@@ -18,3 +18,9 @@ desktop.ini
 # local-only
 .env
 .env.*
+
+# Godot (engine import cache + generated captures; engine binary lives outside repo)
+godot/.godot/
+godot/auto_shot.png
+godot/*.import
+godot/android/build/

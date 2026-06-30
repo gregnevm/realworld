@@ -1,0 +1,23 @@
+name: Godot Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  godot-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Godot 4.7
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
+          unzip -q Godot_v4.7-stable_linux.x86_64.zip
+          mv Godot_v4.7-stable_linux.x86_64 godot-bin
+          chmod +x godot-bin
+      - name: Sim unit tests
+        run: ./godot-bin --headless --path godot -s res://tests/run_tests.gd
+      - name: Playthrough smoke test
+        run: ./godot-bin --headless --path godot -s res://tests/run_smoke.gd
+      - name: Scene parse check
+        run: ./godot-bin --headless --path godot -s res://tests/parse_check.gd
