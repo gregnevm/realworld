@@ -7,7 +7,8 @@ Survival-MMORPG із симуляційною глибиною RimWorld на **�
 ## Структура
 | Тека | Що це |
 |---|---|
-| `game/` | Граний прототип (HTML5 Canvas, vanilla JS, без збірки) |
+| `game/` | Граний веб-прототип (HTML5 Canvas, vanilla JS, без збірки) |
+| `godot/` | Порт у Godot 4.7 (GDScript): AStarGrid2D, детермінований worldgen, headless-тести |
 | `GDD_BOOK/` | Інтерактивний Game Design Document (джерело істини — `gdd.json`) |
 | `tests/` | Тести детермінованого ядра симуляції (`node --test`) |
 | `specs/` | Специфікації фіч (цикл Specify → Plan → Tasks → Implement) |
@@ -22,6 +23,10 @@ npm test                                    # node --test "tests/**/*.test.js"
 
 # GDD
 python "<gdd_build>/scripts/serve.py" GDD_BOOK
+
+# Godot-версія (4.7): тести headless / запуск
+<godot_console.exe> --headless --path godot -s res://tests/run_tests.gd
+<godot.exe> --path godot          # відкрити гру у вікні
 ```
 
 ## Як грати

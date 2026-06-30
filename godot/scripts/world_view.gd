@@ -47,10 +47,18 @@ func _draw() -> void:
 		_draw_node(sim.map.nodes[key], nx, ny)
 	for b in sim.buildings:
 		_draw_building(b)
+	# move / gather target marker (parity with JS renderer)
+	if sim.player.action != null and sim.player.action.has("cell") and int(sim.player.action.cell) >= 0:
+		var cell: int = sim.player.action.cell
+		draw_rect(Rect2((cell % n) * TILE + 2, int(cell / n) * TILE + 2, TILE - 4, TILE - 4), Color(1, 0.81, 0.36, 0.9), false, 2.0)
 	if selected_build != "" and sim._in(hover.x, hover.y):
 		var okb: bool = sim.build_valid(hover.x, hover.y) and GameData.can_afford(sim.stock, GameData.BUILDINGS[selected_build].cost)
 		var col := Color(0.35, 0.82, 0.55, 0.5) if okb else Color(1, 0.35, 0.35, 0.45)
-		draw_rect(Rect2(hover.x * TILE + 1, hover.y * TILE + 1, TILE - 2, TILE - 2), col)
+		var gr := Rect2(hover.x * TILE + 1, hover.y * TILE + 1, TILE - 2, TILE - 2)
+		draw_rect(gr, col)
+		draw_rect(gr, Color.html("5fd38a") if okb else Color.html("ff6b6b"), false, 2.0)
+		var gl: String = {"wall": "#", "door": "D", "floor": ".", "storage": "S", "workbench": "W", "bed": "B", "turret": "T"}.get(selected_build, "?")
+		draw_string(_font, Vector2(hover.x * TILE + TILE * 0.3, hover.y * TILE + TILE * 0.7), gl, HORIZONTAL_ALIGNMENT_LEFT, -1, int(TILE * 0.5), Color(1, 1, 1, 0.85))
 	for s in sim.shots:
 		draw_line(Vector2(s.x1 * TILE, s.y1 * TILE), Vector2(s.x2 * TILE, s.y2 * TILE), Color(1, 0.9, 0.47, clampf(s.t / 0.12, 0, 1)), 2.0)
 	for e in sim.enemies:

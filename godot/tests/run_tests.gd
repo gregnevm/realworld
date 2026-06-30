@@ -18,6 +18,7 @@ func _init() -> void:
 	_t_raid_scaling()
 	_t_data_integrity()
 	_t_convoy_round_trip()
+	_t_death_freeze()
 	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
 	quit(1 if failed > 0 else 0)
 
@@ -56,14 +57,20 @@ func _t_pathfinding() -> void:
 	sim.new_game({"n": 6, "tiles": tiles, "nodes": {}, "spawn": Vector2i(0, 0), "lat": 50.0, "lon": 30.0})
 	var open := sim.compute_path(0, 0, 5, 0)
 	ok(not open.is_empty() and open[open.size() - 1] == Vector2i(5, 0), "open grid reaches target")
-	# full wall column x=3
+	# full wall column x=3 -> unreachable; best-effort returns a partial path that stops before the wall
 	for y in 6:
 		sim.astar.set_point_solid(Vector2i(3, y), true)
-	ok(sim.compute_path(0, 0, 5, 0).is_empty(), "fully walled target unreachable")
-	# open a gap at (3,4)
+	var walled := sim.compute_path(0, 0, 5, 0)
+	ok(not walled.is_empty() and walled[walled.size() - 1].x < 3 and walled[walled.size() - 1] != Vector2i(5, 0), "unreachable target -> best-effort partial path")
+	# open a gap at (3,4) -> reachable again
 	sim.astar.set_point_solid(Vector2i(3, 4), false)
 	var gap := sim.compute_path(0, 0, 5, 0)
 	ok(not gap.is_empty() and gap[gap.size() - 1] == Vector2i(5, 0), "path routes through the gap")
+	# box the start in completely -> empty path
+	sim.astar.set_point_solid(Vector2i(3, 4), true)
+	sim.astar.set_point_solid(Vector2i(1, 0), true)
+	sim.astar.set_point_solid(Vector2i(0, 1), true)
+	ok(sim.compute_path(0, 0, 5, 0).is_empty(), "fully boxed-in start yields empty path")
 
 func _t_raid_scaling() -> void:
 	ok(GameData.raid_wave_size(1) == 2, "raid day1 == 2")
@@ -82,6 +89,17 @@ func _t_data_integrity() -> void:
 	ok(good, "node/building tables reference valid resources")
 	ok(GameData.BUILD_ORDER.size() == GameData.BUILDINGS.size(), "BUILD_ORDER covers BUILDINGS")
 	ok(GameData.RES_ORDER.size() == GameData.RES.size(), "RES_ORDER covers RES")
+	ok(GameData.HUBS.size() == 7, "7 trade hubs (parity with JS)")
+
+func _t_death_freeze() -> void:
+	var s = Sim.new()
+	s.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
+	s._on_death()
+	var day0: int = s.time.day
+	var frac0: float = s.time.frac
+	for i in 50:
+		s.update(1.0)
+	ok(s.dead and s.time.day == day0 and is_equal_approx(s.time.frac, frac0) and s.enemies.is_empty(), "sim frozen after death (no time/raid advance)")
 
 func _t_convoy_round_trip() -> void:
 	var sim = Sim.new()

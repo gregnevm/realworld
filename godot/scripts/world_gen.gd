@@ -59,7 +59,7 @@ static func generate_map(lat: float, lon: float, n: int = 56) -> Dictionary:
 	var noise2 := _make_noise(rng2, 16)
 	var abs_lat := absf(lat)
 	var snowy := abs_lat > 57
-	var arid := abs_lat > 14 and abs_lat < 33 and _noise_at(noise, 8, 3.1, 1.2) > 0.52
+	var arid := abs_lat > 14 and abs_lat < 33 and _noise_at(noise, 8, 31.7, 12.3) > 0.52
 	var urban := float(seed_val % 997) / 997.0
 
 	var tiles := PackedByteArray()

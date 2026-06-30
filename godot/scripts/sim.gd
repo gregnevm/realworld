@@ -216,12 +216,22 @@ func _nearest_free(grid: AStarGrid2D, c: Vector2i) -> Vector2i:
 func _path_on(grid: AStarGrid2D, fx: int, fy: int, tx: int, ty: int) -> Array:
 	tx = clampi(tx, 0, n - 1)
 	ty = clampi(ty, 0, n - 1)
+	var from := Vector2i(fx, fy)
 	var tgt := Vector2i(tx, ty)
 	if grid.is_point_solid(tgt):
 		tgt = _nearest_free(grid, tgt)
 		if tgt == Vector2i(-1, -1):
 			return []
-	var p = grid.get_id_path(Vector2i(fx, fy), tgt)
+	# A solid start (e.g. player built a wall on their own tile) would otherwise
+	# yield an empty path; clear it for the query to match JS (it escapes anyway).
+	var start_solid := grid.is_point_solid(from)
+	if start_solid:
+		grid.set_point_solid(from, false)
+	# allow_partial_path=true => best-effort partial path toward the closest
+	# reachable cell when the target is unreachable (matches JS findPath semantics).
+	var p = grid.get_id_path(from, tgt, true)
+	if start_solid:
+		grid.set_point_solid(from, true)
 	var out := []
 	for i in range(1, p.size()):
 		out.append(p[i])
@@ -244,7 +254,7 @@ func order_move(tx: int, ty: int) -> void:
 
 func order_gather(x: int, y: int) -> void:
 	player.sleeping = false
-	if not map.nodes.has(y * n + x):
+	if not _in(x, y) or not map.nodes.has(y * n + x):
 		return
 	var path := compute_path(int(player.px), int(player.py), x, y)
 	player.action = {"type": "gather", "nx": x, "ny": y, "cell": y * n + x, "path": path, "t": 0.0, "dur": 0.0}
@@ -279,6 +289,8 @@ func _follow_path(o: Dictionary, path: Array, step: float) -> bool:
 func update(dt: float) -> void:
 	if flash_t > 0:
 		flash_t = max(0.0, flash_t - dt)
+	if dead:
+		return  # match JS: the sim freezes after death (no needs/raids/convoys advance)
 	time.frac += dt / time.day_len
 	while time.frac >= 1.0:
 		time.frac -= 1.0

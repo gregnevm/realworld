@@ -254,7 +254,7 @@ func _handle_click(t: Vector2i) -> void:
 	if best != null:
 		sim.order_attack(best)
 		return
-	if sim.map.nodes.has(t.y * sim.n + t.x):
+	if sim._in(t.x, t.y) and sim.map.nodes.has(t.y * sim.n + t.x):
 		sim.order_gather(t.x, t.y)
 	else:
 		sim.order_move(t.x, t.y)
