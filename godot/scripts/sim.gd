@@ -39,6 +39,7 @@ func new_game(m: Dictionary) -> void:
 		"carry": {}, "carry_cap": 30, "action": null, "sleeping": false,
 		"eat_cd": 0.0, "atk_cd": 0.0, "dep_cd": 0.0,
 		"skills": {"gather": 0.0, "combat": 0.0},
+		"equipped": {"tool": "", "weapon": ""}, "items": [],
 	}
 	stock = {"wood": 50, "stone": 30, "food": 18, "scrap": 16, "planks": 0, "components": 2}
 	_build_astar()
@@ -199,6 +200,49 @@ func try_build(kind: String, x: int, y: int) -> void:
 		return
 	GameData.pay_cost(stock, def.cost)
 	_place_building(kind, x, y, -1)
+
+# ---------------- items / equipment (spec 0001) ----------------
+func gather_time(node) -> float:
+	var info = GameData.NODEINFO[node.kind]
+	var mult: float = 1.0 + player.skills.gather * 0.04
+	var tool: String = player.equipped.get("tool", "")
+	if tool != "" and GameData.ITEMS.has(tool):
+		mult *= float(GameData.ITEMS[tool].get("gather_mult", 1.0))
+	return info.time / mult
+
+func melee_damage() -> float:
+	var dmg: float = 12.0 + player.skills.combat
+	var wpn: String = player.equipped.get("weapon", "")
+	if wpn != "" and GameData.ITEMS.has(wpn):
+		dmg += float(GameData.ITEMS[wpn].get("dmg_bonus", 0.0))
+	return dmg
+
+func has_workbench() -> bool:
+	for b in buildings:
+		if b.kind == "workbench":
+			return true
+	return false
+
+func craft_item(item_id: String) -> Dictionary:
+	if not GameData.ITEMS.has(item_id):
+		return {"ok": false, "msg": "Невідомий предмет."}
+	if not has_workbench():
+		return {"ok": false, "msg": "Потрібен верстак."}
+	var recipe = GameData.ITEMS[item_id].recipe
+	if not GameData.can_afford(stock, recipe):
+		return {"ok": false, "msg": "Бракує: " + GameData.cost_str(recipe)}
+	GameData.pay_cost(stock, recipe)
+	if not player.items.has(item_id):
+		player.items.append(item_id)
+	equip(item_id)
+	_log("🛠 Скрафтив та екіпірував: %s." % GameData.ITEMS[item_id].name, "good")
+	return {"ok": true}
+
+func equip(item_id: String) -> void:
+	if not GameData.ITEMS.has(item_id) or not player.items.has(item_id):
+		return
+	var slot: String = GameData.ITEMS[item_id].slot
+	player.equipped[slot] = item_id
 
 # ---------------- pathfinding ----------------
 func _nearest_free(grid: AStarGrid2D, c: Vector2i) -> Vector2i:
@@ -378,7 +422,7 @@ func _do_gather(dt: float, step: float) -> void:
 			_step_to(p, a.nx + 0.5, a.ny + 0.5, step)
 		return
 	var info = GameData.NODEINFO[node.kind]
-	a.dur = info.time / (1.0 + p.skills.gather * 0.04)
+	a.dur = gather_time(node)
 	a.t += dt
 	if a.t >= a.dur:
 		a.t = 0.0
@@ -416,7 +460,7 @@ func _do_attack(dt: float, step: float) -> void:
 	else:
 		p.face = atan2(e.py - p.py, e.px - p.px)
 		if p.atk_cd <= 0:
-			_damage_enemy(e, 12.0 + p.skills.combat)
+			_damage_enemy(e, melee_damage())
 			p.atk_cd = 0.7
 			p.skills.combat = min(20.0, p.skills.combat + 0.15)
 

@@ -29,6 +29,15 @@ const BUILDINGS := {
 }
 const BUILD_ORDER := ["wall", "door", "floor", "storage", "workbench", "bed", "turret"]
 
+# craftable equipment (spec 0001). tool -> faster gather; weapon -> more melee damage.
+const ITEMS := {
+	"axe": {"name": "Сокира", "slot": "tool", "gather_mult": 1.6, "recipe": {"wood": 15, "stone": 10}},
+	"pick": {"name": "Кайло", "slot": "tool", "gather_mult": 1.9, "recipe": {"wood": 12, "stone": 16}},
+	"club": {"name": "Кийок", "slot": "weapon", "dmg_bonus": 6.0, "recipe": {"wood": 20}},
+	"spear": {"name": "Спис", "slot": "weapon", "dmg_bonus": 12.0, "recipe": {"wood": 15, "scrap": 8}},
+}
+const ITEM_ORDER := ["axe", "pick", "club", "spear"]
+
 # real-world trade hubs + what each outpost trades
 const HUBS := [
 	{"name": "Київ", "lat": 50.4501, "lon": 30.5234},

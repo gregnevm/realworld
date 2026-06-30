@@ -33,6 +33,7 @@ var build_bar: HBoxContainer
 var build_buttons := {}
 var night_rect: ColorRect
 var world_panel: PanelContainer
+var items_panel: PanelContainer
 
 const PRESETS := [
 	{"name": "Київ", "lat": 50.4501, "lon": 30.5234},
@@ -86,7 +87,7 @@ func _build_spawn_screen() -> void:
 		btn.pressed.connect(_start_game.bind(pr.lat, pr.lon, pr.name))
 		box.add_child(btn)
 	var hint := Label.new()
-	hint.text = "Керування: клік — іти/добувати/атакувати · WASD · 1–7 будувати · M — логістика · Space — пауза"
+	hint.text = "Керування: клік — іти/добувати/атакувати · WASD · 1–7 будувати · M — логістика · I — спорядження · Space — пауза"
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.modulate = Color(0.6, 0.7, 0.8)
 	box.add_child(hint)
@@ -143,6 +144,13 @@ func _build_hud() -> void:
 	world_panel.custom_minimum_size = Vector2(360, 0)
 	hud.add_child(world_panel)
 
+	items_panel = PanelContainer.new()
+	items_panel.visible = false
+	items_panel.set_anchors_preset(Control.PRESET_CENTER)
+	items_panel.position = Vector2(get_viewport().get_visible_rect().size.x / 2 - 330, 96)
+	items_panel.custom_minimum_size = Vector2(440, 0)
+	hud.add_child(items_panel)
+
 func _mk_label(parent: CanvasLayer, pos: Vector2, fsize: int) -> Label:
 	var l := Label.new()
 	l.position = pos
@@ -188,6 +196,7 @@ func _update_hud() -> void:
 		sim.time.day, sim.clock_str(), sim.phase_name(),
 		_bar(p.hp), int(p.hp), _bar(p.hunger), int(p.hunger), _bar(p.rest), int(p.rest),
 		sim.carry_total(), p.carry_cap]
+	info_label.text += "\n🪓 %s  ⚔ %s" % [_eq_name("tool"), _eq_name("weapon")]
 	var st := "Склад %d/%d\n" % [sim.stock_total(), sim.storage_cap()]
 	for k in GameData.RES_ORDER:
 		st += "%s %d\n" % [GameData.RES[k].label, int(sim.stock.get(k, 0))]
@@ -233,6 +242,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_cycle_speed()
 		elif k == KEY_M:
 			_toggle_world()
+		elif k == KEY_I:
+			_toggle_items()
 		elif k == KEY_ESCAPE:
 			view.selected_build = ""
 			sim.player.action = null
@@ -291,6 +302,44 @@ func _send_convoy(hub_index: int) -> void:
 	if not res.ok:
 		sim._flash(res.msg)
 
+func _toggle_items() -> void:
+	items_panel.visible = not items_panel.visible
+	if items_panel.visible:
+		_build_items_panel()
+
+func _build_items_panel() -> void:
+	for c in items_panel.get_children():
+		items_panel.remove_child(c)
+		c.queue_free()
+	var vb := VBoxContainer.new()
+	items_panel.add_child(vb)
+	var title := Label.new()
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title.text = "🛠 Спорядження (потрібен верстак)\nЕкіпіровано: 🪓 %s · ⚔ %s" % [_eq_name("tool"), _eq_name("weapon")]
+	vb.add_child(title)
+	for id in GameData.ITEM_ORDER:
+		var it = GameData.ITEMS[id]
+		var eff := ("×%.1f видоб" % it.gather_mult) if it.slot == "tool" else ("+%d урон" % int(it.dmg_bonus))
+		var owned := "  ✓" if sim.player.items.has(id) else ""
+		var btn := Button.new()
+		btn.text = "%s [%s] — %s · %s%s" % [it.name, it.slot, eff, GameData.cost_str(it.recipe), owned]
+		btn.pressed.connect(_craft_item.bind(id))
+		vb.add_child(btn)
+	var close := Button.new()
+	close.text = "Закрити (I)"
+	close.pressed.connect(func(): items_panel.visible = false)
+	vb.add_child(close)
+
+func _eq_name(slot: String) -> String:
+	var id: String = sim.player.equipped.get(slot, "")
+	return GameData.ITEMS[id].name if (id != "" and GameData.ITEMS.has(id)) else "—"
+
+func _craft_item(id: String) -> void:
+	var res = sim.craft_item(id)
+	if not res.ok:
+		sim._flash(res.msg)
+	_build_items_panel()
+
 # ---------------- auto screenshot mode ----------------
 func _auto_step(dt: float) -> void:
 	auto_t += dt
@@ -320,6 +369,10 @@ func _auto_build_base() -> void:
 	sim.player.px = c.x + 0.5
 	sim.player.py = c.y + 1.5
 	sim.time.frac = 0.46
+	sim.craft_item("axe")
+	sim.craft_item("spear")
+	items_panel.visible = true
+	_build_items_panel()
 
 func _put(kind: String, x: int, y: int) -> void:
 	if sim.build_valid(x, y) and GameData.can_afford(sim.stock, GameData.BUILDINGS[kind].cost):

@@ -19,6 +19,7 @@ func _init() -> void:
 	_t_data_integrity()
 	_t_convoy_round_trip()
 	_t_death_freeze()
+	_t_items()
 	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
 	quit(1 if failed > 0 else 0)
 
@@ -100,6 +101,34 @@ func _t_death_freeze() -> void:
 	for i in 50:
 		s.update(1.0)
 	ok(s.dead and s.time.day == day0 and is_equal_approx(s.time.frac, frac0) and s.enemies.is_empty(), "sim frozen after death (no time/raid advance)")
+
+func _t_items() -> void:
+	var s = Sim.new()
+	s.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
+	var node := {"kind": "tree", "amount": 10}
+	var base_time: float = s.gather_time(node)
+	var base_dmg: float = s.melee_damage()
+	ok(not s.craft_item("axe").ok, "craft fails without a workbench")
+	var c = s.base_center()
+	var placed := false
+	for dy in range(-2, 3):
+		for dx in range(-2, 3):
+			if not placed and s.build_valid(c.x + dx, c.y + dy):
+				s.stock.wood = 200
+				s.stock.stone = 200
+				s.stock.scrap = 200
+				s.try_build("workbench", c.x + dx, c.y + dy)
+				placed = true
+	s.stock.wood = 200
+	s.stock.stone = 200
+	s.stock.scrap = 200
+	ok(placed and s.craft_item("axe").ok, "axe crafted with workbench + resources")
+	ok(s.player.equipped.tool == "axe" and s.player.items.has("axe"), "axe auto-equipped")
+	ok(s.gather_time(node) < base_time, "tool speeds up gather (%.2f < %.2f)" % [s.gather_time(node), base_time])
+	ok(s.craft_item("spear").ok, "spear crafted")
+	ok(s.player.equipped.weapon == "spear", "spear auto-equipped to weapon slot")
+	ok(s.melee_damage() > base_dmg, "weapon boosts melee (%.1f > %.1f)" % [s.melee_damage(), base_dmg])
+	ok(not s.craft_item("nope").ok, "unknown item rejected")
 
 func _t_convoy_round_trip() -> void:
 	var sim = Sim.new()
