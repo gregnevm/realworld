@@ -20,6 +20,13 @@ var auto_mode := false
 var auto_t := 0.0
 var auto_built := false
 var auto_shot := false
+var auto_osm := false
+
+# OSM real-geography fetch
+var force_osm := false
+var use_osm_check: CheckButton
+var http: HTTPRequest
+var _osm_bbox: Dictionary = {}
 
 # UI refs
 var spawn_layer: CanvasLayer
@@ -47,9 +54,15 @@ func _ready() -> void:
 	_build_world_nodes()
 	_build_hud()
 	_build_spawn_screen()
-	if "auto" in OS.get_cmdline_user_args():
-		_start_game(50.4501, 30.5234, "Київ")
+	var uargs := OS.get_cmdline_user_args()
+	if "autoosm" in uargs:
+		force_osm = true
 		auto_mode = true
+		auto_osm = true
+		_start_game(50.4501, 30.5234, "Київ")
+	elif "auto" in uargs:
+		auto_mode = true
+		_start_game(50.4501, 30.5234, "Київ")
 
 func _build_world_nodes() -> void:
 	view = WorldViewScript.new()
@@ -81,6 +94,10 @@ func _build_spawn_screen() -> void:
 	sub.text = "Survival-MMORPG на справжній географії. Обери точку висадки:"
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(sub)
+	var osm_chk := CheckButton.new()
+	osm_chk.text = "Реальна географія з OpenStreetMap (повільніше)"
+	box.add_child(osm_chk)
+	use_osm_check = osm_chk
 	for pr in PRESETS:
 		var btn := Button.new()
 		btn.text = "%s  (%.3f, %.3f)" % [pr.name, pr.lat, pr.lon]
@@ -169,6 +186,8 @@ func _start_game(lat: float, lon: float, place_name: String) -> void:
 	playing = true
 	spawn_layer.visible = false
 	sim._log("Висадка: %s · біом %s" % [place_name, m.biome], "good")
+	if force_osm or (use_osm_check != null and use_osm_check.button_pressed):
+		_fetch_osm(lat, lon)
 
 func _process(dt: float) -> void:
 	if not playing:
@@ -350,6 +369,12 @@ func _equip_item(id: String) -> void:
 # ---------------- auto screenshot mode ----------------
 func _auto_step(dt: float) -> void:
 	auto_t += dt
+	if auto_osm:
+		# OSM mode: no base; give the network time, then capture the real-geography map
+		if auto_t > 9.0 and not auto_shot:
+			auto_shot = true
+			_capture_and_quit()
+		return
 	if not auto_built and auto_t > 0.15:
 		auto_built = true
 		_auto_build_base()
@@ -391,3 +416,52 @@ func _capture_and_quit() -> void:
 	img.save_png("O:/realworld/godot/auto_shot.png")
 	print("AUTO_SHOT saved")
 	get_tree().quit()
+
+# ---------------- real OSM geography (Overpass) ----------------
+func _fetch_osm(lat: float, lon: float) -> void:
+	var radius := 380.0
+	var dlat := radius / 111320.0
+	var dlon := radius / (111320.0 * cos(deg_to_rad(lat)))
+	var south := lat - dlat
+	var north := lat + dlat
+	var west := lon - dlon
+	var east := lon + dlon
+	_osm_bbox = {"s": south, "n": north, "w": west, "e": east}
+	var bb := "%f,%f,%f,%f" % [south, west, north, east]
+	var q := "[out:json][timeout:18];(" \
+		+ "way[\"highway\"](" + bb + ");" \
+		+ "way[\"natural\"=\"water\"](" + bb + ");" \
+		+ "way[\"waterway\"](" + bb + ");" \
+		+ "way[\"natural\"=\"wood\"](" + bb + ");" \
+		+ "way[\"landuse\"=\"forest\"](" + bb + ");" \
+		+ "way[\"building\"](" + bb + ");" \
+		+ ");out geom 1800;"
+	http = HTTPRequest.new()
+	add_child(http)
+	http.request_completed.connect(_on_osm_done)
+	sim._log("🌐 Тягну реальну географію OSM…")
+	var headers := PackedStringArray(["Content-Type: application/x-www-form-urlencoded"])
+	var err := http.request("https://overpass-api.de/api/interpreter", headers, HTTPClient.METHOD_POST, "data=" + q.uri_encode())
+	if err != OK:
+		sim._log("🌐 OSM-запит не вдався — карта лишається процедурною.", "warn")
+
+func _on_osm_done(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	if http != null:
+		http.queue_free()
+		http = null
+	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
+		sim._log("🌐 OSM недоступний (код %d) — карта процедурна." % code, "warn")
+		return
+	var json = JSON.parse_string(body.get_string_from_utf8())
+	if not (json is Dictionary) or not json.has("elements"):
+		sim._log("🌐 OSM: порожня відповідь — карта процедурна.", "warn")
+		return
+	var elements: Array = json.elements
+	if elements.is_empty():
+		sim._log("🌐 OSM: тут нічого не знайдено — карта процедурна.", "warn")
+		return
+	var stats = WorldGen.overlay_osm(sim.map, elements, _osm_bbox)
+	sim.after_map_change()
+	if view != null:
+		view.queue_redraw()
+	sim._log("🌐 Реальна географія OSM: дороги %d · водойми %d · ліси %d · будівлі %d." % [stats.road, stats.water, stats.forest, stats.building], "good")

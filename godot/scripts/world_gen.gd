@@ -148,3 +148,139 @@ static func _pick_spawn(tiles: PackedByteArray, nodes: Dictionary, n: int) -> Ve
 				tiles[i] = GRASS
 			nodes.erase(i)
 	return best
+
+# ---------------- real OSM overlay (pure rasterisation; network lives in main.gd) ----------------
+# elements: Array of {type:"way", tags:{}, geometry:[{lat,lon},...]} (Overpass `out geom`)
+# bbox: {s,n,w,e}. Mutates map.tiles/nodes in place; re-picks spawn. Deterministic.
+static func overlay_osm(map: Dictionary, elements: Array, bbox: Dictionary) -> Dictionary:
+	var n: int = map.n
+	var tiles: PackedByteArray = map.tiles
+	var nodes: Dictionary = map.nodes
+	var stats := {"road": 0, "water": 0, "forest": 0, "building": 0}
+	for el in elements:
+		if el.get("type", "") != "way":
+			continue
+		var geom = el.get("geometry", [])
+		if geom.size() < 2:
+			continue
+		var kind := _classify(el.get("tags", {}))
+		if kind == "":
+			continue
+		var closed: bool = geom.size() > 3 \
+			and absf(float(geom[0].lat) - float(geom[geom.size() - 1].lat)) < 1e-7 \
+			and absf(float(geom[0].lon) - float(geom[geom.size() - 1].lon)) < 1e-7
+		if kind == "road":
+			for k in range(geom.size() - 1):
+				_osm_line(tiles, nodes, n, _to_cell(geom[k].lat, geom[k].lon, bbox, n), _to_cell(geom[k + 1].lat, geom[k + 1].lon, bbox, n), ROAD)
+			stats.road += 1
+		elif kind == "water":
+			if closed:
+				_osm_fill(tiles, nodes, n, geom, bbox, WATER, "")
+			else:
+				for k in range(geom.size() - 1):
+					_osm_line(tiles, nodes, n, _to_cell(geom[k].lat, geom[k].lon, bbox, n), _to_cell(geom[k + 1].lat, geom[k + 1].lon, bbox, n), WATER)
+			stats.water += 1
+		elif kind == "forest":
+			_osm_fill(tiles, nodes, n, geom, bbox, FOREST, "tree")
+			stats.forest += 1
+		elif kind == "grass":
+			_osm_fill(tiles, nodes, n, geom, bbox, GRASS, "")
+		elif kind == "building":
+			_osm_fill(tiles, nodes, n, geom, bbox, RUIN, "scrap")
+			stats.building += 1
+	map.spawn = _pick_spawn(tiles, nodes, n)
+	map.source = "osm"
+	map.osm_stats = stats
+	return stats
+
+static func _classify(tags: Dictionary) -> String:
+	if tags.has("building"):
+		return "building"
+	if tags.has("highway"):
+		return "road"
+	if tags.has("waterway"):
+		return "water"
+	if tags.get("natural", "") == "water":
+		return "water"
+	if tags.get("natural", "") == "wood" or tags.get("landuse", "") == "forest":
+		return "forest"
+	if tags.get("landuse", "") == "grass":
+		return "grass"
+	return ""
+
+static func _to_cell(lat: float, lon: float, bbox: Dictionary, n: int) -> Vector2i:
+	var x := clampi(int(round((lon - float(bbox.w)) / (float(bbox.e) - float(bbox.w)) * (n - 1))), 0, n - 1)
+	var y := clampi(int(round((float(bbox.n) - lat) / (float(bbox.n) - float(bbox.s)) * (n - 1))), 0, n - 1)
+	return Vector2i(x, y)
+
+static func _osm_set(tiles: PackedByteArray, nodes: Dictionary, n: int, x: int, y: int, t: int, mk: String) -> void:
+	if x < 0 or y < 0 or x >= n or y >= n:
+		return
+	var i := y * n + x
+	tiles[i] = t
+	if t == WATER or t == ROAD:
+		nodes.erase(i)
+	# deterministic node seeding (no RNG) so the overlay is reproducible
+	if mk == "tree" and not nodes.has(i) and (i * 2654435761) % 100 < 50:
+		nodes[i] = {"kind": "tree", "amount": 16 + (i % 12)}
+	elif mk == "scrap" and not nodes.has(i) and (i * 2654435761) % 100 < 40:
+		nodes[i] = {"kind": "scrap", "amount": 8 + (i % 10)}
+
+static func _osm_line(tiles: PackedByteArray, nodes: Dictionary, n: int, a: Vector2i, b: Vector2i, t: int) -> void:
+	var x0 := a.x
+	var y0 := a.y
+	var dx := absi(b.x - x0)
+	var dy := -absi(b.y - y0)
+	var sx := 1 if x0 < b.x else -1
+	var sy := 1 if y0 < b.y else -1
+	var err := dx + dy
+	while true:
+		_osm_set(tiles, nodes, n, x0, y0, t, "")
+		if x0 == b.x and y0 == b.y:
+			break
+		var e2 := 2 * err
+		if e2 >= dy:
+			err += dy
+			x0 += sx
+		if e2 <= dx:
+			err += dx
+			y0 += sy
+
+static func _osm_fill(tiles: PackedByteArray, nodes: Dictionary, n: int, geom: Array, bbox: Dictionary, t: int, mk: String) -> void:
+	var minx := n
+	var miny := n
+	var maxx := 0
+	var maxy := 0
+	var pts := []
+	var lons := []
+	var lats := []
+	for g in geom:
+		var c := _to_cell(g.lat, g.lon, bbox, n)
+		pts.append(c)
+		lons.append(float(g.lon))
+		lats.append(float(g.lat))
+		minx = mini(minx, c.x)
+		miny = mini(miny, c.y)
+		maxx = maxi(maxx, c.x)
+		maxy = maxi(maxy, c.y)
+	for y in range(miny, maxy + 1):
+		for x in range(minx, maxx + 1):
+			var clon: float = float(bbox.w) + (x + 0.5) / n * (float(bbox.e) - float(bbox.w))
+			var clat: float = float(bbox.n) - (y + 0.5) / n * (float(bbox.n) - float(bbox.s))
+			if _point_in(clon, clat, lons, lats):
+				_osm_set(tiles, nodes, n, x, y, t, mk)
+	for k in range(pts.size() - 1):
+		_osm_line(tiles, nodes, n, pts[k], pts[k + 1], t)
+
+static func _point_in(px: float, py: float, xs: Array, ys: Array) -> bool:
+	var inside := false
+	var j := xs.size() - 1
+	for i in range(xs.size()):
+		var xi: float = xs[i]
+		var yi: float = ys[i]
+		var xj: float = xs[j]
+		var yj: float = ys[j]
+		if ((yi > py) != (yj > py)) and (px < (xj - xi) * (py - yi) / (yj - yi) + xi):
+			inside = not inside
+		j = i
+	return inside

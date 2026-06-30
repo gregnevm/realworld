@@ -75,6 +75,29 @@ func _refresh_solid(x: int, y: int) -> void:
 		solid = true
 	astar.set_point_solid(Vector2i(x, y), solid)
 
+func after_map_change() -> void:
+	# OSM overlay rewrote terrain: rebuild pathing grids + relocate to the new clearing
+	_build_astar()
+	for b in buildings:
+		if GameData.BUILDINGS[b.kind].get("blocks", false):
+			_refresh_solid(b.x, b.y)
+	var sp: Vector2i = map.spawn
+	player.px = sp.x + 0.5
+	player.py = sp.y + 0.5
+	player.action = null
+	for b in buildings:
+		if b.kind == "storage":
+			bgrid.erase(b.y * n + b.x)
+			var lx := sp.x + 1
+			var ly := sp.y
+			if not build_valid(lx, ly):
+				lx = sp.x
+				ly = sp.y + 1
+			b.x = lx
+			b.y = ly
+			bgrid[ly * n + lx] = b
+			break
+
 func _init_regions() -> void:
 	var home := {"name": map.get("place_name", "Поселення"), "lat": map.lat, "lon": map.lon, "home": true}
 	var ranked := []

@@ -20,6 +20,7 @@ func _init() -> void:
 	_t_convoy_round_trip()
 	_t_death_freeze()
 	_t_items()
+	_t_osm_overlay()
 	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
 	quit(1 if failed > 0 else 0)
 
@@ -134,6 +135,41 @@ func _t_items() -> void:
 	var wood_before: int = int(s.stock.wood)
 	ok(s.craft_item("axe").ok and s.player.equipped.tool == "axe" and int(s.stock.wood) == wood_before, "re-equipping owned item is free (no re-pay)")
 	ok(not s.craft_item("nope").ok, "unknown item rejected")
+
+func _t_osm_overlay() -> void:
+	var n := 16
+	var tiles := PackedByteArray()
+	tiles.resize(n * n)
+	tiles.fill(WorldGen.GRASS)
+	var map := {"n": n, "tiles": tiles, "nodes": {}, "spawn": Vector2i(0, 0), "lat": 50.0, "lon": 30.0}
+	var bbox := {"s": 49.99, "n": 50.01, "w": 29.99, "e": 30.01}
+	var elements := [
+		{"type": "way", "tags": {"highway": "residential"}, "geometry": [{"lat": 50.0, "lon": 29.991}, {"lat": 50.0, "lon": 30.009}]},
+		{"type": "way", "tags": {"natural": "water"}, "geometry": [{"lat": 50.004, "lon": 29.992}, {"lat": 50.004, "lon": 29.996}, {"lat": 50.008, "lon": 29.996}, {"lat": 50.008, "lon": 29.992}, {"lat": 50.004, "lon": 29.992}]},
+		{"type": "way", "tags": {"building": "yes"}, "geometry": [{"lat": 49.993, "lon": 30.002}, {"lat": 49.993, "lon": 30.006}, {"lat": 49.996, "lon": 30.006}, {"lat": 49.996, "lon": 30.002}, {"lat": 49.993, "lon": 30.002}]},
+	]
+	var stats = WorldGen.overlay_osm(map, elements, bbox)
+	var roads := 0
+	var waters := 0
+	var ruins := 0
+	for t in tiles:
+		if t == WorldGen.ROAD:
+			roads += 1
+		elif t == WorldGen.WATER:
+			waters += 1
+		elif t == WorldGen.RUIN:
+			ruins += 1
+	ok(roads > 0, "OSM highway rasterised to road tiles (%d)" % roads)
+	ok(waters > 0, "OSM water polygon filled (%d)" % waters)
+	ok(ruins > 0, "OSM building -> ruins (%d)" % ruins)
+	ok(map.source == "osm" and stats.road == 1 and stats.building == 1, "overlay stats + source set")
+	# determinism: same elements -> identical tiles
+	var tiles2 := PackedByteArray()
+	tiles2.resize(n * n)
+	tiles2.fill(WorldGen.GRASS)
+	var map2 := {"n": n, "tiles": tiles2, "nodes": {}, "spawn": Vector2i(0, 0), "lat": 50.0, "lon": 30.0}
+	WorldGen.overlay_osm(map2, elements, bbox)
+	ok(tiles == tiles2, "OSM overlay is deterministic")
 
 func _t_convoy_round_trip() -> void:
 	var sim = Sim.new()
