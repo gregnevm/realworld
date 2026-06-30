@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<title>RealWorld — vertical slice</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- ============ SPAWN SCREEN ============ -->
+<div id="spawn" class="screen">
+  <div class="spawn-card">
+    <h1>RealWorld<span class="ver">vertical slice</span></h1>
+    <p class="tag">Survival-MMORPG на справжній географії. Один персонаж. Карта зі справжніх GPS-координат.</p>
+
+    <div class="spawn-row">
+      <label>Обери реальну локацію спавну</label>
+      <div id="presets" class="presets"></div>
+    </div>
+
+    <div class="spawn-row coords">
+      <div>
+        <label>Широта (lat)</label>
+        <input id="lat" type="number" step="0.0001" value="50.4501" />
+      </div>
+      <div>
+        <label>Довгота (lon)</label>
+        <input id="lon" type="number" step="0.0001" value="30.5234" />
+      </div>
+      <button id="gpsBtn" class="ghost">📍 Мій GPS</button>
+    </div>
+
+    <label class="chk"><input id="useOsm" type="checkbox" checked /> Тягнути справжню географію з OpenStreetMap (Overpass)</label>
+
+    <div class="spawn-actions">
+      <button id="spawnBtn" class="primary">Висадитись ▸</button>
+      <button id="continueBtn" class="ghost" style="display:none">Продовжити збереження</button>
+    </div>
+    <p id="spawnStatus" class="status"></p>
+    <p class="fine">Реальна гра — persistent MMO. Це одиночний вертикальний зріз (Фаза 0 з GDD): доводимо, що «real-map survival з логістикою» — це весело.</p>
+  </div>
+</div>
+
+<!-- ============ GAME ============ -->
+<canvas id="cv"></canvas>
+
+<!-- top-left needs -->
+<div id="hud" class="hud hidden">
+  <div class="needs">
+    <div class="need"><span>❤ HP</span><div class="bar"><i id="barHp"></i></div></div>
+    <div class="need"><span>🍖 Голод</span><div class="bar"><i id="barFood"></i></div></div>
+    <div class="need"><span>💤 Відпочинок</span><div class="bar"><i id="barRest"></i></div></div>
+  </div>
+  <div class="clock"><span id="clockDay">День 1</span> · <span id="clockTime">06:00</span> <span id="clockPhase"></span></div>
+  <div class="carry">Несе: <span id="carryTxt">0 / 30</span></div>
+</div>
+
+<!-- top-right stockpile -->
+<div id="stock" class="stock hidden"></div>
+
+<!-- raid banner -->
+<div id="raidBanner" class="raid-banner hidden"></div>
+
+<!-- bottom build bar -->
+<div id="buildbar" class="buildbar hidden"></div>
+
+<!-- bottom-right buttons -->
+<div id="sidebtns" class="sidebtns hidden">
+  <button id="worldBtn" title="Світова карта / логістика">🗺</button>
+  <button id="helpBtn" title="Як грати">❔</button>
+  <button id="speedBtn" title="Швидкість">▸ 1×</button>
+</div>
+
+<!-- message log -->
+<div id="log" class="log hidden"></div>
+
+<!-- selection / action readout -->
+<div id="ticker" class="ticker hidden"></div>
+
+<!-- ============ WORLD MAP / LOGISTICS MODAL ============ -->
+<div id="worldModal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head"><h2>🗺 Світова карта — логістика конвоїв</h2><button id="worldClose" class="x">✕</button></div>
+    <p class="modal-sub">Регіон-тайли справжньої Землі. Відстань між реальними локаціями визначає час конвою. Маршрути перехоплюють — частину вантажу можуть відбити.</p>
+    <canvas id="worldcv" width="640" height="360"></canvas>
+    <div id="convoyPanel" class="convoy-panel"></div>
+    <div id="convoyList" class="convoy-list"></div>
+  </div>
+</div>
+
+<!-- ============ HELP MODAL ============ -->
+<div id="helpModal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head"><h2>❔ Як грати</h2><button id="helpClose" class="x">✕</button></div>
+    <div class="help-body">
+      <p><b>Рух:</b> клік по землі — персонаж піде туди (обходить воду/стіни). Або <b>WASD</b>.</p>
+      <p><b>Добування:</b> клікни по дереву 🌲, каменю 🪨, кущу 🫐 чи руїні — персонаж підійде і збере ресурс. Несе обмежено — віднеси на <b>склад</b> (склад поповнюється сам, коли стоїш поруч).</p>
+      <p><b>Будівництво:</b> вибери об'єкт у нижній панелі → клікни по клітинці. Ресурси беруться зі складу. <b>Стіни</b> й <b>турелі</b> захищають від рейдів.</p>
+      <p><b>Автоматизація:</b> постав <b>верстак</b> — він безперервно (tick-time) переробляє дерево → дошки, навіть поки ти зайнятий іншим.</p>
+      <p><b>Їжа/сон:</b> голод і відпочинок падають з часом. Стань біля складу з їжею — поїси. Поспи в <b>ліжку</b>, щоб відновити відпочинок.</p>
+      <p><b>Рейди:</b> періодично з краю карти приходять рейдери (у повноцінній MMO — інші гравці). Вони ламають базу й б'ють тебе. Тримай оборону: стіни, турелі, бій (клік по ворогу).</p>
+      <p><b>Логістика 🗺:</b> відправляй конвої між реальними локаціями — везеш ресурс, повертаєш торговий товар. Реальна відстань = час у дорозі. Бувають засідки.</p>
+    </div>
+  </div>
+</div>
+
+<script src="js/util.js"></script>
+<script src="js/worldgen.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/render.js"></script>
+<script src="js/logistics.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/input.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>

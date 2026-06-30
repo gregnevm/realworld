@@ -1,0 +1,365 @@
+{
+  "meta": {
+    "title": "RealWorld",
+    "version": "0.1.0",
+    "updated": "2026-06-30",
+    "language": "uk",
+    "authors": ["greg"]
+  },
+  "concept": {
+    "pitch": "Реал-тайм survival-MMORPG, де ігрова карта генерується з реальної географії Землі (GPS / OpenStreetMap). Ти граєш одним глибоко симульованим персонажем — добуваєш ресурси, будуєш базу, ведеш конвої-логістику між реальними локаціями і відбиваєш рейди інших гравців у єдиному persistent-світі.",
+    "genre": "Survival MMORPG із симуляційною ДНК RimWorld (Eco × Foxhole × DayZ × Project Zomboid)",
+    "platforms": ["PC (Steam) — first", "Mobile (реальний GPS)"],
+    "audience": "Фанати RimWorld / Project Zomboid, гео-гравці (Pokémon GO / Ingress) і MMO-будівники (Foxhole / EVE), що хочуть persistent онлайн-світ із глибокою симуляцією",
+    "usp": [
+      "Карти зі справжньої географії (OSM + GPS-координати гравця)",
+      "Один глибоко симульований персонаж замість колонії AI-пешок",
+      "Гравцева логістика реальними конвоями між реальними локаціями (як Foxhole)",
+      "Persistent єдиний світ-сервер із офлайн-базами та рейдами (як EVE × Rust)"
+    ],
+    "pillars": [
+      "Реальна географія має значення",
+      "Одне життя, глибока симуляція",
+      "Економіку й логістику рухають гравці"
+    ]
+  },
+  "sections": [
+    {
+      "id": "overview",
+      "title": "Огляд і бачення",
+      "category": "foundation",
+      "status": "ai",
+      "order": 1,
+      "body": "## High concept\n\n**RealWorld** — це реал-тайм survival-MMORPG, у якій ігровий світ — це **справжня Земля**. Карта генерується з реальної географії (OpenStreetMap + GPS-координати гравця): дороги, будівлі, річки, ліси, рельєф і landcover перетворюються на терен, ресурси та точки інтересу. Дивись section:level_design і section:setting.\n\n**Фантазія гравця:** *самотній виживальник-інженер у живому світі*. Ти — не командир колонії, а одна людина, що видряпується з нуля: рубаєш ліс, будуєш стіни й верстати, автоматизуєш виробництво і намагаєшся не загинути в світі, який не на паузі й повний інших таких самих людей.\n\n## X meets Y\n\n> **RimWorld × Foxhole × DayZ × Pokémon GO**\n\n- Від **RimWorld** — глибина симуляції персонажа (mechanic:character_sim), скіли від використання (section:progression) і tick-based крафт (mechanic:crafting_automation).\n- Від **Foxhole** — гравцева логістика й конвої справжніми дорогами (mechanic:convoy_logistics), війна за території (mechanic:territory_control).\n- Від **DayZ / Rust** — PvP-рейди, persistent-світ і ціна смерті (mechanic:raids_pvp, mechanic:offline_persistence).\n- Від **Pokémon GO** — справжній GPS як спосіб зайти у свій регіон світу (section:controls).\n\n## Розв'язана напруга: один персонаж + MMO\n\nКлючове рішення концепту: гравець керує **одним** глибоко симульованим персонажем, але світ — масовий і persistent. Це означає, що **RealWorld — це не колонія-сим**, а **глибокий survival-RPG**, де роль «колонії» виконують **інші живі гравці**. Замість того щоб мікроменеджити десяток AI-пешок, ти живеш життям однієї людини серед сотень реальних. [[Поселення]] будуються спільнотами, а не натовпом ботів; союзники, конкуренти й [[Рейдер]]и — це реальні люди.\n\nЦя напруга формує весь дизайн: глибина RimWorld застосована до **тебе одного**, а масштаб MMO виносимо у світ навколо. Огляд систем — у section:mechanics_overview; стовпи дизайну — у section:pillars."
+      ,
+      "tags": ["vision", "high-concept", "pitch"],
+      "links": ["level_design", "setting", "mechanics_overview", "pillars", "progression", "controls"]
+    },
+    {
+      "id": "pillars",
+      "title": "Стовпи дизайну",
+      "category": "foundation",
+      "status": "ai",
+      "order": 2,
+      "body": "Три стовпи, що визначають кожне дизайн-рішення RealWorld. Якщо ідея суперечить стовпу — вона відпадає.\n\n## 1. Реальна географія має значення\n\n**Що означає:** карта — це справжній світ. Де ти живеш, які поруч ліси, річки, дороги й міста — усе впливає на доступні ресурси, маршрути конвоїв і цінність території. Генерація світу йде з OSM + рельєфу (section:level_design, mechanic:map_generation), а зайти у свій регіон можна навіть за власними GPS-координатами (section:controls).\n\n**Що ВИКЛЮЧАЄ:** повністю вигадані фентезі-карти; «рандомний сід заради рандому»; локації без зв'язку з реальним розташуванням і відстанями. Відстань між [[Регіон-тайл]]ами — це справжня відстань, а не абстракція.\n\n## 2. Одне життя, глибока симуляція\n\n**Що означає:** ти — один персонаж із потребами, здоров'ям і скілами, що ростуть від використання (mechanic:character_sim, section:progression). Смерть має ціну (mechanic:raids_pvp). Глибина RimWorld спрямована на **одного** пешку — тебе.\n\n**Що ВИКЛЮЧАЄ:** керування колонією AI-пешок; «армії клонів»; респаун без наслідків; геймплей, де персонаж — це лише аватар-курсор без власної симуляції.\n\n## 3. Економіку й логістику рухають гравці\n\n**Що означає:** ресурси, виробництво й торгівля — у руках гравців. Конвої возять товар справжніми дорогами і можуть бути перехоплені (mechanic:convoy_logistics), економіка живе на гравцевих джерелах і стоках (mechanic:economy), а території контролюють [[Поселення]] й фракції (mechanic:territory_control).\n\n**Що ВИКЛЮЧАЄ:** NPC-магазини з нескінченним товаром; телепорт ресурсів між базами; «миттєву» логістику без ризику; економіку, яку наповнює сервер, а не праця гравців."
+      ,
+      "tags": ["pillars", "principles"],
+      "links": ["level_design", "map_generation", "controls", "character_sim", "progression", "raids_pvp", "convoy_logistics", "economy", "territory_control"]
+    },
+    {
+      "id": "audience",
+      "title": "Цільова аудиторія та ринок",
+      "category": "foundation",
+      "status": "ai",
+      "order": 3,
+      "body": "## Хто грає\n\nRealWorld націлений на **поєднання трьох аудиторій** — і це водночас його сила й ризик.\n\n1. **Симуляційні survival-гравці** — фанати **RimWorld** і **Project Zomboid**. Хочуть глибину систем: потреби, скіли, крафт, автоматизацію, наслідки рішень (mechanic:character_sim, mechanic:crafting_automation).\n2. **Гео-гравці** — авдиторія **Pokémon GO / Ingress**. Хочуть, щоб реальне місце мало значення; GPS як вхід у власний регіон світу (section:controls, mechanic:map_generation).\n3. **MMO-будівники** — гравці **Foxhole** та **EVE Online**. Хочуть persistent-світ, гравцеву економіку, логістичні війни й контроль територій (mechanic:convoy_logistics, mechanic:territory_control, mechanic:economy).\n\n## Платформи\n\nКрос-платформа **PC + mobile**. PC (Steam) — провідна платформа з повним контролем і будівництвом; mobile використовує справжній GPS для прив'язки до регіону (section:controls). Деталі — у section:technical.\n\n## Аналоги (comparables)\n\n| Гра | Що беремо |\n|---|---|\n| **RimWorld** | глибина симуляції одного пешка, скіли, tick-крафт |\n| **Project Zomboid** | survival-нахил, ціна смерті, потреби |\n| **Eco** | гравцева економіка й вплив на світ |\n| **Foxhole** | конвої, логістика, війна за території |\n| **EVE Online** | єдиний persistent-шард, гравцева економіка |\n| **Rust** | рейди, офлайн-бази, hardcore-PvP |\n| **Pokémon GO** | реальний GPS як механіка входу |\n\n## Амбіція і ризик\n\nЦілитися в **усі три** аудиторії одночасно — амбітно й небезпечно: ризик розмитого фокусу, коли продукт не «свій» для жодної групи. Симуляційники можуть відлякатися hardcore-PvP, гео-гравці — глибиною мікроменеджменту, MMO-будівники — повільним soло-стартом. Це винесено в section:risks як ключове відкрите питання, а phased-scope (section:scope) — спосіб перевірити гіпотези поетапно."
+      ,
+      "tags": ["audience", "market", "comparables"],
+      "links": ["character_sim", "crafting_automation", "controls", "map_generation", "convoy_logistics", "territory_control", "economy", "technical", "risks", "scope"]
+    },
+    {
+      "id": "core_loop",
+      "title": "Базовий ігровий цикл",
+      "category": "gameplay",
+      "status": "review",
+      "order": 4,
+      "body": "## Авторське формулювання\n\n> **«Добувай ресурси і будуй базу, чекай рейду інших гравців.»**\n\nЦе ядро RealWorld. Нижче воно розкладене на три горизонти.\n\n## Секунди (moment-to-moment)\n\nНа локальній карті ти **gather → craft → build**: рубаєш дерево й камінь, збираєш їжу і scrap із реального терену (mechanic:gathering), ставиш стіни, підлоги, сховища й верстати (mechanic:base_building), запускаєш крафт. Світ **не на паузі** — кожна дія це реальний час (section:controls).\n\n## Сесія (session)\n\nЗа сесію ти **розвиваєш базу й виробництво**, ставиш у чергу tick-крафт, що працює навіть офлайн (mechanic:crafting_automation), **проводиш конвой** із товаром між точками реальними дорогами (mechanic:convoy_logistics) і **відбиваєш рейд** — у MVP це NPC-рейдери, далі живі гравці (mechanic:raids_pvp). Сесія — це цикл «розрослася база → щось вивіз / щось привіз → захистив здобуте».\n\n## Мета (meta)\n\nНа довгій дистанції ти **розрощуєш [[Поселення]]**, борешся за **контроль території** (mechanic:territory_control) і дертися вгору в гравцевій **економіці** (mechanic:economy). Тут «колонія» — це інші живі гравці навколо тебе (section:overview).\n\n## Ядро напруги\n\nГоловна напруга циклу — **PvP-рейд-survival у стилі Rust поверх глибини будівництва RimWorld**. Ти будуєш не просто базу, а **захищувану** базу: кожна стіна, турель і запас — це ставка проти [[Рейдер]]а, що прийде, коли тебе не буде онлайн (mechanic:offline_persistence). Саме це поєднання глибокого будівництва й реальної загрози втрати робить цикл напруженим, а не затишним. Карту систем дивись у section:mechanics_overview."
+      ,
+      "tags": ["core-loop", "gameplay", "user-authored"],
+      "links": ["gathering", "base_building", "crafting_automation", "convoy_logistics", "raids_pvp", "territory_control", "economy", "offline_persistence", "overview", "controls", "mechanics_overview"]
+    },
+    {
+      "id": "mechanics_overview",
+      "title": "Огляд механік",
+      "category": "gameplay",
+      "status": "ai",
+      "order": 5,
+      "body": "Наративна мапа систем RealWorld. Детальні описи й граф зв'язків — у розділі **Механіки**.\n\n## Як усе сходиться\n\nУсе починається зі **світу**: mechanic:map_generation бере реальну географію (OSM + рельєф) і робить із неї [[Регіон-тайл]]и та детальні локальні карти (section:level_design). Світ годує **здобич**: mechanic:gathering дає дерево, камінь, їжу і scrap із реального терену.\n\nУ центрі стоїть **персонаж**: mechanic:character_sim — один глибоко симульований пешка з потребами, здоров'ям і скілами (section:progression). Його праця будує **базу**: mechanic:base_building — стіни, підлоги, сховища, верстати, турелі — яка розблоковує **виробництво**: mechanic:crafting_automation, де крафт іде в реальному часі за чергою рахунків і працює навіть офлайн.\n\nЗдобуте треба **возити й захищати**. mechanic:convoy_logistics водить [[Конвой]]і справжніми дорогами між [[Поселення]]ми, і їх можна перехопити. mechanic:raids_pvp — [[Рейдер]]и (NPC в MVP, далі гравці) штурмують твою базу; mechanic:offline_persistence визначає, як база живе й залишається вразливою, коли ти офлайн.\n\nНа верхньому рівні все стягують **територія й економіка**: mechanic:territory_control — фракції й поселення контролюють регіони реальної Землі, а mechanic:economy — гравцева, B2P, зі стоками ресурсів через рейди, втрати конвоїв і upkeep.\n\n## Повний перелік систем\n\n- mechanic:map_generation — генерація світу з реальної географії\n- mechanic:character_sim — симуляція одного персонажа\n- mechanic:gathering — здобич ресурсів\n- mechanic:base_building — будівництво бази\n- mechanic:crafting_automation — крафт і автоматизація\n- mechanic:raids_pvp — рейди та PvP\n- mechanic:convoy_logistics — конвої та логістика\n- mechanic:offline_persistence — офлайн-persistent-бази\n- mechanic:territory_control — контроль територій\n- mechanic:economy — гравцева економіка\n\nБазовий цикл, що зв'язує їх у грі, — у section:core_loop."
+      ,
+      "tags": ["mechanics", "systems-map", "overview"],
+      "links": ["map_generation", "character_sim", "gathering", "base_building", "crafting_automation", "raids_pvp", "convoy_logistics", "offline_persistence", "territory_control", "economy", "level_design", "progression", "core_loop"]
+    },
+    {
+      "id": "progression",
+      "title": "Прогресія гравця",
+      "category": "gameplay",
+      "status": "ai",
+      "order": 6,
+      "body": "## Як росте персонаж\n\nУ RealWorld один персонаж (mechanic:character_sim), тож уся прогресія — про **його** зростання, а не про набір нових пешок.\n\n### Скіли від використання (RimWorld-style)\n\nСкіли ростуть **від практики**, а не від витрачання абстрактних очок XP. Рубаєш дерево — росте збиральництво (mechanic:gathering); будуєш — росте конструювання (mechanic:base_building); крафтиш — росте відповідне ремесло (mechanic:crafting_automation). Вищі скіли = швидше, якісніше, з меншими втратами. Це підтримує стовп section:pillars «Одне життя, глибока симуляція».\n\n### Tiers спорядження та крафту\n\nПрогрес матеріальний: від примітивних інструментів і дерев'яних стін до металу, механізмів і турелей. Кращий tier спорядження відкриває кращий gather, кращу оборону (mechanic:raids_pvp) і складніше виробництво.\n\n### Tech-дерево бази\n\nБаза має власне tech-дерево: нові верстати, складніші рецепти, автоматизація й оборонні споруди. Це довгограюча вісь прогресу, що зав'язана на section:core_loop.\n\n## Гейти прогресу\n\nПрогрес стримують **два гейти**:\n\n1. **Ресурси** — потрібну сировину треба здобути або привезти конвоєм (mechanic:gathering, mechanic:convoy_logistics).\n2. **Реальний час крафту** — рахунки крафту тривають **годинами реального часу** (tick-based, mechanic:crafting_automation), а не миттєво. Це уповільнює гонку, робить базу й виробництво цінними, і прив'язує прогрес до persistent-світу (mechanic:offline_persistence).\n\nРазом це означає: ти не «гриндиш XP», ти **живеш і будуєш**, а світ тече в реальному часі навколо тебе."
+      ,
+      "tags": ["progression", "skills", "tech-tree"],
+      "links": ["character_sim", "gathering", "base_building", "crafting_automation", "raids_pvp", "convoy_logistics", "offline_persistence", "pillars", "core_loop"]
+    },
+    {
+      "id": "controls",
+      "title": "Керування та game feel",
+      "category": "gameplay",
+      "status": "ai",
+      "order": 7,
+      "body": "## PC (провідна платформа)\n\n- **Рух:** WASD або клік-to-move по локальній карті.\n- **Будівництво:** build-меню з категоріями (стіни, підлоги, сховища, верстати, турелі — mechanic:base_building).\n- **Накази:** RTS-style черга наказів — постав послідовність дій (зрубати, віднести, збудувати, скрафтити), і персонаж виконує їх по черзі. Це міст між survival-керуванням і симуляційною глибиною RimWorld.\n\n## Mobile\n\n- **Тач-керування** для руху й меню.\n- **Реальний GPS** як механіка входу: твої справжні координати «сіють» і знаходять твій регіон світу (mechanic:map_generation, section:level_design). Це прямий зв'язок зі стовпом section:pillars «Реальна географія має значення» й аналогія з Pokémon GO.\n\n## Game feel: реальний час без глобальної паузи\n\nКлючове відчуття RealWorld — **реальний час, без глобальної паузи**. Світ persistent і спільний (mechanic:offline_persistence), тож зупинити його не можна. Замість паузи гравець **планує**: ставить **черги наказів** і **автоматизацію** (mechanic:crafting_automation), які виконуються, поки він діє далі або навіть поки офлайн. Напруга й планування під тиском часу — частина того самого ядра, що описане в section:core_loop."
+      ,
+      "tags": ["controls", "game-feel", "input"],
+      "links": ["base_building", "map_generation", "level_design", "pillars", "offline_persistence", "crafting_automation", "core_loop"]
+    },
+    {
+      "id": "setting",
+      "title": "Світ і сеттинг",
+      "category": "world",
+      "status": "ai",
+      "order": 8,
+      "body": "## Передумова\n\nRealWorld розгортається на **впізнаваній Землі недалекого майбутнього після м'якого колапсу** (soft collapse). Інфраструктура занепала, центральна влада зникла, але світ фізично той самий — ті ж міста, дороги й ландшафти. У цей світ виходить самотній виживальник (section:overview).\n\n## Карта — це реальний світ\n\nГоловна особливість сеттингу: **карта Землі — це справжня Земля**. Регіони — це реальні міста, [[Регіон-тайл]]и відповідають реальним ділянкам глобальної сітки, а локальні карти генеруються з OSM-даних реального місця (mechanic:map_generation, section:level_design). Київ — це Київ, його річки, мости й райони впливають на геймплей.\n\n## Текстура світу\n\n- Покинуті [[Поселення]] перетворюються на бази гравців.\n- Дороги між містами стають артеріями для [[Конвой]]їв (mechanic:convoy_logistics).\n- [[Рейдер]]и — і люди, і відчайдухи — полюють на чужі запаси (mechanic:raids_pvp).\n- Території переходять під контроль фракцій і спільнот (mechanic:territory_control).\n\n## Лор у вікі\n\nКонкретні елементи світу винесені у вікі як cross-linked записи: [[Регіон-тайл]], [[Поселення]], [[Конвой]], [[Рейдер]]. Загальний тон історії — легкий і емерджентний (section:narrative)."
+      ,
+      "tags": ["setting", "world", "lore"],
+      "links": ["overview", "map_generation", "level_design", "convoy_logistics", "raids_pvp", "territory_control", "narrative"]
+    },
+    {
+      "id": "narrative",
+      "title": "Наратив і персонажі",
+      "category": "world",
+      "status": "ai",
+      "order": 9,
+      "body": "## Підхід: легкий, емерджентний, гравцецентричний\n\nRealWorld **не розповідає сценарну історію**. Авторського наративу — мінімум: достатньо передумови (section:setting) і тону, щоб світ був зрозумілий. Решта історії — **емерджентна**, її творять самі гравці.\n\n## Звідки береться драма\n\nКонфлікт і драма народжуються з **систем**, а не з катсцен:\n\n- **Логістична війна** — хто контролює дороги й перехоплює [[Конвой]]і, той диктує економіку (mechanic:convoy_logistics, mechanic:economy).\n- **Боротьба за території** — фракції й [[Поселення]] змагаються за [[Регіон-тайл]]и реальної Землі (mechanic:territory_control).\n- **Рейди** — нічна втрата бази від [[Рейдер]]а — це особиста історія поразки чи помсти (mechanic:raids_pvp, mechanic:offline_persistence).\n\nТаким чином «персонажі» історії — це **реальні гравці**: союзники, суперники, зрадники. Це прямий наслідок розв'язаної напруги «один персонаж + MMO» (section:overview): роль колонії й драматургії беруть на себе живі люди.\n\n## Що це виключає\n\nНемає квестових ланцюгів від NPC, головного антагоніста-боса чи скриптованих сюжетних місій. Світ дає сцену й правила — історію пишуть гравці (section:pillars)."
+      ,
+      "tags": ["narrative", "emergent", "player-driven"],
+      "links": ["setting", "convoy_logistics", "economy", "territory_control", "raids_pvp", "offline_persistence", "overview", "pillars"]
+    },
+    {
+      "id": "level_design",
+      "title": "Дизайн рівнів / контенту",
+      "category": "world",
+      "status": "ai",
+      "order": 10,
+      "body": "## Світ — це гібридна карта\n\nУ RealWorld немає «рівнів» у класичному сенсі. Є **один світ — гібридна карта реальної Землі**, побудована з трьох шарів (mechanic:map_generation):\n\n### a) Глобальна сітка [[Регіон-тайл]]ів\n\nУся Земля — сітка регіон-тайлів. Це стратегічний шар: тут видно території, фракції, маршрути конвоїв і контроль (mechanic:territory_control).\n\n### b) Локальні детальні карти з OSM\n\nКоли ти заходиш у регіон, генерується **детальна локальна карта з даних OpenStreetMap**: дороги, будівлі, річки, ліси, рельєф (elevation) і landcover перетворюються на **терен і ресурси**. Ліс → дерево, кар'єри/гори → камінь, забудова → scrap, водойми й поля → їжа (mechanic:gathering). Дороги стають маршрутами для [[Конвой]]їв (mechanic:convoy_logistics).\n\n### c) Спавн за власними GPS-координатами\n\nГравець **може з'явитися у власному реальному місці** — за GPS-координатами свого пристрою (section:controls). Твій двір може стати твоєю стартовою локацією. Це ядро стовпа section:pillars «Реальна географія має значення».\n\n## Єдиний безшовний світ-сервер\n\nУсе це живе в **одному безшовному світ-сервері** (single-shard, EVE-like). Немає окремих інстансів-матчів: усі гравці в одному persistent-світі (mechanic:offline_persistence). Це найамбітніше технічне рішення проєкту — головний техризик масштабу (section:technical, section:risks).\n\n## Replayability й пейсинг\n\nРеіграбельність забезпечує сам світ: реальна географія різна всюди, а гравцева економіка й території (mechanic:economy, mechanic:territory_control) постійно змінюють «контент» без авторської роботи. Пейсинг задає реальний час крафту й логістики (section:progression)."
+      ,
+      "tags": ["level-design", "world-gen", "map"],
+      "links": ["map_generation", "territory_control", "gathering", "convoy_logistics", "controls", "pillars", "offline_persistence", "technical", "risks", "economy", "progression"]
+    },
+    {
+      "id": "art",
+      "title": "Арт-напрям",
+      "category": "presentation",
+      "status": "ai",
+      "order": 11,
+      "body": "## Принцип: читабельність понад усе\n\nАрт RealWorld підпорядкований **зчитуваності**. Перспектива — **top-down / ізометрична**, у дусі **RimWorld**: чіткі, легко впізнавані силуети об'єктів і персонажів. Гравець має миттєво розуміти, що перед ним — стіна, верстат, турель, ворог (mechanic:base_building, mechanic:raids_pvp).\n\n## Виклик: тайли з реальної карти мають лишатися glanceable\n\nОскільки терен генерується з реальної географії (mechanic:map_generation, section:level_design), головний арт-виклик — зробити так, щоб **карти, похідні від реальних даних, лишалися glanceable**. Реальні дороги, будівлі й ліси треба стилізувати в єдину читабельну мову тайлів, а не показувати «сирий» хаотичний OSM. Ресурсні зони (ліс, камінь, вода) мають бути впізнавані з першого погляду (mechanic:gathering).\n\n## Орієнтири\n\n- **RimWorld** — легкість силуетів, інформативність кольору.\n- Чиста top-down/iso читабельність важливіша за фотореалізм.\n- Єдина візуальна мова для тайлів незалежно від того, який реальний регіон під ними.\n\nЗвук — у section:audio; UI має наслідувати ту саму логіку миттєвої зчитуваності."
+      ,
+      "tags": ["art", "visual-style", "readability"],
+      "links": ["base_building", "raids_pvp", "map_generation", "level_design", "gathering", "audio"]
+    },
+    {
+      "id": "audio",
+      "title": "Аудіо-напрям",
+      "category": "presentation",
+      "status": "draft",
+      "order": 12,
+      "body": "## Загальний напрям (чернетка)\n\nАтмосферний, стриманий ембієнт «тихого світу після колапсу»: звуки природи реального терену (ліс, річка, вітер), діегетичні звуки праці (рубка, крафт, будівництво — mechanic:gathering, mechanic:base_building) і напружені аудіо-сигнали загрози під час рейду (mechanic:raids_pvp). Музика — рідкісна й адаптивна, підсилює напругу очікування рейду з section:core_loop.\n\n> **TODO:** Аудіо-напрям ще не пророблений — це **прогалина**. Потрібно визначити: музичний стиль і референси, правила адаптивної музики (спокій / логістика / рейд), SFX-філософію для діегетичних звуків, обсяг і доцільність VO. Поки що залишено як `draft`."
+      ,
+      "tags": ["audio", "todo", "gap"],
+      "links": ["gathering", "base_building", "raids_pvp", "core_loop"]
+    },
+    {
+      "id": "technical",
+      "title": "Технічна частина",
+      "category": "production",
+      "status": "ai",
+      "order": 13,
+      "body": "## Клієнт\n\nКрос-платформний клієнт: **PC (Steam) — провідний**, плюс **mobile** із доступом до реального GPS (section:controls, section:audience). Спільна кодова база, top-down/iso рендер (section:art).\n\n## Пайплайн генерації світу\n\nСерце технології — пайплайн world-gen (mechanic:map_generation, section:level_design):\n\n1. **OSM через Overpass API** — дороги, будівлі, річки, ліси, landuse.\n2. **Дані рельєфу (elevation)** — висоти для терену й прохідності.\n3. **Landcover** — тип покриву → ресурси (mechanic:gathering).\n4. Усе це зводиться у **тайли** [[Регіон-тайл]]ів і детальні локальні карти.\n5. **Fallback:** якщо OSM-даних бракує або вони недоступні — **процедурна генерація з координат** (procedural-from-coords), щоб світ завжди був граним.\n\n## Симуляція в реальному часі\n\nСвіт — **tick-based real-time sim**: крафт, потреби й виробництво рахуються тіками реального часу (mechanic:crafting_automation, mechanic:character_sim), без глобальної паузи (section:controls). Це дозволяє базам жити й вироблятися навіть офлайн (mechanic:offline_persistence).\n\n## Головний техризик\n\n**Єдиний single-shard MMO-сервер** (EVE-like, section:level_design) — **найбільший технічний ризик** проєкту: вся симуляція, всі гравці й усі persistent-бази в одному світі. Питання масштабованості винесене в section:risks."
+      ,
+      "tags": ["technical", "stack", "world-gen", "server"],
+      "links": ["controls", "audience", "art", "map_generation", "level_design", "gathering", "crafting_automation", "character_sim", "offline_persistence", "risks"]
+    },
+    {
+      "id": "economy",
+      "title": "Економіка та монетизація",
+      "category": "production",
+      "status": "ai",
+      "order": 14,
+      "body": "## Бізнес-модель: B2P (buy-to-play)\n\nRealWorld — **buy-to-play**: купуєш гру один раз. Без підписки на старті, без обов'язкових мікротранзакцій. Косметика — **пізніше** і строго опціональна.\n\n## Жодного pay-to-win\n\nКлючовий принцип: **no pay-to-win**. У persistent-світі з гравцевою економікою (mechanic:economy) продаж переваги за гроші зруйнував би довіру й баланс. Усе, що дає перевагу — ресурси, спорядження, території — здобувається грою, а не гаманцем. Це підтримує стовп section:pillars «Економіку й логістику рухають гравці».\n\n## Стоки ресурсів — гравцеві\n\nЕкономіка жива завдяки **гравцевим стокам ресурсів**, а не серверним краном:\n\n- **Рейди** — втрата запасів під час штурму бази (mechanic:raids_pvp).\n- **Втрати конвоїв** — перехоплений [[Конвой]] = втрачений товар (mechanic:convoy_logistics).\n- **Upkeep** — бази й споруди потребують утримання, що постійно споживає ресурси (mechanic:base_building, mechanic:offline_persistence).\n\nЦі стоки врівноважують джерела (mechanic:gathering, mechanic:crafting_automation) і не дають економіці інфлювати. Контроль територій (mechanic:territory_control) дає доступ до кращих джерел — і робить їх предметом боротьби.\n\n## Покриття серверних витрат\n\nЯк B2P-модель покриватиме витрати на persistent-MMO-сервер без підписки — **відкрите питання** (section:risks)."
+      ,
+      "tags": ["economy", "monetization", "b2p"],
+      "links": ["economy", "raids_pvp", "convoy_logistics", "base_building", "offline_persistence", "gathering", "crafting_automation", "territory_control", "pillars", "risks"]
+    },
+    {
+      "id": "scope",
+      "title": "Виробництво та обсяг",
+      "category": "production",
+      "status": "ai",
+      "order": 15,
+      "body": "## Поетапний підхід (phased MVP)\n\nRealWorld розробляється поетапно, щоб перевіряти найризикованіші гіпотези окремо (section:risks).\n\n### Phase 0 — одиночний вертикальний зріз (ЗАРАЗ)\n\n**Single-player vertical slice:** RimWorld-survival на карті, засіяній з GPS. Перевіряє ядро — gather → craft → build (mechanic:gathering, mechanic:base_building, mechanic:crafting_automation) і симуляцію персонажа (mechanic:character_sim) на реально-географічній карті (mechanic:map_generation).\n\n> **Прототипується просто зараз** у `O:\\realworld\\game`.\n\nУ Phase 0 ще немає інших гравців — це доказ, що survival-ядро на реальній карті працює й приносить задоволення.\n\n### Phase 1 — мала MMO\n\nПерша мультиплеєрна версія: **одне реальне місто, 8–10 гравців**, спрощена конвой-логістика між **2–3 точками** (mechanic:convoy_logistics). Перевіряє persistent-світ, спільне будівництво й перші рейди (mechanic:raids_pvp, mechanic:offline_persistence) у керованому масштабі перед стрибком до single-shard (section:level_design, section:technical).\n\n## Що ЯВНО поза MVP\n\n- Повний single-shard світ усієї Землі (поки лише одне місто).\n- Жива PvP-економіка великого масштабу й фракційний контроль територій (mechanic:territory_control, mechanic:economy) — спрощено або вимкнено.\n- Mobile-клієнт із GPS — після підтвердження PC-ядра (section:controls).\n- Косметика й монетизація (section:economy).\n- Складна автоматизація виробництва верхніх tier'ів (mechanic:crafting_automation) понад необхідне для зрізу.\n\nМета scope — спершу довести, що **survival на реальній карті** весело (Phase 0), і лише тоді нарощувати MMO-масштаб."
+      ,
+      "tags": ["scope", "mvp", "roadmap", "phasing"],
+      "links": ["risks", "gathering", "base_building", "crafting_automation", "character_sim", "map_generation", "convoy_logistics", "raids_pvp", "offline_persistence", "level_design", "technical", "territory_control", "economy", "controls"]
+    },
+    {
+      "id": "risks",
+      "title": "Ризики та відкриті питання",
+      "category": "production",
+      "status": "ai",
+      "order": 16,
+      "body": "## Топ-ризики\n\n### 1. Масштаб єдиного світ-сервера\nSingle-shard MMO (section:level_design, section:technical) — найбільший технічний ризик. Уся симуляція, всі гравці й persistent-бази в одному світі.\n**Пом'якшення:** Phase 1 стартує з одного міста й 8–10 гравців (section:scope), щоб виміряти навантаження до масштабування.\n\n### 2. Розмитий фокус через три аудиторії\nЦілитися одночасно в симуляційників, гео-гравців і MMO-будівників (section:audience) ризикує не задовольнити нікого.\n**Пом'якшення:** Phase 0 доводить survival-ядро для однієї аудиторії спершу.\n\n### 3. Hardcore-нахил\nReal-time + офлайн-рейди + PvP-ядро (mechanic:raids_pvp, mechanic:offline_persistence, section:core_loop) роблять гру жорсткою — це може відлякати частину RimWorld-аудиторії.\n**Пом'якшення:** перевірити апетит до ризику на малому масштабі; можливі PvE/safe-зони.\n\n### 4. Залежність від зовнішніх гео-даних\nWorld-gen спирається на OSM/Overpass (mechanic:map_generation, section:technical).\n**Пом'якшення:** fallback на процедурну генерацію з координат; кешування й власні дзеркала даних.\n\n## Відкриті питання\n\n- Єдиний світ-сервер (9b) — найбільший техризик масштабу; чи витримає симуляція?\n- Крос-платформа PC+mobile одночасно (3abc) — амбітно; ризик розмитого фокусу.\n- Real-time + offline-рейди + PvP core loop ⇒ hardcore-нахил; чи не відлякає частину RimWorld-аудиторії?\n- Залежність world-gen від OSM/Overpass (доступність, ліцензії, rate-limits).\n- Як саме реальна відстань маппиться на час конвою — потребує тюнінгу.\n- Монетизація B2P у persistent-MMO — як покривати серверні витрати без підписки?"
+      ,
+      "tags": ["risks", "open-questions"],
+      "links": ["level_design", "technical", "scope", "audience", "raids_pvp", "offline_persistence", "core_loop", "map_generation", "economy"]
+    }
+  ],
+  "mechanics": [
+    {
+      "id": "map_generation",
+      "name": "Генерація світу з реальної географії",
+      "type": "core",
+      "status": "ai",
+      "summary": "Перетворює реальну географію (OSM + рельєф + landcover) на ігрову карту: глобальну сітку [[Регіон-тайл]]ів і детальні локальні карти з тереном і ресурсами.",
+      "body": "Фундамент усього світу RealWorld. Пайплайн бере дані OpenStreetMap (через Overpass), дані рельєфу та landcover і будує два шари: глобальну сітку [[Регіон-тайл]]ів і детальні локальні карти, де дороги, будівлі, річки й ліси стають тереном і ресурсами. Гравець може засіяти карту власними GPS-координатами. Технічні деталі — у section:technical, дизайн карти — у section:level_design. Якщо OSM-даних бракує, спрацьовує fallback на процедурну генерацію з координат.",
+      "tags": ["world-gen", "osm", "gps", "core"],
+      "relations": [
+        { "to": "gathering", "kind": "feeds", "note": "терен визначає, які ресурси доступні" },
+        { "to": "convoy_logistics", "kind": "feeds", "note": "реальні дороги стають маршрутами конвоїв" },
+        { "to": "territory_control", "kind": "affects", "note": "географія регіонів визначає цінність територій" }
+      ]
+    },
+    {
+      "id": "character_sim",
+      "name": "Симуляція персонажа",
+      "type": "core",
+      "status": "ai",
+      "summary": "Один глибоко симульований пешка: здоров'я, потреби й скіли, що ростуть від використання (RimWorld-style).",
+      "body": "Серце фантазії «одне життя, глибока симуляція» (section:pillars). Гравець керує одним персонажем із потребами (їжа, сон, тепло), здоров'ям і скілами, що ростуть від практики (section:progression). Смерть має ціну. Це не аватар-курсор, а симульована людина — роль «колонії» виконують інші живі гравці (section:overview).",
+      "tags": ["pawn", "needs", "skills", "core"],
+      "relations": [
+        { "to": "gathering", "kind": "requires", "note": "потребує їжі та сировини, які дає здобич" },
+        { "to": "base_building", "kind": "feeds", "note": "праця персонажа будує базу" },
+        { "to": "raids_pvp", "kind": "conflicts", "note": "смерть у рейді = серйозний відкат" }
+      ]
+    },
+    {
+      "id": "gathering",
+      "name": "Здобич ресурсів",
+      "type": "core",
+      "status": "ai",
+      "summary": "Збір дерева, каменю, їжі та scrap із реального терену, похідного від географії.",
+      "body": "Базова дія циклу (section:core_loop). Ресурси прив'язані до реального терену: ліс → дерево, гори/кар'єри → камінь, забудова → scrap, поля й водойми → їжа (mechanic:map_generation). Здобич живить виробництво й будівництво, а скіл збиральництва росте від практики (section:progression).",
+      "tags": ["resources", "wood", "stone", "scrap", "core"],
+      "relations": [
+        { "to": "crafting_automation", "kind": "feeds", "note": "сировина для крафту" },
+        { "to": "base_building", "kind": "feeds", "note": "матеріали для будівництва" }
+      ]
+    },
+    {
+      "id": "base_building",
+      "name": "Будівництво бази",
+      "type": "core",
+      "status": "ai",
+      "summary": "Стіни, підлоги, сховища, верстати й турелі — захищувана база гравця.",
+      "body": "Друга половина авторського ядра «добувай і будуй» (section:core_loop). Будуєш стіни, підлоги, сховища, верстати й турелі, перетворюючи покинуте [[Поселення]] на захищувану базу. Будівництво відкриває виробництво й автоматизацію та формує оборону проти рейдів. Арт силуетів — section:art.",
+      "tags": ["building", "defense", "base", "core"],
+      "relations": [
+        { "to": "gathering", "kind": "requires", "note": "потребує здобутих матеріалів" },
+        { "to": "crafting_automation", "kind": "unlocks", "note": "верстати відкривають крафт і автоматизацію" },
+        { "to": "raids_pvp", "kind": "synergizes", "note": "стіни й турелі дають оборону проти рейдів" }
+      ]
+    },
+    {
+      "id": "crafting_automation",
+      "name": "Крафт і автоматизація",
+      "type": "secondary",
+      "status": "ai",
+      "summary": "Tick-based крафт за чергою рахунків, що працює навіть офлайн.",
+      "body": "Виробництво на верстатах через чергу рахунків (bills). Крафт триває реальний час (tick-based, години), а не миттєво (section:progression), і **продовжує працювати, поки гравець офлайн** (mechanic:offline_persistence). Це робить базу автономною фабрикою й живить гравцеву економіку. Без глобальної паузи (section:controls).",
+      "tags": ["crafting", "automation", "tick", "offline", "secondary"],
+      "relations": [
+        { "to": "economy", "kind": "feeds", "note": "вироблені товари наповнюють гравцеву економіку" }
+      ]
+    },
+    {
+      "id": "raids_pvp",
+      "name": "Рейди та PvP",
+      "type": "core",
+      "status": "ai",
+      "summary": "Інші гравці штурмують твою базу (NPC-рейдери в MVP); ядро survival-напруги в стилі Rust.",
+      "body": "Джерело головної напруги циклу (section:core_loop): [[Рейдер]]и приходять по твої запаси. У MVP це NPC-рейдери, далі — живі гравці. Рейди можливі й коли ти офлайн (mechanic:offline_persistence), тому база має бути захищена заздалегідь (mechanic:base_building). Рейди — головний сток ресурсів економіки (mechanic:economy) і ціна смерті персонажа (mechanic:character_sim).",
+      "tags": ["pvp", "raid", "combat", "core"],
+      "relations": [
+        { "to": "offline_persistence", "kind": "conflicts", "note": "базу можна рейдити, поки гравець офлайн" },
+        { "to": "economy", "kind": "feeds", "note": "втрати в рейдах — головний сток ресурсів" },
+        { "to": "territory_control", "kind": "requires", "note": "рейди прив'язані до контролю та доступу до регіонів" }
+      ]
+    },
+    {
+      "id": "convoy_logistics",
+      "name": "Конвої та логістика",
+      "type": "core",
+      "status": "ai",
+      "summary": "Гравцеві [[Конвой]]ї возять товар справжніми дорогами між локаціями і можуть бути перехоплені (Foxhole-style).",
+      "body": "Гравцева логістика в дусі Foxhole: [[Конвой]]ї перевозять ресурси й товари реальними дорогами (mechanic:map_generation) між [[Поселення]]ми. Конвой можна перехопити, тож логістика — це ризик і драма (section:narrative). Час у дорозі зав'язаний на реальну відстань (потребує тюнінгу — section:risks). Конвої — кровоносна система економіки.",
+      "tags": ["logistics", "convoy", "transport", "core"],
+      "relations": [
+        { "to": "economy", "kind": "feeds", "note": "перевезення товарів рухає гравцеву економіку" },
+        { "to": "base_building", "kind": "requires", "note": "потребує баз як точок відправлення й призначення" },
+        { "to": "raids_pvp", "kind": "conflicts", "note": "конвої вразливі до перехоплення гравцями" }
+      ]
+    },
+    {
+      "id": "offline_persistence",
+      "name": "Офлайн-persistent-бази",
+      "type": "secondary",
+      "status": "ai",
+      "summary": "Персонаж спить безпечно в базі, база автономно працює і лишається вразливою до рейдів у певні вікна.",
+      "body": "Коли гравець офлайн, персонаж «спить» у безпеці бази, а сама база живе далі: автоматизація працює (mechanic:crafting_automation), але базу можна рейдити в офлайн-вікна (mechanic:raids_pvp). Це механіка, що робить persistent-світ (section:level_design) справді безперервним і ставить ставки на оборону, побудовану заздалегідь.",
+      "tags": ["persistence", "offline", "secondary"],
+      "relations": [
+        { "to": "crafting_automation", "kind": "synergizes", "note": "виробництво триває, поки гравець офлайн" }
+      ]
+    },
+    {
+      "id": "territory_control",
+      "name": "Контроль територій",
+      "type": "meta",
+      "status": "ai",
+      "summary": "Поселення й фракції контролюють регіони реальної Землі ([[Регіон-тайл]]и).",
+      "body": "Мета-шар світу: [[Поселення]] й фракції змагаються за контроль над [[Регіон-тайл]]ами реальної Землі (mechanic:map_generation). Контроль регіону дає доступ до кращих ресурсів і впливає на маршрути логістики (section:narrative). Це довгограюча вісь конфлікту, що відкриває гравцеву економіку.",
+      "tags": ["territory", "faction", "meta"],
+      "relations": [
+        { "to": "convoy_logistics", "kind": "affects", "note": "контроль регіонів визначає безпеку маршрутів" },
+        { "to": "economy", "kind": "unlocks", "note": "контроль територій відкриває доступ до економічних джерел" }
+      ]
+    },
+    {
+      "id": "economy",
+      "name": "Гравцева економіка",
+      "type": "economy",
+      "status": "ai",
+      "summary": "Повністю гравцева економіка, B2P, зі стоками ресурсів через рейди, втрати конвоїв і upkeep.",
+      "body": "Економіку рухають гравці (section:pillars), а не серверний кран. Джерела — здобич і виробництво (mechanic:gathering, mechanic:crafting_automation); стоки — рейди (mechanic:raids_pvp), втрати [[Конвой]]їв (mechanic:convoy_logistics) і upkeep баз. Модель B2P без pay-to-win (section:economy). Контроль територій впливає на доступ до джерел.",
+      "tags": ["economy", "b2p", "sinks", "player-driven"],
+      "relations": [
+        { "to": "convoy_logistics", "kind": "requires", "note": "торгівля й рух товарів залежать від логістики" },
+        { "to": "territory_control", "kind": "affects", "note": "економічна сила зміцнює й фінансує контроль територій" }
+      ]
+    }
+  ],
+  "wiki": [
+    {
+      "id": "region-tile",
+      "title": "Регіон-тайл",
+      "body": "**Регіон-тайл** — реальна ділянка глобальної сітки світу RealWorld, що відповідає справжньому регіону Землі. Стратегічний шар карти, на якому видно території, фракції й маршрути. Регіон-тайли генеруються пайплайном mechanic:map_generation і є предметом боротьби в mechanic:territory_control. У них живуть [[Поселення]] і пролягають маршрути [[Конвой]]їв. Дивись section:level_design.",
+      "tags": ["world", "map", "geography"]
+    },
+    {
+      "id": "convoy",
+      "title": "Конвой",
+      "body": "**Конвой** — гравцевий караван, що перевозить ресурси й товари справжніми дорогами між [[Поселення]]ми. Серце механіки mechanic:convoy_logistics: конвої можна перехопити, тож кожне перевезення — це ризик. Час у дорозі залежить від реальної відстані між [[Регіон-тайл]]ами. Перехоплення конвою — головна сцена логістичної війни (section:narrative) і сток економіки (mechanic:economy).",
+      "tags": ["logistics", "transport"]
+    },
+    {
+      "id": "settlement",
+      "title": "Поселення",
+      "body": "**Поселення** — база чи хаб, збудований гравцями на місці реального населеного пункту. Будується через mechanic:base_building, є точкою відправлення й призначення [[Конвой]]їв і ціллю для [[Рейдер]]ів (mechanic:raids_pvp). Поселення контролюють [[Регіон-тайл]]и (mechanic:territory_control). У світі «один персонаж + MMO» поселення — це місце, де роль колонії беруть на себе живі гравці (section:overview).",
+      "tags": ["base", "hub", "world"]
+    },
+    {
+      "id": "raider",
+      "title": "Рейдер",
+      "body": "**Рейдер** — ворожий нападник, що штурмує [[Поселення]] заради ресурсів. У MVP це переважно NPC-рейдери, далі — живі гравці (mechanic:raids_pvp). Рейдери можуть атакувати, поки господар бази офлайн (mechanic:offline_persistence), тому оборона будується заздалегідь (mechanic:base_building). Втрати від рейдерів — головний сток гравцевої mechanic:economy.",
+      "tags": ["enemy", "pvp", "raid"]
+    }
+  ]
+}

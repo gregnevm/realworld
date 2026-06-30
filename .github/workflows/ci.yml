@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run simulation tests
+        run: node --test "tests/**/*.test.js"
+      - name: Secret smell test
+        run: |
+          if grep -rEn "(api[_-]?key|secret|password|token)[[:space:]]*[:=][[:space:]]*['\"][A-Za-z0-9_\-]{16,}" \
+              --include="*.js" --include="*.json" --include="*.html" game tests; then
+            echo "::error::Possible hard-coded secret detected"; exit 1
+          fi

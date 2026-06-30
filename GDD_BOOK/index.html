@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GDD_BOOK</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <div class="brand">
+        <span class="logo">📖</span>
+        <div>
+          <div class="brand-title" id="brand-title">GDD_BOOK</div>
+          <div class="brand-sub" id="brand-sub">interactive design doc</div>
+        </div>
+      </div>
+
+      <div class="search-wrap">
+        <input id="search" type="search" placeholder="Search  (/)" autocomplete="off" />
+      </div>
+
+      <nav id="nav"><!-- built by app.js --></nav>
+
+      <div class="side-foot">
+        <button class="ghost" data-view="graph" id="nav-graph">🕸  Mechanics graph</button>
+        <button class="ghost" data-view="wiki" id="nav-wiki">📚  Wiki</button>
+        <button class="ghost" id="btn-settings">⚙  Settings</button>
+        <button class="ghost" id="btn-export">⬇  Export gdd.json</button>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main id="main">
+      <header id="topbar">
+        <button id="menu-toggle" class="icon-btn" title="Toggle sidebar">☰</button>
+        <div id="crumbs"></div>
+        <div class="spacer"></div>
+        <span id="backend-pill" class="pill" title="Active AI backend">AI: off</span>
+      </header>
+      <section id="content"><!-- rendered view --></section>
+    </main>
+  </div>
+
+  <!-- Ask AI / edit slide-over -->
+  <div id="drawer" class="drawer" aria-hidden="true">
+    <div class="drawer-head">
+      <strong id="drawer-title">Ask AI</strong>
+      <button class="icon-btn" id="drawer-close">✕</button>
+    </div>
+    <div class="drawer-body" id="drawer-body"></div>
+  </div>
+  <div id="scrim" class="scrim" hidden></div>
+
+  <!-- Settings modal -->
+  <div id="settings-modal" class="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <strong>Settings — AI backend</strong>
+        <button class="icon-btn" id="settings-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="field">
+          <span>Backend</span>
+          <select id="cfg-backend">
+            <option value="off">Off (read only)</option>
+            <option value="anthropic">Anthropic API (cloud)</option>
+            <option value="ollama">Local — Ollama</option>
+          </select>
+        </label>
+
+        <div class="backend-group" data-for="anthropic" hidden>
+          <label class="field">
+            <span>API key <small>(stored only in this browser)</small></span>
+            <input id="cfg-anthropic-key" type="password" placeholder="sk-ant-..." />
+          </label>
+          <label class="field">
+            <span>Model</span>
+            <input id="cfg-anthropic-model" type="text" placeholder="claude-opus-4-8" />
+          </label>
+        </div>
+
+        <div class="backend-group" data-for="ollama" hidden>
+          <label class="field">
+            <span>Ollama URL</span>
+            <input id="cfg-ollama-url" type="text" placeholder="http://localhost:11434" />
+          </label>
+          <label class="field">
+            <span>Model</span>
+            <input id="cfg-ollama-model" type="text" placeholder="llama3.1" />
+          </label>
+        </div>
+
+        <p class="hint">Keys and settings stay in <code>localStorage</code> on this device.
+          Nothing is sent anywhere except directly to the backend you choose.</p>
+      </div>
+      <div class="modal-foot">
+        <button class="primary" id="settings-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="assets/markdown.js"></script>
+  <script src="assets/graph.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>
