@@ -320,10 +320,13 @@ func _build_items_panel() -> void:
 	for id in GameData.ITEM_ORDER:
 		var it = GameData.ITEMS[id]
 		var eff := ("×%.1f видоб" % it.gather_mult) if it.slot == "tool" else ("+%d урон" % int(it.dmg_bonus))
-		var owned := "  ✓" if sim.player.items.has(id) else ""
 		var btn := Button.new()
-		btn.text = "%s [%s] — %s · %s%s" % [it.name, it.slot, eff, GameData.cost_str(it.recipe), owned]
-		btn.pressed.connect(_craft_item.bind(id))
+		if sim.player.items.has(id):
+			btn.text = "Екіпірувати: %s [%s] — %s" % [it.name, it.slot, eff]
+			btn.pressed.connect(_equip_item.bind(id))
+		else:
+			btn.text = "Скрафтити: %s [%s] — %s · %s" % [it.name, it.slot, eff, GameData.cost_str(it.recipe)]
+			btn.pressed.connect(_craft_item.bind(id))
 		vb.add_child(btn)
 	var close := Button.new()
 	close.text = "Закрити (I)"
@@ -338,6 +341,10 @@ func _craft_item(id: String) -> void:
 	var res = sim.craft_item(id)
 	if not res.ok:
 		sim._flash(res.msg)
+	_build_items_panel()
+
+func _equip_item(id: String) -> void:
+	sim.equip(id)
 	_build_items_panel()
 
 # ---------------- auto screenshot mode ----------------

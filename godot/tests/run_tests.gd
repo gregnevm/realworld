@@ -128,6 +128,11 @@ func _t_items() -> void:
 	ok(s.craft_item("spear").ok, "spear crafted")
 	ok(s.player.equipped.weapon == "spear", "spear auto-equipped to weapon slot")
 	ok(s.melee_damage() > base_dmg, "weapon boosts melee (%.1f > %.1f)" % [s.melee_damage(), base_dmg])
+	# crafting a second tool swaps the equipped tool
+	ok(s.craft_item("pick").ok and s.player.equipped.tool == "pick", "second tool (pick) swaps equipped tool")
+	# re-equipping an already-owned item must be FREE (no re-pay) — review fix
+	var wood_before: int = int(s.stock.wood)
+	ok(s.craft_item("axe").ok and s.player.equipped.tool == "axe" and int(s.stock.wood) == wood_before, "re-equipping owned item is free (no re-pay)")
 	ok(not s.craft_item("nope").ok, "unknown item rejected")
 
 func _t_convoy_round_trip() -> void:

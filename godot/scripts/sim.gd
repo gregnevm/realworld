@@ -226,14 +226,17 @@ func has_workbench() -> bool:
 func craft_item(item_id: String) -> Dictionary:
 	if not GameData.ITEMS.has(item_id):
 		return {"ok": false, "msg": "Невідомий предмет."}
+	if player.items.has(item_id):
+		equip(item_id)  # already owned -> just (re)equip for free, never re-pay
+		_log("⚔ Екіпіровано: %s." % GameData.ITEMS[item_id].name)
+		return {"ok": true}
 	if not has_workbench():
 		return {"ok": false, "msg": "Потрібен верстак."}
 	var recipe = GameData.ITEMS[item_id].recipe
 	if not GameData.can_afford(stock, recipe):
 		return {"ok": false, "msg": "Бракує: " + GameData.cost_str(recipe)}
 	GameData.pay_cost(stock, recipe)
-	if not player.items.has(item_id):
-		player.items.append(item_id)
+	player.items.append(item_id)
 	equip(item_id)
 	_log("🛠 Скрафтив та екіпірував: %s." % GameData.ITEMS[item_id].name, "good")
 	return {"ok": true}
