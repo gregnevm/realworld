@@ -1,0 +1,1281 @@
+<title>RealWorld — HUD (spec 0004)</title>
+<style>
+  :root{
+    --bg:#0e1216; --panel:#151b21; --panel2:#1b232b; --line:#26313b; --line2:#33414d;
+    --ink:#c9d4dc; --mut:#7c8b97; --dim:#54636f;
+    --amber:#e0b070; --teal:#86d0d6; --good:#6fae54; --warn:#e0b070; --crit:#e06a5a; --blood:#b23b34;
+    --wood:#c08a4a; --stone:#9aa3ab; --food:#e06a5a; --scrap:#86d0d6; --planks:#e0b070; --comp:#b58cff;
+    --sans:system-ui,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"Cascadia Code","Segoe UI Mono",Consolas,monospace;
+    --r:8px;
+  }
+  *{box-sizing:border-box}
+  .wrap{
+    max-width:1200px;margin:0 auto;padding:14px;color:var(--ink);
+    font-family:var(--sans);font-size:14px;line-height:1.5;
+    background:
+      radial-gradient(120% 80% at 50% -10%, #16202a 0%, var(--bg) 60%);
+  }
+  .masthead{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+  .masthead h1{font-size:15px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;margin:0;color:var(--ink)}
+  .masthead h1 b{color:var(--amber);font-weight:700}
+  .masthead .sub{font-family:var(--mono);font-size:11px;color:var(--mut);letter-spacing:.02em}
+
+  .hud{
+    display:grid;gap:8px;
+    grid-template-columns:232px 1fr 250px;
+    grid-template-areas:"top top top" "left world right" "bar bar bar";
+    background:#0b0f13;border:1px solid var(--line);border-radius:12px;padding:8px;
+  }
+  @media(max-width:900px){
+    .hud{grid-template-columns:1fr;grid-template-areas:"top" "world" "left" "right" "bar"}
+  }
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:9px 10px}
+  .panel h2{
+    font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--mut);
+    margin:0 0 8px;display:flex;align-items:center;gap:6px;font-weight:700;
+  }
+  .panel h2 .tag{margin-left:auto;font-family:var(--mono);font-weight:500;letter-spacing:0;color:var(--dim)}
+  .stack{display:flex;flex-direction:column;gap:8px}
+
+  /* top bar */
+  .topbar{grid-area:top;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+    background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);padding:8px 12px}
+  .topbar .item{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:13px}
+  .topbar .item .k{color:var(--mut);font-family:var(--sans);font-size:10px;letter-spacing:.1em;text-transform:uppercase}
+  .topbar .sep{width:1px;height:20px;background:var(--line2)}
+  .topbar .region{margin-left:auto;color:var(--teal)}
+  .btn-ghost{margin-left:8px;background:transparent;border:1px solid var(--line2);color:var(--mut);
+    border-radius:6px;padding:4px 8px;font-family:var(--mono);font-size:11px;cursor:pointer}
+  .btn-ghost:hover{border-color:var(--amber);color:var(--amber)}
+
+  .leftdock{grid-area:left}
+  .rightdock{grid-area:right}
+  .leftdock,.rightdock{display:flex;flex-direction:column;gap:8px;min-width:0}
+
+  /* need bars */
+  .need{display:grid;grid-template-columns:20px 1fr auto;align-items:center;gap:8px;margin-bottom:6px}
+  .need .ico{font-size:14px;text-align:center}
+  .need .track{height:9px;background:#0c1116;border:1px solid var(--line);border-radius:20px;overflow:hidden}
+  .need .fill{height:100%;border-radius:20px;transition:width .3s ease, background .3s}
+  .need .val{font-family:var(--mono);font-size:11px;color:var(--mut);min-width:30px;text-align:right}
+
+  /* health doll */
+  .doll{display:flex;gap:10px;align-items:center}
+  .doll svg{flex:0 0 auto}
+  .doll .meta{font-family:var(--mono);font-size:11px;color:var(--mut);display:flex;flex-direction:column;gap:3px}
+  .doll .meta b{color:var(--ink);font-weight:600}
+  .doll .meta .blood b{color:var(--blood)}
+  .minibtns{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+  .minibtns button{background:var(--panel2);border:1px solid var(--line2);color:var(--ink);
+    border-radius:6px;padding:4px 7px;font-size:11px;cursor:pointer;font-family:var(--sans)}
+  .minibtns button:hover{border-color:var(--amber)}
+  .minibtns button:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+
+  /* stock grid */
+  .stock{display:grid;grid-template-columns:1fr 1fr;gap:5px 10px}
+  .stock .r{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:12px}
+  .stock .r .dot{width:8px;height:8px;border-radius:2px;flex:0 0 auto}
+  .stock .r .n{margin-left:auto;color:var(--ink);font-variant-numeric:tabular-nums}
+  .stock .r .lb{color:var(--mut);font-family:var(--sans);font-size:11px}
+
+  /* build palette */
+  .palette{display:flex;gap:5px;flex-wrap:wrap}
+  .slot{width:40px;height:40px;border:1px solid var(--line2);border-radius:6px;background:var(--panel2);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;position:relative}
+  .slot .g{font-size:16px;line-height:1}
+  .slot .num{position:absolute;top:2px;left:3px;font-family:var(--mono);font-size:8px;color:var(--dim)}
+  .slot.sel{border-color:var(--amber);box-shadow:inset 0 0 0 1px var(--amber)}
+  .slot.no{opacity:.4}
+  .slot:hover{border-color:var(--teal)}
+
+  /* balance panel — the hero */
+  .balance{background:linear-gradient(180deg,#182029,#131a21);border-color:var(--line2)}
+  .gauge{position:relative;height:12px;border-radius:20px;background:#0c1116;border:1px solid var(--line);overflow:hidden;margin:2px 0 4px}
+  .gauge .g-fill{height:100%;width:20%;border-radius:20px;transition:width .35s ease, background .35s}
+  .phases{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.02em}
+  .bal-row{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--mono);font-size:12px;margin-top:7px}
+  .bal-row .k{color:var(--mut);font-family:var(--sans);font-size:11px}
+  .bal-row .v{color:var(--ink);font-variant-numeric:tabular-nums}
+  .phase-pill{display:inline-block;padding:1px 8px;border-radius:20px;font-family:var(--mono);font-size:11px;font-weight:600}
+  .knob{margin-top:9px}
+  .knob label{display:flex;justify-content:space-between;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin-bottom:2px}
+  .knob label b{font-family:var(--mono);color:var(--amber);letter-spacing:0;text-transform:none}
+  input[type=range]{width:100%;accent-color:var(--amber);height:18px;cursor:pointer}
+  .ai-note{margin-top:9px;font-size:10.5px;color:var(--dim);border-top:1px dashed var(--line2);padding-top:7px;line-height:1.45}
+  .ai-note b{color:var(--teal)}
+
+  /* world viewport */
+  .world{grid-area:world;position:relative;background:#0c1116;border:1px solid var(--line);border-radius:var(--r);
+    overflow:hidden;min-height:340px;display:flex}
+  #scene{width:100%;height:100%;display:block;image-rendering:pixelated;cursor:crosshair}
+  .banner{position:absolute;top:0;left:0;right:0;padding:7px 12px;font-family:var(--mono);font-size:12px;
+    font-weight:600;color:#1a0f0d;background:linear-gradient(90deg,var(--crit),#c85a4b);
+    letter-spacing:.03em;transform:translateY(-110%);transition:transform .4s ease}
+  .banner.show{transform:translateY(0)}
+  .world .legend{position:absolute;bottom:6px;left:8px;font-family:var(--mono);font-size:10px;color:var(--mut);
+    background:rgba(10,14,18,.6);border:1px solid var(--line);border-radius:6px;padding:3px 7px;display:flex;gap:10px}
+  .world .legend span{display:flex;align-items:center;gap:4px}
+  .world .legend i{width:8px;height:8px;border-radius:2px;display:inline-block}
+
+  /* action bar + feed */
+  .actionbar{grid-area:bar;display:grid;grid-template-columns:auto 1fr;gap:8px}
+  .feed{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px;min-width:0}
+  .feed h2{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--mut);margin:0 0 6px;font-weight:700}
+  .feedlist{display:flex;flex-direction:column;gap:5px;max-height:140px;overflow-y:auto}
+  .card{display:flex;gap:8px;align-items:flex-start;padding:5px 7px;border-radius:6px;background:var(--panel2);
+    border-left:3px solid var(--line2);font-size:12px}
+  .card.t-big{border-left-color:var(--crit)}
+  .card.t-small{border-left-color:var(--warn)}
+  .card.t-good{border-left-color:var(--good)}
+  .card.t-misc{border-left-color:var(--teal)}
+  .card .ci{font-size:14px}
+  .card .cx{min-width:0}
+  .card .cx b{color:var(--ink);font-weight:600}
+  .card .cx span{color:var(--mut);font-size:11px;display:block}
+  .card .ct{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--dim);white-space:nowrap}
+
+  .incidents{display:flex;flex-direction:column;gap:6px}
+  .incidents .row{display:flex;gap:5px;flex-wrap:wrap}
+  .incidents button{flex:1;background:var(--panel2);border:1px solid var(--line2);color:var(--ink);
+    border-radius:6px;padding:6px 4px;font-size:11px;cursor:pointer;font-family:var(--sans);white-space:nowrap}
+  .incidents button:hover{border-color:var(--amber);color:var(--amber)}
+  .incidents button:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+  .hint{font-size:10.5px;color:var(--dim);margin-top:2px}
+
+  a.src{color:var(--teal);text-decoration:none;border-bottom:1px dotted var(--line2)}
+  a.src:hover{color:var(--amber)}
+
+  /* ---- overlay framework (§3 design-system): hotkey-toggled map layers ---- */
+  .overlays{display:flex;align-items:center;gap:4px;margin-left:8px}
+  .ov-chip{background:transparent;border:1px solid var(--line2);color:var(--mut);border-radius:6px;
+    padding:3px 7px;font-family:var(--mono);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px}
+  .ov-chip .kbd{font-size:9px;color:var(--dim);border:1px solid var(--line);border-radius:3px;padding:0 3px;line-height:14px}
+  .ov-chip:hover{border-color:var(--teal);color:var(--teal)}
+  .ov-chip.on{border-color:var(--amber);color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,transparent)}
+  .ov-chip.on .kbd{color:var(--amber);border-color:var(--amber)}
+  .ov-chip:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+
+  /* comfort mini-panel (shows only when out of thermal band) */
+  .comfort{display:none;grid-template-columns:20px 1fr auto;align-items:center;gap:8px;margin-top:4px;
+    padding-top:6px;border-top:1px dashed var(--line2)}
+  .comfort.show{display:grid}
+  .comfort .ico{font-size:14px;text-align:center}
+  .comfort .thermo{height:9px;background:linear-gradient(90deg,var(--teal),#2b3f5c 45%,#4a4036 55%,var(--crit));
+    border:1px solid var(--line);border-radius:20px;position:relative;overflow:visible}
+  .comfort .mark{position:absolute;top:-2px;width:3px;height:13px;background:var(--ink);border-radius:2px;
+    box-shadow:0 0 0 1px #0b0f13;transition:left .3s ease}
+  .comfort .band{position:absolute;top:0;bottom:0;background:rgba(111,174,84,.22);border-left:1px solid var(--good);border-right:1px solid var(--good)}
+  .comfort .lb{font-family:var(--mono);font-size:10px;color:var(--warn);white-space:nowrap}
+
+  /* wear / deterioration bar on outdoor item rows */
+  .wear{height:4px;background:#0c1116;border:1px solid var(--line);border-radius:20px;overflow:hidden;margin-top:2px}
+  .wear i{display:block;height:100%;background:var(--warn);border-radius:20px}
+  .tag-out{font-size:9px;color:var(--warn);border:1px solid var(--line2);border-radius:3px;padding:0 3px;margin-left:4px}
+
+  /* weather effect chips under the top bar weather item */
+  .wfx{display:flex;gap:4px;flex-wrap:wrap;margin-left:6px}
+  .wfx span{font-size:10px;color:var(--mut);border:1px solid var(--line2);border-radius:20px;padding:0 6px;line-height:16px}
+
+  /* ---- power panel (Batch 2) — tech = --comp violet accent ---- */
+  .power h2 .tag{color:var(--comp)}
+  .power .r .n.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .power .netline{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:12px;
+    margin:2px 0 8px;padding:4px 7px;border-radius:6px;border:1px solid var(--line2);background:var(--panel2)}
+  .power .netline b{font-variant-numeric:tabular-nums}
+  .power .netline .gen{color:var(--good)} .power .netline .drw{color:var(--teal)}
+  .power .netline.brown{border-color:var(--crit);color:var(--crit);
+    animation:pwPulse 1s ease-in-out infinite}
+  @media(prefers-reduced-motion: reduce){ .power .netline.brown{animation:none} }
+  @keyframes pwPulse{0%,100%{background:var(--panel2)}50%{background:color-mix(in srgb,var(--crit) 22%,var(--panel2))}}
+  /* charge gauge — reuse the .gauge shape but violet-fill */
+  .chgauge{position:relative;height:9px;border-radius:20px;background:#0c1116;border:1px solid var(--line);overflow:hidden;flex:1;margin:0 6px}
+  .chgauge i{display:block;height:100%;background:var(--comp);border-radius:20px;transition:width .3s ease,background .3s}
+  .chgauge i.low{background:var(--crit)}
+  /* ⚡ on/off pip per device row */
+  .pwpip{font-size:11px;width:16px;text-align:center;flex:0 0 auto}
+  .pwpip.on{color:var(--amber)} .pwpip.off{color:var(--dim)}
+  /* device toggle buttons */
+  .pwctl{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;border-top:1px dashed var(--line2);padding-top:8px}
+  .pwctl button{background:var(--panel2);border:1px solid var(--line2);color:var(--ink);
+    border-radius:6px;padding:4px 7px;font-size:11px;cursor:pointer;font-family:var(--sans)}
+  .pwctl button:hover{border-color:var(--amber)}
+  .pwctl button:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+  .pwctl button.off{opacity:.5;text-decoration:line-through}
+
+  /* ---- Batch 3: bills / research / cooking / quality / stockpiles ---- */
+  /* bill queue primitive (§4 "bill row"): recipe · until-N stepper · ETA · missing badge */
+  .bills-add{display:flex;gap:5px;margin-bottom:7px}
+  .bills-add select{flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line2);color:var(--ink);
+    border-radius:6px;padding:4px 6px;font-family:var(--sans);font-size:11px;cursor:pointer}
+  .bills-add select:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+  .bills-add button{background:var(--panel2);border:1px solid var(--line2);color:var(--ink);border-radius:6px;
+    padding:4px 8px;font-size:11px;cursor:pointer;font-family:var(--sans)}
+  .bills-add button:hover{border-color:var(--amber);color:var(--amber)}
+  .bills-add button:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+  .billq{display:flex;flex-direction:column;gap:6px}
+  .bill{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:7px;padding:5px 7px;
+    border-radius:6px;background:var(--panel2);border:1px solid var(--line2);border-left:3px solid var(--comp)}
+  .bill.stall{border-left-color:var(--crit)}
+  .bill .bg{font-size:14px;line-height:1}
+  .bill .bx{min-width:0}
+  .bill .bx b{color:var(--ink);font-weight:600;font-size:12px}
+  .bill .bx .eta{display:block;font-family:var(--mono);font-size:10px;color:var(--mut)}
+  .bill .prog{height:4px;background:#0c1116;border:1px solid var(--line);border-radius:20px;overflow:hidden;margin-top:3px}
+  .bill .prog i{display:block;height:100%;background:var(--comp);border-radius:20px;transition:width .3s ease}
+  .bill .step{display:flex;align-items:center;gap:3px;font-family:var(--mono);font-size:11px;color:var(--ink)}
+  .bill .step button{width:18px;height:18px;padding:0;line-height:1;background:var(--panel);border:1px solid var(--line2);
+    color:var(--ink);border-radius:4px;cursor:pointer;font-family:var(--mono);font-size:12px}
+  .bill .step button:hover{border-color:var(--amber);color:var(--amber)}
+  .bill .step button:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+  .bill .step .tgt{min-width:16px;text-align:center;color:var(--amber)}
+  .miss{font-size:9px;color:var(--crit);border:1px solid var(--crit);border-radius:3px;padding:0 4px;
+    line-height:15px;font-family:var(--mono);white-space:nowrap;margin-left:4px}
+  .bill .bxctl{display:flex;flex-direction:column;gap:4px;align-items:flex-end}
+  .bill .rm{background:transparent;border:1px solid var(--line2);color:var(--dim);border-radius:4px;
+    width:18px;height:18px;padding:0;line-height:1;font-size:11px;cursor:pointer}
+  .bill .rm:hover{border-color:var(--crit);color:var(--crit)}
+  .bill .rm:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+  .freshbar{height:4px;background:#0c1116;border:1px solid var(--line);border-radius:20px;overflow:hidden;margin-top:2px}
+  .freshbar i{display:block;height:100%;background:var(--good);border-radius:20px}
+  .rawwarn{margin-top:6px;font-size:10.5px;color:var(--crit);border:1px solid var(--line2);border-radius:6px;
+    padding:4px 7px;background:color-mix(in srgb,var(--crit) 8%,transparent);display:flex;align-items:center;gap:5px}
+  .rawwarn b{font-family:var(--mono)}
+
+  /* research tree (§4 "tech node"): title · progress bar · prereq lines · lock */
+  .research h2 .tag{color:var(--comp)}
+  .tree{position:relative}
+  .tree svg.links{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0}
+  .tnode{position:relative;z-index:1;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:7px;
+    padding:5px 7px;margin-bottom:6px;border-radius:6px;background:var(--panel2);border:1px solid var(--line2)}
+  .tnode.done{border-color:var(--good)}
+  .tnode.active{border-color:var(--amber)}
+  .tnode.locked{opacity:.55}
+  .tnode .tg{font-size:14px;line-height:1}
+  .tnode .tx{min-width:0}
+  .tnode .tx b{color:var(--ink);font-weight:600;font-size:12px}
+  .tnode .tx .cost{display:block;font-family:var(--mono);font-size:10px;color:var(--mut)}
+  .tnode .tprog{height:5px;background:#0c1116;border:1px solid var(--line);border-radius:20px;overflow:hidden;margin-top:3px}
+  .tnode .tprog i{display:block;height:100%;background:var(--comp);border-radius:20px;transition:width .3s ease}
+  .tnode .tbtn{background:var(--panel);border:1px solid var(--line2);color:var(--ink);border-radius:6px;
+    padding:4px 7px;font-size:11px;cursor:pointer;font-family:var(--sans);white-space:nowrap}
+  .tnode .tbtn:hover{border-color:var(--amber);color:var(--amber)}
+  .tnode .tbtn:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+  .tnode .tbtn:disabled{cursor:not-allowed;opacity:.6}
+  .tnode .tstat{font-family:var(--mono);font-size:11px;white-space:nowrap}
+  .tnode .tstat.ok{color:var(--good)} .tnode .tstat.lk{color:var(--mut)}
+
+  /* quality pip on gear rows */
+  .qpip{display:inline-block;width:9px;height:9px;border-radius:2px;flex:0 0 auto;
+    box-shadow:0 0 0 1px #0b0f13;vertical-align:-1px;margin-right:2px}
+
+  /* locked palette slot: 🔒 badge + amber ring on focus */
+  .slot.lock{position:relative}
+  .slot.lock .lk{position:absolute;bottom:1px;right:2px;font-size:9px;line-height:1;color:var(--comp)}
+  .slot:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+</style>
+
+<div class="wrap">
+  <div class="masthead">
+    <h1><b>RealWorld</b> — HUD · механіки та інтерфейс</h1>
+    <div class="sub">spec 0004 · інтерактивний макет — тягни повзунки <b>Balance</b>, запускай інциденти</div>
+  </div>
+
+  <div class="hud" id="hud">
+
+    <!-- TOP BAR -->
+    <div class="topbar">
+      <div class="item"><span class="k">День</span><span id="t-day">6</span></div>
+      <div class="item"><span id="t-phase">☀</span><span id="t-clock">13:20</span></div>
+      <div class="sep"></div>
+      <div class="item"><span class="k">Темп</span><span id="t-temp">18°</span></div>
+      <div class="item"><span id="t-weather">⛅</span><span id="t-wname">хмарно</span></div>
+      <div class="wfx" id="wfx"></div>
+      <div class="item region">📍 <span>Київ · 50.45, 30.52</span></div>
+      <div class="overlays" id="overlays" role="group" aria-label="Накладки карти">
+        <button class="ov-chip" data-ov="roof"><span>Дах</span><span class="kbd">R</span></button>
+        <button class="ov-chip" data-ov="temp"><span>Темп</span><span class="kbd">T</span></button>
+        <button class="ov-chip" data-ov="light"><span>Світло</span><span class="kbd">L</span></button>
+        <button class="ov-chip" data-ov="power"><span>Живл</span><span class="kbd">P</span></button>
+        <button class="ov-chip" data-ov="stock"><span>Склад</span><span class="kbd">Z</span></button>
+      </div>
+      <button class="btn-ghost" id="advance">День +1 ▸</button>
+    </div>
+
+    <!-- LEFT DOCK -->
+    <div class="leftdock">
+      <div class="panel">
+        <h2>▸ Життєві <span class="tag">need</span></h2>
+        <div class="need"><span class="ico">🍖</span><div class="track"><div class="fill" id="n-food"></div></div><span class="val" id="v-food">—</span></div>
+        <div class="need"><span class="ico">😴</span><div class="track"><div class="fill" id="n-rest"></div></div><span class="val" id="v-rest">—</span></div>
+        <div class="need"><span class="ico">💧</span><div class="track"><div class="fill" id="n-water"></div></div><span class="val" id="v-water">—</span></div>
+        <div class="comfort" id="comfort" title="комфорт = температура клітини vs утеплення одягу">
+          <span class="ico" id="cf-ico">🥶</span>
+          <div class="thermo"><div class="band" id="cf-band"></div><div class="mark" id="cf-mark"></div></div>
+          <span class="lb" id="cf-lb">−утеплення</span>
+        </div>
+        <div class="minibtns">
+          <button data-need="food">Їсти</button>
+          <button data-need="rest">Спати</button>
+          <button data-need="water">Пити</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>▸ Здоров'я <span class="tag">hediff</span></h2>
+        <div class="doll">
+          <svg width="66" height="104" viewBox="0 0 66 104" aria-label="тіло пішки">
+            <circle id="p-head" cx="33" cy="13" r="11" fill="#2c3a30" stroke="#0b0f13" stroke-width="1.5"/>
+            <rect id="p-torso" x="22" y="26" width="22" height="34" rx="5" fill="#2c3a30" stroke="#0b0f13" stroke-width="1.5"/>
+            <rect id="p-arm_l" x="10" y="28" width="10" height="30" rx="5" fill="#2c3a30" stroke="#0b0f13" stroke-width="1.5"/>
+            <rect id="p-arm_r" x="46" y="28" width="10" height="30" rx="5" fill="#2c3a30" stroke="#0b0f13" stroke-width="1.5"/>
+            <rect id="p-leg_l" x="23" y="62" width="9" height="38" rx="4.5" fill="#2c3a30" stroke="#0b0f13" stroke-width="1.5"/>
+            <rect id="p-leg_r" x="34" y="62" width="9" height="38" rx="4.5" fill="#2c3a30" stroke="#0b0f13" stroke-width="1.5"/>
+          </svg>
+          <div class="meta">
+            <div class="blood">кров <b id="h-blood">100%</b></div>
+            <div>рух <b id="h-move">100%</b></div>
+            <div>руки <b id="h-manip">100%</b></div>
+            <div>свідом. <b id="h-consc">100%</b></div>
+            <div id="h-state" style="color:var(--good)">стабільно</div>
+          </div>
+        </div>
+        <div class="minibtns">
+          <button data-hurt="leg_l">Рана ноги</button>
+          <button data-hurt="torso">Рана тулуба</button>
+          <button data-act="disease">Хвороба</button>
+          <button data-act="tend">Лікувати 💊</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>▸ Спорядження <span class="tag">gear</span></h2>
+        <div class="stock" style="grid-template-columns:1fr">
+          <div class="r" id="gear-axe" title="якість × базова шкода — наведи, щоб побачити розклад">
+            <span class="qpip" id="axe-pip" style="background:var(--comp)"></span><span class="g">🪓</span>
+            <span class="lb">Сокира <span id="axe-qlab" style="color:var(--comp)">майстерна</span></span>
+            <span class="n" id="axe-stat" style="color:var(--teal)">×якість 1.35</span>
+          </div>
+          <div class="r"><span class="g">🔱</span><span class="lb">Спис</span><span class="n">×дмг 1.15</span></div>
+          <div class="r"><span class="g">🧥</span><span class="lb">Куртка</span><span class="n" style="color:var(--mut)">+утепл 6°</span></div>
+        </div>
+        <div class="stock" style="grid-template-columns:1fr;margin-top:6px;border-top:1px dashed var(--line2);padding-top:6px">
+          <div class="r" title="ящик стоїть надворі — псується; занеси під дах (R)">
+            <span class="g">📦</span><span class="lb">Ящик <span class="tag-out">надворі</span></span>
+            <span class="n" id="det-pct" style="color:var(--warn)">знос 0%</span>
+          </div>
+          <div class="wear"><i id="det-bar" style="width:0%"></i></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- WORLD -->
+    <div class="world">
+      <canvas id="scene" width="560" height="360"></canvas>
+      <div class="banner" id="banner"></div>
+      <div class="legend">
+        <span><i style="background:#2f5133"></i>ліс</span>
+        <span><i style="background:#2b3f5c"></i>вода</span>
+        <span><i style="background:#4a4036"></i>дорога</span>
+        <span><i style="background:var(--amber)"></i>герой</span>
+        <span><i style="background:var(--crit)"></i>рейдер</span>
+      </div>
+    </div>
+
+    <!-- RIGHT DOCK -->
+    <div class="rightdock">
+      <div class="panel balance">
+        <h2>▸ Balance <span class="tag" id="bal-role">режисер: правила</span></h2>
+        <div class="phases"><span>спокій</span><span>рейд</span><span>облога</span><span>сплеск</span></div>
+        <div class="gauge"><div class="g-fill" id="g-threat"></div></div>
+        <div class="bal-row"><span class="k">Фаза</span><span class="phase-pill" id="b-phase">рейд</span></div>
+        <div class="bal-row"><span class="k">Загроза</span><span class="v" id="b-threat">—</span></div>
+        <div class="bal-row"><span class="k">Багатство</span><span class="v" id="b-wealth">—</span></div>
+        <div class="bal-row"><span class="k">Прогноз рейду</span><span class="v" id="b-hint">—</span></div>
+
+        <div class="knob">
+          <label>Складність <b id="k-diff">1.0×</b></label>
+          <input type="range" id="s-diff" min="0.4" max="2.5" step="0.1" value="1.0">
+        </div>
+        <div class="knob">
+          <label>Щедрість <b id="k-gen">1.0×</b></label>
+          <input type="range" id="s-gen" min="0.4" max="2.0" step="0.1" value="1.0">
+        </div>
+        <div class="ai-note">Ці повзунки — <b>поверхня AI-керування</b>. Сьогодні <code>decide()</code> = прозорі правила; завтра AI-політика рухає їх, щоб тримати цільове відчуття гри.</div>
+      </div>
+
+      <div class="panel power" id="power-panel">
+        <h2>▸ Живлення <span class="tag" id="pw-tag">мережа</span></h2>
+        <div class="netline" id="pw-netline" title="генерація vs споживання мережі — червоне = перевантаження">
+          <span>⚡</span>
+          <span>ген <b class="gen" id="pw-gen">0</b>W</span>
+          <span>·</span>
+          <span>спож <b class="drw" id="pw-draw">0</b>W</span>
+          <span id="pw-status" style="margin-left:auto"></span>
+        </div>
+        <div class="stock" style="grid-template-columns:1fr">
+          <div class="r" id="pw-solar-row" title="сонячна панель × поточне світло = вихід (сонячна = світло)">
+            <span class="g">☀</span><span class="lb">Сонячна</span>
+            <span class="n mono" id="pw-solar" style="color:var(--comp)">—</span>
+          </div>
+          <div class="r" title="генератор на пальному — постійний вихід, поки є пальне">
+            <span class="g">⚙</span><span class="lb">Генератор</span>
+            <span class="n mono" id="pw-fuel" style="color:var(--good)">—</span>
+          </div>
+          <div class="r" title="батарея — буфер: заряджається на надлишку, розряджається на дефіциті">
+            <span class="pwpip" id="pw-batt-pip">▮</span><span class="lb">Батарея</span>
+            <div class="chgauge"><i id="pw-batt-fill" style="width:0%"></i></div>
+            <span class="n mono" id="pw-batt" style="color:var(--comp)">0%</span>
+          </div>
+          <div class="r" title="запас = скільки Вт мережа може ще дати понад споживання">
+            <span class="g">📊</span><span class="lb">Запас</span>
+            <span class="n mono" id="pw-headroom" style="color:var(--teal)">—</span>
+          </div>
+        </div>
+        <div class="stock" style="grid-template-columns:1fr;margin-top:6px;border-top:1px dashed var(--line2);padding-top:6px">
+          <div class="r" title="обігрівач — живлення від мережі; при перевантаженні гасне і перестає гріти (див. T)">
+            <span class="pwpip on" id="pw-heater-pip">⚡</span><span class="lb">Обігрівач <span id="pw-heater-lb" style="color:var(--mut)">гріє +4°</span></span>
+            <span class="n mono" id="pw-heater-draw" style="color:var(--dim)">200W</span>
+          </div>
+          <div class="r" title="лампа — живлення від мережі; при перевантаженні гасне (див. L)">
+            <span class="pwpip on" id="pw-lamp-pip">⚡</span><span class="lb">Лампа <span id="pw-lamp-lb" style="color:var(--mut)">коло r4</span></span>
+            <span class="n mono" id="pw-lamp-draw" style="color:var(--dim)">50W</span>
+          </div>
+        </div>
+        <div class="pwctl">
+          <button id="pw-toggle-heater" data-dev="heater" title="увімкнути/вимкнути обігрівач">⚡ Обігрівач</button>
+          <button id="pw-toggle-lamp" data-dev="lamp" title="увімкнути/вимкнути лампу">⚡ Лампа</button>
+          <button id="pw-add-load" title="додати важке навантаження — заганяє мережу в перевантаження">+ Навантаж.</button>
+        </div>
+      </div>
+
+      <!-- Batch 3: Bills (workbench) — appears when the бench is selected -->
+      <div class="panel" id="bench-panel">
+        <h2>▸ Верстак <span class="tag" id="bench-tag">крафт</span></h2>
+        <div class="bills-add">
+          <select id="bench-recipe" aria-label="рецепт для черги"></select>
+          <button id="bench-add" title="додати завдання до черги">+ Завдання</button>
+        </div>
+        <div class="billq" id="bench-bills"></div>
+      </div>
+
+      <!-- Batch 3: Research tree -->
+      <div class="panel research" id="research-panel">
+        <h2>▸ Дослідження <span class="tag" id="research-tag">tech</span></h2>
+        <div class="tree" id="research-tree">
+          <svg class="links" id="research-links" preserveAspectRatio="none"></svg>
+          <div id="research-nodes"></div>
+        </div>
+      </div>
+
+      <!-- Batch 3: Cooking — a stove Bills panel + freshness + raw-poison warning -->
+      <div class="panel" id="stove-panel">
+        <h2>▸ Плита <span class="tag" id="stove-tag">кухня · рівень 2</span></h2>
+        <div class="bills-add">
+          <select id="stove-recipe" aria-label="страва для черги"></select>
+          <button id="stove-add" title="додати завдання до черги">+ Готувати</button>
+        </div>
+        <div class="billq" id="stove-bills"></div>
+        <div class="stock" style="grid-template-columns:1fr;margin-top:7px;border-top:1px dashed var(--line2);padding-top:7px">
+          <div class="r" title="свіжість останньої страви (CompRottable) — тепло пришвидшує гниль">
+            <span class="g">🍲</span><span class="lb">Юшка</span>
+            <span class="n mono" id="stove-fresh" style="color:var(--good)">свіжа 100%</span>
+          </div>
+          <div class="freshbar"><i id="stove-freshbar" style="width:100%"></i></div>
+        </div>
+        <div class="rawwarn" id="stove-raw" title="ризик отруєння падає з рівнем кухаря">
+          <span>⚠</span><span>сире — ризик отруєння <b id="stove-rawpct">48%</b></span>
+        </div>
+        <div class="minibtns">
+          <button id="stove-eat-cooked" title="з'їсти приготовану страву">🍲 З'їсти варене</button>
+          <button id="stove-eat-raw" title="з'їсти сире — ризик отруєння">🥩 З'їсти сире</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>▸ Агенти <span class="tag">non-hero</span></h2>
+        <div class="stock" style="grid-template-columns:1fr">
+          <div class="r"><span class="g">🤖</span><span class="lb">Дрон-1</span><span class="n" style="color:var(--teal)">haul → склад</span></div>
+          <div class="r"><span class="g">🐺</span><span class="lb">Вовк</span><span class="n" style="color:var(--good)">guard</span></div>
+          <div class="r"><span class="g">🐎</span><span class="lb">Кінь</span><span class="n" style="color:var(--mut)">pack</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACTION BAR -->
+    <div class="actionbar">
+      <div class="panel" style="display:flex;flex-direction:column;gap:8px">
+        <div>
+          <h2 style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--mut);margin:0 0 6px;font-weight:700">Будівництво / крафт</h2>
+          <div class="palette" id="palette"></div>
+        </div>
+        <div class="incidents">
+          <h2 style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--mut);margin:0;font-weight:700">Інциденти Balance</h2>
+          <div class="row">
+            <button data-inc="raid">⚔ Рейд</button>
+            <button data-inc="siege">🎯 Облога</button>
+            <button data-inc="infestation">🐛 Рій</button>
+          </div>
+          <div class="row">
+            <button data-inc="manhunter">🐺 Оскаженіння</button>
+            <button data-inc="disease">🤒 Хвороба</button>
+            <button data-inc="cold_snap">❄ Похолодання</button>
+          </div>
+          <div class="row">
+            <button data-inc="cargo">📦 Вантаж</button>
+            <button data-inc="quest">📜 Квест</button>
+          </div>
+          <div class="hint">Розмір/тактика рейду рахуються з поточної загрози Balance.</div>
+        </div>
+      </div>
+
+      <div class="feed">
+        <h2>Стрічка подій</h2>
+        <div class="feedlist" id="feed"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const $=id=>document.getElementById(id);
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // ---- world economic state (mirrors a sim `world` dict) ----
+  const world={
+    day:6,
+    buildings:[{value:45},{value:45},{value:25},{value:25}],
+    stock:{wood:60,stone:30,food:20,scrap:24,planks:8,components:4},
+    items:["axe"],
+    hostile:1.1
+  };
+
+  // ---- Balance (JS mirror of godot/scripts/kernel/balance.gd) ----
+  const Balance={
+    difficulty:1.0, generosity:1.0,
+    wealth(w){let s=0; w.buildings.forEach(b=>s+=b.value); for(const k in w.stock) s+=w.stock[k]; s+=20*w.items.length; return s;},
+    threatPoints(w){return (35 + 0.20*this.wealth(w) + 6*w.day) * Math.max(0.1,w.hostile);},
+    assess(w){const pts=this.threatPoints(w)*this.difficulty;
+      return {wealth:this.wealth(w), threat:pts, phase:this.phase(pts), raidHint:clamp(Math.floor(pts/40),1,30)};},
+    phase(pts){return pts>260?"сплеск":pts>160?"облога":pts>80?"рейд":"спокій";},
+    raidStyle(pts,day){return pts>260?"сапери":pts>160?"облога":(day%4===0?"дропод":"штурм");}
+  };
+  const PHASE_COLOR={"спокій":"var(--good)","рейд":"var(--warn)","облога":"#e08a4a","сплеск":"var(--crit)"};
+
+  function paintBalance(){
+    const a=Balance.assess(world);
+    $("b-threat").textContent=Math.round(a.threat);
+    $("b-wealth").textContent=Math.round(a.wealth);
+    $("b-hint").textContent="~"+a.raidHint+" рейдерів";
+    const pill=$("b-phase"); pill.textContent=a.phase;
+    pill.style.color=PHASE_COLOR[a.phase]; pill.style.background="color-mix(in srgb,"+PHASE_COLOR[a.phase]+" 18%, transparent)";
+    const g=$("g-threat"); g.style.width=clamp(a.threat/600*100,4,100)+"%"; g.style.background=PHASE_COLOR[a.phase];
+    $("k-diff").textContent=Balance.difficulty.toFixed(1)+"×";
+    $("k-gen").textContent=Balance.generosity.toFixed(1)+"×";
+    return a;
+  }
+
+  // ---- climate (JS mirror of climate.gd) ----
+  const LAT=50.45;
+  function climate(day,frac){
+    const yp=(((day-1)%360))/360;
+    let seasonal=-Math.cos(yp*2*Math.PI); if(LAT<0) seasonal=-seasonal;
+    const base=30-0.55*Math.abs(LAT), amp=2+0.30*Math.abs(LAT);
+    const diurnal=-Math.cos(frac*2*Math.PI)*(4+0.05*Math.abs(LAT));
+    return base+seasonal*amp+diurnal;
+  }
+  let frac=0.55;
+
+  // ==== Batch 1 environment: spatial state · overlays · weather · comfort · deterioration ====
+  // Mirrors kernel/environment.gd: indoor buffering, emitters, lamps, wet-driven deterioration.
+  const base={x0:11,y0:13,x1:16,y1:17};              // an enclosed, roofed room (RoofMap)
+  // temp_emitters / lights — Batch 2 (power.gd PowerNetSystem) owns `active`; it mirrors each device's
+  // `powered` (net delivered) & `on` (player intent). A brownout sets active=false -> Batch-1 stops heating.
+  const heaters=[{x:12,y:14,delta:4,active:true,dev:"heater"}];
+  const lamps=[{x:15,y:16,r:4,active:true,dev:"lamp"}];
+  const crate={x:20,y:20};                           // a stack left OUTDOORS (deteriorates)
+  let tempOffset=0, det=0;                            // cold-snap transient · crate deterioration 0..1
+  function isIndoor(x,y){return x>=base.x0&&x<=base.x1&&y>=base.y0&&y<=base.y1;}
+  function tempAt(x,y){                               // felt cell temp (mirrors TemperatureSystem)
+    let t=climate(world.day,frac)+tempOffset;
+    if(isIndoor(x,y)) t+=(21-t)*0.6;                  // INDOOR_INSULATION
+    for(const h of heaters){ if(h.active && (Math.abs(h.x-x)+Math.abs(h.y-y))<=6) t+=h.delta; }
+    return t;
+  }
+
+  // ==== Batch 2 power grid — JS mirror of kernel/power.gd ==============================================
+  // Producers push watts in (solar = rated × ctx.light : teaches solar=light), consumers pull them out,
+  // a battery buffers the difference; if demand > supply+storage the net BROWNS OUT and sheds the lowest
+  // -priority loads. Each device's `powered` verdict flips the matching heater/lamp `active` (the Batch1
+  // <->Batch2 seam) — exactly PowerNetSystem.apply_device_states(). Positioned at the base buildings.
+  const power={
+    // producers
+    solar:{rated:300},                                // solar output = rated × daylight(frac)
+    fuel:{rated:250, fuel:1.0},                        // constant while fuelled
+    // storage
+    battery:{capacity:500, stored:260},
+    // consumers: heater & lamp (linked to the Batch-1 emitter/light entries), plus a togglable extra load
+    loads:[
+      {dev:"heater", draw:200, priority:5, on:true, powered:false, ref:heaters[0]},
+      {dev:"lamp",   draw:50,  priority:3, on:true, powered:false, ref:lamps[0]},
+      {dev:"extra",  draw:400, priority:1, on:false, powered:false, ref:null}, // the "+ Навантаж." stress load
+    ],
+    brownout:false,
+    // wire positions on the base — a producer hub the conduit fans out from, drawn in the P overlay
+    hub:{x:13,y:15}, sun:{x:11,y:13}, bat:{x:16,y:13}
+  };
+  function daylight(){ return clamp(-Math.cos(frac*2*Math.PI),0,1); } // matches climate.gd daylight shape
+  function solarOut(){ return power.solar.rated*daylight(); }
+  function fuelOut(){ return power.fuel.fuel>0 ? power.fuel.rated : 0; }
+  // The net solver — mirrors PowerNetSystem.system_tick step-for-step (supply / demand / battery / shed).
+  function solvePower(){
+    const supply=solarOut()+fuelOut();
+    const live=power.loads.filter(l=>l.on);
+    power.loads.filter(l=>!l.on).forEach(l=>l.powered=false);   // off by intent -> not powered
+    let demand=live.reduce((s,l)=>s+l.draw,0);
+    const avail=power.battery.stored;
+    power.brownout=false;
+    if(demand<=supply+avail){
+      live.forEach(l=>l.powered=true);
+      const net=supply-demand;
+      if(net>=0) power.battery.stored=clamp(power.battery.stored+net,0,power.battery.capacity); // charge surplus
+      else       power.battery.stored=clamp(power.battery.stored+net,0,power.battery.capacity); // discharge (net<0)
+    } else {
+      power.brownout=true;                                       // shed lowest-priority loads until it fits
+      const budget=supply+avail;
+      const ordered=live.slice().sort((a,b)=>b.priority-a.priority); // keep highest priority first
+      let kept=0;
+      ordered.forEach(l=>{ if(kept+l.draw<=budget+1e-6){l.powered=true; kept+=l.draw;} else l.powered=false; });
+      power.battery.stored=clamp(power.battery.stored-Math.max(0,kept-supply),0,power.battery.capacity);
+    }
+    // seam: flip each linked Batch-1 emitter/light `active` to the device's live state (== apply_device_states)
+    power.loads.forEach(l=>{ if(l.ref) l.ref.active = (l.on && l.powered); });
+    return {supply,demand};
+  }
+  function paintPower(){
+    const {supply,demand}=solvePower();
+    $("pw-gen").textContent=Math.round(supply);
+    $("pw-draw").textContent=Math.round(demand);
+    $("pw-solar").textContent=`${power.solar.rated}W ×світло ${daylight().toFixed(2)} = ${Math.round(solarOut())}W`;
+    $("pw-fuel").textContent=`${Math.round(fuelOut())}W`+(power.fuel.fuel>0?"":" (нема пального)");
+    const frac2=clamp(power.battery.stored/power.battery.capacity,0,1);
+    const bf=$("pw-batt-fill"); bf.style.width=Math.round(frac2*100)+"%"; bf.classList.toggle("low",frac2<0.15);
+    $("pw-batt").textContent=Math.round(frac2*100)+"%";
+    $("pw-batt-pip").style.color = frac2<0.15?"var(--crit)":"var(--comp)";
+    const headroom=Math.round(supply-demand);
+    $("pw-headroom").textContent=(headroom>=0?"+":"")+headroom+"W";
+    $("pw-headroom").style.color = headroom<0?"var(--crit)":"var(--teal)";
+    // net meter brownout state
+    const nl=$("pw-netline"); nl.classList.toggle("brown",power.brownout);
+    $("pw-status").textContent = power.brownout?"🔌 перевантаження":"";
+    $("pw-status").style.color = "var(--crit)";
+    // per-device ⚡ pips (on = amber lightning, off = dim)
+    const hL=power.loads.find(l=>l.dev==="heater"), lL=power.loads.find(l=>l.dev==="lamp");
+    setPip("pw-heater-pip", hL); setPip("pw-lamp-pip", lL);
+    $("pw-heater-lb").textContent = hL.powered? `гріє +${heaters[0].delta}°` : "погашено";
+    $("pw-lamp-lb").textContent   = lL.powered? "коло r"+lamps[0].r : "погашено";
+    // toggle button states
+    $("pw-toggle-heater").classList.toggle("off",!hL.on);
+    $("pw-toggle-lamp").classList.toggle("off",!lL.on);
+    const ex=power.loads.find(l=>l.dev==="extra");
+    $("pw-add-load").classList.toggle("off",!ex.on);
+    $("pw-add-load").textContent = ex.on? "− Навантаж." : "+ Навантаж.";
+  }
+  function setPip(id,l){ const p=$(id); const live=l.on&&l.powered;
+    p.textContent = live?"⚡":(l.on?"⚠":"○"); p.className="pwpip "+(live?"on":"off");
+    p.title = live?"живиться":(l.on?"без живлення (перевантаження)":"вимкнено"); }
+  // brownout side-effects: banner + toast + feed the FIRST time a shed happens
+  let _wasBrown=false;
+  function powerFeedback(){
+    if(power.brownout && !_wasBrown){
+      showBanner("🔌 ПЕРЕВАНТАЖЕННЯ — скидаю найнижчі навантаження");
+      const shed=power.loads.filter(l=>l.on&&!l.powered).map(l=>l.dev).join(", ");
+      pushCard("small","🔌","Перевантаження мережі",`скинуто: ${shed||"—"} · погашені прилади не гріють/світять`);
+    }
+    _wasBrown=power.brownout;
+  }
+
+  // weather — shown honestly in the top bar with its gameplay effects
+  const WEATHER={clear:["☀","ясно",[]],rain:["🌧","дощ",["−ріст","гасить 🔥","+знос ×2"]],
+    snow:["🌨","сніг",["−ріст","+знос"]],fog:["🌫","туман",["−видимість"]],
+    cold_snap:["❄","похолодання",["−15°","врожай мерзне"]]};
+  let weather="clear";
+  function paintWeather(){const w=WEATHER[weather];
+    $("t-weather").textContent=w[0]; $("t-wname").textContent=w[1];
+    $("wfx").innerHTML=w[2].map(x=>`<span>${x}</span>`).join("");}
+  function rollWeather(){const t=climate(world.day,0.5),r=Math.random();
+    weather = t<-5 ? (r<0.5?"snow":"clear") : r<0.6?"clear":r<0.78?"rain":r<0.9?"fog":"clear";
+    paintWeather();}
+
+  // overlay framework (design-system §3): ONE radio overlay at a time; hotkeys R / T / L
+  let activeOv=null;
+  const LEGEND_TERRAIN=document.querySelector(".world .legend").innerHTML;
+  function setOverlay(k){activeOv=(activeOv===k)?null:k;
+    document.querySelectorAll(".ov-chip").forEach(c=>c.classList.toggle("on",c.dataset.ov===activeOv));
+    paintLegend();}
+  function paintLegend(){const el=document.querySelector(".world .legend"); if(!el)return;
+    if(!activeOv){el.innerHTML=LEGEND_TERRAIN; return;}
+    if(activeOv==="roof")el.innerHTML=`<span><i style="background:rgba(224,176,112,.5)"></i>у приміщенні</span><span><i style="background:#0c1116"></i>надворі</span><span>📦 надворі — псується</span>`;
+    if(activeOv==="temp")el.innerHTML=`<span><i style="background:rgba(90,150,200,.6)"></i>холод</span><span><i style="background:rgba(90,130,90,.6)"></i>норма</span><span><i style="background:rgba(224,106,90,.7)"></i>жар</span><span>◯ радіус обігрівача</span>`;
+    if(activeOv==="light")el.innerHTML=`<span>💡 лампа — коло світла</span><span><i style="background:#060a18"></i>темрява · −робота</span>`;
+    if(activeOv==="power")el.innerHTML=`<span><i style="background:var(--comp)"></i>кабель</span><span>⚡ живиться</span><span style="color:var(--crit)">○ погашено</span><span style="color:var(--crit)">🔌 перевантаження</span>`;
+    if(activeOv==="stock")el.innerHTML=`<span><i style="background:rgba(134,208,214,.5)"></i>склад (усе)</span><span><i style="background:rgba(224,106,90,.5)"></i>лише їжа</span><span>№ пріоритет</span><span>▮ заповнення</span>`;}
+  function heatColor(t){return t<=0?"rgba(90,150,200,.55)":t<=12?"rgba(80,120,150,.4)":t<=24?"rgba(90,130,90,.4)":t<=30?"rgba(210,150,90,.5)":"rgba(224,106,90,.6)";}
+  function drawOverlay(cw,ch,which){
+    if(which==="roof"){
+      for(let y=0;y<N;y++)for(let x=0;x<N;x++) if(isIndoor(x,y)){ctx.fillStyle="rgba(224,176,112,.16)"; ctx.fillRect(x*cw,y*ch,cw+.5,ch+.5);}
+      ctx.strokeStyle="rgba(224,176,112,.85)"; ctx.lineWidth=1.5;
+      ctx.strokeRect(base.x0*cw,base.y0*ch,(base.x1-base.x0+1)*cw,(base.y1-base.y0+1)*ch);
+      ctx.strokeStyle="#e06a5a"; ctx.beginPath(); ctx.arc((crate.x+.5)*cw,(crate.y+.5)*ch,cw*0.55,0,7); ctx.stroke();
+      ctx.font=Math.floor(ch)+"px serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("📦",(crate.x+.5)*cw,(crate.y+.55)*ch);
+    } else if(which==="temp"){
+      for(let y=0;y<N;y++)for(let x=0;x<N;x++){ctx.fillStyle=heatColor(tempAt(x,y)); ctx.fillRect(x*cw,y*ch,cw+.5,ch+.5);}
+      heaters.forEach(h=>{if(!h.active)return; ctx.strokeStyle="rgba(224,138,74,.75)"; ctx.lineWidth=1.2;
+        ctx.beginPath(); ctx.arc((h.x+.5)*cw,(h.y+.5)*ch,6*cw,0,7); ctx.stroke();
+        ctx.font=Math.floor(ch)+"px serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("🔥",(h.x+.5)*cw,(h.y+.55)*ch);});
+    } else if(which==="light"){
+      lamps.forEach(l=>{if(!l.active)return; const cx=(l.x+.5)*cw,cy=(l.y+.5)*ch,rr=l.r*cw;
+        const g=ctx.createRadialGradient(cx,cy,0,cx,cy,rr); g.addColorStop(0,"rgba(224,200,120,.5)"); g.addColorStop(1,"rgba(224,200,120,0)");
+        ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,rr,0,7); ctx.fill();
+        ctx.font=Math.floor(ch)+"px serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("💡",cx,(l.y+.55)*ch);});
+    } else if(which==="power"){
+      const cc=(p)=>[(p.x+.5)*cw,(p.y+.5)*ch];         // cell centre in px
+      const hub=cc(power.hub);
+      // conduit: violet wires from the producer hub to producers, battery and each device building
+      const wireTo=(p,lit)=>{const q=cc(p); ctx.strokeStyle=lit?"rgba(181,140,255,.85)":"rgba(84,99,111,.7)";
+        ctx.lineWidth=lit?2:1.2; ctx.beginPath(); ctx.moveTo(hub[0],hub[1]); ctx.lineTo(q[0],q[1]); ctx.stroke();};
+      wireTo(power.sun,true); wireTo(power.bat,true);
+      power.loads.forEach(l=>{ if(l.ref) wireTo({x:l.ref.x,y:l.ref.y}, l.on&&l.powered); });
+      // producer / battery glyphs
+      ctx.font=Math.floor(ch*0.95)+"px serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText("☀",cc(power.sun)[0],(power.sun.y+.55)*ch);
+      ctx.fillText("🔋",cc(power.bat)[0],(power.bat.y+.55)*ch);
+      ctx.fillText("⚙",hub[0],(power.hub.y+.55)*ch);
+      // per-building ⚡ on/off pip
+      power.loads.forEach(l=>{ if(!l.ref)return; const [x,y]=cc({x:l.ref.x,y:l.ref.y});
+        const live=l.on&&l.powered;
+        ctx.font=Math.floor(ch*0.8)+"px serif"; ctx.fillStyle=live?"#e0b070":"#e06a5a";
+        ctx.fillText(live?"⚡":"○", x, y-ch*0.15); });
+      // floating net meter ⚡ ген X / спож Y  (mono-ish, top-left of the base)
+      const s=solarOut()+fuelOut(), d=power.loads.filter(l=>l.on).reduce((a,l)=>a+l.draw,0);
+      const mx=(power.sun.x)*cw, my=(power.sun.y-1.1)*ch;
+      ctx.font="bold "+Math.floor(ch*0.8)+"px "+"ui-monospace,Consolas,monospace"; ctx.textAlign="left"; ctx.textBaseline="alphabetic";
+      ctx.fillStyle="rgba(10,14,18,.75)"; ctx.fillRect(mx-2,my-ch*0.85,cw*11,ch*1.05);
+      ctx.fillStyle=power.brownout?"#e06a5a":"#b58cff";
+      ctx.fillText(`⚡ ген ${Math.round(s)} / спож ${Math.round(d)}`, mx+2, my);
+      // brownout red pulse ring over the hub
+      if(power.brownout){ const t=reduce?0.5:(0.5+0.5*Math.sin(Date.now()/180));
+        ctx.strokeStyle="rgba(224,106,90,"+(0.35+0.5*t)+")"; ctx.lineWidth=2+2*t;
+        ctx.beginPath(); ctx.arc(hub[0],hub[1],cw*(1.6+t*0.7),0,7); ctx.stroke(); }
+    } else if(which==="stock"){
+      // stockpile zones (StockZone): tint by accepted contents, a priority number, a fill bar per zone.
+      zones.forEach(z=>{
+        const rx=z.rect.x*cw, ry=z.rect.y*ch, rw=z.rect.w*cw, rh=z.rect.h*ch;
+        ctx.fillStyle=zoneTint(z); ctx.fillRect(rx,ry,rw,rh);
+        ctx.strokeStyle="rgba(224,176,112,.7)"; ctx.lineWidth=1.2; ctx.strokeRect(rx+.5,ry+.5,rw-1,rh-1);
+        // priority number, top-left
+        ctx.font="bold "+Math.floor(ch*0.85)+"px ui-monospace,Consolas,monospace";
+        ctx.textAlign="left"; ctx.textBaseline="top"; ctx.fillStyle="#e0b070";
+        ctx.fillText("№"+z.priority, rx+3, ry+3);
+        // fill bar along the bottom edge
+        const f=zoneFill(z), bw=(rw-6)*f;
+        ctx.fillStyle="rgba(12,17,22,.75)"; ctx.fillRect(rx+3, ry+rh-8, rw-6, 5);
+        ctx.fillStyle= z.filter.food?"rgba(224,106,90,.9)":"rgba(134,208,214,.9)";
+        ctx.fillRect(rx+3, ry+rh-8, bw, 5);
+        // fill % label
+        ctx.font=Math.floor(ch*0.6)+"px ui-monospace,Consolas,monospace"; ctx.textBaseline="bottom";
+        ctx.fillStyle="#c9d4dc"; ctx.fillText(Math.round(f*100)+"%", rx+3, ry+rh-9);
+        // contents glyph, centre
+        ctx.font=Math.floor(ch*1.1)+"px serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillText(z.glyph, rx+rw/2, ry+rh/2);
+      });
+    }
+  }
+
+  // comfort — hero-tile felt temp vs apparel insulation; panel appears only out of band
+  const INSULATION=6;
+  const mapTemp=t=>clamp((t+15)/55*100,0,100);
+  function updateComfort(){
+    const felt=tempAt(Math.round(hero.x),Math.round(hero.y));
+    const coldLimit=8-INSULATION*0.7, hotLimit=30, out=felt<coldLimit||felt>hotLimit;
+    $("comfort").classList.toggle("show",out);
+    if(out){const cold=felt<coldLimit; $("cf-ico").textContent=cold?"🥶":"🥵";
+      $("cf-lb").textContent=(cold?"−утеплення ":"перегрів ")+Math.round(felt)+"°";}
+    $("cf-mark").style.left=mapTemp(felt)+"%";
+    const b=$("cf-band"); b.style.left=mapTemp(coldLimit)+"%"; b.style.right=(100-mapTemp(hotLimit))+"%";
+  }
+
+  function paintClimate(){
+    const t=climate(world.day,frac)+tempOffset;
+    $("t-day").textContent=world.day;
+    $("t-temp").textContent=Math.round(t)+"°";
+    const mins=Math.floor(frac*24*60);
+    $("t-clock").textContent=String(Math.floor(mins/60)).padStart(2,"0")+":"+String(mins%60).padStart(2,"0");
+    const night=frac<0.24||frac>0.80;
+    $("t-phase").textContent=night?"🌙":(frac<0.32?"🌅":frac>0.72?"🌇":"☀");
+    $("t-temp").style.color = t<3?"var(--teal)":t>26?"var(--crit)":"var(--ink)";
+    updateComfort();
+  }
+
+  // ---- needs ----
+  const needs={food:82,rest:64,water:71};
+  const needColor=v=>v>55?"var(--good)":v>25?"var(--warn)":"var(--crit)";
+  function paintNeeds(){
+    for(const k of ["food","rest","water"]){
+      const v=clamp(needs[k],0,100);
+      $("n-"+k).style.width=v+"%"; $("n-"+k).style.background=needColor(v);
+      $("v-"+k).textContent=Math.round(v);
+    }
+  }
+
+  // ---- health ----
+  const parts={head:{cap:"consc",hp:100},torso:{cap:"blood",hp:100},arm_l:{cap:"manip",hp:100},
+    arm_r:{cap:"manip",hp:100},leg_l:{cap:"move",hp:100},leg_r:{cap:"move",hp:100}};
+  const health={blood:100,disease:0,immunity:0,tended:false};
+  function partColor(hp){const t=hp/100; const r=Math.round(44+(178-44)*(1-t)), g=Math.round(58+(59-58)*(1-t)), b=Math.round(48+(52-48)*(1-t)); return `rgb(${r},${g},${b})`;}
+  function capOf(which){ // product of injured parts feeding this capacity
+    let f=1; for(const key in parts){ if(parts[key].cap===which) f*= parts[key].hp/100; }
+    if(which==="consc") f*=(1-health.disease*0.55);
+    if(which==="consc"||which==="move") f*=health.blood/100;
+    return clamp(f,0,1);
+  }
+  function paintHealth(){
+    for(const key in parts) $("p-"+key).setAttribute("fill",partColor(parts[key].hp));
+    const move=Math.round(capOf("move")*100), manip=Math.round(capOf("manip")*100),
+          consc=Math.round(capOf("consc")*100);
+    $("h-blood").textContent=Math.round(health.blood)+"%";
+    $("h-move").textContent=move+"%"; $("h-manip").textContent=manip+"%"; $("h-consc").textContent=consc+"%";
+    const st=$("h-state");
+    if(health.blood<=15||consc<=10){st.textContent="⚠ при смерті"; st.style.color="var(--crit)";}
+    else if(bleeding()>0){st.textContent="кровотеча"; st.style.color="var(--warn)";}
+    else if(health.disease>0.05){st.textContent="хворіє"; st.style.color="var(--warn)";}
+    else {st.textContent="стабільно"; st.style.color="var(--good)";}
+  }
+  function bleeding(){let b=0; for(const k in parts){ if(parts[k].hp<100 && !health.tended) b+=(100-parts[k].hp)*0.0006; } return b;}
+
+  // ---- stock + palette ----
+  const RES={wood:["🪵","Дерево","var(--wood)"],stone:["🪨","Камінь","var(--stone)"],food:["🍖","Їжа","var(--food)"],
+    scrap:["⚙","Брухт","var(--scrap)"],planks:["🟫","Дошки","var(--planks)"],components:["🔩","Компон.","var(--comp)"]};
+  function paintStock(){
+    // stock panel lives in the action bar's build column? keep in right-side gear? render into a hidden host if present
+  }
+  // build palette. Slot.req = a research id that must be unlocked; a locked slot dims + shows 🔒 + a
+  // "дослідити: X" tooltip. Slots un-dim when their project completes (research toast wires buildPalette()).
+  const BUILDS=[["🧱","Стіна",null],["🚪","Двері",null],["▦","Підлога",null],["📦","Склад",null],["🛠","Верстак",null],
+    ["🛏","Ліжко",null],["🔫","Турель","ballistics"],["🌱","Грядка",null],["⚡","Генератор","electricity"]];
+  function buildPalette(){
+    const host=$("palette"); host.innerHTML="";
+    BUILDS.forEach((b,i)=>{
+      const req=b[2], locked=req && !research.isUnlocked(req);
+      const el=document.createElement("button"); el.className="slot"+(locked?" no lock":"");
+      el.innerHTML=`<span class="num">${i+1}</span><span class="g">${b[0]}</span>`+(locked?`<span class="lk">🔒</span>`:"");
+      el.title=locked?`${b[0]} ${b[1]} 🔒 дослідити: ${RESEARCH_DEFS[req].name}`:`${b[0]} ${b[1]}`;
+      el.setAttribute("aria-label",b[1]+(locked?` — заблоковано, дослідити ${RESEARCH_DEFS[req].name}`:""));
+      el.addEventListener("click",()=>{
+        if(locked){ showBanner("🔒 заблоковано — дослідити: "+RESEARCH_DEFS[req].name); return; }
+        host.querySelectorAll(".slot").forEach(s=>s.classList.remove("sel")); el.classList.add("sel"); });
+      host.appendChild(el);
+    });
+  }
+
+  // ---- feed + incidents ----
+  const feed=$("feed");
+  function pushCard(cls,icon,title,sub){
+    const c=document.createElement("div"); c.className="card t-"+cls;
+    c.innerHTML=`<span class="ci">${icon}</span><span class="cx"><b>${title}</b><span>${sub}</span></span><span class="ct">Д${world.day}</span>`;
+    feed.prepend(c); while(feed.children.length>18) feed.lastChild.remove();
+  }
+  function showBanner(text){
+    const b=$("banner"); b.textContent=text; b.classList.add("show");
+    clearTimeout(showBanner._t); showBanner._t=setTimeout(()=>b.classList.remove("show"), reduce?2600:4200);
+  }
+  const INC={
+    raid(){const a=Balance.assess(world); const style=Balance.raidStyle(a.threat,world.day);
+      spawnRaiders(a.raidHint); showBanner(`⚔ РЕЙД — ${a.raidHint} мех. · тактика: ${style}`);
+      pushCard("big","⚔","Рейд роботів",`${a.raidHint} мех. · ${style} · загроза ${Math.round(a.threat)}`);},
+    siege(){const a=Balance.assess(world); spawnRaiders(Math.max(4,Math.round(a.raidHint*0.6)));
+      showBanner("🎯 ОБЛОГА — ворог ставить мортири"); pushCard("big","🎯","Облога","мортири на дистанції — вилазка?");},
+    infestation(){pushCard("small","🐛","Рій комах","вилупились всередині бази — стіни не рятують");},
+    manhunter(){const n=clamp(2+Math.floor(world.day/3),2,12); pushCard("small","🐺","Оскаженіла зграя",`${n}× вовки полюють на героя`);},
+    disease(){health.disease=Math.max(health.disease,0.15); health.immunity=0; health.tended=false; paintHealth();
+      pushCard("small","🤒","Хвороба","інфекція легень — гонка імунітету почалась");},
+    cold_snap(){weather="cold_snap"; tempOffset=-15; paintWeather(); paintClimate();
+      pushCard("misc","❄","Похолодання","−15°C на 2 дні — врожай мерзне");},
+    cargo(){const amt=Math.round((10+world.day*2)*Balance.generosity); world.stock.scrap+=amt; world.stock.components+=2;
+      paintBalance(); pushCard("good","📦","Вантажні капсули",`+${amt} брухту, +2 компон. (×щедрість ${Balance.generosity.toFixed(1)})`);},
+    quest(){const rep=Math.round(10*Balance.generosity); pushCard("good","📜","Квест союзника",`захист 3 дні · нагорода +${rep} репутації`);}
+  };
+
+  // ---- world canvas ----
+  const cv=$("scene"), ctx=cv.getContext("2d");
+  const N=28, tiles=new Array(N*N), nodes=[];
+  (function genMap(){
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+      let t=0; // grass
+      const river=Math.sin(x*0.5)*2+N*0.42;
+      if(Math.abs(y-river)<1.4) t=2;               // water
+      if(y===Math.floor(N*0.62)) t=3;              // road (horizontal)
+      if(((x*7+y*13)%97)<7 && t===0) t=1;          // forest patch
+      tiles[y*N+x]=t;
+    }
+    for(let i=0;i<26;i++){const x=(i*11+5)%N,y=(i*7+3)%N; if(tiles[y*N+x]===0) nodes.push({x,y,k:i%3});}
+  })();
+  const TCOL=["#20321f","#2f5133","#2b3f5c","#4a4036"];
+  const hero={x:N/2,y:N*0.55,tx:N/2,ty:N*0.55};
+  let raiders=[];
+  function spawnRaiders(n){raiders=[]; for(let i=0;i<Math.min(n,24);i++){const e=Math.random(); let x,y;
+    if(e<.5){x=Math.random()*N;y=Math.random()<.5?0:N-1;}else{x=Math.random()<.5?0:N-1;y=Math.random()*N;}
+    raiders.push({x,y});}}
+  cv.addEventListener("click",ev=>{const r=cv.getBoundingClientRect();
+    hero.tx=(ev.clientX-r.left)/r.width*N; hero.ty=(ev.clientY-r.top)/r.height*N;});
+  const NGLY=["🌲","🪨","🫐"];
+  function draw(){
+    const w=cv.width,h=cv.height,cw=w/N,ch=h/N;
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++){ctx.fillStyle=TCOL[tiles[y*N+x]]; ctx.fillRect(x*cw,y*ch,cw+.5,ch+.5);}
+    if(activeOv==="roof"||activeOv==="temp"||activeOv==="stock") drawOverlay(cw,ch,activeOv);
+    ctx.font=Math.floor(ch*0.9)+"px serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+    nodes.forEach(nd=>ctx.fillText(NGLY[nd.k],(nd.x+.5)*cw,(nd.y+.55)*ch));
+    // raiders approach hero
+    raiders.forEach(e=>{const dx=hero.x-e.x,dy=hero.y-e.y,d=Math.hypot(dx,dy)||1;
+      if(!reduce){e.x+=dx/d*0.02;e.y+=dy/d*0.02;}
+      ctx.fillStyle="#e06a5a"; ctx.beginPath(); ctx.arc((e.x+.5)*cw,(e.y+.5)*ch,cw*0.32,0,7); ctx.fill();});
+    // hero
+    if(!reduce){hero.x+=(hero.tx-hero.x)*0.08; hero.y+=(hero.ty-hero.y)*0.08;}
+    ctx.fillStyle="#e0b070"; ctx.strokeStyle="#0b0f13"; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc((hero.x+.5)*cw,(hero.y+.5)*ch,cw*0.4,0,7); ctx.fill(); ctx.stroke();
+    // day/night ambient
+    const night=clamp(0.46*(1-(Math.cos(frac*2*Math.PI)*-0.5+0.5))*2,0,0.5);
+    ctx.fillStyle="rgba(6,10,24,"+night+")"; ctx.fillRect(0,0,w,h);
+    if(activeOv==="light") drawOverlay(cw,ch,"light");  // lamps cut through the night
+    if(activeOv==="power") drawOverlay(cw,ch,"power");  // wires + net meter + ⚡ pips on top
+    if(!reduce) requestAnimationFrame(draw);
+  }
+
+  // ---- interactions ----
+  $("s-diff").addEventListener("input",e=>{Balance.difficulty=parseFloat(e.target.value); paintBalance();});
+  $("s-gen").addEventListener("input",e=>{Balance.generosity=parseFloat(e.target.value); paintBalance();});
+  $("advance").addEventListener("click",()=>{world.day++; frac=0.35; tempOffset*=0.4; rollWeather(); paintClimate(); paintBalance();
+    pushCard("misc","🌅","Новий день","світанок — капсула поповнена");});
+  document.querySelectorAll("[data-inc]").forEach(b=>b.addEventListener("click",()=>INC[b.dataset.inc]()));
+  // overlay toggles (chips + hotkeys R/T/L)
+  document.querySelectorAll(".ov-chip").forEach(c=>c.addEventListener("click",()=>setOverlay(c.dataset.ov)));
+  window.addEventListener("keydown",e=>{ if(e.target.tagName==="INPUT")return; const k=e.key.toLowerCase();
+    if(k==="r")setOverlay("roof"); else if(k==="t")setOverlay("temp"); else if(k==="l")setOverlay("light");
+    else if(k==="p")setOverlay("power"); else if(k==="z")setOverlay("stock");});
+
+  // ---- power controls: toggle a load / add a stress load → drive the net into brownout ----
+  function toggleLoad(dev){ const l=power.loads.find(x=>x.dev===dev); if(l){ l.on=!l.on; paintPower(); powerFeedback();
+    // if a device switched off, its Batch-1 emitter/light goes inactive (heater stops heating / lamp dark)
+    if(l.ref && !l.on){ l.ref.active=false; }
+    pushCard("misc","⚡", dev==="heater"?"Обігрівач":dev==="lamp"?"Лампа":"Навантаження", l.on?"увімкнено":"вимкнено"); } }
+  $("pw-toggle-heater").addEventListener("click",()=>toggleLoad("heater"));
+  $("pw-toggle-lamp").addEventListener("click",()=>toggleLoad("lamp"));
+  $("pw-add-load").addEventListener("click",()=>toggleLoad("extra"));
+  document.querySelectorAll("[data-need]").forEach(b=>b.addEventListener("click",()=>{needs[b.dataset.need]=clamp(needs[b.dataset.need]+34,0,100); paintNeeds();}));
+  document.querySelectorAll("[data-hurt]").forEach(b=>b.addEventListener("click",()=>{parts[b.dataset.hurt].hp=clamp(parts[b.dataset.hurt].hp-40,0,100); health.tended=false; paintHealth();}));
+  document.querySelectorAll("[data-act]").forEach(b=>b.addEventListener("click",()=>{
+    if(b.dataset.act==="tend"){health.tended=true; health.immunity=Math.max(health.immunity,health.disease+0.2); if(world.stock.components>0)world.stock.components--; pushCard("good","💊","Лікування","кровотечу зупинено, гонку імунітету виграно");}
+    if(b.dataset.act==="disease"){INC.disease();}
+    paintHealth(); paintBalance();
+  }));
+
+  // ---- clocks: slow need decay + health resolve (gameplay ticks) ----
+  setInterval(()=>{
+    frac=(frac+0.012)%1;
+    paintPower(); powerFeedback();   // solve the net first: sets heater/lamp `active` before temp paints
+    paintClimate();
+    needs.food=clamp(needs.food-0.5,0,100); needs.rest=clamp(needs.rest-0.35,0,100); needs.water=clamp(needs.water-0.6,0,100);
+    if(needs.food<55){needs.food+=1;} // auto-eat from storage
+    paintNeeds();
+    // deterioration: the outdoor crate wears, faster when wet (mirrors CompDeteriorate)
+    const wet=(weather==="rain"||weather==="snow");
+    det=clamp(det+(wet?0.03:0.012),0,1);
+    if(det>=1){det=0; pushCard("misc","📦","Ящик зруйновано","залишений надворі згнив — занось під дах (R)");}
+    $("det-pct").textContent="знос "+Math.round(det*100)+"%"; $("det-bar").style.width=Math.round(det*100)+"%";
+    // health resolve
+    const bl=bleeding(); if(bl>0){health.blood=clamp(health.blood-bl*8,0,100);} else if(health.blood<100){health.blood=clamp(health.blood+0.3,0,100);}
+    for(const k in parts){if(parts[k].hp<100) parts[k].hp=clamp(parts[k].hp+(health.tended?0.9:0.4),0,100);}
+    if(health.disease>0){ health.immunity+=(health.tended?0.02:0.011); if(health.immunity<1) health.disease=clamp(health.disease+0.01,0,1.5); else health.disease=Math.max(0,health.disease-0.03);}
+    paintHealth();
+    // Batch-3 tick: production benches, research, meal rot (a game-day per HUD tick ~0.06)
+    const dday=0.06;
+    tickBench(benches.craft,dday); tickBench(benches.stove,dday);
+    paintBills("bench-bills",benches.craft); paintBills("stove-bills",benches.stove);
+    tickResearch(dday);
+    if(lastMeal){ const t=tempAt(base.x0,base.y0); const warm=clamp(t/10,0.2,4.0);
+      lastMeal.rot=clamp(lastMeal.rot+(1/lastMeal.rotDays)*warm*dday,0,1); }
+    paintCooking();
+  }, reduce?1500:900);
+
+  // solar teaching: also re-solve on the smooth day/night frac tween so ☀ output visibly follows the clock
+  if(!reduce) setInterval(paintPower, 700);
+
+  // ==== Batch 3 production & technology — JS mirror of kernel/production.gd ============================
+  // Recipes/bills/research/cooking/quality/stockpiles, same grammar as the kernel: recipes drain world.stock
+  // into outputs against a bench's bill queue; research gates advanced recipes & build slots; cooking is a
+  // recipe whose poison chance falls with cook skill; crafted output carries a rolled quality mult; zones
+  // steer hauling. Every rule below traces to production.gd / things.gd so the HUD reads the real model.
+
+  // RESEARCH — ResearchDef(cost,prereqs) + ResearchState(unlocked/active/progress), can_make() gate.
+  const RESEARCH_DEFS={
+    smithing:{name:"Ковальство",cost:2.0,prereqs:[],glyph:"🔨"},
+    electricity:{name:"Електрика",cost:3.0,prereqs:["smithing"],glyph:"⚡"},
+    ballistics:{name:"Балістика",cost:4.0,prereqs:["electricity"],glyph:"🎯"}
+  };
+  const research={unlocked:{},active:"",progress:0.0,
+    isUnlocked(id){return !!this.unlocked[id];},
+    prereqsMet(id){const d=RESEARCH_DEFS[id]; if(!d)return false; return d.prereqs.every(p=>this.isUnlocked(p));},
+    canStart(id){if(this.isUnlocked(id)||!RESEARCH_DEFS[id])return false; return this.prereqsMet(id);},
+    tryStart(id){if(!this.canStart(id))return false; this.active=id; this.progress=0.0; return true;},
+    advance(dday){if(!this.active)return false; const d=RESEARCH_DEFS[this.active]; if(!d)return false;
+      this.progress+=Math.max(0,dday);
+      if(this.progress+1e-9>=d.cost){const done=this.active; this.unlocked[done]=true; this.active=""; this.progress=0.0; return done;}
+      return false;}};
+  // the single gate (production.gd can_make): no requires_research => always; else must be unlocked
+  function canMake(req){ if(!req)return true; return research.isUnlocked(req); }
+
+  // RECIPES — RecipeDef payload {inputs, output, work, requires_research?}. Bills draw from world.stock.
+  const RECIPES={
+    planks:   {glyph:"🟫",name:"Дошки",     inputs:{wood:5},           output:{id:"planks",count:2},        work:0.4},
+    component:{glyph:"🔩",name:"Компонент",  inputs:{scrap:8,planks:1}, output:{id:"components",count:1},     work:0.8, requires_research:"smithing"},
+    turret:   {glyph:"🔫",name:"Турель",     inputs:{components:3,stone:10}, output:{id:"turrets",count:1},   work:1.2, requires_research:"ballistics"}
+  };
+  const MEALS={
+    soup:  {glyph:"🍲",name:"Юшка",  inputs:{food:2},        output:{id:"meal",count:1,thing:true,rot_days:4}, work:0.3},
+    stew:  {glyph:"🥘",name:"Рагу",  inputs:{food:3,planks:0}, output:{id:"meal",count:1,thing:true,rot_days:6}, work:0.5}
+  };
+  const ALL_RECIPES=Object.assign({},RECIPES,MEALS);
+
+  // BILL — mode 'count'(target,done) | 'until'(hold stock at target); progress in game-days; stalled latches.
+  let _billUID=1;
+  function makeBill(rid,mode,target){return {uid:_billUID++,recipe:rid,mode:mode||"count",target:target||1,done:0,progress:0,stalled:false,suspended:false};}
+  function billWants(b,outStock){ if(b.suspended)return false; if(b.mode==="until")return outStock<b.target; return b.done<b.target; }
+  function billFinished(b){ return b.mode==="count" && b.done>=b.target; }
+  function missingInputs(recipe){ const miss=[]; const inp=recipe.inputs||{};
+    for(const r in inp){ if(inp[r]>0 && (world.stock[r]||0)<inp[r]) miss.push(RES[r]?RES[r][0]:r); } return miss; }
+
+  // Two benches, each an array of bills (a CompWorkbench.bills). maker_level drives quality & cook skill.
+  const benches={ craft:{maker_level:9, bills:[], recipes:RECIPES}, stove:{maker_level:4, bills:[], recipes:MEALS} };
+  benches.craft.bills.push(makeBill("planks","until",8));
+  benches.stove.bills.push(makeBill("soup","count",3));
+
+  // ProductionSystem.system_tick — one completion per bill per tick; consume inputs, add outputs, sweep 'count'.
+  function tickBench(bench,dday){
+    const survivors=[];
+    for(const b of bench.bills){
+      tickBill(b,bench,dday);
+      if(!billFinished(b)) survivors.push(b);
+    }
+    bench.bills=survivors;
+  }
+  function tickBill(b,bench,dday){
+    const recipe=bench.recipes[b.recipe]; if(!recipe){b.stalled=true;return;}
+    const outId=recipe.output.id, outStock=world.stock[outId]||0;
+    if(!billWants(b,outStock))return;
+    if(!canMake(recipe.requires_research)){b.stalled=true;return;}
+    if(missingInputs(recipe).length){b.stalled=true;return;}
+    b.stalled=false; b.progress+=dday;
+    if(b.progress+1e-9<recipe.work)return;
+    b.progress-=recipe.work; if(b.progress<0)b.progress=0;
+    for(const r in (recipe.inputs||{})) world.stock[r]=(world.stock[r]||0)-recipe.inputs[r];
+    yieldOutput(recipe,bench);
+    if(b.mode==="count")b.done+=1;
+  }
+  // QUALITY roll — things.gd CompQuality.post_make: roll = rand*5 + level*0.18, clamped 0..6; mult=0.6+0.15*lvl.
+  const QLABELS=["жахлива","погана","звичайна","добра","відмінна","майстерна","легендарна"];
+  const QCOLOR=["var(--crit)","var(--warn)","var(--mut)","var(--teal)","var(--good)","var(--comp)","var(--amber)"];
+  function rollQuality(makerLevel){ return clamp(Math.floor(Math.random()*5+makerLevel*0.18),0,6); }
+  function qualityMult(lvl){ return 0.6+0.15*lvl; }
+  let lastMeal=null; // {rot:0..1, fresh, rotDays}
+  function yieldOutput(recipe,bench){
+    const out=recipe.output;
+    if(out.thing){
+      // a spawned Thing (meal) — stamp quality + a CompRottable freshness timer
+      const q=rollQuality(bench.maker_level);
+      lastMeal={rot:0,rotDays:out.rot_days||6,quality:q,name:RECIPES[bench===benches.stove?"":""]?"":recipe.name};
+      pushCard("good","🍲","Страва готова",`${recipe.name} · якість ${QLABELS[q]}`);
+    } else {
+      const count=out.count||1; world.stock[out.id]=(world.stock[out.id]||0)+count;
+      // celebrate a legendary craft (quality feature #4)
+      const q=rollQuality(bench.maker_level);
+      if(q>=6) pushCard("good","🏆","ЛЕГЕНДАРНА РІЧ!",`${recipe.name} × якість ${qualityMult(q).toFixed(2)} — шедевр!`);
+    }
+    paintBalance();
+  }
+
+  // COOKING poison — production.gd: base 0.06, raw ×8, per-level discount (1-0.12)^level. Clamped 0..1.
+  const COOK_POISON_BASE=0.06, RAW_POISON_MULT=8.0, COOK_SKILL_DISCOUNT=0.12;
+  function poisonChance(cookLevel,raw){ let base=COOK_POISON_BASE; if(raw)base*=RAW_POISON_MULT;
+    return clamp(base*Math.pow(1-COOK_SKILL_DISCOUNT,Math.max(0,cookLevel)),0,1); }
+
+  // STOCKPILE ZONES — StockZone(rect,priority,filter). best_zone_for = highest priority accepting a res.
+  const zones=[
+    {id:"main", rect:{x:18,y:8,w:5,h:4}, priority:2, filter:{}, glyph:"📦", name:"Загальний"},
+    {id:"food", rect:{x:18,y:19,w:4,h:3}, priority:5, filter:{food:true}, glyph:"🍖", name:"Їжа"}
+  ];
+  function zoneAccepts(z,res){ return Object.keys(z.filter).length===0 || !!z.filter[res]; }
+  function zoneFill(z){ // fill = matching stock / a nominal capacity per cell
+    let held=0; for(const r in world.stock){ if(zoneAccepts(z,r)) held+=world.stock[r]; }
+    const cap=z.rect.w*z.rect.h*12; return clamp(held/cap,0,1); }
+  function zoneTint(z){ // tint by dominant accepted resource
+    if(z.filter.food) return "rgba(224,106,90,.30)";
+    return "rgba(134,208,214,.24)"; }
+
+  // ---- paints ----
+  function paintBills(hostId,bench){
+    const host=$(hostId); if(!host)return; host.innerHTML="";
+    for(const b of bench.bills){
+      const recipe=bench.recipes[b.recipe]; if(!recipe)continue;
+      const miss=missingInputs(recipe);
+      const eta=Math.max(0,(recipe.work-b.progress)).toFixed(1);
+      const el=document.createElement("div");
+      el.className="bill"+((b.stalled||miss.length)?" stall":"");
+      el.dataset.uid=b.uid;
+      const modeLabel=b.mode==="until"?`до ${b.target}`:`×${b.target} · ${b.done}/${b.target}`;
+      const missBadge=miss.length?`<span class="miss" title="бракує матеріалів">⛔ ${miss.join(" ")}</span>`:"";
+      el.innerHTML=`
+        <span class="bg">${recipe.glyph}</span>
+        <span class="bx"><b>${recipe.name}</b> ${missBadge}
+          <span class="eta">${b.stalled&&!miss.length?"🔒 заблоковано":"~"+eta+" дн"} · ${modeLabel}</span>
+          <span class="prog"><i style="width:${clamp(b.progress/recipe.work*100,0,100)}%"></i></span>
+        </span>
+        <span class="bxctl">
+          <span class="step">
+            <button data-step="-1" aria-label="менше">−</button>
+            <span class="tgt">${b.target}</span>
+            <button data-step="1" aria-label="більше">+</button>
+          </span>
+          <button class="rm" title="прибрати завдання" aria-label="прибрати">✕</button>
+        </span>`;
+      el.querySelector('[data-step="1"]').addEventListener("click",()=>{b.target++; paintBills(hostId,bench);});
+      el.querySelector('[data-step="-1"]').addEventListener("click",()=>{b.target=Math.max(1,b.target-1); paintBills(hostId,bench);});
+      el.querySelector(".rm").addEventListener("click",()=>{bench.bills=bench.bills.filter(x=>x.uid!==b.uid); paintBills(hostId,bench);});
+      host.appendChild(el);
+    }
+    if(!bench.bills.length) host.innerHTML=`<div class="hint">черга порожня — додай завдання вгорі</div>`;
+  }
+  function fillRecipeSelect(selId,recipeSet){
+    const sel=$(selId); if(!sel)return; sel.innerHTML="";
+    for(const rid in recipeSet){ const r=recipeSet[rid];
+      const locked=!canMake(r.requires_research);
+      const o=document.createElement("option"); o.value=rid;
+      o.textContent=`${r.glyph} ${r.name}`+(locked?` 🔒 (${RESEARCH_DEFS[r.requires_research].name})`:"");
+      o.disabled=locked; sel.appendChild(o);
+    }
+  }
+
+  function paintResearch(){
+    const host=$("research-nodes"); if(!host)return; host.innerHTML="";
+    const ids=Object.keys(RESEARCH_DEFS);
+    ids.forEach(id=>{
+      const d=RESEARCH_DEFS[id];
+      const done=research.isUnlocked(id), active=research.active===id, canStart=research.canStart(id);
+      const el=document.createElement("div");
+      el.className="tnode"+(done?" done":active?" active":(!done&&!canStart&&!active)?" locked":"");
+      el.id="tnode-"+id;
+      let statHtml, btnHtml="";
+      if(done){ statHtml=`<span class="tstat ok">✓ відкрито</span>`; }
+      else if(active){ const pct=Math.round(research.progress/d.cost*100);
+        statHtml=`<span class="tstat" style="color:var(--amber)">${pct}%</span>`; }
+      else if(canStart){ btnHtml=`<button class="tbtn" data-res="${id}">Дослідити</button>`; statHtml=""; }
+      else { const need=d.prereqs.filter(p=>!research.isUnlocked(p)).map(p=>RESEARCH_DEFS[p].name).join(", ");
+        statHtml=`<span class="tstat lk" title="дослідити спершу: ${need}">🔒 ${need}</span>`; }
+      const prog=active?research.progress/d.cost:done?1:0;
+      el.innerHTML=`
+        <span class="tg">${d.glyph}</span>
+        <span class="tx"><b>${d.name}</b>
+          <span class="cost">${d.cost.toFixed(1)} дн${d.prereqs.length?" · потрібно: "+d.prereqs.map(p=>RESEARCH_DEFS[p].name).join(", "):""}</span>
+          <span class="tprog"><i style="width:${Math.round(prog*100)}%"></i></span>
+        </span>
+        ${btnHtml||statHtml}`;
+      const btn=el.querySelector("[data-res]");
+      if(btn) btn.addEventListener("click",()=>{ if(research.tryStart(id)){ pushCard("misc","🔬","Дослідження почато",d.name); paintResearch(); } });
+      host.appendChild(el);
+    });
+    drawResearchLinks();
+  }
+  // prereq connector lines (§4 tech node: "prereq lines") — SVG under the nodes
+  function drawResearchLinks(){
+    const svg=$("research-links"), tree=$("research-tree"); if(!svg||!tree)return;
+    const tr=tree.getBoundingClientRect();
+    svg.setAttribute("viewBox",`0 0 ${tr.width} ${tr.height}`);
+    let paths="";
+    for(const id in RESEARCH_DEFS){ const d=RESEARCH_DEFS[id];
+      const child=$("tnode-"+id); if(!child)continue; const cb=child.getBoundingClientRect();
+      d.prereqs.forEach(p=>{ const pel=$("tnode-"+p); if(!pel)return; const pb=pel.getBoundingClientRect();
+        const x1=pb.left-tr.left+14, y1=pb.bottom-tr.top, x2=cb.left-tr.left+14, y2=cb.top-tr.top;
+        const lit=research.isUnlocked(p);
+        paths+=`<path d="M${x1} ${y1} C ${x1} ${(y1+y2)/2}, ${x2} ${(y1+y2)/2}, ${x2} ${y2}" fill="none" stroke="${lit?'var(--comp)':'var(--line2)'}" stroke-width="${lit?2:1.2}"/>`;
+      });
+    }
+    svg.innerHTML=paths;
+  }
+
+  // quality pip on the crafted axe (feature #4)
+  function paintGearQuality(){
+    const lvl=5; // a майстерна (masterwork) axe, for display
+    $("axe-pip").style.background=QCOLOR[lvl];
+    $("axe-qlab").textContent=QLABELS[lvl]; $("axe-qlab").style.color=QCOLOR[lvl];
+    const m=qualityMult(lvl);
+    $("axe-stat").textContent="×якість "+m.toFixed(2);
+    $("gear-axe").title=`шкода = база 20 × якість ${m.toFixed(2)} = ${Math.round(20*m)} (${QLABELS[lvl]})`;
+  }
+
+  // cooking: freshness + raw-poison warning scaled by the stove's cook skill (maker_level)
+  function paintCooking(){
+    const cook=benches.stove.maker_level;
+    const rawPct=Math.round(poisonChance(cook,true)*100), cookedPct=Math.round(poisonChance(cook,false)*100);
+    $("stove-rawpct").textContent=rawPct+"%";
+    $("stove-raw").title=`сире: база ${(COOK_POISON_BASE*RAW_POISON_MULT*100).toFixed(0)}% × кухар ${Math.pow(1-COOK_SKILL_DISCOUNT,cook).toFixed(2)} = ${rawPct}% · варене лише ${cookedPct}%`;
+    if(lastMeal){
+      const fresh=clamp(1-lastMeal.rot,0,1); const pct=Math.round(fresh*100);
+      $("stove-fresh").textContent=(fresh>0.5?"свіжа ":fresh>0.15?"черствіє ":"гниль ")+pct+"%";
+      $("stove-fresh").style.color=fresh>0.5?"var(--good)":fresh>0.15?"var(--warn)":"var(--crit)";
+      const fb=$("stove-freshbar"); fb.style.width=pct+"%";
+      fb.style.background=fresh>0.5?"var(--good)":fresh>0.15?"var(--warn)":"var(--crit)";
+    }
+  }
+
+  // ---- Batch-3 interactions ----
+  fillRecipeSelect("bench-recipe",RECIPES); fillRecipeSelect("stove-recipe",MEALS);
+  $("bench-add").addEventListener("click",()=>{ const rid=$("bench-recipe").value; if(!rid)return;
+    benches.craft.bills.push(makeBill(rid,"count",4)); paintBills("bench-bills",benches.craft);
+    pushCard("misc","🛠","Завдання додано",RECIPES[rid].name+" ×4"); });
+  $("stove-add").addEventListener("click",()=>{ const rid=$("stove-recipe").value; if(!rid)return;
+    benches.stove.bills.push(makeBill(rid,"count",3)); paintBills("stove-bills",benches.stove);
+    pushCard("misc","🍳","Готування додано",MEALS[rid].name+" ×3"); });
+  $("stove-eat-cooked").addEventListener("click",()=>{
+    const cook=benches.stove.maker_level;
+    if(Math.random()<poisonChance(cook,false)){ health.disease=Math.max(health.disease,0.1); paintHealth();
+      pushCard("small","🤢","Легке отруєння","навіть варене підвело — шлунок бунтує"); }
+    else { needs.food=clamp(needs.food+40,0,100); paintNeeds(); pushCard("good","🍲","Ситна страва","+40 їжі · варене живить більше (×1.6)"); } });
+  $("stove-eat-raw").addEventListener("click",()=>{
+    const cook=benches.stove.maker_level, ch=poisonChance(cook,true);
+    if(Math.random()<ch){ health.disease=Math.max(health.disease,0.2); health.tended=false; paintHealth();
+      showBanner("🤮 ОТРУЄННЯ — сире м'ясо звалило героя");
+      pushCard("big","🤮","Харчове отруєння",`шанс був ${Math.round(ch*100)}% · їж варене`); }
+    else { needs.food=clamp(needs.food+22,0,100); paintNeeds(); pushCard("misc","🥩","Пронесло","сире цього разу минулось — але ризик "+Math.round(ch*100)+"%"); } });
+
+  // research: advance the active project on the game clock, toast + un-lock slots on completion
+  function tickResearch(dday){
+    const done=research.advance(dday);
+    if(done){ const d=RESEARCH_DEFS[done];
+      showBanner("🔬 ВІДКРИТО: "+d.name);
+      pushCard("good","🔬","Дослідження завершено",d.name+" — розблоковано рецепти/будівлі");
+      fillRecipeSelect("bench-recipe",RECIPES); fillRecipeSelect("stove-recipe",MEALS);
+      buildPalette(); paintResearch();
+    } else if(research.active){ paintResearch(); }
+  }
+
+  // ---- boot ----
+  buildPalette(); paintNeeds(); paintHealth(); paintWeather(); paintPower(); paintClimate(); paintBalance();
+  paintBills("bench-bills",benches.craft); paintBills("stove-bills",benches.stove);
+  paintResearch(); paintGearQuality(); paintCooking();
+  draw(); if(reduce) draw();
+})();
+</script>
