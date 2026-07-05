@@ -21,6 +21,6 @@ desktop.ini
 
 # Godot (engine import cache + generated captures; engine binary lives outside repo)
 godot/.godot/
-godot/auto_shot.png
+godot/*_shot*.png
 godot/*.import
 godot/android/build/

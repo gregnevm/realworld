@@ -3,6 +3,7 @@ extends RefCounted
 
 const GameData = preload("res://scripts/data.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
+const Social = preload("res://scripts/social.gd")
 
 var map: Dictionary
 var n: int = 0
@@ -21,19 +22,23 @@ var craft_timer := 0.0
 var dead := false
 var move_input := Vector2.ZERO
 var messages: Array = []
+var messages_seq := 0              # monotonic lifetime append counter (spec 0005 §2.7 FeedbackBus seam);
+                                   # NEVER reset by the 40-cap trim so a sequence cursor survives it.
 var banner := ""
 var flash_msg := ""
 var flash_t := 0.0
+
+# spec 0002: capsules / invites / social graph
+var capsule: Dictionary = {}
+var invites: Array = []
+var social = null                 # optional social graph (Social.new_graph); null in headless unit tests
 
 var astar: AStarGrid2D            # terrain + blocking buildings (player)
 var astar_terrain: AStarGrid2D    # terrain only (raiders smash walls)
 
 # ---------------- setup ----------------
-func new_game(m: Dictionary) -> void:
-	map = m
-	n = m.n
-	var sp: Vector2i = m.spawn
-	player = {
+func _default_player(sp: Vector2i) -> Dictionary:
+	return {
 		"px": sp.x + 0.5, "py": sp.y + 0.5, "face": 0.0,
 		"hp": 100.0, "hunger": 82.0, "rest": 92.0,
 		"carry": {}, "carry_cap": 30, "action": null, "sleeping": false,
@@ -41,7 +46,18 @@ func new_game(m: Dictionary) -> void:
 		"skills": {"gather": 0.0, "combat": 0.0},
 		"equipped": {"tool": "", "weapon": ""}, "items": [],
 	}
+
+func _default_capsule() -> Dictionary:
+	return {"charges": GameData.CAPSULE_DAILY_CHARGES, "radius_km": GameData.CAPSULE_BASE_RADIUS_KM, "last_day": int(time.day)}
+
+func new_game(m: Dictionary) -> void:
+	map = m
+	n = m.n
+	var sp: Vector2i = m.spawn
+	player = _default_player(sp)
 	stock = {"wood": 50, "stone": 30, "food": 18, "scrap": 16, "planks": 0, "components": 2}
+	capsule = _default_capsule()
+	invites = []
 	_build_astar()
 	var lx := sp.x + 1
 	var ly := sp.y
@@ -50,6 +66,100 @@ func new_game(m: Dictionary) -> void:
 		ly = sp.y + 1
 	_place_building("storage", lx, ly, -1)
 	_init_regions()
+
+# Arrive in a NEW region by capsule: your pawn + full personal inventory, but no base/stock here.
+func arrive_region(m: Dictionary, pawn: Dictionary) -> void:
+	map = m
+	n = int(m.n)
+	_build_astar()
+	player = _default_player(m.spawn)
+	for k in PAWN_FIELDS:
+		if pawn.has(k):
+			player[k] = (pawn[k].duplicate(true) if (pawn[k] is Dictionary or pawn[k] is Array) else pawn[k])
+	player.carry_cap = int(player.carry_cap)
+	stock = {}
+	buildings = []
+	bgrid = {}
+	_reset_local_threats()
+	_init_regions()
+	dead = false
+
+# Region-local state (raiders, convoys, pending raid) does not travel between regions.
+func _reset_local_threats() -> void:
+	enemies = []
+	convoys = []
+	shots = []
+	raid = {"timer": 0.0, "next": 95.0, "active": false, "warned": false, "wave": int(raid.get("wave", 0))}
+	banner = ""
+
+# The pawn's portable inventory + condition (what a capsule carries).
+const PAWN_FIELDS := ["carry", "carry_cap", "skills", "equipped", "items", "hp", "hunger", "rest"]
+
+func extract_pawn() -> Dictionary:
+	return {
+		"carry": (player.carry as Dictionary).duplicate(true),
+		"carry_cap": int(player.carry_cap),
+		"skills": (player.skills as Dictionary).duplicate(true),
+		"equipped": (player.equipped as Dictionary).duplicate(true),
+		"items": (player.items as Array).duplicate(true),
+		"hp": float(player.hp), "hunger": float(player.hunger), "rest": float(player.rest),
+	}
+
+# Overwrite the current pawn's portable state with a travelling pawn, placed at this region's base.
+func apply_pawn(pawn: Dictionary) -> void:
+	for k in PAWN_FIELDS:
+		if pawn.has(k):
+			player[k] = (pawn[k].duplicate(true) if (pawn[k] is Dictionary or pawn[k] is Array) else pawn[k])
+	player.carry_cap = int(player.carry_cap)
+	var c := base_center()
+	player.px = c.x + 0.5
+	player.py = c.y + 1.5
+	player.action = null
+
+# Rebuild a previously-visited region from a persistence record (seed + diff + save).
+func load_region(data: Dictionary) -> void:
+	var nn := int(data.n)
+	var lat := float(data.lat)
+	var lon := float(data.lon)
+	var m := WorldGen.generate_map(lat, lon, nn)
+	m["place_name"] = str(data.get("place_name", "Регіон"))
+	# OSM terrain is the ONE thing not reproducible from the coordinate, so it is persisted as a tile
+	# blob. Restore it only if intact (right length); never silently fall back to a DIFFERENT world.
+	if str(data.get("source", "")) == "osm":
+		var decoded := Marshalls.base64_to_raw(str(data.get("tiles_b64", "")))
+		if decoded.size() == nn * nn:
+			m.tiles = decoded
+			m["source"] = "osm"
+			# spawn was picked against procedural tiles; re-pick against the real OSM terrain
+			m.spawn = WorldGen._pick_spawn(m.tiles, m.nodes, nn)
+		else:
+			_log("⚠ OSM-регіон пошкоджено (немає збережених тайлів) — тимчасово процедурна карта.", "bad")
+	var nodes := {}
+	for k in data.nodes:
+		var nd = data.nodes[k]
+		nodes[int(str(k))] = {"kind": str(nd.kind), "amount": int(nd.amount)}
+	m.nodes = nodes
+	map = m
+	n = nn
+	_build_astar()
+	player = _default_player(m.spawn)
+	var pd: Dictionary = data.player
+	for f in pd:
+		player[f] = (pd[f].duplicate(true) if (pd[f] is Dictionary or pd[f] is Array) else pd[f])
+	player["action"] = null
+	player.carry_cap = int(player.carry_cap)
+	stock = {}
+	for k in data.stock:
+		stock[k] = data.stock[k]
+	time.day = int(data.day)
+	time.frac = float(data.frac)
+	buildings = []
+	bgrid = {}
+	_reset_local_threats()
+	for b in data.buildings:
+		_place_building(str(b.kind), int(b.x), int(b.y), float(b.hp))
+	_init_regions()
+	dead = false
 
 func _build_astar() -> void:
 	astar = AStarGrid2D.new()
@@ -179,6 +289,7 @@ func _near_storage(r: float) -> bool:
 
 func _log(text: String, cls: String = "") -> void:
 	messages.append({"text": text, "cls": cls})
+	messages_seq += 1
 	if messages.size() > 40:
 		messages.remove_at(0)
 
@@ -223,6 +334,29 @@ func try_build(kind: String, x: int, y: int) -> void:
 		return
 	GameData.pay_cost(stock, def.cost)
 	_place_building(kind, x, y, -1)
+
+# Player-initiated teardown: recover half the build cost (rounded down). You can never
+# demolish your last storage (that would strand deposits), matching the base-centric design.
+func demolish(x: int, y: int) -> Dictionary:
+	if not _in(x, y) or not bgrid.has(y * n + x):
+		return {"ok": false, "msg": "Тут немає будівлі."}
+	var b = bgrid[y * n + x]
+	if b.kind == "storage":
+		var storages := 0
+		for o in buildings:
+			if o.kind == "storage":
+				storages += 1
+		if storages <= 1:
+			return {"ok": false, "msg": "Не можна знести єдиний склад."}
+	var refund := {}
+	for res in GameData.BUILDINGS[b.kind].cost:
+		var back: int = int(GameData.BUILDINGS[b.kind].cost[res]) / 2
+		if back > 0:
+			deposit(res, back)
+			refund[res] = back
+	_remove_building(b)
+	_log("♻ %s розібрано%s." % [GameData.BUILDINGS[b.kind].name, (" (+" + GameData.cost_str(refund) + ")") if not refund.is_empty() else ""], "good")
+	return {"ok": true}
 
 # ---------------- items / equipment (spec 0001) ----------------
 func gather_time(node) -> float:
@@ -366,6 +500,7 @@ func update(dt: float) -> void:
 		time.frac -= 1.0
 		time.day += 1
 		_log("🌅 Новий день: %d" % time.day)
+		_grant_daily_capsule()
 	_update_player(dt)
 	_update_crafting(dt)
 	_update_raids(dt)
@@ -540,7 +675,13 @@ func _spawn_wave() -> void:
 	var r = raid
 	r.active = true
 	r.wave += 1
-	var cnt := GameData.raid_wave_size(time.day)
+	# diplomacy: hostile clans raid harder; allied/empire clans never do (spec 0002)
+	var pressure := 1.0
+	var faction := "невідомі мародери"
+	if social != null:
+		pressure = Social.raid_pressure(social)
+		faction = Social.raid_faction_name(social, r.wave)
+	var cnt: int = clampi(int(ceil(float(GameData.raid_wave_size(time.day)) * pressure)), 1, 20)
 	var edge := randi() % 4
 	var placed := 0
 	var guard := 0
@@ -566,8 +707,8 @@ func _spawn_wave() -> void:
 			continue
 		enemies.append(GameData.make_raider(x + 0.5, y + 0.5, time.day))
 		placed += 1
-	banner = "⚔ РЕЙД! %d рейдерів" % cnt
-	_log("⚔ Рейд #%d: %d рейдерів атакують базу!" % [r.wave, cnt], "bad")
+	banner = "⚔ РЕЙД! %d рейдерів — %s" % [cnt, faction]
+	_log("⚔ Рейд #%d: %d рейдерів (%s) атакують базу!" % [r.wave, cnt, faction], "bad")
 
 func _update_enemies(dt: float) -> void:
 	var p = player
@@ -663,7 +804,82 @@ func _damage_enemy(e, amt: float) -> void:
 func _on_death() -> void:
 	dead = true
 	banner = ""
-	_log("☠ Твій персонаж загинув.", "bad")
+	_log("☠ Твій персонаж загинув. Все нажите втрачено.", "bad")
+
+# Permadeath (spec 0002): the pawn is gone entirely — skills, carried loot and items reset.
+# You get a fresh un-leveled rookie at the clan base; the settlement (buildings + stock) persists.
+func respawn_new_pawn() -> void:
+	var sp := base_center()
+	var open := _nearest_free(astar, sp)
+	if open == Vector2i(-1, -1):
+		open = map.spawn
+	player = _default_player(open)
+	enemies = []
+	raid.active = false
+	raid.warned = false
+	raid.timer = 0.0
+	banner = ""
+	dead = false
+	_log("🧬 Нова пішка прибула в поселення — прокачка з нуля.", "warn")
+
+# ---------------- capsules & invites (spec 0002) ----------------
+func _grant_daily_capsule() -> void:
+	if capsule.is_empty():
+		capsule = _default_capsule()
+		return
+	if int(time.day) != int(capsule.last_day):
+		capsule.last_day = int(time.day)
+		if int(capsule.charges) < GameData.CAPSULE_DAILY_CHARGES:
+			capsule.charges = GameData.CAPSULE_DAILY_CHARGES
+			_log("🚀 Щоденна капсула готова (радіус %d км)." % int(capsule.radius_km), "good")
+
+func capsule_can_reach(lat: float, lon: float) -> Dictionary:
+	var km := WorldGen.haversine_km(float(map.lat), float(map.lon), lat, lon)
+	if int(capsule.get("charges", 0)) <= 0:
+		return {"ok": false, "km": km, "msg": "Капсула вже використана — чекай нового дня."}
+	if km > float(capsule.radius_km):
+		return {"ok": false, "km": km, "msg": "Задалеко: %d км > ліміт %d км." % [int(km), int(capsule.radius_km)]}
+	return {"ok": true, "km": km, "msg": "Готова до запуску (%d км)." % int(km)}
+
+# Validate + consume a charge. Returns a travel intent for the session (main.travel_to).
+func try_launch_capsule(lat: float, lon: float, place_name: String) -> Dictionary:
+	var chk := capsule_can_reach(lat, lon)
+	if not chk.ok:
+		return {"ok": false, "msg": chk.msg}
+	capsule.charges = int(capsule.charges) - 1
+	_log("🚀 Капсула запущена → %s (%d км)." % [place_name, int(chk.km)], "good")
+	return {"ok": true, "lat": lat, "lon": lon, "name": place_name, "km": chk.km}
+
+func add_invite(inv: Dictionary) -> void:
+	for e in invites:
+		if e.id == inv.id:
+			return
+	invites.append(inv)
+	_log("✉ Інвайт від %s (%s) → %s." % [inv.get("inviter", "?"), inv.get("clan", "—"), inv.get("name", "?")])
+
+func accept_invite(id: String) -> Dictionary:
+	var inv = null
+	for e in invites:
+		if e.id == id:
+			inv = e
+			break
+	if inv == null:
+		return {"ok": false, "msg": "Інвайт не знайдено."}
+	if not bool(inv.get("allow_receive", false)):
+		return {"ok": false, "msg": "Інвайт не дозволяє прийом капсули."}
+	var res := try_launch_capsule(float(inv.lat), float(inv.lon), str(inv.name))
+	if res.ok:
+		invites.erase(inv)
+	return res
+
+func region_display() -> String:
+	# show coordinates at the SAME 4-dp precision that actually seeds the world, so what the player
+	# reads is a faithful, shareable handle on this exact world (not a coarser, ambiguous one).
+	return "%s (%.4f, %.4f)" % [str(map.get("place_name", "Регіон")), float(map.lat), float(map.lon)]
+
+# The seed IS the coordinate: the terrain/nodes of this region are a pure function of it.
+func region_seed() -> int:
+	return int(map.get("seed", WorldGen.hash_seed(float(map.lat), float(map.lon))))
 
 # ---------------- logistics ----------------
 func dispatch_convoy(hub_index: int, send_res: String, send_amt: int) -> Dictionary:

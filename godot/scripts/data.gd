@@ -54,6 +54,15 @@ const OFFERS := [
 	{"buys": "stone", "sells": "food", "rate": 1},
 ]
 
+# ---- capsules (spec 0002): RimWorld-style drop pods ----
+const CAPSULE_BASE_RADIUS_KM := 100.0   # daily base capsule: one person, ≤100 km, once/day
+const CAPSULE_DAILY_CHARGES := 1
+
+# ---- social tiers (spec 0002) ----
+const SOCIAL_TIERS := ["player", "clan", "alliance", "empire"]
+const TIER_ICON := {"player": "🧍", "clan": "🛡", "alliance": "🤝", "empire": "👑"}
+const STANCE_ICON := {"ally": "🟢", "neutral": "🟡", "hostile": "🔴"}
+
 static func can_afford(stock: Dictionary, cost: Dictionary) -> bool:
 	for k in cost:
 		if float(stock.get(k, 0)) < float(cost[k]):

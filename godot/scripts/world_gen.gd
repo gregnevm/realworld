@@ -1,4 +1,13 @@
 # RealWorld — world_gen.gd : real lat/lon -> deterministic tile map (no scene deps)
+#
+# "Координати — це seed": the world is a pure function of the coordinate. hash_seed folds the
+# canonical coordinate string (canon_coord) into a 32-bit seed; generate_map expands that seed
+# through Godot's RandomNumberGenerator (PCG32) into terrain/nodes/spawn. The seed INTEGER is
+# byte-identical to the frozen JS reference (util.js hashSeed), but the RNG differs (JS uses
+# mulberry32), so the two engines are intentionally SEPARATE shards — the Godot port's PCG32 stream
+# is the canonical generator here, pinned by a golden-vector test (run_tests _t_worldgen_golden) so
+# it can never silently drift across engine versions. Cross-engine world parity is a deliberate
+# non-goal at Phase 0; if it is ever wanted, port mulberry32 into GDScript and re-pin the golden.
 extends RefCounted
 
 enum {WATER, GRASS, FOREST, ROCK, ROAD, SOIL, RUIN, SAND, SNOW}
@@ -8,9 +17,26 @@ const TERRAIN_NAME := ["вода", "трава", "ліс", "скеля", "дор
 static func is_terrain_blocked(t: int) -> bool:
 	return t == WATER or t == ROCK
 
-# deterministic 32-bit FNV-1a fold of the formatted coordinates
+# "Coordinates ARE the seed": the canonical coordinate string is the SINGLE source of truth for both
+# the terrain seed (hash_seed) and the region identity (persistence.region_key). Rounding to 4 dp
+# (~11 m) defines the world's resolution; both must derive from this one function so they can never
+# drift apart (a region's storage key and its terrain seed must always agree).
+static func canon_coord(lat: float, lon: float) -> String:
+	# Normalize to a single well-defined point on the globe BEFORE formatting, so the seed/identity
+	# is unambiguous everywhere: clamp latitude to the poles, wrap longitude at the antimeridian
+	# (+180 → −180), and collapse signed/near-zero to +0 (kills the "-0.0000" equator/meridian seam).
+	# All of these are no-ops for ordinary in-range coordinates, so existing seeds are unchanged.
+	lat = clampf(lat, -90.0, 90.0)
+	lon = wrapf(lon, -180.0, 180.0)
+	if absf(lat) < 0.00005:
+		lat = 0.0
+	if absf(lon) < 0.00005:
+		lon = 0.0
+	return "%.4f,%.4f" % [lat, lon]
+
+# deterministic 32-bit FNV-1a fold of the canonical coordinate string
 static func hash_seed(lat: float, lon: float) -> int:
-	var s := "%.4f,%.4f" % [lat, lon]
+	var s := canon_coord(lat, lon)
 	var h := 2166136261
 	for i in s.length():
 		h = (h ^ s.unicode_at(i)) & 0xffffffff
@@ -120,6 +146,7 @@ static func generate_map(lat: float, lon: float, n: int = 56) -> Dictionary:
 	var spawn := _pick_spawn(tiles, nodes, n)
 	return {
 		"n": n, "tiles": tiles, "nodes": nodes, "spawn": spawn, "lat": lat, "lon": lon,
+		"seed": seed_val,   # the coordinate-derived world id, carried so the UI/fingerprint need not recompute
 		"biome": "бореальний / сніжний" if snowy else ("посушливий" if arid else "помірний"),
 		"urban": urban,
 	}
