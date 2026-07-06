@@ -1,6 +1,12 @@
 # Spec 0005 — UX/UI view-layer architecture (rules, architecture, approach)
 
-> Status: proposed · additive · does not touch `sim.gd` this pass
+> Status: **Batches 0–5 implemented + verified** (2026-07-05) · additive · `main.gd` untouched (only an additive
+> `messages_seq` counter added to `sim.gd` per §2.7). The full spine is live under `godot/scripts/ui/`, proven by
+> `tests/run_ui_tests.gd` (65 headless tests, incl. the R1/R3/R4/R7/R9/R10 grep tripwires) and a windowed
+> `newhud` screenshot (`godot/newhud_shot.png`). All suites green: 119 unit + 152 kernel + 65 UI + 8 smoke.
+> Remaining: Batch 6 (port the modals) + Batch 7 (flip default & delete the monolith paths). Original status below.
+>
+> Status (original): proposed · additive · does not touch `sim.gd` this pass
 > Companion to: **specs/0003-mechanics-kernel.md** (the sim kernel — the "5 contracts" this document mirrors) and **docs/ux/design-system.md** + **docs/ux/hud.html** (the LOCKED visual/interaction contract — tokens §1, layout §2, overlays §3, panel/widget vocabulary §4, interaction grammar §5, a11y §7, verification §8).
 > This spec is the missing **code architecture for the view layer**. It says HOW the HUD is structured as Godot code so it stays coherent as 30+ mechanics' panels/overlays land. It does **not** restate what the HUD looks like or how it behaves — that is design-system.md's job — nor what the sim exposes — that is the VIEW BINDING SURFACE and spec 0003's job. It cross-references both.
 

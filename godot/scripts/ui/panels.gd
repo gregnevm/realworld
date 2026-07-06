@@ -10,7 +10,7 @@ const Widgets = preload("res://scripts/ui/widgets.gd")
 const GameData = preload("res://scripts/data.gd")
 
 # ---- StockPanel (RIGHT dock) — THE PROOF SLICE: Snapshot -> Panel -> Widget -> Tokens end to end ----
-class StockPanel extends PanelBase.Panel:
+class StockPanel extends PanelBase.Base:
 	var _rows: Dictionary = {}     # res id -> StatRow
 	var _total: Widgets.StatRow
 	func _init() -> void:
@@ -40,7 +40,7 @@ class StockPanel extends PanelBase.Panel:
 		_total.set_value("%d/%d" % [int(st.total), int(st.cap)])
 
 # ---- VitalsPanel (LEFT dock) — hero need bars (day/HP/hunger/rest), colored by urgency enum ----
-class VitalsPanel extends PanelBase.Panel:
+class VitalsPanel extends PanelBase.Base:
 	var _bars: Array = []          # NeedBar instances, in bar order
 	var _carry: Widgets.StatRow
 	func _init() -> void:
@@ -70,7 +70,7 @@ class VitalsPanel extends PanelBase.Panel:
 		_carry.set_value("%d/%d" % [int(carry.cur), int(carry.cap)])
 
 # ---- BalancePanel (RIGHT dock) — the director readout: threat gauge + phase (empty-gated until §8) ----
-class BalancePanel extends PanelBase.Panel:
+class BalancePanel extends PanelBase.Base:
 	var _gauge: Widgets.Gauge
 	var _phase: Widgets.StatRow
 	var _threat: Widgets.StatRow
@@ -100,11 +100,19 @@ class BalancePanel extends PanelBase.Panel:
 			return
 		var phase: StringName = StringName(th.phase)
 		var state: StringName = _phase_state(phase)
-		_gauge.bind({"fill": clampf(float(th.threat) / 320.0, 0.04, 1.0), "state": state})
+		_gauge.bind({"fill": clampf(float(th.threat) / 320.0, 0.04, 1.0), "state": state,
+			"phases": [_phase_label(&"calm"), _phase_label(&"raid"), _phase_label(&"siege"), _phase_label(&"spike")],
+			"active": _phase_index(phase)})
 		_phase.set_value(_phase_label(phase))
 		_threat.set_value(int(th.threat))
 		_wealth.set_value(int(th.wealth))
 		_hint.set_value("~%d рейдерів" % int(th.raid_hint))
+	func _phase_index(phase: StringName) -> int:
+		match phase:
+			&"calm": return 0
+			&"raid": return 1
+			&"siege": return 2
+			_: return 3
 	func _phase_state(phase: StringName) -> StringName:
 		match phase:
 			&"calm": return &"good"

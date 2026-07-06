@@ -100,23 +100,43 @@ class NeedBar extends WidgetBase.Widget:
 		if _track != null:
 			_track.queue_redraw()
 
-# ---- Gauge (.gauge/.phases): a segmented horizontal meter (Balance threat / immunity race) ----
+# ---- Gauge (.gauge/.phases): a SEGMENTED horizontal meter WITH the phase-label strip above
+# (design-system §4 / hud.html `.phases` спокій·рейд·облога·сплеск; spec 0005 §2.11 bind(value,phases)) ----
 class Gauge extends WidgetBase.Widget:
 	var value := ""
 	var _fill := 0.0
 	var _color: Color = Tokens.GOOD
 	var _bar: Control
+	var _phase_labels: Array = []       # up to 4 Labels, spread space-between over the fill
 	func _build() -> void:
-		custom_minimum_size = Vector2(0, 12)
+		custom_minimum_size = Vector2(0, 26)
+		var vb := VBoxContainer.new()
+		vb.set_anchors_preset(Control.PRESET_FULL_RECT)
+		vb.add_theme_constant_override("separation", 2)
+		add_child(vb)
+		var phases := HBoxContainer.new()
+		vb.add_child(phases)
+		for i in 4:
+			var l := Label.new()
+			l.add_theme_font_size_override("font_size", 9)
+			l.add_theme_color_override("font_color", Tokens.DIM)
+			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			l.horizontal_alignment = [HORIZONTAL_ALIGNMENT_LEFT, HORIZONTAL_ALIGNMENT_CENTER, HORIZONTAL_ALIGNMENT_CENTER, HORIZONTAL_ALIGNMENT_RIGHT][i]
+			phases.add_child(l)
+			_phase_labels.append(l)
 		_bar = Control.new()
-		_bar.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_bar.custom_minimum_size = Vector2(0, 12)
+		_bar.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		_bar.draw.connect(_draw_bar)
-		add_child(_bar)
+		vb.add_child(_bar)
 	func _draw_bar() -> void:
 		var w: float = _bar.size.x
 		var h: float = _bar.size.y
 		_bar.draw_rect(Rect2(0, 0, w, h), Tokens.PANEL2)
 		_bar.draw_rect(Rect2(0, 0, w * clampf(_fill, 0.04, 1.0), h), _color)
+		for i in range(1, 4):                                  # segment ticks at the phase thresholds
+			var x: float = w * float(i) / 4.0
+			_bar.draw_line(Vector2(x, 0), Vector2(x, h), Tokens.LINE, 1.0)
 	func bind(vm) -> void:
 		build_once()
 		if not (vm is Dictionary):
@@ -124,6 +144,12 @@ class Gauge extends WidgetBase.Widget:
 		_fill = clampf(float(vm.get("fill", 0.0)), 0.0, 1.0)
 		_color = Tokens.urgency(StringName(vm.get("state", &"good")))
 		value = str(vm.get("value", ""))
+		var phases: Array = vm.get("phases", [])              # ["спокій","рейд","облога","сплеск"]
+		var active: int = int(vm.get("active", -1))           # highlighted phase index
+		for i in _phase_labels.size():
+			if i < phases.size():
+				_phase_labels[i].text = String(phases[i])
+				_phase_labels[i].add_theme_color_override("font_color", Tokens.WARN if i == active else Tokens.DIM)
 		if _bar != null:
 			_bar.queue_redraw()
 

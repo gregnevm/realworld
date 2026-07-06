@@ -14,7 +14,8 @@ const DOCK_TOP := 2
 const DOCK_BAR := 3
 const DOCK_MODAL := 4
 
-class Panel extends PanelContainer:
+# NOTE: named `Base` (not `Panel`) — an inner class named `Panel` would shadow Godot's native Panel.
+class Base extends PanelContainer:
 	signal intent(verb: StringName, args: Dictionary)   # bubbles to InputController (R9)
 
 	var panel_id: StringName = &"panel"

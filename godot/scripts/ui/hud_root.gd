@@ -15,11 +15,21 @@ var balance                 # Balance director (constructed once by the entry sc
 var session                 # SessionScript (has .sim)
 
 var _docks: Dictionary = {}   # dock int -> container Control
+var last_snap: Dictionary = {}   # the most recent snapshot (OverlayHost reads env/clock from it)
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# A Control under a CanvasLayer does not inherit the viewport size, so PRESET_FULL_RECT leaves
+	# width 0 and any right-edge anchor collapses. Pin to TOP_LEFT and size explicitly to the viewport
+	# (re-fit on resize) so right/bottom-anchored docks resolve against the true screen width.
+	set_anchors_preset(Control.PRESET_TOP_LEFT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fit_viewport()
+	get_viewport().size_changed.connect(_fit_viewport)
 	_build_zones()
+
+func _fit_viewport() -> void:
+	position = Vector2.ZERO
+	size = get_viewport().get_visible_rect().size
 
 func _build_zones() -> void:
 	var left := VBoxContainer.new()
@@ -27,10 +37,16 @@ func _build_zones() -> void:
 	left.custom_minimum_size = Vector2(232, 0)
 	WidgetBase.Widget.pin_top_left(left)
 	add_child(left)
+	# Right dock: an explicit-width right strip. A right-anchored VBoxContainer growing BEGIN from a
+	# zero nominal size does not reliably expand to its combined min width, so we anchor a fixed 250px
+	# strip to the right edge (design-system §2 RIGHT DOCK width) rather than rely on grow-to-content.
 	var right := VBoxContainer.new()
 	right.add_theme_constant_override("separation", 8)
-	right.custom_minimum_size = Vector2(250, 0)
-	WidgetBase.Widget.pin_top_right(right)
+	right.anchor_left = 1.0; right.anchor_right = 1.0
+	right.anchor_top = 0.0; right.anchor_bottom = 0.0
+	right.offset_left = -262; right.offset_right = -12; right.offset_top = 10
+	right.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	right.grow_vertical = Control.GROW_DIRECTION_END
 	add_child(right)
 	var top := HBoxContainer.new()
 	top.set_anchors_preset(Control.PRESET_TOP_WIDE)
@@ -75,4 +91,5 @@ func refresh(dt: float) -> void:
 	if bus != null:
 		bus.ingest(session.sim, dt)
 	var snap: Dictionary = HudModel.snapshot(session, world, ctx, balance)
+	last_snap = snap
 	registry.bind_visible(snap)

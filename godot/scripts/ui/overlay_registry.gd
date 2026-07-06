@@ -35,8 +35,11 @@ class OverlayRegistry extends RefCounted:
 		return (o.radio and active == id) or (not o.radio and bool(_markers.get(id, false)))
 
 	func active_and_markers() -> Array:                          # 1 radio + all enabled always-on
-		return overlays.filter(func(o): return (o.radio and o.overlay_id == active)
-											or (not o.radio and bool(_markers.get(o.overlay_id, false))))
+		var out: Array = []
+		for o in overlays:
+			if (o.radio and o.overlay_id == active) or (not o.radio and bool(_markers.get(o.overlay_id, false))):
+				out.append(o)
+		return out
 
 	func legend_for_active() -> Array:
 		var o = _get(active)

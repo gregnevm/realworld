@@ -33,6 +33,8 @@ func _init() -> void:
 	_t_value_data()
 	_t_feedback()
 	_t_feed_survives_trim()
+	_t_feed_clamp()
+	_t_feed_self_heal()
 	_t_widgets()
 	_t_stock_spine()
 	_t_panel_registry()
@@ -87,6 +89,9 @@ func _t_view_geom() -> void:
 	ok(ViewGeom.contains(full, 10, 10) and not ViewGeom.contains(corner, 55, 55), "contains() honors the rect")
 	var fr := ViewGeom.full_rect(56)
 	ok(int(fr.x1) == 55 and int(fr.y1) == 55, "full_rect covers [0,n)")
+	# n-dependence: a different region size clamps to n-1 (OverlayHost must pass sim.n, not a hardcoded 56)
+	var small := ViewGeom.cull_rect(Vector2(560, 560), Vector2(1, 1), Vector2(4000, 4000), 40, 28)
+	ok(int(small.x1) == 39 and int(small.y1) == 39, "cull_rect clamps to n-1 for n=40 (no drift when region size != 56)")
 
 # ---------------- LatLon (pure parse/validate, lifted from main._parse_latlon) ----------------
 func _t_latlon() -> void:
@@ -95,6 +100,8 @@ func _t_latlon() -> void:
 	var b := LatLon.parse("50.45, 30.52", "")
 	ok(bool(b.ok) and is_equal_approx(float(b.lon), 30.52), "parse single 'lat, lon' pasted address form")
 	ok(not bool(LatLon.parse("120", "0").ok), "reject out-of-range latitude")
+	ok(not bool(LatLon.parse("0", "200").ok), "reject out-of-range longitude (the short-circuited operand)")
+	ok(not bool(LatLon.parse("50, 200", "").ok), "reject out-of-range longitude in pasted address form")
 	ok(not bool(LatLon.parse("", "").ok), "reject empty input")
 
 # ---------------- HudModel.snapshot (the ViewModel; the assess() analogue) ----------------
@@ -115,6 +122,13 @@ func _t_snapshot() -> void:
 	ok(bool(snap.threat.available) and snap.threat.phase is StringName, "threat slice maps Balance.assess() -> phase enum")
 	# a null session degrades gracefully (never crashes headless)
 	ok(not bool(HudModel.snapshot(null, {}, {}, bal).alive), "null session -> {alive:false}")
+	# a DEAD world snapshots without crashing (dead flag true, hp=0 -> crit urgency)
+	sess.sim.dead = true
+	sess.sim.player.hp = 0.0
+	var dsnap := HudModel.snapshot(sess, world, {"day": 5}, bal)
+	ok(bool(dsnap.alive) and bool(dsnap.dead), "dead world still snapshots (alive=true, dead=true)")
+	ok(dsnap.vitals.bars[0].state == &"crit", "hp 0 -> crit urgency enum on the death path")
+	sess.sim.dead = false; sess.sim.player.hp = 100.0
 
 # ---------------- R8: every snapshot leaf is value data (no live refs / closures) ----------------
 func _t_value_data() -> void:
@@ -174,6 +188,36 @@ func _t_feed_survives_trim() -> void:
 	ok(seen.size() == 45, "feed receives all 45 messages across the 40-cap trim (no gap, no duplicate)")
 	ok(seen[0] == "msg-0" and seen[44] == "msg-44", "feed order preserved across the sliding-window trim")
 
+# ---------------- _t_feed_clamp: MORE than 40 new messages between ingests exercises the mini() clamp ----------------
+func _t_feed_clamp() -> void:
+	var sim := _FakeSim.new()
+	var bus = FeedbackBus.FeedbackBus.new()
+	var seen := []
+	bus.feed.connect(func(evt): seen.append(evt.text))
+	for i in 5:
+		sim._log("a-%d" % i)
+	bus.ingest(sim, 0.1)                       # drains 5, _last_seq = 5
+	seen.clear()
+	for i in 50:
+		sim._log("b-%d" % i)                   # 50 > 40 window: seq-_last_seq = 50 must clamp to msgs.size()
+	bus.ingest(sim, 0.1)
+	ok(seen.size() == sim.messages.size() and seen.size() == 40, "over-window burst clamps to the trimmed tail (no negative index)")
+	ok(seen[seen.size() - 1] == "b-49", "clamped drain ends at the newest message")
+
+# ---------------- _t_feed_self_heal: a fresh sim (backwards messages_seq) re-syncs, not swallows ----------------
+func _t_feed_self_heal() -> void:
+	var bus = FeedbackBus.FeedbackBus.new()
+	var old_sim := _FakeSim.new()
+	for i in 10:
+		old_sim._log("old-%d" % i)
+	bus.ingest(old_sim, 0.1)                   # _last_seq climbs to 10
+	var fresh := _FakeSim.new()                # new game/respawn: messages_seq restarts at 0
+	fresh._log("Висадка…", "good")
+	var seen := []
+	bus.feed.connect(func(evt): seen.append(evt.text))
+	bus.ingest(fresh, 0.1)                      # must NOT swallow the fresh sim's opening log
+	ok(seen.size() == 1 and seen[0] == "Висадка…", "fresh sim re-syncs (backwards seq self-heals, no swallow)")
+
 # ---------------- Widgets: build-once + R11 triplet (color+icon+number) ----------------
 func _t_widgets() -> void:
 	var bar = Widgets.NeedBar.new()
@@ -183,7 +227,11 @@ func _t_widgets() -> void:
 	var row = Widgets.StatRow.new()
 	row.set_glyph_res("wood"); row.set_value(42)
 	ok(row.value == "42", "StatRow builds lazily + sets mono value")
-	bar.free(); row.free()
+	# Gauge parity: the locked .phases strip must be present + labelled (design-system §4 / hud.html)
+	var g = Widgets.Gauge.new()
+	g.bind({"fill": 0.5, "state": &"warn", "phases": ["спокій", "рейд", "облога", "сплеск"], "active": 1})
+	ok(g._phase_labels.size() == 4 and g._phase_labels[0].text == "спокій" and g._phase_labels[3].text == "сплеск", "Gauge renders the 4-phase label strip (parity with locked anatomy)")
+	bar.free(); row.free(); g.free()
 
 # ---------------- StockPanel proof slice: build once, bind twice (R2) ----------------
 func _t_stock_spine() -> void:
@@ -213,7 +261,7 @@ func _t_panel_registry() -> void:
 	var sess = _fake_session()
 	var snap := HudModel.snapshot(sess, {"buildings": [], "stock": sess.sim.stock, "items": []}, {"day": 5}, Balance.Balance.new())
 	a.visible = true; b.visible = false
-	var before := b.rebind_count
+	var before: int = b.rebind_count
 	reg.bind_visible(snap)
 	ok(b.rebind_count == before, "bind_visible SKIPS a hidden panel (the view's tick_all)")
 	ok(a.rebind_count > 0, "bind_visible binds the visible panel")
@@ -250,7 +298,7 @@ func _t_rule_tripwires() -> void:
 		"res://scripts/persistence.gd", "res://scripts/world_gen.gd", "res://scripts/kernel/balance.gd"]
 	var r1 := true
 	for f in sim_side:
-		if "res://scripts/ui" in _read(f):
+		if "res://scripts/ui" in _read_code(f):
 			r1 = false
 	ok(r1, "R1: sim/kernel/session/social/persistence never reference res://scripts/ui")
 	# R3 — no raw color/stylebox under ui/ except tokens.gd + theme.gd
@@ -258,13 +306,13 @@ func _t_rule_tripwires() -> void:
 		"panel.gd", "widget.gd", "overlay.gd", "feedback_bus.gd", "format.gd", "view_geom.gd"]
 	var r3 := true
 	for f in ui_files:
-		var body := _read("res://scripts/ui/" + f)
+		var body := _read_code("res://scripts/ui/" + f)   # comment-stripped: doc comments may mention them
 		if "Color.html(" in body or "StyleBoxFlat.new(" in body or "Color(" in body:
 			r3 = false
 			printerr("  R3 leak in ", f)
 	ok(r3, "R3: no raw Color()/Color.html()/StyleBoxFlat.new() outside tokens.gd + theme.gd")
 	# R4 — the thin controller names no mechanic
-	var hud := _read("res://scripts/ui/hud_root.gd")
+	var hud := _read_code("res://scripts/ui/hud_root.gd")
 	var mechs := ["raid", "convoy", "capsule", "social", "craft", "power", "research", "stock", "logistics"]
 	var r4 := true
 	for m in mechs:
@@ -274,7 +322,7 @@ func _t_rule_tripwires() -> void:
 	# R7 — resize-safe anchoring only via pin_* (no raw .position/PRESET_TOP_RIGHT in panels/widgets/overlays)
 	var r7 := true
 	for f in ["panels.gd", "widgets.gd", "overlays.gd"]:
-		var body := _read("res://scripts/ui/" + f)
+		var body := _read_code("res://scripts/ui/" + f)
 		if ".position =" in body or "PRESET_TOP_RIGHT" in body:
 			r7 = false
 	ok(r7, "R7: no raw .position/PRESET_TOP_RIGHT in panels/widgets/overlays (pin_* only)")
@@ -283,22 +331,33 @@ func _t_rule_tripwires() -> void:
 		"order_move", "order_gather", "order_attack", "accept_invite"]
 	var r9 := true
 	for f in ["panels.gd", "widgets.gd"]:
-		var body := _read("res://scripts/ui/" + f)
+		var body := _read_code("res://scripts/ui/" + f)
 		for cmd in cmds:
 			if cmd in body:
 				r9 = false
 	ok(r9, "R9: panels/widgets call no sim mutator (only the InputController does)")
-	# R10 — only feedback_bus.gd drains the sim push channels
+	# R10 — only feedback_bus.gd drains the sim push channels. Target sim-field reads precisely:
+	# .flash_msg/.flash_t/.messages are sim-only names; use "sim.banner" (not ".banner") since the
+	# FeedbackBus SIGNAL is also named `banner` and BannerWidget legitimately subscribes to bus.banner.
 	var r10 := true
 	for f in ["widgets.gd", "panels.gd", "hud_model.gd", "hud_root.gd", "overlays.gd"]:
-		var body := _read("res://scripts/ui/" + f)
-		if ".messages" in body or ".banner" in body or ".flash_msg" in body or ".flash_t" in body:
+		var body := _read_code("res://scripts/ui/" + f)
+		if ".messages" in body or "sim.banner" in body or ".flash_msg" in body or ".flash_t" in body:
 			r10 = false
 	ok(r10, "R10: only feedback_bus.gd reads sim.messages/banner/flash (single adapter)")
 
 func _read(path: String) -> String:
 	var f := FileAccess.open(path, FileAccess.READ)
 	return f.get_as_text() if f != null else ""
+
+# comment-stripped file text (drops full-line # comments) so tripwire greps ignore doc comments
+func _read_code(path: String) -> String:
+	var out := PackedStringArray()
+	for line in _read(path).split("\n"):
+		if line.strip_edges().begins_with("#"):
+			continue
+		out.append(line)
+	return "\n".join(out)
 
 # ================= fakes (inner classes, like run_kernel_tests _StubClimate) =================
 func _fake_session():

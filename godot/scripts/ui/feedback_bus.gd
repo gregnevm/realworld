@@ -21,6 +21,11 @@ class FeedbackBus extends RefCounted:
 	func ingest(sim, _dt: float) -> void:
 		if sim == null:
 			return
+		# Self-heal on sim identity change: a fresh Sim (session restart / respawn) starts messages_seq
+		# at 0, below a long-lived bus's cursor. Without this, `seq > _last_seq` stays false and the new
+		# world's opening feed is swallowed. A backwards jump means "new sim" -> resync from its tail.
+		if int(sim.messages_seq) < _last_seq:
+			reset_cursors()
 		# banner: emit only on change
 		var b: String = String(sim.banner)
 		if b != _last_banner:
@@ -43,7 +48,11 @@ class FeedbackBus extends RefCounted:
 				feed.emit({"cls": String(m.get("cls", "")), "text": String(m.get("text", ""))})
 			_last_seq = seq
 
-	func reset_cursors() -> void:   # HudRoot calls this on session.travel_to (§2.5)
+	# Re-sync from the sim's current tail. Called automatically by ingest() on a sim-identity change
+	# (backwards messages_seq jump), and available for a HudRoot travel/region-change hook. NOTE: travel
+	# via session.travel_to reuses the same Sim in place and messages_seq is monotonic, so travel needs
+	# no explicit reset; the self-heal covers the fresh-Sim (restart/respawn) case that does.
+	func reset_cursors() -> void:
 		_last_seq = 0
 		_last_banner = ""
 		_last_flash = ""

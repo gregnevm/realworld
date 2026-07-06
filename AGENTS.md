@@ -43,6 +43,18 @@ realworld/
   .claude/launch.json  dev-сервер прев'ю
 ```
 
+## Godot-порт (форвардний рушій — нові фічі сюди; JS-версія заморожена як референс)
+- **Де:** `godot/` — повний порт на **Godot 4.7 (GDScript)**. Симуляція scene-free, детермінована (PCG32 із FNV-хешу координат), тестовна headless. Пиляр: «координати — це seed» (світ = чиста функція `lat/lon`). UI — **українською**.
+- **Шари:**
+  - `godot/scripts/` — `sim.gd` (детермінований сим), `session.gd` (оркестрація регіонів/подорожей/респавну), `social.gd`, `persistence.gd`, `world_gen.gd`, `world_view.gd` (custom-draw тайлмапи), `main.gd` (поточний HUD-моноліт — досі дефолтна сцена).
+  - `godot/scripts/kernel/` — **механічний кернел (spec 0003)**: `Def`/`Thing`+`ThingComp`/`StatWorker`+`StatPart`/`SimSystem`+`SystemRegistry`/`Balance`. «Додати механіку ніколи не редагує tick-loop».
+  - `godot/scripts/ui/` — **view-шар (spec 0005)**: 6 контрактів-дзеркал кернела — `Tokens`/`Theme`, `Panel`+`PanelRegistry`, `Overlay`+`OverlayRegistry`, `Widget`(бібліотека примітивів), `HudModel.snapshot()` (чистий ViewModel = аналог `Balance.assess()`), `FeedbackBus`, `InputVerbs`+`InputController`. `HudRoot` — тонкий контролер. `newhud_main.gd` — нова сцена (bare-arg `newhud`), збирається **лише з реєстрів** (`mechanics.gd`).
+- **12 правил view-шару (spec 0005 §1, примусові через `run_ui_tests.gd`):** R1 односторонній потік (sim не імпортує ui) · R2 build-once-then-bind (без ребілду панелей) · R3 стилі лише через `Tokens`/`Theme` (жодних inline `Color(`/`StyleBoxFlat` поза `tokens.gd`/`theme.gd`) · R4 контролер не називає жодної механіки · R5 кожне число з `explain()` · R6 просторовий стан = `Overlay`, не список координат · R7 resize-safe анкери лише через `Widget.pin_*` · R8 слайси — тільки value-data · R9 sim-команди лише в роутері · R10 фідбек — один адаптер · R11 enum+іконка+число (не лише колір) · R12 keyboard-first + видимий детермінізм.
+- **GDScript-гочі (обов'язково):** `:=` не виводить тип із `Variant` (доступ до поля `Dictionary`, `abs()`, нетипізований метод) → явний `: Type` або `absf/absi`; JSON round-trip перетворює `int→float`; `RefCounted` не збирає цикли → чисти крос-рефи в `_exit_tree()`; лише seeded `RandomNumberGenerator`; **інклас+preload** (жодного top-level `class_name`, жодних autoload); анкери resize-safe. Інклас з іменем `Panel` **шедовить** нативний `Panel` — базу названо `Base`.
+- **Тести (headless):** `test.cmd` у корені ганяє 4 сьюти — `run_tests` (119), `run_kernel_tests` (152), `run_ui_tests` (65, spec 0005), `run_smoke` (8). Годо-екзе: `%LOCALAPPDATA%\GodotPortable\Godot_v4.7-stable_win64[_console].exe`. Приклад: `Godot_console.exe --headless --path godot -s res://tests/run_ui_tests.gd`.
+- **Скриншот нового HUD:** `Godot_console.exe --path godot res://newhud.tscn -- newhud shot` (віконно, не headless) → `godot/newhud_shot.png`.
+- **UX-контракт:** `docs/ux/design-system.md` (зафіксовані токени §1 / layout §2 / оверлеї §3 / віджети §4 / граматика §5) + `docs/ux/hud.html` (рендер-макет, джерело parity). Специфікації: `specs/0003` (кернел), `specs/0004` (каталог механік+UX), `specs/0005` (view-архітектура).
+
 ## Конвенції
 - **Іменування:** усе публічне вішається на `RW.*`; стан гри — `G`; тайл-індекс — `i = y*N + x`.
 - **Стиль:** 2 пробіли; `"use strict"` у кожному IIFE-модулі; без ES-модулів (`import/export`) — лишаємось на classic scripts заради no-build.
