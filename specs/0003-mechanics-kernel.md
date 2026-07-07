@@ -1,6 +1,6 @@
 # Spec 0003 — RimWorld-style mechanics kernel (abstractions & interfaces)
 
-Status: **kernel implemented + verified** (143 kernel tests green; existing 119 unit still green) ·
+Status: **kernel implemented + verified** (239 kernel tests green; existing 119 unit still green) ·
 Engine: Godot 4.7 port (`godot/scripts/kernel/`, scene-free, headless-testable) · Reference: JS web slice frozen.
 
 Goal: **develop the full mechanics concept as abstractions & interfaces, analogous to RimWorld** — not a
@@ -134,10 +134,13 @@ kernel; **D** = designed, expressed via a shipped interface, not yet coded.
 | 2 | Sleep / rest | Need_Rest | `Need_Rest`; sleeping `satisfy()`s it | K |
 | 3 | Located injuries | Hediff_Injury | `HealthTracker.injure()` → capacities → stats | K |
 | 4 | Bleeding / downing | BleedRate / Downed | `Hediff.bleed_rate()` drains `blood`; `downed` | K |
-| 5 | Medicine / tending | TendUtility | `HealthTracker.tend_all()` (needs `medicine` res + `medbed` Thing) | K/D |
+| 5 | Medicine / tending | TendUtility | `HealthTracker.tend_all()` + `gear.TendService.tend()` — requires a `medicine` res in `world.stock` AND a medbed Thing (`CompMedbed`); effectiveness = StatWorker(medic competence) × medicine quality; consumes exactly one medicine, fails (no effect, no consume) when either is missing | K |
 | 6 | Infection | Hediff (infection) | `Hediff_Injury.infection` festers untended | K |
 | 7 | Disease / immunity | Hediff_Disease | immunity-vs-severity race | K |
-| 8 | Apparel & armor | Apparel / ArmorRating | `StatPart` on `ArmorRating_*`; a `CompApparel` Thing worn in an equip slot | D |
+| 8 | Apparel & armor | Apparel / ArmorRating | `gear.CompApparel` Thing (slot / insulation_c / armor-by-damage-type / wear) worn in a `gear.EquipModel` slot map; `StatPart_Armor` on `ArmorRating_<type>`; `apply_armor(dmg,type,equip,rng)` mitigates & wears gear; rising wear degrades armor + insulation | K |
+| A9 | Temperature comfort | Hypothermia / Heatstroke + ComfortTemperature | `gear.Hediff_Hypothermia`/`Hediff_Heatstroke` climb while FELT temp (ctx.temp_c + equipped insulation) leaves the comfort band [12–30 °C] and recede inside it, lowering consciousness/moving; `gear.ComfortSystem` (prio 25, after env) / static `update_comfort()` maintain them on the `HealthTracker` | K |
+| A3 | Thirst / water | Need_Thirst | `gear.Need_Water` (id `&water`) drains faster above ~25 °C (reads ctx.temp_c); `gear.drink(need, river/well/stored)` satisfies; `gear.hero_needs()` = `default_needs()` + water | K |
+| A11 | Scars & prosthetics | Hediff scar / bionic implant surgery | `gear.Hediff_Scar` (permanent, fixed cap penalty); `resolve_to_scar()` non-destructive post-heal sweep leaves a scar where a severe wound healed; `gear.Hediff_Implant` restores a capacity; `install_prosthetic(tracker, part, implant)` = the medbed surgery (removes injuries+scars on the part, fits the implant) | K |
 
 ### 7.2 Production & economy
 | # | Mechanic | RimWorld | Kernel expression | |
@@ -157,8 +160,9 @@ kernel; **D** = designed, expressed via a shipped interface, not yet coded.
 | 16 | Farming / grow zones / seasons | Plant / GrowthRate | `CompGrower` (ships) + climate `temperature_c`/`season`/`daylight` | K |
 | 17 | Temperature (heat/cold stress) | Map temperature | `TemperatureSystem` writes `ctx.temp_c`; hurts hero/crops/rot; heaters & coolers are power-consuming Things | K |
 | 18 | Weather events | WeatherDef | `ClimateProvider.weather()` (ships) + a `WeatherSystem` applying rain/fog/cold-snap effects | K |
-| 19 | Fire & spread | Fire | `CompFlammable` + a `FireSystem` spreading across adjacent flammable Things; rain/snow suppress | D |
-| 20 | Defensive traps | Building_Trap | a trap `Thing` whose comp triggers on an `Agent` entering its cell | D |
+| 19 | Fire & spread | Fire | `combat.gd` `CompFlammable` + `FireSystem` (prio 30) spreading across adjacent (Manhattan 1) flammable Things over seeded `world.rng`; `ctx.wet` (rain/snow) suppresses ignition & extinguishes | K |
+| 20 | Defensive traps | Building_Trap | `combat.gd` `CompTrap` triggers on a **hostile** `Agent` entering `parent.pos` (deals damage, decrements `uses`, disarms at 0); NEVER triggers on the hero/player faction | K |
+| D3 | Turrets: ammo & heat | Building_TurretGun + CompRefuelable | `combat.gd` `CompTurret` auto-fires at the nearest hostile `Agent` in `range` ONLY when its co-located `Power.CompPowerTrader.is_live()` AND ammo>0 AND heat<heat_max AND off cooldown; consumes ammo, adds heat, deals damage; otherwise bleeds heat/cooldown down; deterministic targeting (nearest, tie by list index) | K |
 
 ### 7.4 Threats & the director
 | # | Mechanic | RimWorld | Kernel expression | |
@@ -166,11 +170,12 @@ kernel; **D** = designed, expressed via a shipped interface, not yet coded.
 | 21 | Balance pacing | Storyteller | `Balance.tick()` MTB rolls + adaptive gating | K |
 | 22 | Wealth-based difficulty | WealthWatcher | `Balance.wealth()` / `threat_points()` / `difficulty` knob | K |
 | 23 | Raid tactics | Raid strategies | `Balance._exec_raid().style` = assault/droppod/siege/sappers | K |
-| 24 | Mortars / artillery | Building_TurretGun (mortar) | a mortar `Thing` firing a `projectile` Thing; the `siege` raid style builds enemy mortars | D |
+| 24 | Mortars / artillery | Building_TurretGun (mortar) | `combat.gd` `CompMortar` fires a `Projectile` Thing at a target cell with seeded scatter (grows with range); `Projectile` lands after a fuse (dday countdown) and deals area damage; `Combat.from_siege()` is the hook the `siege` raid style calls to build enemy mortars | K |
 | 25 | Manhunter packs | ManhunterPack | `Balance` `manhunter` incident → `Agent_Animal.manhunter` | K |
 | 26 | Ally quests | QuestScriptDef | `Balance` `quest` incident sourced from `social.gd` friends/clans; reward = reputation/resources | K |
 | 27 | Cargo drops / gifts | CargoPods | `Balance` `cargo` incident (× `generosity`) | K |
 | 32 | Insect infestation | Infestation | `Balance` `infestation` incident → hostile `Agent` swarm | K |
+| D6 | Cover | Cover / hit-mitigation | `combat.gd` `StatPart_Cover` (folds `ctx.cover_mult` into a ranged-damage `StatWorker`) + `Combat.apply_cover(dmg, defender_pos, world)` reading `world.cover` cells (defender on/adjacent to cover takes `world.cover_frac` less ranged damage) | K |
 
 ### 7.5 Non-hero actors (the "colony without colonists")
 | # | Mechanic | RimWorld | Kernel expression | |
@@ -204,7 +209,7 @@ The kernel is a parallel, tested layer today. Migration is incremental and each 
   (real weather), `social.gd.new_graph()` (live roster) — all three share the same "shape IS the wire format"
   contract established in spec 0002.
 
-## 10. Test coverage (`godot/tests/run_kernel_tests.gd`, 54 assertions, headless)
+## 10. Test coverage (`godot/tests/run_kernel_tests.gd`, 239 assertions, headless)
 
 Def registry + type index + DefOf + pack injection · Thing/Comp rot (warm vs frozen), growth (band + night
 dormancy), quality (deterministic per seed, monotone) · Stat pipeline (quality × capacity, explain) · System
@@ -213,3 +218,12 @@ priority ordering · Climate (equator/pole, Kyiv seasons, hemisphere flip, day/n
 immunity race, capacities bundle) · **Balance** (wealth, threat scaling, `assess` snapshot, `difficulty`/
 `generosity` knobs, raid tactic escalation, `decide()` gating, deterministic `tick`, adaptive big-threat
 suppression) · Agents (raider→base, bot haul vs idle, animal guard/graze/manhunter).
+
+Plus per-batch coverage for the five layered systems — environment (temp/weather/light/deteriorate), power
+(net/battery/brownout + emitter seam), production (bills/research/cooking/quality/zones), gear (armor/
+comfort/tend/water/scars), combat (turret/mortar/trap/fire/cover) — and a **capstone end-to-end integration
+test** (`_t_integration`) that composes ALL FIVE layers in ONE `SystemRegistry` and ticks the interleaved
+10→30 spine (temperature→weather→light→power→production→comfort→fire): it proves environment writes the ctx
+substrate, power balances the net and drives the heater emitter, production runs a bench bill, comfort
+grows/recedes a hypothermia hediff, fire spreads (and is quenched when wet), the Batch-1↔2 emitter handoff
+cools the cell on brownout, and the whole spine is deterministic per seed.

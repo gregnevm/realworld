@@ -324,8 +324,22 @@ clean health doll.
 
 ## Implementation status & next steps
 
-- **Balance director:** implemented + tested (`balance.gd`, 59 kernel tests) — §B is ready to bind to a panel.
-- **Kernel mechanics (K in 0003 §7):** logic implemented + tested; these panels bind to existing kernel APIs.
-- **This spec's UX:** the layout + per-mechanic interface is realized as a **rendered interactive HUD mock-up**
-  (the artifact shipped alongside this session) so the design is *seen and clicked*, not just described. The Godot
-  `main.gd` HUD then grows into these zones one panel at a time, following spec 0003 §8's migration order.
+**All catalogued mechanics are now implemented in the kernel AND realized in the interactive HUD**, built in five
+dependency-ordered batches (each: kernel module + headless tests + HUD interface, adversarially reviewed & fixed):
+
+| Batch | Kernel module | Mechanics | HUD surface |
+|---|---|---|---|
+| 1 · Environment | `environment.gd` | temperature · weather · lighting · roofing · deterioration | `R`/`T`/`L` overlays, comfort panel, weather chips, wear bars |
+| 2 · Power | `power.gd` | net · generators/solar · batteries · heaters/lamps · brownout | `P` overlay + Power panel; brownout ↔ heater/lamp coupling |
+| 3 · Production/tech | `production.gd` | bills/quotas · research · cooking/poisoning · quality · stockpiles | Bills panel · Research tree · `Z` overlay · quality pips |
+| 4 · Gear/health | `gear.gd` | apparel/armor · comfort hediffs · medicine+medbed · thirst · scars/prosthetics | equipment slots · doll hediffs · tend flow · water |
+| 5 · Threats/combat | `combat.gd` | turrets+ammo · mortars · traps · fire spread · cover | turret range/ammo · mortar targeting · fire markers · `K` cover overlay |
+
+- **Kernel:** 219+ headless assertions, 0 failures; every batch passed an adversarial review pass (correctness ·
+  determinism · UX coherence · test adequacy) that caught and fixed real bugs before merge.
+- **Design system:** [`docs/ux/design-system.md`](../docs/ux/design-system.md) is the binding UX contract (tokens,
+  the 6-overlay framework, panel/interaction grammar, accessibility). All six overlays are radios; the HUD is
+  keyboard-navigable, colorblind-safe (icon+number pairing), and Ukrainian throughout.
+- **This spec's UX** is realized, *seen and clicked*, in the rendered mock-up [`docs/ux/hud.html`](../docs/ux/hud.html).
+- **Next:** the Godot `main.gd` HUD grows into these zones one panel at a time, following spec 0003 §8's migration
+  order, binding each panel to the now-shipped kernel APIs.

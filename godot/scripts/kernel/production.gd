@@ -16,7 +16,14 @@
 #   world.zones : Array[StockZone]              stockpile zones the zone-hauler chooses among.
 #   world.spawn : Array[Things.Thing]           (optional) ProductionSystem appends spawned output Things
 #                                               here when a recipe yields a Thing (a meal) rather than a
-#                                               bulk resource. The host drains this list.
+#                                               bulk resource. The host drains this list. For a thing output
+#                                               the system ALSO bumps world.stock[out_id] by the count as a
+#                                               logical tally so 'until'-mode bills can measure how many
+#                                               exist and stop at target (a host draining a meal must decrement
+#                                               that tally to keep it honest).
+#   world.rng   : RandomNumberGenerator         (optional) seed the system uses to roll each crafted output
+#                                               Thing's quality at creation; if absent a fixed-seed rng is
+#                                               installed so quality is still rolled deterministically.
 # A workbench is a Things.Thing carrying a CompWorkbench (its bill list). ProductionSystem scans
 # world.things for workbenches exactly like PowerNetSystem scans for power comps.
 #
@@ -132,7 +139,8 @@ class CompWorkbench extends Things.ThingComp:
 #   2. gate on research via can_make(); a gated-but-locked recipe stalls without consuming.
 #   3. require inputs present in world.stock; missing -> stall, produce nothing.
 #   4. advance progress by ctx.dday; on reaching recipe.work, consume inputs and yield output
-#      (bulk -> world.stock; thing -> world.spawn), bump done / hold 'until', reset progress.
+#      (bulk -> world.stock; thing -> world.spawn AND a world.stock tally), bump done / hold 'until',
+#      reset progress.
 # Only ONE unit completes per bill per tick even if dday is large — keeps stock accounting legible and
 # deterministic; a bigger dday just fills progress and the surplus carries to next tick.
 class ProductionSystem extends Systems.SimSystem:
@@ -218,15 +226,35 @@ class ProductionSystem extends Systems.SimSystem:
 			var spawn: Array = world.get("spawn", [])
 			if not world.has("spawn"):
 				world["spawn"] = spawn
+			var rng = _world_rng(world)
 			for i in count:
 				var thing = _make_output_thing(recipe, out, out_id, maker_level)
+				thing.post_make(rng)   # roll quality deterministically at creation (documented contract)
 				spawn.append(thing)
+			# Also tally spawned things into world.stock as a logical count so 'until'-mode bills whose
+			# output is a Thing can see how many exist and stop at target (bulk 'else' branch below does the
+			# same for resources). Without this, out_stock stays 0 forever and 'until' overproduces.
+			stock[out_id] = int(stock.get(out_id, 0)) + count
 		else:
 			stock[out_id] = int(stock.get(out_id, 0)) + count
 
+	# The seeded rng used to roll crafted-output quality at creation. Prefers the host-provided world.rng
+	# (so a save/replay reproduces exactly); falls back to a fixed-seed rng so the contract still holds —
+	# quality is ALWAYS rolled here, never left at CompQuality's default tier — even for a host that omits
+	# world.rng. Determinism preserved: no time seed, no global randf().
+	func _world_rng(world) -> RandomNumberGenerator:
+		var rng = world.get("rng", null)
+		if rng is RandomNumberGenerator:
+			return rng
+		var fallback := RandomNumberGenerator.new()
+		fallback.seed = 0
+		world["rng"] = fallback
+		return fallback
+
 	# Build one output Thing: a fresh Thing tagged with the output id, carrying any comps the recipe
-	# names (e.g. a meal wants CompRottable), always stamped with CompQuality(maker_level) then post_made
-	# with the world rng so its quality tier is rolled deterministically at creation.
+	# names (e.g. a meal wants CompRottable), always stamped with CompQuality(maker_level). The caller
+	# (_yield) then post_makes it with the world rng so its quality tier is rolled deterministically at
+	# creation — see _world_rng.
 	func _make_output_thing(recipe, out: Dictionary, out_id: StringName, maker_level: float):
 		var def = Defs.Def.new(&"item", out_id, {"max_hp": float(out.get("max_hp", 60.0))})
 		var thing = Things.Thing.new(def)

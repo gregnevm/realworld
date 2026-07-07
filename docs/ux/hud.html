@@ -274,6 +274,106 @@
   .slot.lock{position:relative}
   .slot.lock .lk{position:absolute;bottom:1px;right:2px;font-size:9px;line-height:1;color:var(--comp)}
   .slot:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+
+  /* ==== Batch 4: hero gear · comfort hediffs · medbed tend · water · scars/prosthetics ==== */
+
+  /* Equipment body-slot grid (reuses the doll silhouette metaphor as a slot list) */
+  .eqgrid{display:flex;flex-direction:column;gap:5px}
+  .eqslot{display:grid;grid-template-columns:18px 1fr auto;align-items:center;gap:7px;padding:4px 6px;
+    border-radius:6px;background:var(--panel2);border:1px solid var(--line2);cursor:pointer;text-align:left;
+    font-family:var(--sans);color:var(--ink);width:100%}
+  .eqslot:hover{border-color:var(--teal)}
+  .eqslot:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+  .eqslot.empty{opacity:.62;border-style:dashed}
+  .eqslot.warm{border-left:3px solid var(--teal)}
+  .eqslot .es-ico{font-size:14px;text-align:center;line-height:1}
+  .eqslot .es-bx{min-width:0}
+  .eqslot .es-name{font-size:12px;font-weight:600;color:var(--ink)}
+  .eqslot .es-name .es-empty{color:var(--mut);font-weight:400}
+  .eqslot .es-sub{display:block;font-family:var(--mono);font-size:10px;color:var(--mut);white-space:nowrap}
+  .eqslot .es-sub .ar{color:var(--good)} .eqslot .es-sub .ins{color:var(--teal)}
+  .eqslot .es-right{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+  .eqslot .es-wear{width:44px;height:4px;background:#0c1116;border:1px solid var(--line);border-radius:20px;overflow:hidden}
+  .eqslot .es-wear i{display:block;height:100%;background:var(--warn);border-radius:20px;transition:width .3s ease}
+  .eqslot .es-wear i.ruined{background:var(--crit)}
+  .eqtotals{display:flex;gap:10px;margin-top:7px;padding-top:6px;border-top:1px dashed var(--line2);
+    font-family:var(--mono);font-size:11px;color:var(--mut)}
+  .eqtotals b{font-variant-numeric:tabular-nums}
+  .eqtotals .warmv{color:var(--teal)} .eqtotals .arv{color:var(--good)}
+
+  /* comfort hediff entries on the health doll (severity bar) */
+  .hediffs{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+  .hediff{display:grid;grid-template-columns:16px 1fr auto;align-items:center;gap:6px;font-size:11px}
+  .hediff .hd-ico{font-size:13px;text-align:center;line-height:1}
+  .hediff .hd-name{color:var(--ink)}
+  .hediff .hd-sev{height:5px;background:#0c1116;border:1px solid var(--line);border-radius:20px;overflow:hidden}
+  .hediff .hd-sev i{display:block;height:100%;border-radius:20px;transition:width .3s ease,background .3s}
+  .hediff .hd-val{font-family:var(--mono);font-size:10px;color:var(--mut);min-width:30px;text-align:right}
+  .hediff.cold .hd-sev i{background:var(--teal)} .hediff.hot .hd-sev i{background:var(--crit)}
+  .hediff.scar .hd-name{color:var(--mut)} .hediff.scar .hd-ico{filter:grayscale(.3)}
+  .hediff.implant .hd-name{color:var(--comp)}
+
+  /* medbed tend action: cost + progress ring + deltas, gated on medicine+medbed */
+  .tendbox{margin-top:8px;padding-top:7px;border-top:1px dashed var(--line2)}
+  .tend-head{display:flex;align-items:center;gap:8px}
+  .tend-ring{width:34px;height:34px;flex:0 0 auto;transform:rotate(-90deg)}
+  .tend-ring .bg{fill:none;stroke:var(--line);stroke-width:4}
+  .tend-ring .fg{fill:none;stroke:var(--good);stroke-width:4;stroke-linecap:round;
+    stroke-dasharray:88;stroke-dashoffset:88;transition:stroke-dashoffset .3s ease}
+  .tend-info{min-width:0;font-family:var(--mono);font-size:10.5px;color:var(--mut);line-height:1.4}
+  .tend-info .cost{color:var(--ink)} .tend-info .cost.no{color:var(--crit)}
+  .tend-info .delta.up{color:var(--good)} .tend-info .delta.dn{color:var(--teal)}
+  .tend-btn{margin-top:7px;width:100%;background:var(--panel2);border:1px solid var(--line2);color:var(--ink);
+    border-radius:6px;padding:6px 8px;font-size:12px;cursor:pointer;font-family:var(--sans);
+    display:flex;align-items:center;justify-content:center;gap:6px}
+  .tend-btn:hover:not(:disabled){border-color:var(--amber)}
+  .tend-btn:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+  .tend-btn:disabled{cursor:not-allowed;color:var(--crit);border-color:var(--crit);opacity:.75;
+    background:color-mix(in srgb,var(--crit) 8%,transparent)}
+  .tend-gate{font-size:10px;color:var(--crit);margin-top:4px;display:none;font-family:var(--mono)}
+  .tend-gate.show{display:block}
+
+  /* scar glyph overlaid on a doll part */
+  .doll{position:relative}
+  .scarmark{position:absolute;font-size:10px;line-height:1;pointer-events:none;filter:saturate(.4)}
+
+  /* ==== Batch 5: threats & combat objects — turret · mortar · trap · fire · cover ==== */
+
+  /* cover indicator near the health doll — shows the hero's ranged-damage mitigation when in cover */
+  .coverind{display:none;align-items:center;gap:6px;margin-top:8px;padding:4px 7px;border-radius:6px;
+    border:1px solid var(--line2);background:color-mix(in srgb,var(--teal) 8%,transparent);
+    font-family:var(--mono);font-size:11px;color:var(--teal)}
+  .coverind.show{display:flex}
+  .coverind .ci-ico{font-size:13px}
+  .coverind b{font-variant-numeric:tabular-nums;color:var(--teal)}
+
+  /* turret selection panel: range/ammo/heat readouts + powered state (reuses the .power grammar) */
+  .turret h2 .tag{color:var(--crit)}
+  .turret .tbar{height:9px;background:#0c1116;border:1px solid var(--line);border-radius:20px;overflow:hidden;
+    flex:1;margin:0 6px}
+  .turret .tbar i{display:block;height:100%;border-radius:20px;transition:width .3s ease,background .3s}
+  .turret .tbar i.ammo{background:var(--good)} .turret .tbar i.heat{background:var(--crit)}
+  .turret .tbar i.ammo.low{background:var(--warn)}
+  .turret .badstate{margin-top:6px;font-size:10.5px;color:var(--crit);border:1px solid var(--crit);
+    border-radius:6px;padding:4px 7px;background:color-mix(in srgb,var(--crit) 8%,transparent);
+    display:none;align-items:center;gap:5px;font-family:var(--mono)}
+  .turret .badstate.show{display:flex}
+  .turret .pwpip{font-size:11px;width:16px;text-align:center;flex:0 0 auto}
+  .turret .pwpip.on{color:var(--amber)} .turret .pwpip.off{color:var(--crit)}
+  .turret .tctl{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;border-top:1px dashed var(--line2);padding-top:8px}
+  .turret .tctl button{background:var(--panel2);border:1px solid var(--line2);color:var(--ink);
+    border-radius:6px;padding:4px 7px;font-size:11px;cursor:pointer;font-family:var(--sans)}
+  .turret .tctl button:hover{border-color:var(--amber)}
+  .turret .tctl button:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+  .turret .tctl button.off{opacity:.5;text-decoration:line-through}
+  /* mortar aim button active state (in the incidents row) */
+  #mortar-aim.off{border-color:var(--amber);color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,transparent)}
+
+  /* mortar target-mode banner (a distinct affordance from the crit incident banner) */
+  .aimhint{position:absolute;bottom:6px;right:8px;font-family:var(--mono);font-size:11px;color:var(--amber);
+    background:rgba(10,14,18,.72);border:1px solid var(--amber);border-radius:6px;padding:3px 8px;
+    display:none;align-items:center;gap:5px;z-index:3}
+  .aimhint.show{display:flex}
 </style>
 
 <div class="wrap">
@@ -299,6 +399,7 @@
         <button class="ov-chip" data-ov="light"><span>Світло</span><span class="kbd">L</span></button>
         <button class="ov-chip" data-ov="power"><span>Живл</span><span class="kbd">P</span></button>
         <button class="ov-chip" data-ov="stock"><span>Склад</span><span class="kbd">Z</span></button>
+        <button class="ov-chip" data-ov="cover"><span>Укриття</span><span class="kbd">K</span></button>
       </div>
       <button class="btn-ghost" id="advance">День +1 ▸</button>
     </div>
@@ -341,26 +442,50 @@
             <div id="h-state" style="color:var(--good)">стабільно</div>
           </div>
         </div>
+        <!-- Batch 4: comfort hediffs (hypothermia/heatstroke) + scars + implants as doll entries -->
+        <div class="hediffs" id="hediffs"></div>
+        <!-- Batch 5: cover mitigation indicator — shows only when the hero stands in/adjacent to cover -->
+        <div class="coverind" id="coverind" title="укриття зменшує вхідну далекобійну шкоду (kernel apply_cover: ×(1−cover_frac))">
+          <span class="ci-ico">🛡</span><span>укриття <b id="coverind-pct">−0%</b> далекобійної шкоди</span>
+        </div>
+        <!-- Batch 4: medbed tend — medicine cost + progress ring + bleed/infection deltas, gated -->
+        <div class="tendbox">
+          <div class="tend-head">
+            <svg class="tend-ring" viewBox="0 0 32 32" aria-hidden="true">
+              <circle class="bg" cx="16" cy="16" r="14"></circle>
+              <circle class="fg" id="tend-ring-fg" cx="16" cy="16" r="14"></circle>
+            </svg>
+            <div class="tend-info">
+              <div>вартість <span class="cost" id="tend-cost">💊 1 · медліжко</span></div>
+              <div><span class="delta dn" id="tend-d-bleed">кровот −</span> · <span class="delta up" id="tend-d-inf">інфекц −</span></div>
+            </div>
+          </div>
+          <button class="tend-btn" id="tend-btn" data-act="tend" title="лікувати на медліжку — потрібні медикаменти (Склад) і медліжко (палітра)">💊 Лікувати</button>
+          <div class="tend-gate" id="tend-gate"></div>
+        </div>
         <div class="minibtns">
           <button data-hurt="leg_l">Рана ноги</button>
           <button data-hurt="torso">Рана тулуба</button>
+          <button data-hurt="leg_l" data-severe="1" title="важка рана — одразу лишає шрам після загоєння (як kernel: injure severity 8)">Важка рана ноги</button>
           <button data-act="disease">Хвороба</button>
-          <button data-act="tend">Лікувати 💊</button>
+          <button data-act="surgery" title="запланувати операцію: замінити шрам протезом (черга медліжка)">🦾 Операція</button>
         </div>
       </div>
 
       <div class="panel">
-        <h2>▸ Спорядження <span class="tag">gear</span></h2>
-        <div class="stock" style="grid-template-columns:1fr">
+        <h2>▸ Спорядження <span class="tag">gear · apparel</span></h2>
+        <!-- Batch 4: body-slot silhouettes — click a slot to equip/unequip; armor % · утепл °C · знос -->
+        <div class="eqgrid" id="eqgrid" role="group" aria-label="Слоти спорядження"></div>
+        <div class="eqtotals">
+          <span title="сумарне утеплення одягу — піднімає відчутну температуру (див. Комфорт)">🌡 утепл <b class="warmv" id="eq-warm">+0°</b></span>
+          <span title="сумарна броня (гострий) — багатошарова: 1−∏(1−r)">🛡 броня <b class="arv" id="eq-armor">0%</b></span>
+        </div>
+        <div class="stock" style="grid-template-columns:1fr;margin-top:6px;border-top:1px dashed var(--line2);padding-top:6px">
           <div class="r" id="gear-axe" title="якість × базова шкода — наведи, щоб побачити розклад">
             <span class="qpip" id="axe-pip" style="background:var(--comp)"></span><span class="g">🪓</span>
             <span class="lb">Сокира <span id="axe-qlab" style="color:var(--comp)">майстерна</span></span>
             <span class="n" id="axe-stat" style="color:var(--teal)">×якість 1.35</span>
           </div>
-          <div class="r"><span class="g">🔱</span><span class="lb">Спис</span><span class="n">×дмг 1.15</span></div>
-          <div class="r"><span class="g">🧥</span><span class="lb">Куртка</span><span class="n" style="color:var(--mut)">+утепл 6°</span></div>
-        </div>
-        <div class="stock" style="grid-template-columns:1fr;margin-top:6px;border-top:1px dashed var(--line2);padding-top:6px">
           <div class="r" title="ящик стоїть надворі — псується; занеси під дах (R)">
             <span class="g">📦</span><span class="lb">Ящик <span class="tag-out">надворі</span></span>
             <span class="n" id="det-pct" style="color:var(--warn)">знос 0%</span>
@@ -374,6 +499,7 @@
     <div class="world">
       <canvas id="scene" width="560" height="360"></canvas>
       <div class="banner" id="banner"></div>
+      <div class="aimhint" id="aimhint"><span>🎯</span><span>клік по клітині — ціль міномета · ПКМ/Esc — вихід</span></div>
       <div class="legend">
         <span><i style="background:#2f5133"></i>ліс</span>
         <span><i style="background:#2b3f5c"></i>вода</span>
@@ -450,6 +576,33 @@
         </div>
       </div>
 
+      <!-- Batch 5: Turret — selection panel (range · ammo/heat · powered state). Reuses .power grammar. -->
+      <div class="panel turret" id="turret-panel">
+        <h2>▸ Турель <span class="tag" id="turret-tag">оборона</span></h2>
+        <div class="stock" style="grid-template-columns:1fr">
+          <div class="r" title="дальність стрільби — коло на карті (наведи/вибери турель)">
+            <span class="pwpip" id="tur-pip">⚡</span><span class="lb">Живлення <span id="tur-pwlb" style="color:var(--mut)">від мережі</span></span>
+            <span class="n mono" id="tur-range" style="color:var(--teal)">R6</span>
+          </div>
+          <div class="r" title="набої — стрільба споживає по 1; порожньо = не стріляє">
+            <span class="g">🔫</span><span class="lb">Набої</span>
+            <div class="tbar"><i class="ammo" id="tur-ammo-bar" style="width:100%"></i></div>
+            <span class="n mono" id="tur-ammo" style="color:var(--good)">12/12</span>
+          </div>
+          <div class="r" title="нагрів — при 100% турель перегрівається і мовчить, поки не охолоне">
+            <span class="g">🌡</span><span class="lb">Нагрів</span>
+            <div class="tbar"><i class="heat" id="tur-heat-bar" style="width:0%"></i></div>
+            <span class="n mono" id="tur-heat" style="color:var(--crit)">0%</span>
+          </div>
+        </div>
+        <div class="badstate" id="tur-bad"><span>⛔</span><span id="tur-bad-lb">нема живлення</span></div>
+        <div class="tctl">
+          <button id="tur-toggle-pw" title="увімкнути/вимкнути живлення турелі">⚡ Живлення</button>
+          <button id="tur-reload" title="перезарядити набої">🔫 Набої</button>
+          <button id="tur-select" title="вибрати турель — показати коло дальності на карті">🎯 Показати радіус</button>
+        </div>
+      </div>
+
       <!-- Batch 3: Bills (workbench) — appears when the бench is selected -->
       <div class="panel" id="bench-panel">
         <h2>▸ Верстак <span class="tag" id="bench-tag">крафт</span></h2>
@@ -493,6 +646,26 @@
         </div>
       </div>
 
+      <!-- Batch 4: Medbed — medicine stock + surgery bill queue (reuses the Bills primitive) -->
+      <div class="panel" id="medbed-panel">
+        <h2>▸ Медліжко <span class="tag" id="medbed-tag">med · якість 3</span></h2>
+        <div class="stock" style="grid-template-columns:1fr">
+          <div class="r" id="med-stock-row" title="медикаменти — TendService витрачає 1 за лікування">
+            <span class="g">💊</span><span class="lb">Медикаменти</span>
+            <span class="n mono" id="med-stock" style="color:var(--teal)">0</span>
+          </div>
+          <div class="r" id="medbed-present-row" title="медліжко присутнє? лікування/операції потребують його (побудуй у палітрі, слот 🩺)">
+            <span class="g">🩺</span><span class="lb">Медліжко</span>
+            <span class="n mono" id="medbed-present" style="color:var(--crit)">нема</span>
+          </div>
+        </div>
+        <div class="bills-add" style="margin-top:7px">
+          <select id="medbed-part" aria-label="частина для операції"></select>
+          <button id="medbed-add" title="запланувати операцію протезування">🦾 Операція</button>
+        </div>
+        <div class="billq" id="medbed-bills"></div>
+      </div>
+
       <div class="panel">
         <h2>▸ Агенти <span class="tag">non-hero</span></h2>
         <div class="stock" style="grid-template-columns:1fr">
@@ -525,8 +698,9 @@
           <div class="row">
             <button data-inc="cargo">📦 Вантаж</button>
             <button data-inc="quest">📜 Квест</button>
+            <button id="mortar-aim" title="режим прицілювання міномета — клікни клітину на карті">🎯 Міномет</button>
           </div>
-          <div class="hint">Розмір/тактика рейду рахуються з поточної загрози Balance.</div>
+          <div class="hint">Розмір/тактика рейду рахуються з поточної загрози Balance. «Облога» ставить ворожий табір і кидає снаряди.</div>
         </div>
       </div>
 
@@ -550,10 +724,13 @@
   const world={
     day:6,
     buildings:[{value:45},{value:45},{value:25},{value:25}],
-    stock:{wood:60,stone:30,food:20,scrap:24,planks:8,components:4},
+    stock:{wood:60,stone:30,food:20,scrap:24,planks:8,components:4,medicine:2},
     items:["axe"],
     hostile:1.1
   };
+  // Batch 4 medbed: presence gates TendService.tend()/surgery. med_quality (0..6) -> quality_mult 0.6+0.15*tier.
+  const medbed={present:false, med_quality:3};
+  function medbedQualityMult(){ return 0.6+0.15*medbed.med_quality; }
 
   // ---- Balance (JS mirror of godot/scripts/kernel/balance.gd) ----
   const Balance={
@@ -724,7 +901,8 @@
     if(activeOv==="temp")el.innerHTML=`<span><i style="background:rgba(90,150,200,.6)"></i>холод</span><span><i style="background:rgba(90,130,90,.6)"></i>норма</span><span><i style="background:rgba(224,106,90,.7)"></i>жар</span><span>◯ радіус обігрівача</span>`;
     if(activeOv==="light")el.innerHTML=`<span>💡 лампа — коло світла</span><span><i style="background:#060a18"></i>темрява · −робота</span>`;
     if(activeOv==="power")el.innerHTML=`<span><i style="background:var(--comp)"></i>кабель</span><span>⚡ живиться</span><span style="color:var(--crit)">○ погашено</span><span style="color:var(--crit)">🔌 перевантаження</span>`;
-    if(activeOv==="stock")el.innerHTML=`<span><i style="background:rgba(134,208,214,.5)"></i>склад (усе)</span><span><i style="background:rgba(224,106,90,.5)"></i>лише їжа</span><span>№ пріоритет</span><span>▮ заповнення</span>`;}
+    if(activeOv==="stock")el.innerHTML=`<span><i style="background:rgba(134,208,214,.5)"></i>склад (усе)</span><span><i style="background:rgba(224,106,90,.5)"></i>лише їжа</span><span>№ пріоритет</span><span>▮ заповнення</span>`;
+    if(activeOv==="cover")el.innerHTML=`<span><i style="background:rgba(134,208,214,.45)"></i>укриття 🛡</span><span>−${Math.round(COVER_FRAC*100)}% далекобійної шкоди</span><span style="color:var(--amber)">◆ герой в укритті</span>`;}
   function heatColor(t){return t<=0?"rgba(90,150,200,.55)":t<=12?"rgba(80,120,150,.4)":t<=24?"rgba(90,130,90,.4)":t<=30?"rgba(210,150,90,.5)":"rgba(224,106,90,.6)";}
   function drawOverlay(cw,ch,which){
     if(which==="roof"){
@@ -794,20 +972,141 @@
         ctx.font=Math.floor(ch*1.1)+"px serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
         ctx.fillText(z.glyph, rx+rw/2, ry+rh/2);
       });
+    } else if(which==="cover"){
+      // Batch 5 cover overlay (K): each cover cell shaded teal with a shield glyph + the mitigation %.
+      coverCells.forEach(c=>{
+        ctx.fillStyle="rgba(134,208,214,.28)"; ctx.fillRect(c.x*cw,c.y*ch,cw+.5,ch+.5);
+        ctx.strokeStyle="rgba(134,208,214,.7)"; ctx.lineWidth=1.2; ctx.strokeRect(c.x*cw+.5,c.y*ch+.5,cw-1,ch-1);
+        ctx.font=Math.floor(ch*0.7)+"px serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillText("🛡",(c.x+.5)*cw,(c.y+.42)*ch);
+        ctx.font="bold "+Math.floor(ch*0.5)+"px ui-monospace,Consolas,monospace"; ctx.fillStyle="#86d0d6";
+        ctx.fillText("-"+Math.round(COVER_FRAC*100)+"%",(c.x+.5)*cw,(c.y+.82)*ch);
+      });
+      // mark the hero amber when standing in cover
+      if(heroInCover()){ ctx.font="bold "+Math.floor(ch*0.8)+"px serif"; ctx.fillStyle="#e0b070";
+        ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillText("◆",(Math.round(hero.x)+.5)*cw,(Math.round(hero.y)-0.4)*ch); }
     }
   }
 
-  // comfort — hero-tile felt temp vs apparel insulation; panel appears only out of band
-  const INSULATION=6;
+  // ==== Batch 4: apparel & armor — JS mirror of kernel/gear.gd (CompApparel / EquipModel) ============
+  // Each worn item: slot · insulation_c · armor{dtype->0..1} · wear 0..1. condition = 1-wear; armor and
+  // insulation both scale by condition (a ragged jacket protects less & keeps you less warm). armor_rating
+  // stacks MULTIPLICATIVELY across layers: 1-∏(1-r) — exactly EquipModel.armor_rating.
+  const APPAREL={
+    parka:  {slot:"torso", ico:"🧥", name:"Парка",       ins:6.0, armor:{sharp:0.28,blunt:0.20}, wear:0.10, max:1.0},
+    vest:   {slot:"torso", ico:"🦺", name:"Бронежилет",  ins:1.0, armor:{sharp:0.45,blunt:0.35}, wear:0.22, max:1.0},
+    helmet: {slot:"head",  ico:"⛑",  name:"Шолом",        ins:0.5, armor:{sharp:0.40,blunt:0.30}, wear:0.05, max:1.0},
+    pants:  {slot:"legs",  ico:"👖", name:"Штани",        ins:3.0, armor:{sharp:0.15,blunt:0.10}, wear:0.08, max:1.0},
+    boots:  {slot:"feet",  ico:"🥾", name:"Черевики",     ins:2.0, armor:{sharp:0.12,blunt:0.10}, wear:0.30, max:1.0},
+  };
+  // Alternatives offered when a slot is empty (click cycles through options for that slot).
+  const SLOTS=[
+    {slot:"head",  label:"Голова",  options:["helmet"]},
+    {slot:"torso", label:"Тулуб",   options:["parka","vest"]},
+    {slot:"legs",  label:"Ноги",    options:["pants"]},
+    {slot:"feet",  label:"Взуття",  options:["boots"]},
+  ];
+  const equip={ // slot -> {key, wear}; starts with the warm parka worn so removing it visibly chills the hero
+    torso:{key:"parka", wear:0.10},
+    legs :{key:"pants", wear:0.08},
+  };
+  function itemCondition(e){ const d=APPAREL[e.key]; return clamp(1-e.wear/Math.max(0.001,d.max),0,1); }
+  function itemInsulation(e){ return APPAREL[e.key].ins*itemCondition(e); }
+  function itemArmor(e,dtype){ return clamp((APPAREL[e.key].armor[dtype]||0)*itemCondition(e),0,1); }
+  function totalInsulation(){ let w=0; for(const s in equip) if(equip[s]) w+=itemInsulation(equip[s]); return w; }
+  function armorRating(dtype){ let pass=1; for(const s in equip) if(equip[s]) pass*=(1-itemArmor(equip[s],dtype)); return clamp(1-pass,0,1); }
+  function paintEquip(){
+    const host=$("eqgrid"); if(!host)return; host.innerHTML="";
+    SLOTS.forEach(sl=>{
+      const e=equip[sl.slot]; const filled=!!e; const d=filled?APPAREL[e.key]:null;
+      const btn=document.createElement("button"); btn.className="eqslot"+(filled?"":" empty")+(filled&&d.ins>=3?" warm":"");
+      btn.dataset.slot=sl.slot;
+      if(filled){
+        const cond=itemCondition(e), wearPct=Math.round((1-cond)*100), ruined=cond<=0.001;
+        const ar=Math.round(itemArmor(e,"sharp")*100), ins=itemInsulation(e).toFixed(1);
+        btn.title=`${d.name} — броня гостр ${ar}% (база ${Math.round((d.armor.sharp||0)*100)}% × стан ${cond.toFixed(2)}) · утепл ${ins}° · знос ${wearPct}% · клік: зняти`;
+        btn.innerHTML=`<span class="es-ico">${d.ico}</span>
+          <span class="es-bx"><span class="es-name">${d.name}</span>
+            <span class="es-sub"><span class="ar">🛡${ar}%</span> · <span class="ins">🌡+${ins}°</span></span></span>
+          <span class="es-right"><span class="es-wear"><i class="${ruined?'ruined':''}" style="width:${wearPct}%"></i></span>
+            <span class="es-sub">знос ${wearPct}%</span></span>`;
+        btn.setAttribute("aria-label",`${sl.label}: ${d.name}, броня ${ar}%, утеплення ${ins}°, знос ${wearPct}% — клік щоб зняти`);
+      } else {
+        const opt=APPAREL[sl.options[0]];
+        btn.title=`${sl.label}: порожньо — клік щоб вдягти ${opt.name}`;
+        btn.innerHTML=`<span class="es-ico">＋</span>
+          <span class="es-bx"><span class="es-name"><span class="es-empty">${sl.label} — порожньо</span></span>
+            <span class="es-sub">клік: вдягти ${opt.ico} ${opt.name}</span></span><span class="es-right"></span>`;
+        btn.setAttribute("aria-label",`${sl.label}: порожньо — клік щоб вдягти ${opt.name}`);
+      }
+      btn.addEventListener("click",()=>cycleSlot(sl));
+      host.appendChild(btn);
+    });
+    $("eq-warm").textContent="+"+totalInsulation().toFixed(1)+"°";
+    $("eq-armor").textContent=Math.round(armorRating("sharp")*100)+"%";
+    $("eqgrid").parentElement.querySelector(".eqtotals span:nth-child(2)").title=
+      `броня гостр = 1−∏(1−r шарів) = ${armorRating("sharp").toFixed(2)}`;
+  }
+  // click cycles a slot: empty -> option[0] -> option[1] -> ... -> empty. Re-drives comfort each time so
+  // stripping the warm parka visibly worsens hypothermia (the Batch-1<->Batch-4 comfort seam).
+  function cycleSlot(sl){
+    const cur=equip[sl.slot];
+    if(!cur){ equip[sl.slot]={key:sl.options[0],wear:APPAREL[sl.options[0]].wear};
+      pushCard("misc","🧥","Вдягнено",APPAREL[sl.options[0]].name); }
+    else {
+      const idx=sl.options.indexOf(cur.key);
+      if(idx>=0 && idx<sl.options.length-1){ const nk=sl.options[idx+1];
+        equip[sl.slot]={key:nk,wear:APPAREL[nk].wear}; pushCard("misc","🦺","Змінено",APPAREL[nk].name); }
+      else { const removed=APPAREL[cur.key].name; equip[sl.slot]=null;
+        pushCard("misc","🧺","Знято",removed+" — тепер холодніше"); }
+    }
+    paintEquip(); updateComfort(); paintHealth();
+  }
+
+  // comfort — hero-tile felt temp vs REAL apparel insulation; hediffs drive the panel + doll entries.
+  // Mirrors gear.gd COMFORT_MIN_C/MAX_C band with felt = ambient + insulation warmth.
+  const COMFORT_MIN_C=12, COMFORT_MAX_C=30;
+  const comfort={hypo:0, heat:0}; // severities 0..1, mirror Hediff_Hypothermia/Heatstroke
   const mapTemp=t=>clamp((t+15)/55*100,0,100);
   function updateComfort(){
-    const felt=tempAt(Math.round(hero.x),Math.round(hero.y));
-    const coldLimit=8-INSULATION*0.7, hotLimit=30, out=felt<coldLimit||felt>hotLimit;
+    // ambient felt at hero tile (no indoor-heater double count: use raw climate cell like the kernel ctx.temp_c)
+    const ambient=climate(world.day,frac)+tempOffset
+      +(isIndoor(Math.round(hero.x),Math.round(hero.y))?9:0)   // rough indoor buffer for the readout
+      +(heaters.some(h=>h.active&&(Math.abs(h.x-Math.round(hero.x))+Math.abs(h.y-Math.round(hero.y)))<=6)?4:0);
+    const felt=ambient+totalInsulation();
+    // climb/recede the comfort severities against the band (per-frame nudge; kernel uses dday)
+    if(felt<COMFORT_MIN_C) comfort.hypo=clamp(comfort.hypo+(COMFORT_MIN_C-felt)*0.02,0,1), comfort.heat=Math.max(0,comfort.heat-0.06);
+    else if(felt>COMFORT_MAX_C) comfort.heat=clamp(comfort.heat+(felt-COMFORT_MAX_C)*0.02,0,1), comfort.hypo=Math.max(0,comfort.hypo-0.06);
+    else comfort.hypo=Math.max(0,comfort.hypo-0.06), comfort.heat=Math.max(0,comfort.heat-0.06);
+    // the existing #comfort thermometer panel: appears out of band, marker at felt temp
+    const out=felt<COMFORT_MIN_C||felt>COMFORT_MAX_C;
     $("comfort").classList.toggle("show",out);
-    if(out){const cold=felt<coldLimit; $("cf-ico").textContent=cold?"🥶":"🥵";
-      $("cf-lb").textContent=(cold?"−утеплення ":"перегрів ")+Math.round(felt)+"°";}
+    if(out){const cold=felt<COMFORT_MIN_C; $("cf-ico").textContent=cold?"🥶":"🥵";
+      $("cf-lb").textContent=(cold?"−утеплення ":"перегрів ")+Math.round(felt)+"° (одяг +"+totalInsulation().toFixed(0)+"°)";}
     $("cf-mark").style.left=mapTemp(felt)+"%";
-    const b=$("cf-band"); b.style.left=mapTemp(coldLimit)+"%"; b.style.right=(100-mapTemp(hotLimit))+"%";
+    const b=$("cf-band"); b.style.left=mapTemp(COMFORT_MIN_C)+"%"; b.style.right=(100-mapTemp(COMFORT_MAX_C))+"%";
+    paintHediffs();
+  }
+  // render comfort hediffs + scars + implants as doll entries; also stamp scar glyphs onto the SVG doll
+  function paintHediffs(){
+    const host=$("hediffs"); if(!host)return; const rows=[];
+    if(comfort.hypo>0.02) rows.push(hediffRow("cold","🥶","Переохолодження",comfort.hypo,
+      `свідомість ×${(1-comfort.hypo*0.6).toFixed(2)} · рух ×${(1-comfort.hypo*0.5).toFixed(2)}`));
+    if(comfort.heat>0.02) rows.push(hediffRow("hot","🥵","Тепловий удар",comfort.heat,
+      `свідомість ×${(1-comfort.heat*0.6).toFixed(2)}`));
+    for(const key in parts){ const p=parts[key];
+      if(p.implant) rows.push(hediffRow("implant","🦾","Протез — "+PARTLBL[key],1,"відновлено (ціл. 1.00)",true));
+      else if(p.scar) rows.push(hediffRow("scar","▪","Шрам — "+PARTLBL[key],1,`ціл. ×${SCAR_CAP_PENALTY.toFixed(2)} (назавжди)`,true)); }
+    host.innerHTML=rows.join("")||`<div class="hint" style="margin:0">жодних гострих станів</div>`;
+  }
+  function hediffRow(cls,ico,name,sev,sub,flat){
+    const pct=Math.round(sev*100);
+    const bar=flat?"":`<div class="hd-sev"><i style="width:${pct}%"></i></div>`;
+    const val=flat?`<span class="hd-val">${sub}</span>`:`<span class="hd-val">${pct}%</span>`;
+    const subEl=flat?"":`<span class="hd-name" style="font-size:9.5px;color:var(--dim);display:block">${sub}</span>`;
+    return `<div class="hediff ${cls}" title="${name} — ${sub}"><span class="hd-ico">${ico}</span>`+
+      `<span><span class="hd-name">${name}</span>${flat?"":""}</span>${bar}${val}</div>`;
   }
 
   function paintClimate(){
@@ -825,27 +1124,55 @@
   // ---- needs ----
   const needs={food:82,rest:64,water:71};
   const needColor=v=>v>55?"var(--good)":v>25?"var(--warn)":"var(--crit)";
+  // Batch 4: thirst drains faster when hot — gear.gd Need_Water: drain ×(1+(temp−25)×0.06) above 25°.
+  const WATER_HEAT_THRESHOLD_C=25, WATER_HEAT_PER_C=0.06;
+  function thirstHeatMult(){ const t=climate(world.day,frac)+tempOffset;
+    return t>WATER_HEAT_THRESHOLD_C ? 1+(t-WATER_HEAT_THRESHOLD_C)*WATER_HEAT_PER_C : 1; }
   function paintNeeds(){
     for(const k of ["food","rest","water"]){
       const v=clamp(needs[k],0,100);
       $("n-"+k).style.width=v+"%"; $("n-"+k).style.background=needColor(v);
       $("v-"+k).textContent=Math.round(v);
     }
+    // teach the coupling: the 💧 need shows its heat-scaled drain rate in the value tooltip
+    const m=thirstHeatMult(), wv=$("v-water");
+    wv.title=`спрага: базовий стік × спека ${m.toFixed(2)}` + (m>1?` (жарко >${WATER_HEAT_THRESHOLD_C}° — швидше)`:"");
+    wv.style.color = m>1.15 ? "var(--crit)" : "var(--mut)";
   }
 
   // ---- health ----
   const parts={head:{cap:"consc",hp:100},torso:{cap:"blood",hp:100},arm_l:{cap:"manip",hp:100},
     arm_r:{cap:"manip",hp:100},leg_l:{cap:"move",hp:100},leg_r:{cap:"move",hp:100}};
+  // Batch 4 body-part labels + scar/prosthetic state. scar/implant flags per part drive the doll marks.
+  const PARTLBL={head:"голова",torso:"тулуб",arm_l:"ліва рука",arm_r:"права рука",leg_l:"ліва нога",leg_r:"права нога"};
+  const SCAR_CAP_PENALTY=0.85; // gear.gd SCAR_CAP_PENALTY: a scar's fixed capacity factor
+  const SCAR_SEVERITY_HP=25;   // an injury this deep (below this hp) leaves a scar once it heals
   const health={blood:100,disease:0,immunity:0,tended:false};
   function partColor(hp){const t=hp/100; const r=Math.round(44+(178-44)*(1-t)), g=Math.round(58+(59-58)*(1-t)), b=Math.round(48+(52-48)*(1-t)); return `rgb(${r},${g},${b})`;}
   function capOf(which){ // product of injured parts feeding this capacity
-    let f=1; for(const key in parts){ if(parts[key].cap===which) f*= parts[key].hp/100; }
+    let f=1; for(const key in parts){ const p=parts[key]; if(p.cap!==which)continue;
+      if(p.implant) continue;                 // a prosthetic RESTORES the capacity: factor 1.0
+      f*= p.hp/100;
+      if(p.scar) f*=SCAR_CAP_PENALTY;          // a healed severe wound leaves a permanent penalty
+    }
     if(which==="consc") f*=(1-health.disease*0.55);
     if(which==="consc"||which==="move") f*=health.blood/100;
+    // comfort hediffs (gear.gd cap_factor): hypothermia slows consc+move, heatstroke slows consc.
+    if(which==="consc") f*=(1-comfort.hypo*0.6)*(1-comfort.heat*0.6);
+    if(which==="move")  f*=(1-comfort.hypo*0.5);
     return clamp(f,0,1);
   }
   function paintHealth(){
-    for(const key in parts) $("p-"+key).setAttribute("fill",partColor(parts[key].hp));
+    for(const key in parts){
+      const p=parts[key], el=$("p-"+key);
+      // a prosthetic part renders metallic (--comp violet); otherwise tint by hp.
+      el.setAttribute("fill", p.implant?"#7a5cff":partColor(p.hp));
+      // scar-watch: a part that dropped below the severe threshold owes a scar once it heals back.
+      if(p.hp<=SCAR_SEVERITY_HP) p.wasSevere=true;
+      if(p.wasSevere && p.hp>=100 && !p.scar && !p.implant){ p.scar=true; p.wasSevere=false;
+        pushCard("misc","▪","Шрам",PARTLBL[key]+" зажив зі шрамом (−ціл. назавжди)"); }
+    }
+    stampScars();
     const move=Math.round(capOf("move")*100), manip=Math.round(capOf("manip")*100),
           consc=Math.round(capOf("consc")*100);
     $("h-blood").textContent=Math.round(health.blood)+"%";
@@ -858,6 +1185,63 @@
   }
   function bleeding(){let b=0; for(const k in parts){ if(parts[k].hp<100 && !health.tended) b+=(100-parts[k].hp)*0.0006; } return b;}
 
+  // ---- Batch 4: scar glyphs on the doll · medbed tend action · surgery bills ----
+  // Stamp a faint scar "▪" / prosthetic bolt on the SVG part centre (overlaid, absolute in the .doll box).
+  const SVG_PART_XY={head:[33,13],torso:[33,43],arm_l:[15,43],arm_r:[51,43],leg_l:[27,81],leg_r:[38,81]};
+  function stampScars(){
+    const doll=document.querySelector(".doll"); if(!doll)return;
+    doll.querySelectorAll(".scarmark").forEach(m=>m.remove());
+    const svg=doll.querySelector("svg"), r=svg.getBoundingClientRect(), dr=doll.getBoundingClientRect();
+    const sx=r.width/66, sy=r.height/104, ox=r.left-dr.left, oy=r.top-dr.top;
+    for(const key in parts){ const p=parts[key]; if(!p.scar && !p.implant) continue;
+      const [px,py]=SVG_PART_XY[key]; const m=document.createElement("span");
+      m.className="scarmark"; m.textContent=p.implant?"🔩":"▪";
+      m.style.color=p.implant?"var(--comp)":"var(--dim)";
+      m.style.left=(ox+px*sx-4)+"px"; m.style.top=(oy+py*sy-6)+"px";
+      m.title=(p.implant?"протез — ":"шрам — ")+PARTLBL[key];
+      doll.appendChild(m);
+    }
+  }
+  // TendService gate + effectiveness (gear.gd): needs medicine>=1 AND a medbed present. eff = (base +
+  // per-level) × medicine quality. Deltas: infection down / immunity up, scaled by eff.
+  const TEND_BASE=0.5, MEDIC_PER_LEVEL=0.06, MEDIC_LEVEL=6;
+  function tendEffectiveness(){ return (TEND_BASE+MEDIC_PER_LEVEL*MEDIC_LEVEL)*medbedQualityMult(); }
+  // Is there anything for a tend to actually do? Mirrors gear.gd's nothing-to-tend guard: an untended wound
+  // (a part below full that hasn't been tended) OR an active disease to relieve. A full, already-tended hero
+  // has no tendable state, so we don't let a click burn a scarce medicine for ok/tended=0.
+  function hasTendableState(){
+    if(health.disease>0) return true;
+    if(!health.tended){ for(const k in parts){ if(parts[k].hp<100) return true; } }
+    return false;
+  }
+  function canTend(){ return (world.stock.medicine||0)>=1 && medbed.present && hasTendableState(); }
+  function paintTend(){
+    const eff=tendEffectiveness();
+    const hasMed=(world.stock.medicine||0)>=1, ok=canTend();
+    // progress ring shows the effectiveness the next tend would deliver (fill = eff, clamped to 1)
+    const ring=$("tend-ring-fg"), frac2=clamp(eff,0,1);
+    ring.style.strokeDashoffset=(88*(1-frac2)).toFixed(1);
+    ring.style.stroke = ok?"var(--good)":"var(--crit)";
+    const cost=$("tend-cost"); cost.textContent=`💊 1 · медліжко (еф. ${eff.toFixed(2)})`;
+    cost.classList.toggle("no",!ok);
+    // predicted deltas from an effective tend
+    $("tend-d-bleed").textContent="кровот −"+Math.round(eff*100)+"%";
+    $("tend-d-inf").textContent="інфекц −"+(0.2*eff).toFixed(2)+" / імун +"+(0.2*eff).toFixed(2);
+    const btn=$("tend-btn"); btn.disabled=!ok;
+    const gate=$("tend-gate");
+    const reasons=[]; if(!hasMed)reasons.push("нема медикаментів (Склад 💊)"); if(!medbed.present)reasons.push("нема медліжка (палітра 🩺)");
+    if(hasMed && medbed.present && !hasTendableState())reasons.push("нема що лікувати");
+    gate.classList.toggle("show",!ok); gate.textContent = ok?"":("⛔ "+reasons.join(" · "));
+    btn.title = ok?`лікувати — витратить 1 💊, ефективність ${eff.toFixed(2)}`:"⛔ "+reasons.join(" · ");
+  }
+  function paintMedbed(){
+    $("med-stock").textContent=world.stock.medicine||0;
+    $("med-stock").style.color=(world.stock.medicine||0)>=1?"var(--teal)":"var(--crit)";
+    const mp=$("medbed-present"); mp.textContent=medbed.present?"є (як.3)":"нема";
+    mp.style.color=medbed.present?"var(--good)":"var(--crit)";
+    paintMedbedBills();
+  }
+
   // ---- stock + palette ----
   const RES={wood:["🪵","Дерево","var(--wood)"],stone:["🪨","Камінь","var(--stone)"],food:["🍖","Їжа","var(--food)"],
     scrap:["⚙","Брухт","var(--scrap)"],planks:["🟫","Дошки","var(--planks)"],components:["🔩","Компон.","var(--comp)"]};
@@ -867,7 +1251,7 @@
   // build palette. Slot.req = a research id that must be unlocked; a locked slot dims + shows 🔒 + a
   // "дослідити: X" tooltip. Slots un-dim when their project completes (research toast wires buildPalette()).
   const BUILDS=[["🧱","Стіна",null],["🚪","Двері",null],["▦","Підлога",null],["📦","Склад",null],["🛠","Верстак",null],
-    ["🛏","Ліжко",null],["🔫","Турель","ballistics"],["🌱","Грядка",null],["⚡","Генератор","electricity"]];
+    ["🛏","Ліжко",null],["🩺","Медліжко",null,"medbed"],["🔫","Турель","ballistics","turret"],["🪤","Пастка",null,"trap"],["⚡","Генератор","electricity"]];
   function buildPalette(){
     const host=$("palette"); host.innerHTML="";
     BUILDS.forEach((b,i)=>{
@@ -878,10 +1262,20 @@
       el.setAttribute("aria-label",b[1]+(locked?` — заблоковано, дослідити ${RESEARCH_DEFS[req].name}`:""));
       el.addEventListener("click",()=>{
         if(locked){ showBanner("🔒 заблоковано — дослідити: "+RESEARCH_DEFS[req].name); return; }
-        host.querySelectorAll(".slot").forEach(s=>s.classList.remove("sel")); el.classList.add("sel"); });
+        host.querySelectorAll(".slot").forEach(s=>s.classList.remove("sel")); el.classList.add("sel");
+        // Batch 4: building the medbed makes it "present" — unlocks tend/surgery gating throughout.
+        if(b[3]==="medbed" && !medbed.present){ medbed.present=true;
+          pushCard("good","🩺","Медліжко збудовано","лікування та операції тепер доступні");
+          paintTend(); paintMedbed(); }
+        // Batch 5: trap slot -> enter placement mode; turret slot -> select the turret (range ring)
+        if(b[3]==="trap"){ setBuildMode("trap"); showBanner("🪤 обери клітину (не на дорозі) для пастки"); }
+        else if(b[3]==="turret"){ turret.selected=true; setBuildMode(null); showBanner("🎯 турель вибрано — коло дальності на карті"); paintTurret(); }
+        else { setBuildMode(null); }
+      });
       host.appendChild(el);
     });
   }
+  function paletteDeselect(){ const host=$("palette"); if(host) host.querySelectorAll(".slot").forEach(s=>s.classList.remove("sel")); }
 
   // ---- feed + incidents ----
   const feed=$("feed");
@@ -899,7 +1293,13 @@
       spawnRaiders(a.raidHint); showBanner(`⚔ РЕЙД — ${a.raidHint} мех. · тактика: ${style}`);
       pushCard("big","⚔","Рейд роботів",`${a.raidHint} мех. · ${style} · загроза ${Math.round(a.threat)}`);},
     siege(){const a=Balance.assess(world); spawnRaiders(Math.max(4,Math.round(a.raidHint*0.6)));
-      showBanner("🎯 ОБЛОГА — ворог ставить мортири"); pushCard("big","🎯","Облога","мортири на дистанції — вилазка?");},
+      // Batch 5: siege places an enemy camp (mortar battery) ring and lobs enemy shells at the base
+      enemyCamp={x:2,y:2,r:3};
+      const target={x:Math.round((base.x0+base.x1)/2), y:Math.round((base.y0+base.y1)/2)};
+      const battery=Math.max(2,Math.round(a.raidHint*0.25));
+      for(let i=0;i<battery;i++) fireShell(target.x,target.y,"hostile",enemyCamp.x,enemyCamp.y);
+      showBanner("🎯 ОБЛОГА — ворожі мортири б'ють по базі");
+      pushCard("big","🎯","Облога",`ворожий табір · ${battery} снарядів у польоті — вилазка?`);},
     infestation(){pushCard("small","🐛","Рій комах","вилупились всередині бази — стіни не рятують");},
     manhunter(){const n=clamp(2+Math.floor(world.day/3),2,12); pushCard("small","🐺","Оскаженіла зграя",`${n}× вовки полюють на героя`);},
     disease(){health.disease=Math.max(health.disease,0.15); health.immunity=0; health.tended=false; paintHealth();
@@ -907,7 +1307,9 @@
     cold_snap(){weather="cold_snap"; tempOffset=-15; paintWeather(); paintClimate();
       pushCard("misc","❄","Похолодання","−15°C на 2 дні — врожай мерзне");},
     cargo(){const amt=Math.round((10+world.day*2)*Balance.generosity); world.stock.scrap+=amt; world.stock.components+=2;
-      paintBalance(); pushCard("good","📦","Вантажні капсули",`+${amt} брухту, +2 компон. (×щедрість ${Balance.generosity.toFixed(1)})`);},
+      world.stock.medicine=(world.stock.medicine||0)+2;   // Batch 4: capsules also drop medicine
+      paintBalance(); paintMedbed(); paintTend();
+      pushCard("good","📦","Вантажні капсули",`+${amt} брухту, +2 компон., +2 💊 (×щедрість ${Balance.generosity.toFixed(1)})`);},
     quest(){const rep=Math.round(10*Balance.generosity); pushCard("good","📜","Квест союзника",`захист 3 дні · нагорода +${rep} репутації`);}
   };
 
@@ -927,17 +1329,185 @@
   })();
   const TCOL=["#20321f","#2f5133","#2b3f5c","#4a4036"];
   const hero={x:N/2,y:N*0.55,tx:N/2,ty:N*0.55};
+  // Batch 4 water: a well emitter (refill radius ring) placed near the base; hover state for the shimmer.
+  const well={x:17,y:14,r:5};
+  const hoverTile={x:-1,y:-1,water:false};   // last-hovered tile; water=true when it's a river/well cell
   let raiders=[];
+  function isWaterTile(x,y){ if(x<0||y<0||x>=N||y>=N)return false; return tiles[y*N+x]===2; }
   function spawnRaiders(n){raiders=[]; for(let i=0;i<Math.min(n,24);i++){const e=Math.random(); let x,y;
     if(e<.5){x=Math.random()*N;y=Math.random()<.5?0:N-1;}else{x=Math.random()<.5?0:N-1;y=Math.random()*N;}
-    raiders.push({x,y});}}
+    raiders.push({x,y,hp:100});}}
   cv.addEventListener("click",ev=>{const r=cv.getBoundingClientRect();
-    hero.tx=(ev.clientX-r.left)/r.width*N; hero.ty=(ev.clientY-r.top)/r.height*N;});
+    const tx=(ev.clientX-r.left)/r.width*N, ty=(ev.clientY-r.top)/r.height*N;
+    const cx=Math.floor(tx),cy=Math.floor(ty);
+    // Batch 5: mortar target mode — a click places a PLAYER shell aimed at this tile (scatter grows w/ range)
+    if(aimMode){ fireShell(cx,cy,"player",turret.x,turret.y);
+      pushCard("misc","🎯","Міномет — постріл",`ціль (${cx},${cy}) · розсіювання ~${scatterFor(Math.hypot(cx-turret.x,cy-turret.y)).toFixed(1)}`);
+      setAimMode(false); return; }
+    // Batch 5: build mode — place a trap (non-path tiles only)
+    if(buildMode==="trap"){ placeTrap(cx,cy); return; }
+    // click a water tile (or inside the well radius) => drink (Gear.drink): river 0.7 / well 0.6 / stored 0.4
+    const inWell=(Math.abs(cx-well.x)+Math.abs(cy-well.y))<=well.r;
+    if(isWaterTile(cx,cy)||inWell){ const src=isWaterTile(cx,cy)?"river":"well", val=DRINK_VALUES[src];
+      needs.water=clamp(needs.water+val*100,0,100); paintNeeds();
+      pushCard("good","💧","Напитись",(src==="river"?"з річки":"з колодязя")+` +${Math.round(val*100)} спраги`); return; }
+    hero.tx=tx; hero.ty=ty;});
+  cv.addEventListener("mousemove",ev=>{const r=cv.getBoundingClientRect();
+    const cx=Math.floor((ev.clientX-r.left)/r.width*N), cy=Math.floor((ev.clientY-r.top)/r.height*N);
+    const inWell=(Math.abs(cx-well.x)+Math.abs(cy-well.y))<=well.r;
+    hoverTile.x=cx; hoverTile.y=cy; hoverTile.water=isWaterTile(cx,cy)||inWell;
+    cv.style.cursor=hoverTile.water?"pointer":"crosshair";
+    cv.title=hoverTile.water?"питна вода — клік щоб напитись":"";});
+  cv.addEventListener("mouseleave",()=>{hoverTile.x=-1;hoverTile.y=-1;hoverTile.water=false;});
+  // right-click cancels aim/build mode (verb: cancel/deconstruct, §5 interaction grammar)
+  cv.addEventListener("contextmenu",ev=>{ if(aimMode||buildMode){ ev.preventDefault();
+    setAimMode(false); setBuildMode(null); paletteDeselect(); showBanner("режим скасовано"); } });
+  // gear.gd DRINK_VALUES {river:.7, well:.6, stored:.4}
+  const DRINK_VALUES={river:0.7, well:0.6, stored:0.4};
+
+  // ==== Batch 5: threats & combat objects — JS mirror of kernel/combat.gd ============================
+  // Turrets (CompTurret), mortars/shells (CompMortar/Projectile), traps (CompTrap), fire (CompFlammable/
+  // FireSystem) and cover (apply_cover/StatPart_Cover). The player's defences never hit the hero (faction
+  // rule); enemy siege shells hit the base. Determinism in the kernel is seeded; the mockup animates the
+  // same *shapes* the player must read: range rings, scatter circles, falling impacts, hazard chevrons,
+  // flame glyphs + spread front, and cover shields.
+
+  // -- turret (CompTurret): a powered gun on the base. Mirrors range_r/ammo/heat/is_powered/can_fire. --
+  const turret={x:14,y:16, range:6, ammoMax:12, ammo:12, heat:0, heatMax:4, heatPerShot:1, coolRate:2,
+    cool:0, on:true, powered:true, selected:false, firedFlash:0};
+  function turretPowered(){ return turret.on && turret.powered; }
+  function turretCanFire(){ return turretPowered() && turret.ammo>0 && turret.heat<turret.heatMax && turret.cool<=0; }
+  // pick nearest hostile (raider) within range — deterministic nearest, matches _pick_target
+  function turretTarget(){ let best=null,bd=1e9;
+    raiders.forEach(e=>{ const d=Math.abs(Math.round(e.x)-turret.x)+Math.abs(Math.round(e.y)-turret.y);
+      if(d<=turret.range && d<bd){ bd=d; best=e; } });
+    return best; }
+  function tickTurret(dday){
+    if(turret.cool>0) turret.cool=Math.max(0,turret.cool-dday);
+    if(turret.heat>0) turret.heat=Math.max(0,turret.heat-turret.coolRate*dday);
+    if(turret.firedFlash>0) turret.firedFlash=Math.max(0,turret.firedFlash-dday);
+    if(!turretCanFire()) return;
+    const tgt=turretTarget(); if(!tgt) return;
+    turret.ammo-=1; turret.heat+=turret.heatPerShot; turret.cool=1.0; turret.firedFlash=0.8;
+    // deal damage: push the raider "down" (mockup removes it when close to dead)
+    tgt.hp=(tgt.hp==null?100:tgt.hp)-34;
+    if(tgt.hp<=0){ const i=raiders.indexOf(tgt); if(i>=0) raiders.splice(i,1);
+      pushCard("good","🔫","Турель влучила","ворог знищений"); }
+  }
+
+  // -- mortar / shells (CompMortar + Projectile). scatter grows with distance; enemy shells fall on base. --
+  const mortar={fuseDays:2.0, blast:2, scatterBase:1.0, scatterPer:0.06};
+  function scatterFor(dist){ return mortar.scatterBase + mortar.scatterPer*dist; }
+  let shells=[];   // {x,y, tx,ty, fuse, radius, owner:'hostile'|'player', exploded, flash}
+  let enemyCamp=null;  // {x,y,r} — the siege camp ring (enemy mortar battery)
+  let aimMode=false;   // click-to-target-tile mode for the player mortar
+  // build a shell aimed at (tx,ty), scattered pseudo-deterministically (mockup uses Math.random for wobble)
+  function fireShell(tx,ty,owner,ox,oy){
+    const dist=Math.hypot(tx-ox,ty-oy), s=scatterFor(dist);
+    const ix=tx+Math.round((Math.random()*2-1)*s), iy=ty+Math.round((Math.random()*2-1)*s);
+    shells.push({x:ox,y:oy, tx:ix,ty:iy, fuse:mortar.fuseDays, radius:mortar.blast, owner, exploded:false, flash:0, t:0});
+  }
+  function tickShells(dday){
+    const alive=[];
+    for(const sh of shells){
+      sh.t=Math.min(1,(sh.t||0)+dday/Math.max(0.1,mortar.fuseDays));  // 0..1 flight progress for the arc
+      sh.fuse-=dday;
+      if(sh.fuse<=0){
+        sh.exploded=true; sh.flash=1.0;
+        if(sh.owner==="hostile"){
+          // enemy shell smashes the base — a "пожежа" if it lands on/near a flammable building
+          igniteAt(sh.tx,sh.ty,sh.radius);
+          if(isIndoor(sh.tx,sh.ty)) showBanner("💥 ВОРОЖИЙ СНАРЯД влучив у базу");
+          pushCard("big","💣","Ворожий снаряд",`підрив на (${sh.tx},${sh.ty}) — радіус ${sh.radius}`);
+        } else {
+          // player shell hits hostiles in blast radius
+          let hits=0;
+          raiders=raiders.filter(e=>{ const d=Math.abs(Math.round(e.x)-sh.tx)+Math.abs(Math.round(e.y)-sh.ty);
+            if(d<=sh.radius){ hits++; return false; } return true; });
+          pushCard(hits?"good":"misc","💣","Постріл міномета",hits?`${hits}× ворогів накрито`:"мимо — розсіювання");
+        }
+        explosions.push({x:sh.tx,y:sh.ty,r:sh.radius,life:1.0});
+      } else alive.push(sh);
+    }
+    shells=alive;
+  }
+  let explosions=[]; // {x,y,r,life} transient blast rings
+
+  // -- traps (CompTrap): armed on a non-path tile; springs on the first hostile; hazard chevron to owner. --
+  let _trapUID=1;
+  const traps=[{uid:_trapUID++, x:13,y:19, dmg:25, uses:1, armed:true, sprung:0}];
+  function isPathTile(x,y){ return x>=0&&y>=0&&x<N&&y<N && tiles[y*N+x]===3; } // road = path (no traps)
+  function placeTrap(x,y){
+    if(isPathTile(x,y)){ showBanner("⛔ на дорозі пастку не поставити"); return false; }
+    if(traps.some(t=>t.x===x&&t.y===y)){ showBanner("⛔ тут уже є пастка"); return false; }
+    traps.push({uid:_trapUID++, x,y, dmg:25, uses:1, armed:true, sprung:0});
+    pushCard("misc","🪤","Пастку зведено",`(${x},${y}) — тільки для ворога`);
+    return true;
+  }
+  function tickTraps(dday){
+    for(const tr of traps){
+      if(tr.sprung>0) tr.sprung=Math.max(0,tr.sprung-dday);
+      if(!tr.armed || tr.uses<=0) continue;
+      // first hostile (raider) standing on the trap cell springs it — NEVER the hero (friendly-fire rule)
+      const victim=raiders.find(e=>Math.round(e.x)===tr.x && Math.round(e.y)===tr.y);
+      if(victim){
+        victim.hp=(victim.hp==null?100:victim.hp)-tr.dmg;
+        tr.uses-=1; tr.sprung=0.9; if(tr.uses<=0) tr.armed=false;
+        if(victim.hp<=0){ const i=raiders.indexOf(victim); if(i>=0) raiders.splice(i,1); }
+        pushCard("small","🪤","Пастка спрацювала",`ворог поранений на (${tr.x},${tr.y})`);
+      }
+    }
+  }
+
+  // -- fire (CompFlammable + FireSystem): flammable buildings; rain (wet) extinguishes + blocks ignition. --
+  // The base cells are the flammable Things. `fire` maps "x,y" -> intensity 0..1; spread front = newly lit.
+  const flammables=[]; // list of {x,y} — the base footprint (walls/floor)
+  (function(){ for(let y=base.y0;y<=base.y1;y++)for(let x=base.x0;x<=base.x1;x++) flammables.push({x,y}); })();
+  const fire={};  // "x,y" -> {i:intensity, front:bool}
+  function fkey(x,y){ return x+","+y; }
+  function isFlammable(x,y){ return flammables.some(f=>f.x===x&&f.y===y); }
+  function igniteAt(x,y,r){
+    for(const f of flammables){ if(Math.abs(f.x-x)+Math.abs(f.y-y)<=r){ fire[fkey(f.x,f.y)]={i:1,front:true}; } }
+  }
+  function tickFire(dday,wet){
+    // rain/snow: FireSystem extinguishes everything and suppresses ignition this tick
+    if(wet){ for(const k in fire) delete fire[k]; return; }
+    const burning=Object.keys(fire).filter(k=>fire[k].i>0);
+    if(!burning.length) return;
+    // spread: adjacent flammables catch (one ring per tick), marked as the spread FRONT
+    const newly=[];
+    for(const f of flammables){ const k=fkey(f.x,f.y); if(fire[k]) continue;
+      const adj=burning.some(bk=>{ const [bx,by]=bk.split(",").map(Number); return Math.abs(bx-f.x)+Math.abs(by-f.y)<=1; });
+      if(adj && Math.random()<0.5*dday*10){ newly.push(k); }
+    }
+    // clear last tick's front flag, then set the new front
+    for(const k in fire) fire[k].front=false;
+    newly.forEach(k=>fire[k]={i:1,front:true});
+    // burn: intensity holds; if it reaches a building we already banner'd on ignition
+    if(newly.length && !fire._bannered){ fire._bannered=true; showBanner("🔥 ПОЖЕЖА — вогонь на базі, потрібен дощ або гасіння"); }
+    if(!burning.length) fire._bannered=false;
+  }
+
+  // -- cover (apply_cover / in_cover): cover cells; hero on/adjacent gets cover_frac ranged mitigation. --
+  const COVER_FRAC=0.5;
+  const coverCells=[{x:15,y:15},{x:16,y:15},{x:12,y:17},{x:20,y:12}]; // sandbag tiles (world.cover)
+  function heroInCover(){ const hx=Math.round(hero.x),hy=Math.round(hero.y);
+    return coverCells.some(c=>Math.abs(c.x-hx)+Math.abs(c.y-hy)<=1); }
+
+  // interaction modes: aim (mortar target-tile) and build (trap placement). Only one active at a time.
+  let buildMode=null;
+  function setAimMode(on){ aimMode=on; if(on) buildMode=null;
+    $("aimhint").classList.toggle("show",on); $("mortar-aim").classList.toggle("off",on);
+    cv.style.cursor = on ? "crosshair" : "crosshair"; }
+  function setBuildMode(m){ buildMode=m; if(m) aimMode=false; $("aimhint").classList.remove("show"); }
+
   const NGLY=["🌲","🪨","🫐"];
   function draw(){
     const w=cv.width,h=cv.height,cw=w/N,ch=h/N;
     for(let y=0;y<N;y++)for(let x=0;x<N;x++){ctx.fillStyle=TCOL[tiles[y*N+x]]; ctx.fillRect(x*cw,y*ch,cw+.5,ch+.5);}
-    if(activeOv==="roof"||activeOv==="temp"||activeOv==="stock") drawOverlay(cw,ch,activeOv);
+    if(activeOv==="roof"||activeOv==="temp"||activeOv==="stock"||activeOv==="cover") drawOverlay(cw,ch,activeOv);
+    drawWater(cw,ch);            // Batch 4: well refill ring + drinkable teal shimmer on hovered water
+    drawCombat(cw,ch);           // Batch 5: turret ring · traps · fire · shells (always-on markers)
     ctx.font=Math.floor(ch*0.9)+"px serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
     nodes.forEach(nd=>ctx.fillText(NGLY[nd.k],(nd.x+.5)*cw,(nd.y+.55)*ch));
     // raiders approach hero
@@ -955,6 +1525,96 @@
     if(activeOv==="power") drawOverlay(cw,ch,"power");  // wires + net meter + ⚡ pips on top
     if(!reduce) requestAnimationFrame(draw);
   }
+  // Batch 4 water rendering: the well's refill-radius ring (💧) + a teal "drinkable" shimmer on the tile
+  // (or well area) under the cursor. Thirst drains faster when hot — the readout lives in Vitals (paintNeeds).
+  function drawWater(cw,ch){
+    // well glyph + refill radius ring (a mini-overlay, always on so the water source reads on the map)
+    const wx=(well.x+.5)*cw, wy=(well.y+.5)*ch, rr=well.r*cw;
+    ctx.strokeStyle="rgba(134,208,214,.55)"; ctx.setLineDash([4,3]); ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.arc(wx,wy,rr,0,7); ctx.stroke(); ctx.setLineDash([]);
+    ctx.font=Math.floor(ch*0.95)+"px serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText("🕳",wx,(well.y+.55)*ch);
+    // drinkable teal shimmer on the hovered water tile / well area
+    if(hoverTile.water && hoverTile.x>=0){
+      const t=reduce?0.5:(0.5+0.5*Math.sin(Date.now()/240));
+      ctx.fillStyle="rgba(134,208,214,"+(0.18+0.28*t)+")";
+      ctx.fillRect(hoverTile.x*cw,hoverTile.y*ch,cw+.5,ch+.5);
+      ctx.strokeStyle="rgba(134,208,214,"+(0.5+0.4*t)+")"; ctx.lineWidth=1.5;
+      ctx.strokeRect(hoverTile.x*cw+.5,hoverTile.y*ch+.5,cw-1,ch-1);
+      ctx.font=Math.floor(ch*0.8)+"px serif"; ctx.fillStyle="rgba(134,208,214,.95)";
+      ctx.fillText("💧",(hoverTile.x+.5)*cw,(hoverTile.y+.5)*ch);
+    }
+  }
+
+  // ==== Batch 5 canvas: turret ring · trap chevrons · fire glyphs+front · mortar arcs/impacts · camp ring
+  function drawCombat(cw,ch){
+    const t=reduce?0.5:(0.5+0.5*Math.sin(Date.now()/300));
+    // -- FIRE (always-on): flame glyph on each burning cell; the spread FRONT ringed amber --
+    for(const k in fire){ if(k[0]==="_")continue; const cell=fire[k]; if(!cell||cell.i<=0)continue;
+      const [x,y]=k.split(",").map(Number);
+      ctx.fillStyle="rgba(224,106,90,"+(0.28+0.22*t)+")"; ctx.fillRect(x*cw,y*ch,cw+.5,ch+.5);
+      ctx.font=Math.floor(ch*0.95)+"px serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText("🔥",(x+.5)*cw,(y+.5)*ch);
+      if(cell.front){ ctx.strokeStyle="rgba(224,176,112,"+(0.5+0.4*t)+")"; ctx.lineWidth=1.6;
+        ctx.strokeRect(x*cw+.5,y*ch+.5,cw-1,ch-1); } // spread front
+    }
+    // -- TURRET range ring (when selected/hovered) + a fire flash line to its target --
+    const showRing = turret.selected || $("turret-panel").matches(":hover");
+    const tx=(turret.x+.5)*cw, ty=(turret.y+.5)*ch;
+    ctx.font=Math.floor(ch*0.9)+"px serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillStyle=turretPowered()?"#c9d4dc":"rgba(224,106,90,.9)";
+    ctx.fillText("🔫",tx,(turret.y+.55)*ch);
+    if(!turretPowered()){ ctx.font=Math.floor(ch*0.55)+"px serif"; ctx.fillStyle="#e06a5a";
+      ctx.fillText("⚡",tx+cw*0.35,ty-ch*0.35); } // red no-power pip
+    if(showRing){
+      ctx.strokeStyle=turretCanFire()?"rgba(134,208,214,.6)":"rgba(224,106,90,.6)"; ctx.lineWidth=1.4;
+      ctx.setLineDash([4,3]); ctx.beginPath(); ctx.arc(tx,ty,turret.range*cw,0,7); ctx.stroke(); ctx.setLineDash([]);
+    }
+    if(turret.firedFlash>0){ const tgt=turretTarget(); if(tgt){ ctx.strokeStyle="rgba(224,176,112,"+turret.firedFlash+")";
+      ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo((tgt.x+.5)*cw,(tgt.y+.5)*ch); ctx.stroke(); } }
+    // -- TRAPS: armed traps show a faint hazard chevron (only to the owner = the player, always visible here) --
+    traps.forEach(tr=>{ const cx=(tr.x+.5)*cw, cy=(tr.y+.5)*ch;
+      if(tr.armed){ ctx.strokeStyle="rgba(224,176,112,.5)"; ctx.lineWidth=1.4;
+        ctx.beginPath(); ctx.moveTo(cx-cw*0.28,cy+ch*0.10); ctx.lineTo(cx,cy-ch*0.14); ctx.lineTo(cx+cw*0.28,cy+ch*0.10); ctx.stroke();
+        ctx.font=Math.floor(ch*0.6)+"px serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillStyle="rgba(224,176,112,.75)";
+        ctx.fillText("🪤",cx,cy+ch*0.05); }
+      if(tr.sprung>0){ ctx.strokeStyle="rgba(224,106,90,"+tr.sprung+")"; ctx.lineWidth=2+2*tr.sprung;
+        ctx.beginPath(); ctx.arc(cx,cy,cw*(0.4+(1-tr.sprung)*0.6),0,7); ctx.stroke(); } // burst
+    });
+    // -- COVER sandbag markers (always-on faint, so cover reads even without the K overlay) --
+    if(activeOv!=="cover"){ coverCells.forEach(c=>{ ctx.font=Math.floor(ch*0.6)+"px serif";
+      ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillStyle="rgba(134,208,214,.45)";
+      ctx.fillText("🛡",(c.x+.5)*cw,(c.y+.5)*ch); }); }
+    // -- ENEMY CAMP ring (siege) --
+    if(enemyCamp){ const ex=(enemyCamp.x+.5)*cw, ey=(enemyCamp.y+.5)*ch;
+      ctx.strokeStyle="rgba(224,106,90,.7)"; ctx.lineWidth=1.6; ctx.setLineDash([5,4]);
+      ctx.beginPath(); ctx.arc(ex,ey,enemyCamp.r*cw,0,7); ctx.stroke(); ctx.setLineDash([]);
+      ctx.font=Math.floor(ch*0.95)+"px serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText("⛺",ex,(enemyCamp.y+.55)*ch); }
+    // -- SHELLS in flight: arc preview + a scatter circle at the target; impact flash on landing --
+    shells.forEach(sh=>{
+      const ox=(sh.x+.5)*cw, oy=(sh.y+.5)*ch, ixp=(sh.tx+.5)*cw, iyp=(sh.ty+.5)*ch;
+      // scatter circle at target
+      const scat=scatterFor(Math.hypot(sh.tx-sh.x,sh.ty-sh.y));
+      ctx.strokeStyle=sh.owner==="hostile"?"rgba(224,106,90,.55)":"rgba(224,176,112,.6)"; ctx.lineWidth=1.2;
+      ctx.setLineDash([3,3]); ctx.beginPath(); ctx.arc(ixp,iyp,Math.max(scat,sh.radius)*cw,0,7); ctx.stroke(); ctx.setLineDash([]);
+      // arc preview: parabola from origin to target, marker at flight progress
+      const p=clamp(sh.t||0,0,1); const mx=ox+(ixp-ox)*p, arc=-Math.sin(p*Math.PI)*ch*3.2, my=oy+(iyp-oy)*p+arc;
+      ctx.strokeStyle=sh.owner==="hostile"?"rgba(224,106,90,.5)":"rgba(224,176,112,.5)"; ctx.lineWidth=1;
+      ctx.beginPath(); for(let q=0;q<=1.0001;q+=0.1){ const qx=ox+(ixp-ox)*q, qy=oy+(iyp-oy)*q-Math.sin(q*Math.PI)*ch*3.2;
+        if(q===0)ctx.moveTo(qx,qy); else ctx.lineTo(qx,qy); } ctx.stroke();
+      // falling shell marker + a warning glyph near the impact for ENEMY shells
+      ctx.font=Math.floor(ch*0.8)+"px serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillStyle=sh.owner==="hostile"?"#e06a5a":"#e0b070"; ctx.fillText("💣",mx,my);
+      if(sh.owner==="hostile"){ ctx.font=Math.floor(ch*0.85)+"px serif";
+        ctx.fillStyle="rgba(224,106,90,"+(0.55+0.4*t)+")"; ctx.fillText("⚠",ixp,iyp-ch*0.2); }
+    });
+    // -- explosion rings (transient) --
+    explosions=explosions.filter(x=>x.life>0);
+    explosions.forEach(x=>{ x.life-=reduce?0.08:0.05;
+      ctx.strokeStyle="rgba(224,106,90,"+Math.max(0,x.life)+")"; ctx.lineWidth=2+3*(1-x.life);
+      ctx.beginPath(); ctx.arc((x.x+.5)*cw,(x.y+.5)*ch,x.r*cw*(1.4-x.life),0,7); ctx.stroke(); });
+  }
 
   // ---- interactions ----
   $("s-diff").addEventListener("input",e=>{Balance.difficulty=parseFloat(e.target.value); paintBalance();});
@@ -964,9 +1624,10 @@
   document.querySelectorAll("[data-inc]").forEach(b=>b.addEventListener("click",()=>INC[b.dataset.inc]()));
   // overlay toggles (chips + hotkeys R/T/L)
   document.querySelectorAll(".ov-chip").forEach(c=>c.addEventListener("click",()=>setOverlay(c.dataset.ov)));
-  window.addEventListener("keydown",e=>{ if(e.target.tagName==="INPUT")return; const k=e.key.toLowerCase();
+  window.addEventListener("keydown",e=>{ if(/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)||e.target.isContentEditable)return; const k=e.key.toLowerCase();
     if(k==="r")setOverlay("roof"); else if(k==="t")setOverlay("temp"); else if(k==="l")setOverlay("light");
-    else if(k==="p")setOverlay("power"); else if(k==="z")setOverlay("stock");});
+    else if(k==="p")setOverlay("power"); else if(k==="z")setOverlay("stock"); else if(k==="k")setOverlay("cover");
+    else if(k==="escape"){ if(aimMode||buildMode){ setAimMode(false); setBuildMode(null); paletteDeselect(); } }});
 
   // ---- power controls: toggle a load / add a stress load → drive the net into brownout ----
   function toggleLoad(dev){ const l=power.loads.find(x=>x.dev===dev); if(l){ l.on=!l.on; paintPower(); powerFeedback();
@@ -976,20 +1637,140 @@
   $("pw-toggle-heater").addEventListener("click",()=>toggleLoad("heater"));
   $("pw-toggle-lamp").addEventListener("click",()=>toggleLoad("lamp"));
   $("pw-add-load").addEventListener("click",()=>toggleLoad("extra"));
+
+  // ---- Batch 5: turret panel paint + controls ----
+  function paintTurret(){
+    const powered=turretPowered();
+    $("tur-range").textContent="R"+turret.range;
+    const ammoPct=Math.round(turret.ammo/turret.ammoMax*100);
+    const ab=$("tur-ammo-bar"); ab.style.width=ammoPct+"%"; ab.classList.toggle("low",turret.ammo<=3);
+    $("tur-ammo").textContent=turret.ammo+"/"+turret.ammoMax;
+    $("tur-ammo").style.color=turret.ammo<=3?"var(--warn)":"var(--good)";
+    const heatPct=Math.round(turret.heat/turret.heatMax*100);
+    $("tur-heat-bar").style.width=clamp(heatPct,0,100)+"%";
+    $("tur-heat").textContent=clamp(heatPct,0,100)+"%";
+    // power pip + label
+    const pip=$("tur-pip"); pip.textContent=powered?"⚡":"○"; pip.className="pwpip "+(powered?"on":"off");
+    $("tur-pwlb").textContent=powered?"від мережі":(turret.on?"нема живлення":"вимкнено");
+    // red bad-state: no power OR no ammo (the "нема живлення/набоїв" state the task requires)
+    const bad=$("tur-bad"); let reason="";
+    if(!powered) reason="нема живлення"; else if(turret.ammo<=0) reason="нема набоїв"; else if(turret.heat>=turret.heatMax) reason="перегрів — охолоджується";
+    bad.classList.toggle("show",!!reason); $("tur-bad-lb").textContent=reason;
+    $("tur-toggle-pw").classList.toggle("off",!turret.on);
+  }
+  $("tur-toggle-pw").addEventListener("click",()=>{ turret.on=!turret.on; paintTurret();
+    pushCard("misc","⚡","Турель",turret.on?"живлення увімкнено":"живлення вимкнено"); });
+  $("tur-reload").addEventListener("click",()=>{ turret.ammo=turret.ammoMax; paintTurret();
+    pushCard("good","🔫","Турель перезаряджена",turret.ammoMax+" набоїв"); });
+  $("tur-select").addEventListener("click",()=>{ turret.selected=!turret.selected; paintTurret();
+    showBanner(turret.selected?"🎯 турель вибрано — коло дальності на карті":"вибір знято"); });
+  // simulate the net cutting turret power (teach the powered gate) via the extra-load brownout seam:
+  // when the power net browns out, the turret loses power too (shares the grid).
+  function syncTurretPower(){ turret.powered = !power.brownout; }
+
+  // ---- Batch 5: cover indicator near the health doll ----
+  function paintCover(){
+    const inC=heroInCover(); const ind=$("coverind");
+    ind.classList.toggle("show",inC);
+    if(inC) $("coverind-pct").textContent="−"+Math.round(COVER_FRAC*100)+"%";
+  }
+
+  // ---- Batch 5: mortar aim button ----
+  $("mortar-aim").addEventListener("click",()=>{ setAimMode(!aimMode);
+    if(aimMode) showBanner("🎯 режим міномета — клікни клітину-ціль"); });
   document.querySelectorAll("[data-need]").forEach(b=>b.addEventListener("click",()=>{needs[b.dataset.need]=clamp(needs[b.dataset.need]+34,0,100); paintNeeds();}));
-  document.querySelectorAll("[data-hurt]").forEach(b=>b.addEventListener("click",()=>{parts[b.dataset.hurt].hp=clamp(parts[b.dataset.hurt].hp-40,0,100); health.tended=false; paintHealth();}));
+  document.querySelectorAll("[data-hurt]").forEach(b=>b.addEventListener("click",()=>{
+    // a normal wound shaves 40 hp; a "severe" wound (data-severe) drops the part below SCAR_SEVERITY_HP in
+    // ONE click, so the scar→surgery→prosthetic seam is reachable from a single labelled action — mirroring
+    // the kernel, where a single injure(severity 8) already scars.
+    const dmg=b.dataset.severe?85:40;
+    parts[b.dataset.hurt].hp=clamp(parts[b.dataset.hurt].hp-dmg,0,100); health.tended=false; paintHealth(); paintTend();}));
   document.querySelectorAll("[data-act]").forEach(b=>b.addEventListener("click",()=>{
-    if(b.dataset.act==="tend"){health.tended=true; health.immunity=Math.max(health.immunity,health.disease+0.2); if(world.stock.components>0)world.stock.components--; pushCard("good","💊","Лікування","кровотечу зупинено, гонку імунітету виграно");}
+    if(b.dataset.act==="tend"){
+      // TendService.tend gate: requires medicine>=1 AND a medbed present. No medicine/medbed -> no effect.
+      if(!canTend()){
+        const why=[]; if((world.stock.medicine||0)<1)why.push("нема медикаментів"); if(!medbed.present)why.push("нема медліжка");
+        if((world.stock.medicine||0)>=1 && medbed.present && !hasTendableState())why.push("нема що лікувати");
+        showBanner("⛔ Лікування неможливе — "+why.join(", ")); paintTend(); return;
+      }
+      const eff=tendEffectiveness();
+      health.tended=true; health.immunity=Math.max(health.immunity,health.disease+0.2*eff);
+      health.disease=Math.max(0,health.disease-0.2*eff);
+      world.stock.medicine=Math.max(0,(world.stock.medicine||0)-1);   // consume exactly one medicine
+      pushCard("good","💊","Лікування",`кровотечу спинено · еф. ${eff.toFixed(2)} · −1 медикамент`);
+      paintTend(); paintMedbed();
+    }
     if(b.dataset.act==="disease"){INC.disease();}
+    if(b.dataset.act==="surgery"){ queueSurgeryForFirstScar(); }
     paintHealth(); paintBalance();
   }));
+
+  // ---- Batch 4: medbed surgery bills (reuse the Bills primitive) ----
+  // A surgery bill fits a prosthetic: on completion it removes injuries+scars on the part and installs an
+  // implant (cap_factor 1.0). Mirrors install_prosthetic. Bills require a medbed + 1 medicine to progress.
+  let _surgUID=1; const surgeryBills=[];
+  function queueSurgery(partKey){
+    if(surgeryBills.some(s=>s.part===partKey))return;
+    surgeryBills.push({uid:_surgUID++,part:partKey,progress:0,work:1.0});
+    if(!medbed.present) showBanner("🩺 Операцію заплановано, але потрібне медліжко");
+    paintMedbedBills();
+    pushCard("misc","🦾","Операцію заплановано","протез — "+PARTLBL[partKey]);
+  }
+  function queueSurgeryForFirstScar(){
+    const scarred=Object.keys(parts).find(k=>parts[k].scar && !parts[k].implant);
+    if(!scarred){ showBanner("нема шрамів для протезування"); return; }
+    queueSurgery(scarred);
+  }
+  function tickSurgery(dday){
+    const survivors=[];
+    for(const s of surgeryBills){
+      if(!medbed.present || (world.stock.medicine||0)<1){ s.stalled=true; survivors.push(s); continue; }
+      s.stalled=false; s.progress+=dday;
+      if(s.progress+1e-9>=s.work){
+        // install_prosthetic: clear injury+scar on the part, mark implant.
+        const p=parts[s.part]; p.scar=false; p.wasSevere=false; p.hp=100; p.implant=true;
+        world.stock.medicine=Math.max(0,(world.stock.medicine||0)-1);
+        pushCard("good","🦾","Протез встановлено",PARTLBL[s.part]+" — ціл. відновлено (−1 медикамент)");
+        paintHealth();
+      } else survivors.push(s);
+    }
+    surgeryBills.length=0; surgeryBills.push(...survivors);
+  }
+  function paintMedbedBills(){
+    const host=$("medbed-bills"); if(!host)return; host.innerHTML="";
+    for(const s of surgeryBills){
+      const stall=s.stalled||!medbed.present||(world.stock.medicine||0)<1;
+      const eta=Math.max(0,(s.work-s.progress)).toFixed(1);
+      const el=document.createElement("div"); el.className="bill"+(stall?" stall":"");
+      const miss=(world.stock.medicine||0)<1?`<span class="miss" title="бракує">⛔ 💊</span>`:(!medbed.present?`<span class="miss">⛔ 🩺</span>`:"");
+      el.innerHTML=`<span class="bg">🦾</span>
+        <span class="bx"><b>Протез — ${PARTLBL[s.part]}</b> ${miss}
+          <span class="eta">${stall?"🔒 потрібні медліжко+💊":"~"+eta+" дн"}</span>
+          <span class="prog"><i style="width:${clamp(s.progress/s.work*100,0,100)}%"></i></span></span>
+        <span class="bxctl"><button class="rm" title="скасувати" aria-label="скасувати">✕</button></span>`;
+      el.querySelector(".rm").addEventListener("click",()=>{ const i=surgeryBills.indexOf(s); if(i>=0)surgeryBills.splice(i,1); paintMedbedBills(); });
+      host.appendChild(el);
+    }
+    if(!surgeryBills.length) host.innerHTML=`<div class="hint">черга порожня — «🦾 Операція» замінює шрам протезом</div>`;
+  }
+  // fill the surgery part-picker with scarred parts (fallback: all parts)
+  function fillSurgeryParts(){
+    const sel=$("medbed-part"); if(!sel)return; const prev=sel.value; sel.innerHTML="";
+    const keys=Object.keys(parts);
+    keys.forEach(k=>{ const o=document.createElement("option"); o.value=k;
+      const tag=parts[k].implant?" (протез)":parts[k].scar?" (шрам)":"";
+      o.textContent=PARTLBL[k]+tag; sel.appendChild(o); });
+    if(prev)sel.value=prev;
+  }
+  $("medbed-add").addEventListener("click",()=>{ fillSurgeryParts(); const pk=$("medbed-part").value; if(pk) queueSurgery(pk); });
 
   // ---- clocks: slow need decay + health resolve (gameplay ticks) ----
   setInterval(()=>{
     frac=(frac+0.012)%1;
     paintPower(); powerFeedback();   // solve the net first: sets heater/lamp `active` before temp paints
     paintClimate();
-    needs.food=clamp(needs.food-0.5,0,100); needs.rest=clamp(needs.rest-0.35,0,100); needs.water=clamp(needs.water-0.6,0,100);
+    needs.food=clamp(needs.food-0.5,0,100); needs.rest=clamp(needs.rest-0.35,0,100);
+    needs.water=clamp(needs.water-0.6*thirstHeatMult(),0,100);   // Batch 4: hotter => faster thirst
     if(needs.food<55){needs.food+=1;} // auto-eat from storage
     paintNeeds();
     // deterioration: the outdoor crate wears, faster when wet (mirrors CompDeteriorate)
@@ -1010,6 +1791,15 @@
     if(lastMeal){ const t=tempAt(base.x0,base.y0); const warm=clamp(t/10,0.2,4.0);
       lastMeal.rot=clamp(lastMeal.rot+(1/lastMeal.rotDays)*warm*dday,0,1); }
     paintCooking();
+    // Batch-4 tick: comfort (equip insulation vs felt temp), surgery bills, tend/medbed readouts
+    updateComfort();
+    tickSurgery(dday); paintMedbedBills();
+    paintTend(); paintMedbed();
+    // Batch-5 tick: turret firing, mortar shells, traps, fire spread (wet suppresses). Order mirrors the
+    // kernel: turret/trap comp ticks, then FireSystem@30. `wet` reuses the Batch-1 deterioration flag.
+    syncTurretPower();
+    tickTurret(dday); tickTraps(dday); tickShells(dday); tickFire(dday, wet);
+    paintTurret(); paintCover();
   }, reduce?1500:900);
 
   // solar teaching: also re-solve on the smooth day/night frac tween so ☀ output visibly follows the clock
@@ -1098,6 +1888,9 @@
       // a spawned Thing (meal) — stamp quality + a CompRottable freshness timer
       const q=rollQuality(bench.maker_level);
       lastMeal={rot:0,rotDays:out.rot_days||6,quality:q,name:RECIPES[bench===benches.stove?"":""]?"":recipe.name};
+      // tally the spawned Thing into world.stock so 'until'-mode meal bills can see the count and stop at
+      // target (mirrors production.gd _yield); without this billWants(outStock) stays 0 and overproduces.
+      world.stock[out.id]=(world.stock[out.id]||0)+(out.count||1);
       pushCard("good","🍲","Страва готова",`${recipe.name} · якість ${QLABELS[q]}`);
     } else {
       const count=out.count||1; world.stock[out.id]=(world.stock[out.id]||0)+count;
@@ -1273,9 +2066,11 @@
   }
 
   // ---- boot ----
-  buildPalette(); paintNeeds(); paintHealth(); paintWeather(); paintPower(); paintClimate(); paintBalance();
+  buildPalette(); paintNeeds(); paintEquip(); paintHealth(); updateComfort(); paintWeather(); paintPower(); paintClimate(); paintBalance();
   paintBills("bench-bills",benches.craft); paintBills("stove-bills",benches.stove);
   paintResearch(); paintGearQuality(); paintCooking();
+  fillSurgeryParts(); paintTend(); paintMedbed();
+  paintTurret(); paintCover();   // Batch 5
   draw(); if(reduce) draw();
 })();
 </script>
