@@ -39,6 +39,7 @@ func _init() -> void:
 	_t_friend_geography()
 	_t_session_travel()
 	_t_session_respawn()
+	_t_catalog_gameplay()
 	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
 	quit(1 if failed > 0 else 0)
 
@@ -95,8 +96,10 @@ func _t_worldgen_golden() -> void:
 	ok(rng_ok, "engine RNG stream pinned for the coordinate seed")
 	var m := WorldGen.generate_map(50.4501, 30.5234, 56)
 	var fp := Persistence.content_hash({"t": Marshalls.raw_to_base64(m.tiles), "nc": m.nodes.size(), "sx": m.spawn.x, "sy": m.spawn.y})
-	ok(m.nodes.size() == 506 and m.spawn == Vector2i(28, 34), "generate_map layout pinned (nodes=506, spawn=28,34)")
-	ok(fp == "4e623d08379cd29a", "generate_map terrain fingerprint pinned (%s)" % fp)
+	# Re-pinned for Batch 7: the catalogue node scatter (second-pass rng) adds 133 nodes to Kyiv;
+	# tiles and spawn are UNTOUCHED (the legacy rng stream is byte-identical — that's the design).
+	ok(m.nodes.size() == 639 and m.spawn == Vector2i(28, 34), "generate_map layout pinned (nodes=639, spawn=28,34)")
+	ok(fp == "39a414c3dea7afd9", "generate_map terrain fingerprint pinned (%s)" % fp)
 
 func _t_haversine() -> void:
 	var km := WorldGen.haversine_km(50.4501, 30.5234, 49.8397, 24.0297)
@@ -141,18 +144,43 @@ func _t_raid_scaling() -> void:
 	ok(GameData.raid_wave_size(50) == 12, "raid clamps at 12")
 
 func _t_data_integrity() -> void:
+	# Batch 7: the tables are the legacy core MERGED with the full catalogue; every reference must
+	# resolve in RES_ALL (the union), and the legacy core must survive the merge.
 	var good := true
 	for k in GameData.NODEINFO:
-		if not GameData.RES.has(GameData.NODEINFO[k].res):
+		if not GameData.RES_ALL.has(GameData.NODEINFO[k].res):
 			good = false
 	for b in GameData.BUILDINGS:
 		for c in GameData.BUILDINGS[b].cost:
-			if not GameData.RES.has(c):
+			if not GameData.RES_ALL.has(c):
 				good = false
-	ok(good, "node/building tables reference valid resources")
-	ok(GameData.BUILD_ORDER.size() == GameData.BUILDINGS.size(), "BUILD_ORDER covers BUILDINGS")
+	ok(good, "node/building tables reference valid resources (RES_ALL union)")
+	var legacy_ok := true
+	for k in GameData.BUILD_ORDER:
+		if not GameData.BUILDINGS.has(k):
+			legacy_ok = false
+	for k in GameData.RES_ORDER:
+		if not GameData.RES.has(k) or not GameData.RES_ALL.has(k):
+			legacy_ok = false
+	ok(legacy_ok, "legacy BUILD_ORDER/RES_ORDER survive the catalogue merge")
 	ok(GameData.RES_ORDER.size() == GameData.RES.size(), "RES_ORDER covers RES")
 	ok(GameData.HUBS.size() == 7, "7 trade hubs (parity with JS)")
+	# the merge actually deepened the tables
+	ok(GameData.BUILDINGS.size() >= 40, "merged BUILDINGS carries the catalogue (%d)" % GameData.BUILDINGS.size())
+	ok(GameData.NODEINFO.size() >= 11, "merged NODEINFO carries the catalogue nodes (%d)" % GameData.NODEINFO.size())
+	ok(GameData.RES_ALL.size() >= 60, "RES_ALL carries every stockable id (%d)" % GameData.RES_ALL.size())
+	ok(GameData.ITEMS.has("machete") and GameData.ITEMS.machete.slot == "weapon", "catalogue gear derived into ITEMS (machete=weapon)")
+	ok(GameData.ITEMS.has("steel_pick") and float(GameData.ITEMS.steel_pick.gather_mult) > float(GameData.ITEMS.pick.gather_mult), "steel pick out-gathers the stone pick")
+	ok(not GameData.FOODS.is_empty() and String(GameData.FOODS[0].id) == "meal_fine", "FOODS ordered best-first (вишукана страва зверху)")
+	# category coverage: every building lands in a palette category
+	var cats := {}
+	for c2 in GameData.BUILD_CATS:
+		cats[c2.id] = true
+	var cat_ok := true
+	for b2 in GameData.BUILDINGS:
+		if not cats.has(String(GameData.BUILDINGS[b2].get("cat", ""))):
+			cat_ok = false
+	ok(cat_ok, "every merged building has a palette category")
 
 func _t_death_freeze() -> void:
 	var s = Sim.new()
@@ -518,3 +546,107 @@ func _t_session_respawn() -> void:
 			has_storage = true
 			break
 	ok(has_storage, "new pawn respawns at the home settlement (storage present)")
+
+# ---------------- Batch 7: the catalogue is PLAYABLE (build gates, benches, food, traps, nodes) ----------------
+func _t_catalog_gameplay() -> void:
+	# --- research gate on try_build: null research (headless sim) allows only ungated kinds -------
+	var s = Sim.new()
+	s.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
+	s.stock = {"clay": 100, "stone": 100, "wood": 100}
+	var c = s.base_center()
+	var spot := Vector2i(-1, -1)
+	for dy in range(-3, 4):
+		for dx in range(-3, 4):
+			if spot.x < 0 and s.build_valid(c.x + dx, c.y + dy):
+				spot = Vector2i(c.x + dx, c.y + dy)
+	ok(spot.x >= 0, "found a buildable spot near base")
+	s.try_build("kiln", spot.x, spot.y)
+	ok(s.buildings.filter(func(b): return b.kind == "kiln").is_empty(), "kiln refused without research state (null research)")
+
+	# --- the full session loop: research -> build -> bench -> bill -> stock ------------------------
+	var se = SessionScript.new()
+	se.autosave = false
+	se.start(50.4501, 30.5234, "Київ")
+	se.sim.stock = {"clay": 100, "stone": 100, "wood": 100, "fiber": 50}
+	var c2 = se.sim.base_center()
+	var spots := []
+	for dy in range(-4, 5):
+		for dx in range(-4, 5):
+			if spots.size() < 3 and se.sim.build_valid(c2.x + dx, c2.y + dy):
+				spots.append(Vector2i(c2.x + dx, c2.y + dy))
+	ok(spots.size() >= 3, "found buildable spots near base")
+	se.sim.try_build("kiln", spots[0].x, spots[0].y)
+	ok(se.sim.buildings.filter(func(b): return b.kind == "kiln").is_empty(), "kiln still locked before pottery")
+	se.kernel.research.unlock(&"pottery")
+	se.sim.try_build("kiln", spots[0].x, spots[0].y)
+	var kilns: Array = se.sim.buildings.filter(func(b): return b.kind == "kiln")
+	ok(kilns.size() == 1, "kiln builds once pottery is researched")
+	se.kernel_tick(0.01)
+	var bench = se.bench_for(kilns[0])
+	ok(bench != null, "kernel bench synced for the built kiln")
+	var add = se.add_bill(kilns[0], &"r_brick", &"until", 4)
+	ok(bool(add.ok), "bill queued on the kiln")
+	for i in 60:
+		se.kernel_tick(0.05)
+	ok(int(se.sim.stock.get("brick", 0)) == 4, "kiln bill crafted bricks into sim.stock ('until 4' -> %d)" % int(se.sim.stock.get("brick", 0)))
+	se.sim.demolish(int(kilns[0].x), int(kilns[0].y))
+	se.kernel_tick(0.01)
+	ok(se.bench_for(kilns[0]) == null, "demolished kiln drops its kernel bench")
+
+	# --- research advances only with a research bench ----------------------------------------------
+	var rs = se.kernel.research
+	ok(rs.try_start(&"carpentry"), "research project starts")
+	for i in 10:
+		se.kernel_tick(0.5)
+	ok(not rs.is_unlocked(&"carpentry"), "research does NOT advance without a research bench")
+	se.sim.try_build("research_bench", spots[1].x, spots[1].y)
+	ok(not se.sim.buildings.filter(func(b): return b.kind == "research_bench").is_empty(), "research bench built (ungated)")
+	for i in 10:
+		se.kernel_tick(0.5)
+	ok(rs.is_unlocked(&"carpentry"), "research completes once the bench exists")
+
+	# --- auto-eat prefers the best meal -------------------------------------------------------------
+	var s3 = se.sim
+	s3.stock["meal_fine"] = 1
+	s3.stock["food"] = 5
+	s3.player.hunger = 30.0
+	s3.player.eat_cd = 0.0
+	s3._auto_eat(s3.player)
+	ok(int(s3.stock.get("meal_fine", 0)) == 0 and int(s3.stock.get("food", 0)) == 5, "auto-eat takes the fine meal before raw food")
+	ok(s3.player.hunger > 90.0, "fine meal restores more than raw food (%.0f)" % s3.player.hunger)
+
+	# --- equip station-crafted gear from stock ------------------------------------------------------
+	s3.stock["machete"] = 1
+	var base_dmg: float = s3.melee_damage()
+	var eqr = s3.equip_from_stock("machete")
+	ok(bool(eqr.ok) and int(s3.stock.get("machete", 0)) == 0, "machete taken from stock and equipped")
+	ok(s3.melee_damage() > base_dmg, "equipped machete raises melee damage (%.0f -> %.0f)" % [base_dmg, s3.melee_damage()])
+
+	# --- traps hurt raiders --------------------------------------------------------------------------
+	rs.unlock(&"masonry")
+	rs.unlock(&"fortification")
+	s3.stock["wood"] = 100
+	s3.try_build("spike_trap", spots[2].x, spots[2].y)
+	var traps: Array = s3.buildings.filter(func(b): return b.kind == "spike_trap")
+	ok(traps.size() == 1 and int(traps[0].uses) == 3, "spike trap placed with 3 uses")
+	var raider = GameData.make_raider(spots[2].x + 0.5, spots[2].y + 0.5, 1)
+	s3.enemies.append(raider)
+	var hp0: float = raider.hp
+	s3._update_enemies(0.1)
+	ok(raider.hp < hp0 or raider.dead, "raider standing on the trap took trap damage")
+	ok(s3.buildings.filter(func(b): return b.kind == "spike_trap" and int(b.uses) == 2).size() == 1 or s3.buildings.filter(func(b): return b.kind == "spike_trap").is_empty(), "trap consumed one use")
+
+	# --- worldgen scatters the new catalogue nodes ---------------------------------------------------
+	var m := WorldGen.generate_map(50.4501, 30.5234, 56)
+	var kinds := {}
+	for cell in m.nodes:
+		kinds[m.nodes[cell].kind] = int(kinds.get(m.nodes[cell].kind, 0)) + 1
+	var new_kinds := 0
+	for k in ["iron_vein", "copper_vein", "coal_seam", "fiber_plant", "clay_pit", "herb_patch", "sand_pit"]:
+		if kinds.has(k):
+			new_kinds += 1
+	ok(new_kinds >= 4, "Kyiv 56x56 scatters 4+ new node kinds (got %d)" % new_kinds)
+	var m2 := WorldGen.generate_map(50.4501, 30.5234, 56)
+	ok(str(m.nodes) == str(m2.nodes), "catalogue node scatter is deterministic per coordinate")
+	# gathering a new node yields its catalogue resource through the SAME gather loop
+	ok(String(GameData.NODEINFO["iron_vein"].res) == "iron_ore", "iron vein yields iron ore via NODEINFO")

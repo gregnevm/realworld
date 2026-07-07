@@ -33,6 +33,10 @@ var capsule: Dictionary = {}
 var invites: Array = []
 var social = null                 # optional social graph (Social.new_graph); null in headless unit tests
 
+# Batch 7: the session's ResearchState (kernel). Null in headless unit tests -> only ungated
+# buildings are placeable, exactly like Production.can_make's null-research contract.
+var research = null
+
 var astar: AStarGrid2D            # terrain + blocking buildings (player)
 var astar_terrain: AStarGrid2D    # terrain only (raiders smash walls)
 
@@ -301,6 +305,9 @@ func _flash(text: String) -> void:
 func _place_building(kind: String, x: int, y: int, hp: float):
 	var def = GameData.BUILDINGS[kind]
 	var b := {"kind": kind, "x": x, "y": y, "hp": (def.hp if hp < 0 else hp), "cool": 0.0, "aim": 0.0}
+	var extra: Dictionary = def.get("extra", {})
+	if extra.has("trap_damage"):
+		b["uses"] = int(extra.get("uses", 1))
 	buildings.append(b)
 	bgrid[y * n + x] = b
 	if def.get("blocks", false):
@@ -324,11 +331,23 @@ func build_valid(x: int, y: int) -> bool:
 		return false
 	return true
 
+# Is this building kind unlocked under the current research state? Ungated kinds are always open.
+func building_unlocked(kind: String) -> bool:
+	var req := String(GameData.BUILDINGS.get(kind, {}).get("requires_research", ""))
+	if req == "":
+		return true
+	return research != null and research.is_unlocked(StringName(req))
+
 func try_build(kind: String, x: int, y: int) -> void:
 	if not build_valid(x, y):
 		_flash("Тут не можна будувати.")
 		return
 	var def = GameData.BUILDINGS[kind]
+	if not building_unlocked(kind):
+		var req := String(def.get("requires_research", ""))
+		var rdef = GameData.DB.get_def(StringName(req))
+		_flash("🔒 Потрібно дослідити: %s" % (String(rdef.field(&"label", req)) if rdef != null else req))
+		return
 	if not GameData.can_afford(stock, def.cost):
 		_flash("Бракує: " + GameData.cost_str(def.cost))
 		return
@@ -403,6 +422,22 @@ func equip(item_id: String) -> void:
 		return
 	var slot: String = GameData.ITEMS[item_id].slot
 	player.equipped[slot] = item_id
+
+# Batch 7: gear crafted on station bills lands in the stock; take one and equip it. The stock count
+# decrements — a rifle in hand is no longer a rifle in the warehouse.
+func equip_from_stock(item_id: String) -> Dictionary:
+	if not GameData.ITEMS.has(item_id):
+		return {"ok": false, "msg": "Невідомий предмет."}
+	if player.items.has(item_id):
+		equip(item_id)
+		return {"ok": true}
+	if int(stock.get(item_id, 0)) < 1:
+		return {"ok": false, "msg": "На складі немає: %s." % GameData.ITEMS[item_id].name}
+	stock[item_id] = int(stock[item_id]) - 1
+	player.items.append(item_id)
+	equip(item_id)
+	_log("⚔ Взято зі складу та екіпіровано: %s." % GameData.ITEMS[item_id].name, "good")
+	return {"ok": true}
 
 # ---------------- pathfinding ----------------
 func _nearest_free(grid: AStarGrid2D, c: Vector2i) -> Vector2i:
@@ -529,10 +564,8 @@ func _update_player(dt: float) -> void:
 	if p.hp <= 0 and not dead:
 		_on_death()
 		return
-	if p.hunger < 55 and p.eat_cd <= 0 and int(stock.get("food", 0)) >= 1 and _near_storage(2.2):
-		stock.food -= 1
-		p.hunger = min(100.0, p.hunger + 38.0)
-		p.eat_cd = 2.5
+	if p.hunger < 55 and p.eat_cd <= 0 and _near_storage(2.2):
+		_auto_eat(p)
 	if carry_total() > 0 and p.dep_cd <= 0 and _near_storage(1.8):
 		for k in p.carry.keys():
 			if p.carry[k] > 0:
@@ -568,6 +601,17 @@ func _update_player(dt: float) -> void:
 			_do_gather(dt, step)
 		"attack":
 			_do_attack(dt, step)
+
+# Batch 7: eat the BEST available food from the stock (meals > bread > berries) — cooking pays off.
+# Falls back cleanly when only legacy "food" exists. One unit per bite, same cooldown as before.
+func _auto_eat(p: Dictionary) -> void:
+	for f in GameData.FOODS:
+		var id: String = f.id
+		if int(stock.get(id, 0)) >= 1:
+			stock[id] = int(stock[id]) - 1
+			p.hunger = min(100.0, p.hunger + float(f.restore))
+			p.eat_cd = 2.5
+			return
 
 func _do_gather(dt: float, step: float) -> void:
 	var p = player
@@ -713,6 +757,9 @@ func _spawn_wave() -> void:
 func _update_enemies(dt: float) -> void:
 	var p = player
 	var center := base_center()
+	for b in buildings:
+		if b.has("uses"):
+			b.cool = max(0.0, float(b.cool) - dt)   # re-arm traps
 	for k in range(enemies.size() - 1, -1, -1):
 		var e = enemies[k]
 		e.atk_cd = max(0.0, e.atk_cd - dt)
@@ -727,6 +774,21 @@ func _update_enemies(dt: float) -> void:
 				if p.hp <= 0 and not dead:
 					_on_death()
 			continue
+		# Batch 7: traps — a raider standing on an armed trap cell takes its damage; uses tick down.
+		# tb.cool (re-armed once per second) stops one raider eating every use in consecutive frames.
+		var ti := int(e.py) * n + int(e.px)
+		if bgrid.has(ti):
+			var tb = bgrid[ti]
+			var textra: Dictionary = GameData.BUILDINGS[tb.kind].get("extra", {})
+			if textra.has("trap_damage") and int(tb.get("uses", 0)) > 0 and float(tb.cool) <= 0.0:
+				tb.uses = int(tb.uses) - 1
+				tb.cool = 1.0
+				_damage_enemy(e, float(textra.trap_damage))
+				_log("💥 %s спрацювала!" % GameData.BUILDINGS[tb.kind].name, "good")
+				if int(tb.uses) <= 0:
+					_remove_building(tb)
+				if e.dead or not enemies.has(e):
+					continue
 		var st = null
 		for b in buildings:
 			if b.kind == "storage" and _dist(e.px, e.py, b.x + 0.5, b.y + 0.5) < 1.35:

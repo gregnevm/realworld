@@ -38,6 +38,9 @@ var ui_t := 0.0
 var ui_shot := false
 var ui_stage := 0
 var _gameshot := false
+var cat_mode := false     # Batch 7: scripted craft/research panel verification
+var cat_stage := 0
+var cat_t := 0.0
 
 # OSM real-geography fetch
 var force_osm := false
@@ -68,6 +71,14 @@ var items_panel: PanelContainer
 var capsule_panel: PanelContainer
 var social_panel: PanelContainer
 var help_panel: PanelContainer
+var craft_panel: PanelContainer       # Batch 7: station bills (click a station building)
+var research_panel: PanelContainer    # Batch 7: the tech tree
+var craft_target = null               # the sim building whose bench the craft panel edits
+var build_cat := "structure"          # active palette category
+var cat_bar: HBoxContainer
+var cat_buttons := {}
+var _locked_sig := ""                 # research-lock signature; palette rebuilds when it changes
+var _panel_refresh_t := 0.0           # live refresh for craft/research panels
 var spawn_status: Label
 var gps_lat_edit: LineEdit
 var gps_lon_edit: LineEdit
@@ -120,6 +131,9 @@ func _ready() -> void:
 		get_tree().quit()
 	elif "uishot" in uargs:
 		ui_mode = true
+		_start_game(50.4501, 30.5234, "Київ")
+	elif "catshot" in uargs:
+		cat_mode = true
 		_start_game(50.4501, 30.5234, "Київ")
 	elif "gameshot" in uargs:
 		auto_mode = true
@@ -230,7 +244,7 @@ func _build_spawn_screen() -> void:
 	box.add_child(demo)
 
 	var hint := Label.new()
-	hint.text = "Керування: ЛКМ — іти/добувати/атакувати · ПКМ — розібрати будівлю · колесо — зум · WASD · 1–7 будувати · M логістика · I спорядження · C капсула · F соціальне · H довідка · Space пауза"
+	hint.text = "Керування: ЛКМ — іти/добувати/атакувати · ЛКМ по станції — виробництво · ПКМ — розібрати · колесо — зум · WASD · Tab категорії · 1–9 будувати · R дослідження · M логістика · I спорядження · C капсула · F соціальне · H довідка · Space пауза"
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.modulate = Color.html(C_DIM)
 	box.add_child(hint)
@@ -341,6 +355,7 @@ func _build_hud() -> void:
 	hud.add_child(toolbar)
 	_tool_btn("🗺 Логістика", func(): _toggle_only(world_panel))
 	_tool_btn("🛠 Спорядження", func(): _toggle_only(items_panel))
+	_tool_btn("🔬 Дослідження", func(): _toggle_only(research_panel))
 	_tool_btn("🧭 Капсула", func(): _toggle_only(capsule_panel))
 	_tool_btn("🛡 Соціальне", func(): _toggle_only(social_panel))
 	_tool_btn("❔ Довідка", func(): _toggle_only(help_panel))
@@ -369,7 +384,25 @@ func _build_hud() -> void:
 	log_label = _rich(112)
 	log_wrap.add_child(log_label)
 
-	# bottom-center: build bar — full-width strip, buttons auto-centered
+	# bottom-center: build bar — full-width strip, buttons auto-centered. Batch 7: a category strip
+	# sits above it (Tab cycles); the bar shows the ACTIVE category's buildings from the catalogue.
+	cat_bar = HBoxContainer.new()
+	cat_bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	cat_bar.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	cat_bar.offset_top = -62
+	cat_bar.offset_bottom = -62
+	cat_bar.alignment = BoxContainer.ALIGNMENT_CENTER
+	cat_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cat_bar.add_theme_constant_override("separation", 4)
+	hud.add_child(cat_bar)
+	for cinfo in GameData.BUILD_CATS:
+		var cb := Button.new()
+		cb.text = "%s %s" % [cinfo.icon, cinfo.label]
+		cb.custom_minimum_size = Vector2(0, 24)
+		cb.toggle_mode = true
+		cb.pressed.connect(_select_cat.bind(String(cinfo.id)))
+		cat_bar.add_child(cb)
+		cat_buttons[String(cinfo.id)] = cb
 	build_bar = HBoxContainer.new()
 	build_bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	build_bar.grow_vertical = Control.GROW_DIRECTION_BEGIN
@@ -379,23 +412,51 @@ func _build_hud() -> void:
 	build_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	build_bar.add_theme_constant_override("separation", 4)
 	hud.add_child(build_bar)
-	var idx := 1
-	for key in GameData.BUILD_ORDER:
-		var def = GameData.BUILDINGS[key]
-		var btn := Button.new()
-		btn.text = "%d %s\n%s" % [idx, def.name, GameData.cost_str(def.cost)]
-		btn.tooltip_text = _build_tooltip(key)
-		btn.custom_minimum_size = Vector2(80, 46)
-		btn.pressed.connect(_select_build.bind(key))
-		build_bar.add_child(btn)
-		build_buttons[key] = btn
-		idx += 1
+	_rebuild_build_bar()
 
 	world_panel = _mk_modal(Vector2(-190, -160), Vector2(380, 0))
 	items_panel = _mk_modal(Vector2(-240, -200), Vector2(480, 0))
 	capsule_panel = _mk_modal(Vector2(-250, -230), Vector2(500, 0))
 	social_panel = _mk_modal(Vector2(-260, -220), Vector2(520, 0))
 	help_panel = _mk_modal(Vector2(-260, -230), Vector2(520, 0))
+	craft_panel = _mk_modal(Vector2(-250, -220), Vector2(500, 0))
+	research_panel = _mk_modal(Vector2(-260, -240), Vector2(520, 0))
+
+# --- Batch 7: category palette -------------------------------------------------------------------
+func _select_cat(cat: String) -> void:
+	build_cat = cat
+	view.selected_build = ""
+	_rebuild_build_bar()
+
+func _rebuild_build_bar() -> void:
+	for c in build_bar.get_children():
+		build_bar.remove_child(c)
+		c.queue_free()
+	build_buttons = {}
+	for cid in cat_buttons:
+		cat_buttons[cid].button_pressed = (cid == build_cat)
+	var idx := 1
+	for key in GameData.buildings_in_cat(build_cat):
+		var def = GameData.BUILDINGS[key]
+		var unlocked: bool = sim == null or sim.building_unlocked(key)
+		var btn := Button.new()
+		var num := ("%d " % idx) if idx <= 9 else ""
+		btn.text = "%s%s%s\n%s" % [num, ("" if unlocked else "🔒"), def.name, GameData.cost_str(def.cost)]
+		btn.tooltip_text = _build_tooltip(key)
+		btn.custom_minimum_size = Vector2(76, 46)
+		btn.pressed.connect(_select_build.bind(key))
+		build_bar.add_child(btn)
+		build_buttons[key] = btn
+		idx += 1
+
+# Signature of the current lock/afford state; the palette rebuilds only when research flips a lock.
+func _locks_signature() -> String:
+	if sim == null:
+		return ""
+	var bits := PackedStringArray()
+	for key in GameData.buildings_in_cat(build_cat):
+		bits.append("1" if sim.building_unlocked(key) else "0")
+	return "".join(bits)
 
 func _mk_modal(offset: Vector2, minsize: Vector2) -> PanelContainer:
 	var p := PanelContainer.new()
@@ -449,9 +510,23 @@ func _build_tooltip(key: String) -> String:
 		t += "\n+%d до складу" % int(def.capacity)
 	if key == "turret":
 		t += "\nдальність %.1f · DPS %d" % [def.range, int(def.dps)]
-	if key == "workbench":
-		t += "\nавто-крафт дощок"
+	if def.has("station"):
+		t += "\nстанція: клікни по будівлі — черга виробництва"
+	var extra: Dictionary = def.get("extra", {})
+	if extra.has("trap_damage"):
+		t += "\nпастка: %d урону · %d спрацювань" % [int(extra.trap_damage), int(extra.get("uses", 1))]
+	if bool(extra.get("research", false)):
+		t += "\nвідкриває панель Дослідження (R)"
+	var req := String(def.get("requires_research", ""))
+	if req != "":
+		t += "\n🔒 дослідження: %s" % _research_label(req)
 	return t
+
+func _research_label(id: String) -> String:
+	if session == null:
+		return id
+	var d = session.kernel.db.get_def(StringName(id))
+	return String(d.field(&"label", id)) if d != null else id
 
 # ---------------- death screen ----------------
 func _build_death_screen() -> void:
@@ -531,16 +606,68 @@ func _process(dt: float) -> void:
 	var sdt := dt * speed
 	if sdt > 0 and not sim.dead:
 		sim.update(sdt)
+		session.kernel_tick(sdt / float(sim.time.day_len))   # Batch 7: benches/research run in game-days
 	cam.global_position = Vector2(sim.player.px * TILE, sim.player.py * TILE)
 	view.hover = _mouse_tile()
 	view.queue_redraw()
 	_update_hud()
+	# live refresh for the bill/tech panels (progress moves while they're open)
+	_panel_refresh_t += dt
+	if _panel_refresh_t >= 0.5:
+		_panel_refresh_t = 0.0
+		if craft_panel != null and craft_panel.visible:
+			_build_craft_panel()
+		if research_panel != null and research_panel.visible:
+			_build_research_panel()
 	if not auto_mode:
 		death_layer.visible = sim.dead
 	if auto_mode:
 		_auto_step(dt)
 	if ui_mode:
 		_ui_step(dt)
+	if cat_mode:
+		_cat_step(dt)
+
+# --- Batch 7 dev verification: play the catalogue loop and shoot the craft + research panels ---
+func _cat_step(dt: float) -> void:
+	cat_t += dt
+	if cat_stage == 0 and cat_t > 0.2:
+		cat_stage = 1
+		sim.stock.wood = 200; sim.stock.stone = 200; sim.stock["clay"] = 60; sim.stock["fiber"] = 30
+		session.kernel.research.unlock(&"pottery")
+		session.kernel.research.unlock(&"agriculture")
+		var c: Vector2i = sim.base_center()
+		var spots := []
+		for dy in range(-3, 4):
+			for dx in range(-3, 4):
+				if spots.size() < 3 and sim.build_valid(c.x + dx, c.y + dy):
+					spots.append(Vector2i(c.x + dx, c.y + dy))
+		sim.try_build("kiln", spots[0].x, spots[0].y)
+		sim.try_build("research_bench", spots[1].x, spots[1].y)
+		sim.try_build("farm_plot", spots[2].x, spots[2].y)
+		session.kernel_tick(0.001)
+		for b in sim.buildings:
+			if b.kind == "kiln":
+				craft_target = b
+				session.add_bill(b, &"r_brick", &"until", 10)
+				session.add_bill(b, &"r_charcoal", &"count", 3)
+		session.kernel.research.try_start(&"metallurgy")
+		sim.time.frac = 0.5
+		speed = 3.0
+	elif cat_stage == 1 and cat_t > 1.6:
+		cat_stage = 2
+		_toggle_only(craft_panel)
+	elif cat_stage == 2 and cat_t > 2.4:
+		cat_stage = 3
+		await _save_shot("O:/realworld/godot/craft_shot.png")
+	elif cat_stage == 3 and cat_t > 2.7:
+		cat_stage = 4
+		_toggle_only(research_panel)
+	elif cat_stage == 4 and cat_t > 3.4:
+		cat_stage = 5
+		await _save_shot("O:/realworld/godot/research_shot.png")
+		print("CATSHOT bricks=%d charcoal=%d" % [int(sim.stock.get("brick", 0)), int(sim.stock.get("charcoal", 0))])
+		get_tree().quit()
 
 func _ui_step(dt: float) -> void:
 	ui_t += dt
@@ -599,8 +726,14 @@ func _update_hud() -> void:
 	banner_label.text = sim.banner
 	flash_label.text = sim.flash_msg if sim.flash_t > 0 else ""
 	log_label.text = _hud_log()
+	var sig := _locks_signature()
+	if sig != _locked_sig:
+		_locked_sig = sig
+		_rebuild_build_bar()   # a completed research just unlocked something — refresh the 🔒 marks
 	for key in build_buttons:
-		build_buttons[key].modulate = Color(1, 1, 1) if GameData.can_afford(sim.stock, GameData.BUILDINGS[key].cost) else Color(1, 1, 1, 0.45)
+		var afford: bool = GameData.can_afford(sim.stock, GameData.BUILDINGS[key].cost)
+		var unlocked: bool = sim.building_unlocked(key)
+		build_buttons[key].modulate = Color(1, 1, 1) if (afford and unlocked) else Color(1, 1, 1, 0.45 if unlocked else 0.3)
 		build_buttons[key].button_pressed = (view.selected_build == key)
 	night_rect.color.a = sim.daylight()
 
@@ -610,12 +743,34 @@ func _hud_info(p) -> String:
 	s += "Голод %s\n" % _bbar(p.hunger)
 	s += "Відп. %s\n" % _bbar(p.rest)
 	s += "[color=#%s]Несе %d/%d · 🪓 %s · ⚔ %s[/color]" % [C_DIM, sim.carry_total(), int(p.carry_cap), _eq_name("tool"), _eq_name("weapon")]
+	if session != null and session.kernel.research.active != &"":
+		var rs = session.kernel.research
+		var d = session.kernel.db.get_def(rs.active)
+		var cost: float = d.cost() if d != null else 1.0
+		var mark := "" if session.has_research_bench() else " ⚠стіл!"
+		s += "\n[color=#%s]🔬 %s %d%%%s[/color]" % [C_ACCENT, _research_label(String(rs.active)),
+			int(100.0 * clampf(rs.progress / maxf(0.01, cost), 0.0, 1.0)), mark]
 	return s
 
 func _hud_stock() -> String:
 	var s := "[b]Склад %d/%d[/b]\n" % [sim.stock_total(), sim.storage_cap()]
 	for k in GameData.RES_ORDER:
 		s += "%s %s  %d\n" % [GameData.RES[k].icon, GameData.RES[k].label, int(sim.stock.get(k, 0))]
+	# Batch 7: every non-zero catalogue resource joins the list (capped; the долгий хвіст згорнуто)
+	var extra := 0
+	var more := 0
+	for k in GameData.RES_ALL_ORDER:
+		if GameData.RES.has(k):
+			continue
+		if int(sim.stock.get(k, 0)) <= 0:
+			continue
+		if extra < 12:
+			s += "%s %s  %d\n" % [GameData.res_icon(k), GameData.res_label(k), int(sim.stock.get(k, 0))]
+			extra += 1
+		else:
+			more += 1
+	if more > 0:
+		s += "[color=#%s]… ще %d видів[/color]\n" % [C_DIM, more]
 	return s
 
 func _hud_log() -> String:
@@ -668,16 +823,23 @@ func _unhandled_input(event: InputEvent) -> void:
 			_zoom_by(1.0 / 1.1)
 	elif event is InputEventKey and event.pressed and not event.echo:
 		var k := (event as InputEventKey).keycode
-		if k >= KEY_1 and k <= KEY_7:
+		if k >= KEY_1 and k <= KEY_9:
 			var bi: int = k - KEY_1
-			if bi < GameData.BUILD_ORDER.size():
-				_select_build(GameData.BUILD_ORDER[bi])
+			var keys: Array = GameData.buildings_in_cat(build_cat)
+			if bi < keys.size():
+				_select_build(keys[bi])
+		elif k == KEY_TAB:
+			# cycle the build category strip
+			var ids := GameData.BUILD_CATS.map(func(c): return String(c.id))
+			_select_cat(ids[(ids.find(build_cat) + 1) % ids.size()])
 		elif k == KEY_SPACE:
 			_cycle_speed()
 		elif k == KEY_M:
 			_toggle_only(world_panel)
 		elif k == KEY_I:
 			_toggle_only(items_panel)
+		elif k == KEY_R:
+			_toggle_only(research_panel)
 		elif k == KEY_C:
 			_toggle_only(capsule_panel)
 		elif k == KEY_F:
@@ -690,7 +852,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_close_all_panels()
 
 func _pointer_over_ui() -> bool:
-	for pnl in [world_panel, items_panel, capsule_panel, social_panel, help_panel]:
+	for pnl in [world_panel, items_panel, capsule_panel, social_panel, help_panel, craft_panel, research_panel]:
 		if pnl != null and pnl.visible and pnl.get_global_rect().has_point(get_viewport().get_mouse_position()):
 			return true
 	return false
@@ -711,6 +873,13 @@ func _handle_click(t: Vector2i) -> void:
 	if best != null:
 		sim.order_attack(best)
 		return
+	# Batch 7: a click on a STATION building opens its bill queue (the craft loop's front door)
+	if sim._in(t.x, t.y) and sim.bgrid.has(t.y * sim.n + t.x):
+		var b = sim.bgrid[t.y * sim.n + t.x]
+		if GameData.BUILDINGS[b.kind].has("station"):
+			craft_target = b
+			_toggle_only(craft_panel)
+			return
 	if sim._in(t.x, t.y) and sim.map.nodes.has(t.y * sim.n + t.x):
 		sim.order_gather(t.x, t.y)
 	else:
@@ -731,7 +900,7 @@ func _cycle_speed() -> void:
 
 # ---------------- panels ----------------
 func _close_all_panels() -> void:
-	for pnl in [world_panel, items_panel, capsule_panel, social_panel, help_panel]:
+	for pnl in [world_panel, items_panel, capsule_panel, social_panel, help_panel, craft_panel, research_panel]:
 		if pnl != null:
 			pnl.visible = false
 
@@ -751,6 +920,10 @@ func _toggle_only(target: PanelContainer) -> void:
 		_build_social_panel()
 	elif target == help_panel:
 		_build_help_panel()
+	elif target == craft_panel:
+		_build_craft_panel()
+	elif target == research_panel:
+		_build_research_panel()
 
 func _clear(node: Node) -> VBoxContainer:
 	for c in node.get_children():
@@ -844,7 +1017,37 @@ func _build_items_panel() -> void:
 			btn.text = "Скрафтити: %s [%s] — %s · %s" % [it.name, it.slot, eff, GameData.cost_str(it.recipe)]
 			btn.pressed.connect(_craft_item.bind(id))
 		vb.add_child(btn)
+	# Batch 7: gear crafted on station bills sits in the STOCK — take & equip it from here.
+	var stock_gear := []
+	for id in GameData.ITEMS:
+		if bool(GameData.ITEMS[id].get("from_stock", false)) and int(sim.stock.get(id, 0)) > 0:
+			stock_gear.append(id)
+	var owned_gear := []
+	for id in sim.player.items:
+		if bool(GameData.ITEMS.get(id, {}).get("from_stock", false)):
+			owned_gear.append(id)
+	if not stock_gear.is_empty() or not owned_gear.is_empty():
+		vb.add_child(_section("Зі складу (крафт на верстатах)"))
+	for id in stock_gear:
+		var it2 = GameData.ITEMS[id]
+		var eff2 := ("×%.1f видобуток" % it2.gather_mult) if it2.slot == "tool" else ("+%d урон" % int(it2.dmg_bonus))
+		var btn2 := Button.new()
+		btn2.text = "Взяти й екіпірувати: %s [%s] — %s (на складі %d)" % [it2.name, it2.slot, eff2, int(sim.stock.get(id, 0))]
+		btn2.pressed.connect(_equip_stock_item.bind(id))
+		vb.add_child(btn2)
+	for id in owned_gear:
+		var it3 = GameData.ITEMS[id]
+		var btn3 := Button.new()
+		btn3.text = "Екіпірувати: %s [%s]" % [it3.name, it3.slot]
+		btn3.pressed.connect(_equip_item.bind(id))
+		vb.add_child(btn3)
 	_close_button(vb, items_panel)
+
+func _equip_stock_item(id: String) -> void:
+	var res = sim.equip_from_stock(id)
+	if not res.ok:
+		sim._flash(res.msg)
+	_build_items_panel()
 
 func _short_hash(h: String) -> String:
 	return h.substr(0, 8) if h.length() >= 8 else "—"
@@ -1006,6 +1209,146 @@ func _gen_invite(i: int) -> void:
 	sim.add_invite(Social.friend_invite(social, i, sim.capsule.radius_km))
 	_toggle_only(capsule_panel)
 
+# --- Batch 7: craft panel — the bill queue of the clicked station building ---
+func _build_craft_panel() -> void:
+	if craft_target == null or not sim.buildings.has(craft_target):
+		craft_panel.visible = false
+		return
+	var vb := _clear(craft_panel)
+	var def = GameData.BUILDINGS[craft_target.kind]
+	var st := String(def.get("station", ""))
+	_panel_title(vb, "%s %s — виробництво" % [String(def.get("icon", "🛠")), def.name])
+	var bench = session.bench_for(craft_target)
+	# --- current queue -----------------------------------------------------------------------
+	var wb = bench.get_comp(session.Production.CompWorkbench) if bench != null else null
+	if wb != null and not wb.bills.is_empty():
+		vb.add_child(_section("Черга"))
+		for b in wb.bills:
+			var row := HBoxContainer.new()
+			var recipe = session.kernel.db.get_def(b.recipe_id)
+			var pct := 0
+			var head := String(b.recipe_id)
+			if recipe != null:
+				if recipe.work_days() > 0.0:
+					pct = int(100.0 * clampf(b.progress / recipe.work_days(), 0.0, 1.0))
+				var out_id := String(recipe.output().get("id", ""))
+				head = "%s %s" % [GameData.res_icon(out_id), GameData.res_label(out_id)]
+			var tail := ("до %d" % b.target) if b.mode == &"until" else ("%d/%d" % [b.done, b.target])
+			var lbl := Label.new()
+			lbl.text = "%s · %s · %d%%%s" % [head, tail, pct, (" · ⛔ бракує ресурсів" if b.stalled else "")]
+			lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			lbl.modulate = Color.html(C_WARN) if b.stalled else Color.html(C_DIM)
+			row.add_child(lbl)
+			var del := Button.new()
+			del.text = "✕"
+			del.pressed.connect(func():
+				wb.bills.erase(b)
+				_build_craft_panel())
+			row.add_child(del)
+			vb.add_child(row)
+	# --- recipes at this station ----------------------------------------------------------------
+	vb.add_child(_section("Рецепти"))
+	var shown := 0
+	for r in session.Catalog.recipes_at_station(session.kernel.db, StringName(st)):
+		if shown >= 9:
+			break
+		shown += 1
+		var out: Dictionary = r.output()
+		var out_id := String(out.get("id", ""))
+		var unlocked: bool = session.Production.can_make(r, session.kernel.research)
+		var ins := []
+		for k in r.inputs():
+			ins.append("%s%d" % [GameData.res_icon(String(k)), int(r.inputs()[k])])
+		var line := "%s %s ×%d %s %s" % [GameData.res_icon(out_id), GameData.res_label(out_id),
+			int(out.get("count", 1)), ("← " + " ".join(ins)) if not ins.is_empty() else "(росте само)",
+			("" if unlocked else "· 🔒 " + _research_label(String(r.requires_research())))]
+		var row2 := HBoxContainer.new()
+		var lbl2 := Label.new()
+		lbl2.text = line
+		lbl2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lbl2.modulate = Color(1, 1, 1) if unlocked else Color.html(C_DIM)
+		row2.add_child(lbl2)
+		var b1 := Button.new()
+		b1.text = "＋1"
+		b1.disabled = not unlocked
+		b1.pressed.connect(_add_bill.bind(r.id, &"count", 1))
+		row2.add_child(b1)
+		var b5 := Button.new()
+		b5.text = "до 10"
+		b5.disabled = not unlocked
+		b5.pressed.connect(_add_bill.bind(r.id, &"until", 10))
+		row2.add_child(b5)
+		vb.add_child(row2)
+	var hint := Label.new()
+	hint.text = "＋1 — разове замовлення · «до 10» — тримати запас. Верстат працює сам, ресурси зі складу."
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.modulate = Color.html(C_DIM)
+	hint.add_theme_font_size_override("font_size", 12)
+	vb.add_child(hint)
+	_close_button(vb, craft_panel)
+
+func _add_bill(recipe_id: StringName, mode: StringName, target: int) -> void:
+	var res = session.add_bill(craft_target, recipe_id, mode, target)
+	if not res.ok:
+		sim._flash(res.msg)
+	_build_craft_panel()
+
+# --- Batch 7: research panel — the tech tree in four eras ---
+func _build_research_panel() -> void:
+	var vb := _clear(research_panel)
+	_panel_title(vb, "🔬 Дослідження")
+	var rs = session.kernel.research
+	var db = session.kernel.db
+	if not session.has_research_bench():
+		var warn := Label.new()
+		warn.text = "⚠ Побудуй «Дослідницький стіл» (Виробництво) — без нього прогрес стоїть."
+		warn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		warn.modulate = Color.html(C_WARN)
+		vb.add_child(warn)
+	var head := Label.new()
+	if rs.active != &"":
+		var d = db.get_def(rs.active)
+		var cost: float = d.cost() if d != null else 1.0
+		head.text = "Активний: %s %s — %d%%" % [String(d.field(&"icon", "")) if d != null else "",
+			_research_label(String(rs.active)), int(100.0 * clampf(rs.progress / maxf(0.01, cost), 0.0, 1.0))]
+		head.modulate = Color.html(C_GOOD)
+	else:
+		head.text = "Активного проєкту немає — обери нижче."
+		head.modulate = Color.html(C_DIM)
+	vb.add_child(head)
+	var done := Label.new()
+	done.text = "Відкрито: %d/%d" % [rs.unlocked.size(), db.all_of_type(&"research").size()]
+	done.modulate = Color.html(C_DIM)
+	vb.add_child(done)
+	var tier_names := {1: "Ера I · Виживання", 2: "Ера II · Матеріали", 3: "Ера III · Індустрія", 4: "Ера IV · Електрика"}
+	var tiers: Dictionary = session.Catalog.research_tiers(db)
+	for t in [1, 2, 3, 4]:
+		var startable := []
+		for r in tiers.get(t, []):
+			if rs.can_start(r.id) and r.id != rs.active:
+				startable.append(r)
+		if startable.is_empty():
+			continue
+		vb.add_child(_section(String(tier_names.get(t, "Ера %d" % t))))
+		var grid := GridContainer.new()
+		grid.columns = 2
+		grid.add_theme_constant_override("h_separation", 6)
+		grid.add_theme_constant_override("v_separation", 4)
+		vb.add_child(grid)
+		for r2 in startable:
+			var btn := Button.new()
+			btn.text = "%s %s (%.1fд)" % [String(r2.field(&"icon", "")), String(r2.field(&"label", r2.id)), r2.cost()]
+			btn.pressed.connect(_start_research.bind(r2.id))
+			grid.add_child(btn)
+	_close_button(vb, research_panel)
+
+func _start_research(id: StringName) -> void:
+	if session.kernel.research.try_start(id):
+		sim._log("🔬 Дослідження розпочато: %s" % _research_label(String(id)), "good")
+	else:
+		sim._flash("Не можна почати це дослідження.")
+	_build_research_panel()
+
 # --- help / controls ---
 func _build_help_panel() -> void:
 	var vb := _clear(help_panel)
@@ -1017,11 +1360,20 @@ func _build_help_panel() -> void:
 	body.add_theme_font_size_override("normal_font_size", 14)
 	body.text = "\n".join([
 		"[b][color=#%s]Керування[/color][/b]" % C_ACCENT,
-		"• [b]ЛКМ[/b] — іти - по 🌲/🪨/🫐/руїні — добувати - по рейдеру — атакувати",
+		"• [b]ЛКМ[/b] — іти - по ноді (🌲🪨🫐⚙ + жили/глинища/травники) — добувати - по рейдеру — атакувати",
+		"• [b]ЛКМ по станції[/b] (верстак/піч/кузня/грядка…) — черга виробництва (білли)",
 		"• [b]WASD[/b] — прямий рух - [b]ПКМ[/b] — зняти вибір / [b]розібрати[/b] свою будівлю",
-		"• [b]1–7[/b] — обрати будівлю - розмісти [b]ЛКМ[/b] (зелено=можна)",
+		"• [b]Tab[/b] — категорія будівництва - [b]1–9[/b] — будівля - розмісти [b]ЛКМ[/b] (зелено=можна)",
 		"• [b]Колесо миші[/b] — зум - [b]Space[/b] — пауза/швидкість",
-		"• [b]M[/b] логістика - [b]I[/b] спорядження - [b]C[/b] капсула - [b]F[/b] соціальне - [b]H[/b] довідка - [b]Esc[/b] закрити",
+		"• [b]M[/b] логістика - [b]I[/b] спорядження - [b]R[/b] дослідження - [b]C[/b] капсула - [b]F[/b] соціальне - [b]H[/b] довідка - [b]Esc[/b] закрити",
+		"",
+		"[b][color=#%s]Виробничий цикл (Batch 7)[/color][/b]" % C_ACCENT,
+		"• Добувай нові ресурси: [b]жили[/b] (залізо/мідь/вугілля) на скелях, [b]глинища/піщаники/волокно/трави[/b] на луках.",
+		"• Побудуй [b]Дослідницький стіл[/b] і відкривай технології ([b]R[/b]): гончарство → металургія → ковальство → …",
+		"• Станції ([b]піч, плавильня, кузня, ткацтво, кухня…[/b]) виконують [b]білли[/b] самі — клікни по станції та замов.",
+		"• Ланцюги: глина→цегла - руда+вугілля→залізо→сталь - волокно→тканина - трави→ліки - зерно→борошно→хліб.",
+		"• [b]Грядка[/b] — білли «що росте»; [b]страви[/b] з кухні ситніші за ягоди; [b]пастки[/b] ранять рейдерів.",
+		"• Зброя/інструменти зі станцій потрапляють на склад — екіпіруй через [b]I → Зі складу[/b].",
 		"",
 		"[b][color=#%s]Світ = координати[/color][/b]" % C_ACCENT,
 		"• Карта, ресурси й соціальний ростер — [b]чиста функція координат[/b] (seed). Ті самі координати завжди дають той самий світ, для всіх гравців.",

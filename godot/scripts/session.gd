@@ -12,6 +12,8 @@ const Social = preload("res://scripts/social.gd")
 const Persistence = preload("res://scripts/persistence.gd")
 const Catalog = preload("res://scripts/kernel/catalog.gd")
 const Production = preload("res://scripts/kernel/production.gd")
+const Things = preload("res://scripts/kernel/things.gd")
+const GameData = preload("res://scripts/data.gd")
 const MAP_N := 56
 const STORE_PATH := "user://world.json"
 
@@ -41,7 +43,9 @@ func _init_kernel() -> void:
 	_kernel_reg = Production.build_production()
 
 # Advance the kernel world by `dday` game-days. Seeds the kernel rng from the region seed on first use
-# (deterministic quality rolls), advances the active research project, then ticks the system registry.
+# (deterministic quality rolls), syncs benches with the sim's station buildings, advances the active
+# research project (needs a built research bench), ticks the systems, then drains spawned Things
+# (their stock tally IS the playable inventory; per-item quality becomes a live surface later).
 func kernel_tick(dday: float) -> void:
 	if kernel.is_empty() or sim == null or dday <= 0.0:
 		return
@@ -50,13 +54,78 @@ func kernel_tick(dday: float) -> void:
 		var rng := RandomNumberGenerator.new()
 		rng.seed = sim.region_seed()
 		kernel["rng"] = rng
+	_sync_benches()
 	var research = kernel.research
 	var active_id: StringName = research.active
-	if active_id != &"" and research.advance(dday):
+	if active_id != &"" and has_research_bench() and research.advance(dday):
 		var d = kernel.db.get_def(active_id)
 		var label: String = String(d.field(&"label", active_id)) if d != null else String(active_id)
 		sim._log("🔬 Дослідження завершено: %s" % label, "good")
 	_kernel_reg.tick_all(kernel, {"dday": dday})
+	if not (kernel.spawn as Array).is_empty():
+		kernel.spawn.clear()
+
+# --- benches: one kernel workbench Thing per station building the sim has built ----------------------
+# Keyed "kind:x:y"; a demolished/destroyed building drops its bench (and its bill queue) next tick;
+# travelling to another region swaps sim.buildings, so foreign benches drop automatically too.
+func _sync_benches() -> void:
+	if not kernel.has("bench_keys"):
+		kernel["bench_keys"] = {}
+	var by_key: Dictionary = kernel.bench_keys
+	var live := {}
+	for b in sim.buildings:
+		var st := String(GameData.BUILDINGS.get(b.kind, {}).get("station", ""))
+		if st == "":
+			continue
+		var key := "%s:%d:%d" % [b.kind, int(b.x), int(b.y)]
+		live[key] = true
+		if by_key.has(key):
+			var wb0 = by_key[key].get_comp(Production.CompWorkbench)
+			if wb0 != null:
+				wb0.props["maker_level"] = float(sim.player.skills.get("gather", 0.0))
+			continue
+		var thing = Things.Thing.new(null)
+		thing.flags["building"] = StringName(str(b.kind))
+		thing.flags["bkey"] = key
+		thing.add_comp(Production.CompWorkbench.new({
+			"station": st, "maker_level": float(sim.player.skills.get("gather", 0.0))}))
+		kernel.things.append(thing)
+		by_key[key] = thing
+	for key in by_key.keys():
+		if not live.has(key):
+			var t = by_key[key]
+			t.destroyed = true
+			kernel.things.erase(t)
+			t.detach()
+			by_key.erase(key)
+
+func has_research_bench() -> bool:
+	if sim == null:
+		return false
+	for b in sim.buildings:
+		if bool(GameData.BUILDINGS.get(b.kind, {}).get("extra", {}).get("research", false)):
+			return true
+	return false
+
+# The kernel bench Thing for a sim building (null if it isn't a station or isn't synced yet).
+func bench_for(b) -> Variant:
+	if kernel.is_empty():
+		return null
+	_sync_benches()
+	return (kernel.bench_keys as Dictionary).get("%s:%d:%d" % [b.kind, int(b.x), int(b.y)], null)
+
+# UI seam: queue a bill on a station building. mode &"count"/&"until". Returns ok+msg for a flash.
+func add_bill(b, recipe_id: StringName, mode: StringName, target: int) -> Dictionary:
+	var bench = bench_for(b)
+	if bench == null:
+		return {"ok": false, "msg": "Це не верстат."}
+	var recipe = kernel.db.get_def(recipe_id)
+	if recipe == null:
+		return {"ok": false, "msg": "Невідомий рецепт."}
+	if not Production.can_make(recipe, kernel.research):
+		return {"ok": false, "msg": "🔒 Спершу дослідження."}
+	bench.get_comp(Production.CompWorkbench).add_bill(Production.Bill.new(recipe_id, mode, target))
+	return {"ok": true}
 
 func start(lat: float, lon: float, place_name: String) -> void:
 	_init_kernel()
@@ -64,6 +133,7 @@ func start(lat: float, lon: float, place_name: String) -> void:
 	m["place_name"] = place_name
 	sim = Sim.new()
 	sim.new_game(m)
+	sim.research = kernel.research   # Batch 7: build gating reads the account research state
 	store = Persistence.store_new()
 	social = Social.new_graph("Ти", WorldGen.hash_seed(lat, lon), lat, lon)
 	sim.social = social

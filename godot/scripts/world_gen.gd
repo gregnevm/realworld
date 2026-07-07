@@ -143,6 +143,7 @@ static func generate_map(lat: float, lon: float, n: int = 56) -> Dictionary:
 			elif t == RUIN and rng.randf() < 0.5:
 				nodes[i] = {"kind": "scrap", "amount": 8 + int(rng.randf() * 10)}
 
+	_scatter_catalog_nodes(tiles, nodes, n, seed_val)
 	var spawn := _pick_spawn(tiles, nodes, n)
 	return {
 		"n": n, "tiles": tiles, "nodes": nodes, "spawn": spawn, "lat": lat, "lon": lon,
@@ -150,6 +151,44 @@ static func generate_map(lat: float, lon: float, n: int = 56) -> Dictionary:
 		"biome": "бореальний / сніжний" if snowy else ("посушливий" if arid else "помірний"),
 		"urban": urban,
 	}
+
+# Batch 7: scatter the catalogue's NEW gather nodes (ore veins, clay/sand pits, fiber, herbs) in a
+# SECOND pass with a derived seed. The legacy rng stream above stays byte-identical (golden vector +
+# existing worlds keep their tree/rock/bush/scrap layout); the new layer is still a pure function of
+# the coordinate. Order of checks per tile is fixed -> deterministic.
+static func _scatter_catalog_nodes(tiles: PackedByteArray, nodes: Dictionary, n: int, seed_val: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_val ^ 0x5DEECE66
+	for y in n:
+		for x in n:
+			var i := y * n + x
+			var roll := rng.randf()           # exactly ONE draw per tile keeps the stream stable
+			if nodes.has(i):
+				continue
+			match tiles[i]:
+				ROCK:
+					if roll < 0.10:
+						nodes[i] = {"kind": "iron_vein", "amount": 8 + int(roll * 40.0)}
+					elif roll < 0.17:
+						nodes[i] = {"kind": "copper_vein", "amount": 6 + int(roll * 30.0)}
+					elif roll < 0.25:
+						nodes[i] = {"kind": "coal_seam", "amount": 8 + int(roll * 30.0)}
+				GRASS:
+					if roll < 0.020:
+						nodes[i] = {"kind": "fiber_plant", "amount": 6 + int(roll * 250.0)}
+					elif roll < 0.030:
+						nodes[i] = {"kind": "clay_pit", "amount": 8 + int(roll * 150.0)}
+					elif roll < 0.042:
+						nodes[i] = {"kind": "herb_patch", "amount": 5 + int(roll * 100.0)}
+				SOIL:
+					if roll < 0.06:
+						nodes[i] = {"kind": "clay_pit", "amount": 10 + int(roll * 60.0)}
+				SAND:
+					if roll < 0.10:
+						nodes[i] = {"kind": "sand_pit", "amount": 10 + int(roll * 60.0)}
+				FOREST:
+					if roll < 0.02:
+						nodes[i] = {"kind": "herb_patch", "amount": 4 + int(roll * 150.0)}
 
 static func _pick_spawn(tiles: PackedByteArray, nodes: Dictionary, n: int) -> Vector2i:
 	var c := n >> 1

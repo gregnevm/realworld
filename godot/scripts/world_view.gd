@@ -57,7 +57,7 @@ func _draw() -> void:
 		var gr := Rect2(hover.x * TILE + 1, hover.y * TILE + 1, TILE - 2, TILE - 2)
 		draw_rect(gr, col)
 		draw_rect(gr, Color.html("5fd38a") if okb else Color.html("ff6b6b"), false, 2.0)
-		var gl: String = {"wall": "#", "door": "D", "floor": ".", "storage": "S", "workbench": "W", "bed": "B", "turret": "T"}.get(selected_build, "?")
+		var gl: String = {"wall": "#", "door": "D", "floor": ".", "storage": "S", "workbench": "W", "bed": "B", "turret": "T"}.get(selected_build, String(GameData.BUILDINGS[selected_build].get("name", "?")).substr(0, 1))
 		draw_string(_font, Vector2(hover.x * TILE + TILE * 0.3, hover.y * TILE + TILE * 0.7), gl, HORIZONTAL_ALIGNMENT_LEFT, -1, int(TILE * 0.5), Color(1, 1, 1, 0.85))
 	for s in sim.shots:
 		draw_line(Vector2(s.x1 * TILE, s.y1 * TILE), Vector2(s.x2 * TILE, s.y2 * TILE), Color(1, 0.9, 0.47, clampf(s.t / 0.12, 0, 1)), 2.0)
@@ -81,6 +81,13 @@ func _draw_node(node, x: int, y: int) -> void:
 				draw_circle(c + Vector2((k - 1) * r * 0.4, (k % 2) * r * 0.2), r * 0.14, Color.html("d3506a"))
 		"scrap":
 			draw_rect(Rect2(c.x - r * 0.5, c.y - r * 0.2, r, r * 0.4), Color.html("86d0d6"))
+		_:
+			# Batch 7 catalogue nodes (ore veins, clay/sand pits, fiber, herbs): tinted disc from
+			# the node's own color so every new resource reads distinctly on the map.
+			var info: Dictionary = GameData.NODEINFO.get(node.kind, {})
+			var col := Color.html(String(info.get("color", "888888")))
+			draw_circle(c, r * 0.62, col)
+			draw_arc(c, r * 0.62, 0, TAU, 12, col.darkened(0.45), 1.6)
 
 func _draw_building(b) -> void:
 	var def = GameData.BUILDINGS[b.kind]
@@ -93,7 +100,7 @@ func _draw_building(b) -> void:
 			draw_rect(Rect2(p.x + 1, p.y + 1, TILE - 2, TILE - 2), Color.html("7d756a"))
 		_:
 			draw_rect(Rect2(p.x + 2, p.y + 2, TILE - 4, TILE - 4), Color(0.08, 0.10, 0.13, 0.7))
-			var letter: String = {"door": "D", "storage": "S", "workbench": "W", "bed": "B", "turret": "T"}.get(b.kind, "?")
+			var letter: String = {"door": "D", "storage": "S", "workbench": "W", "bed": "B", "turret": "T"}.get(b.kind, String(def.get("name", "?")).substr(0, 1))
 			draw_string(_font, c + Vector2(-TILE * 0.22, TILE * 0.22), letter, HORIZONTAL_ALIGNMENT_LEFT, -1, int(TILE * 0.6), Color.html("e7edf3"))
 			if b.kind == "turret":
 				draw_line(c, c + Vector2(cos(b.aim), sin(b.aim)) * TILE * 0.45, Color.html("2a2f36"), maxf(2.0, TILE * 0.12))

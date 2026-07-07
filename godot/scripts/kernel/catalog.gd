@@ -213,8 +213,8 @@ static func _buildings() -> Array:
 		{"id": "spike_trap",    "label": "Колюча пастка",   "icon": "📌", "cat": "defense", "cost": {"wood": 8}, "hp": 30.0, "work": 0.08, "blocks": false, "extra": {"trap_damage": 30.0, "uses": 3}, "requires_research": "fortification"},
 		{"id": "deadfall_trap", "label": "Пастка-давилка",  "icon": "🪨", "cat": "defense", "cost": {"stone": 10}, "hp": 30.0, "work": 0.10, "blocks": false, "extra": {"trap_damage": 55.0, "uses": 1}, "requires_research": "fortification"},
 		{"id": "mine",          "label": "Міна",            "icon": "💥", "cat": "defense", "cost": {"gunpowder": 2, "components": 2, "steel": 2}, "hp": 20.0, "work": 0.12, "blocks": false, "extra": {"trap_damage": 90.0, "uses": 1, "blast_radius": 2.0}, "requires_research": "sapper_charges"},
-		# --- ферма ---------------------------------------------------------------------------------
-		{"id": "farm_plot", "label": "Грядка", "icon": "🌱", "cat": "farm", "cost": {"wood": 4}, "hp": 30.0, "work": 0.05, "blocks": false, "requires_research": "agriculture"},
+		# --- ферма (станція "farm": білли грядки = що на ній росте) ---------------------------------
+		{"id": "farm_plot", "label": "Грядка", "icon": "🌱", "cat": "farm", "cost": {"wood": 4}, "hp": 30.0, "work": 0.05, "blocks": false, "station": "farm", "requires_research": "agriculture"},
 	]
 
 # ====================================================================================================
@@ -290,6 +290,12 @@ static func _recipes() -> Array:
 		# --- електромонтажний стіл (єдина живлена станція) -----------------------------------------
 		{"id": "r_wire",        "station": "electronics", "inputs": {"copper": 2},                             "output": {"id": "wire", "count": 3},        "work": 0.2, "requires_research": "electronics_tech"},
 		{"id": "r_electronics", "station": "electronics", "inputs": {"wire": 2, "glass": 1, "components": 1},  "output": {"id": "electronics", "count": 1}, "work": 0.6, "requires_research": "electronics_tech"},
+		# --- грядка: вирощування — довгі безінпутні білли (посів = замовлення, жнива = вихід) --------
+		{"id": "r_grow_grain",      "station": "farm", "inputs": {}, "output": {"id": "grain", "count": 8},      "work": 6.0, "requires_research": "agriculture"},
+		{"id": "r_grow_vegetables", "station": "farm", "inputs": {}, "output": {"id": "vegetables", "count": 6}, "work": 5.0, "requires_research": "agriculture"},
+		{"id": "r_grow_berries",    "station": "farm", "inputs": {}, "output": {"id": "food", "count": 5},       "work": 4.0, "requires_research": "agriculture"},
+		{"id": "r_grow_cotton",     "station": "farm", "inputs": {}, "output": {"id": "fiber", "count": 6},      "work": 5.5, "requires_research": "agriculture"},
+		{"id": "r_grow_herbs",      "station": "farm", "inputs": {}, "output": {"id": "herbs", "count": 4},      "work": 5.5, "requires_research": "herbal_lore"},
 	]
 
 # Comps a thing-output carries, keyed by output id. Referenced classes are runtime (not const-safe),
