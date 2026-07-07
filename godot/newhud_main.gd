@@ -16,6 +16,8 @@ const InputController = preload("res://scripts/ui/input_controller.gd")
 const InputVerbs = preload("res://scripts/ui/input_verbs.gd")
 const Mechanics = preload("res://scripts/ui/mechanics.gd")
 const Balance = preload("res://scripts/kernel/balance.gd")
+const Catalog = preload("res://scripts/kernel/catalog.gd")
+const Production = preload("res://scripts/kernel/production.gd")
 const UITheme = preload("res://scripts/ui/theme.gd")
 const GameData = preload("res://scripts/data.gd")
 const TILE := 28
@@ -79,6 +81,7 @@ func _process(dt: float) -> void:
 		return
 	if not session.sim.dead:
 		session.sim.update(dt)
+		session.kernel_tick(dt / float(session.sim.time.day_len))   # kernel runs in game-days
 	cam.global_position = Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE)
 	view.queue_redraw()
 	overlay_host.map_n = int(session.sim.n)   # keep in lockstep with the live region (survives travel)
@@ -118,6 +121,15 @@ func _build_demo_base() -> void:
 	sim.player.px = c.x + 0.5; sim.player.py = c.y + 1.5
 	router.dispatch(&"craft", {"id": "axe"}, session)
 	router.dispatch(&"craft", {"id": "spear"}, session)
+	# Batch-6 kernel content so the catalogue panels show live data: benches with bills + a research run.
+	var wb = Catalog.make_building_thing(session.kernel.db, &"workbench")
+	wb.get_comp(Production.CompWorkbench).add_bill(Production.Bill.new(&"r_planks", &"until", 20))
+	wb.get_comp(Production.CompWorkbench).add_bill(Production.Bill.new(&"r_rope", &"count", 2))
+	var fire = Catalog.make_building_thing(session.kernel.db, &"campfire")
+	fire.get_comp(Production.CompWorkbench).add_bill(Production.Bill.new(&"r_meal_campfire", &"until", 3))
+	session.kernel.things.append(wb)
+	session.kernel.things.append(fire)
+	session.kernel.research.try_start(&"pottery")
 
 func _put(kind: String, x: int, y: int) -> void:
 	if session.sim.build_valid(x, y) and GameData.can_afford(session.sim.stock, GameData.BUILDINGS[kind].cost):

@@ -334,9 +334,12 @@ dependency-ordered batches (each: kernel module + headless tests + HUD interface
 | 3 · Production/tech | `production.gd` | bills/quotas · research · cooking/poisoning · quality · stockpiles | Bills panel · Research tree · `Z` overlay · quality pips |
 | 4 · Gear/health | `gear.gd` | apparel/armor · comfort hediffs · medicine+medbed · thirst · scars/prosthetics | equipment slots · doll hediffs · tend flow · water |
 | 5 · Threats/combat | `combat.gd` | turrets+ammo · mortars · traps · fire spread · cover | turret range/ammo · mortar targeting · fire markers · `K` cover overlay |
+| 6 · Content tree | `catalog.gd` | 63 resources (5 tiers) · 11 nodes · 5 crops · 46 buildings (7 categories) · 51 recipes (17 stations, byproducts) · 31 research (4 eras) · station+power bill gates · deep validator (integrity, acyclic DAG, solvability closure) | `BuildPanel` (палітра за категоріями, 🔓/✔), `ResearchPanel` (проєкт+прогрес+доступні), `CraftPanel` (білли верстатів, ⛔ stalled) — bound to the live `session.kernel` world |
 
-- **Kernel:** 219+ headless assertions, 0 failures; every batch passed an adversarial review pass (correctness ·
-  determinism · UX coherence · test adequacy) that caught and fixed real bugs before merge.
+- **Kernel:** 284 headless assertions, 0 failures; every batch passed an adversarial review pass (correctness ·
+  determinism · UX coherence · test adequacy) that caught and fixed real bugs before merge. Batch 6's validator
+  makes the CONTENT itself tested: the whole craft/build/research tree is proven solvable from raw sources
+  (no unobtainable resource, no bootstrap-deadlocked station, no dead tech) on every suite run.
 - **Design system:** [`docs/ux/design-system.md`](../docs/ux/design-system.md) is the binding UX contract (tokens,
   the 6-overlay framework, panel/interaction grammar, accessibility). All six overlays are radios; the HUD is
   keyboard-navigable, colorblind-safe (icon+number pairing), and Ukrainian throughout.

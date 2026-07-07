@@ -209,7 +209,7 @@ The kernel is a parallel, tested layer today. Migration is incremental and each 
   (real weather), `social.gd.new_graph()` (live roster) — all three share the same "shape IS the wire format"
   contract established in spec 0002.
 
-## 10. Test coverage (`godot/tests/run_kernel_tests.gd`, 239 assertions, headless)
+## 10. Test coverage (`godot/tests/run_kernel_tests.gd`, 284 assertions, headless)
 
 Def registry + type index + DefOf + pack injection · Thing/Comp rot (warm vs frozen), growth (band + night
 dormancy), quality (deterministic per seed, monotone) · Stat pipeline (quality × capacity, explain) · System
@@ -227,3 +227,52 @@ test** (`_t_integration`) that composes ALL FIVE layers in ONE `SystemRegistry` 
 substrate, power balances the net and drives the heater emitter, production runs a bench bill, comfort
 grows/recedes a hypothermia hediff, fire spreads (and is quenched when wet), the Batch-1↔2 emitter handoff
 cools the cell on brownout, and the whole spine is deterministic per seed.
+
+Batch 6 adds the **content-catalogue suite** (`_t_catalog`, 45 assertions): depth thresholds (63 resources /
+11 nodes / 5 crops / 46 buildings / 51 recipes / 31 research), a clean `validate_catalog()` on the shipped
+content, negative validator tests (unknown input, research cycle, dead tech, station bootstrap deadlock),
+the station & power bill gates, and end-to-end chains — ore→charcoal→iron→steel→components→rifle (quality-
+stamped Thing), carcass→(meat+hide byproduct)→leather→parka (wearable `CompApparel`, +18 °C), campfire meal
+that rots by catalogue `rot_days`, herbs→herbal medicine→medicine feeding `TendService.tend()` with the
+catalogue medbed, crop defs driving `CompGrower` + `harvest_crop()`, and the real research path
+гончарство→металургія→ковальство→механообробка ground through `try_start`/`advance`.
+
+## 11. Content catalogue (Batch 6 — `kernel/catalog.gd`)
+
+The grammar above gets its full **vocabulary**: a single data module registering, through the
+`DefDatabase.load_pack` seam, the complete playable content tree —
+
+- **63 resources** in 5 tiers (сировина → матеріали → високотехнологічні → їжа/медицина → спорядження),
+  each with `label/icon/tier/cat/source/value` (+`nutrition` for food). `source` grounds the craft closure:
+  `gather/hunt/fish/farm/water` are base sources, `craft` must be reachable via recipes.
+- **11 gather nodes** (дерево/скеля/ягідник/брухт/волокнина/глинище/піщаник/залізна+мідна жила/вугільний
+  пласт/травник) and **5 crops** (пшениця/овочі/ягідник/бавовна/цілющі трави) whose payloads are literal
+  `CompGrower` props; `make_crop_thing()`/`harvest_crop()` close the farm loop.
+- **46 buildings** in 7 categories (структури/склад/виробництво/енергія/комфорт/оборона/ферма) with cost,
+  hp, build work, research gates, `station` tags, and `power` payloads that are literal power-comp props;
+  `make_building_thing()` instantiates any of them as a kernel Thing with the right comps (workbench,
+  power trader/source/battery, medbed).
+- **51 recipes** across 17 stations (верстак/багаття/піч/плавильня/кузня/ткацтво/чинбарня/кравецтво/
+  різник/плита/млин/аптека/лабораторія/біопереробник/хімстіл/токарний/електромонтажний), chained
+  raw→material→advanced→gear; thing-outputs carry catalogue comps (meals: `CompRottable`; apparel:
+  `CompApparel` with insulation + typed armor). New recipe fields: `station` (bench gate) and
+  `byproducts` (butchering yields meat AND hide).
+- **31 research projects** in 4 eras (виживання → матеріали → індустрія → електрика), an acyclic DAG whose
+  prereqs stage the whole tree from гончарство to біоніка.
+
+Two new **ProductionSystem gates** compose the catalogue with earlier batches: a station-bound recipe
+stalls on a foreign bench, and a bench carrying a `CompPowerTrader` (електромонтажний стіл) crafts only
+while the net delivers (Batch 2 ↔ 6 seam).
+
+**The deep validator** (`validate_catalog`) is the playability proof, beyond per-def `validate()`:
+referential integrity (every input/output/cost/prereq/station names a registered def) · research DAG
+acyclicity + no dead tech · station coverage both ways · and a **solvability closure** — a fixpoint over
+the coupled sets {obtainable resources} × {buildable stations} that starts from base sources only and
+proves every resource, recipe and building reachable, catching bootstrap deadlocks (a bench whose parts
+are made only on that bench) that pure reference checks cannot see. The shipped catalogue passes with
+zero errors; the suite also proves the validator *catches* seeded breakage.
+
+**Host wiring:** `session.gd` owns the account-level kernel world (`session.kernel` = db + `ResearchState`
++ kernel Things) and ticks it in game-days via `kernel_tick()`; the view layer surfaces it through three
+pure `HudModel` slices (`catalog`/`research`/`bills`) bound by the `BuildPanel`/`ResearchPanel`/`CraftPanel`
+(spec 0005 grammar, R2/R8/R11 enforced in `run_ui_tests.gd`).

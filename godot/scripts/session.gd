@@ -10,6 +10,8 @@ const Sim = preload("res://scripts/sim.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
 const Social = preload("res://scripts/social.gd")
 const Persistence = preload("res://scripts/persistence.gd")
+const Catalog = preload("res://scripts/kernel/catalog.gd")
+const Production = preload("res://scripts/kernel/production.gd")
 const MAP_N := 56
 const STORE_PATH := "user://world.json"
 
@@ -20,7 +22,44 @@ var home := {"lat": 0.0, "lon": 0.0, "name": ""}
 var has_home := false   # explicit — a legitimate spawn at (0,0) must not read as "no home"
 var autosave := true   # tests disable disk writes
 
+# --- the Batch-6 kernel world (account-level, survives region travel) --------------------------------
+# Carries the full content catalogue (db), the research state, and the kernel Things (benches with
+# bills, crops...). `stock` is re-aliased to sim.stock every tick because travel/respawn can swap the
+# sim's dictionary identity. Ticked by kernel_tick() with elapsed GAME-DAYS (the kernel's dday unit).
+var kernel: Dictionary = {}
+var _kernel_reg   # Systems.SystemRegistry running the kernel systems (production for now)
+
+func _init_kernel() -> void:
+	var db = Catalog.build_db()
+	kernel = {
+		"db": db,
+		"research": Production.ResearchState.new(db),
+		"things": [],
+		"spawn": [],
+		"zones": [],
+	}
+	_kernel_reg = Production.build_production()
+
+# Advance the kernel world by `dday` game-days. Seeds the kernel rng from the region seed on first use
+# (deterministic quality rolls), advances the active research project, then ticks the system registry.
+func kernel_tick(dday: float) -> void:
+	if kernel.is_empty() or sim == null or dday <= 0.0:
+		return
+	kernel["stock"] = sim.stock
+	if not (kernel.get("rng") is RandomNumberGenerator):
+		var rng := RandomNumberGenerator.new()
+		rng.seed = sim.region_seed()
+		kernel["rng"] = rng
+	var research = kernel.research
+	var active_id: StringName = research.active
+	if active_id != &"" and research.advance(dday):
+		var d = kernel.db.get_def(active_id)
+		var label: String = String(d.field(&"label", active_id)) if d != null else String(active_id)
+		sim._log("🔬 Дослідження завершено: %s" % label, "good")
+	_kernel_reg.tick_all(kernel, {"dday": dday})
+
 func start(lat: float, lon: float, place_name: String) -> void:
+	_init_kernel()
 	var m := WorldGen.generate_map(lat, lon, MAP_N)
 	m["place_name"] = place_name
 	sim = Sim.new()

@@ -18,6 +18,8 @@ const PanelReg = preload("res://scripts/ui/panel_registry.gd")
 const OverlayReg = preload("res://scripts/ui/overlay_registry.gd")
 const Overlays = preload("res://scripts/ui/overlays.gd")
 const Balance = preload("res://scripts/kernel/balance.gd")
+const Catalog = preload("res://scripts/kernel/catalog.gd")
+const Production = preload("res://scripts/kernel/production.gd")
 const GameData = preload("res://scripts/data.gd")
 
 var passed := 0
@@ -37,6 +39,8 @@ func _init() -> void:
 	_t_feed_self_heal()
 	_t_widgets()
 	_t_stock_spine()
+	_t_catalog_slices()
+	_t_catalog_panels()
 	_t_panel_registry()
 	_t_overlay_registry()
 	_t_bus_no_dangling()
@@ -248,6 +252,75 @@ func _t_stock_spine() -> void:
 	ok(int(snap.stock.rows.wood) == 12, "proof spine: snapshot -> panel binds fake stock, no live sim ref (R8)")
 	panel.free()
 
+# ---------------- Batch-6 catalogue slices: kernel world -> value-data ViewModel ----------------
+func _t_catalog_slices() -> void:
+	var sess = _fake_kernel_session()
+	var bal = Balance.Balance.new()
+	var world := {"buildings": [], "stock": sess.sim.stock, "items": []}
+	var snap := HudModel.snapshot(sess, world, {"day": 1}, bal)
+	# build palette summary
+	ok(bool(snap.catalog.available) and (snap.catalog.cats as Array).size() == 7, "catalog slice: 7 категорій палітри")
+	var s0: Dictionary = snap.catalog.cats[0]     # structure
+	ok(int(s0.total) == 8 and int(s0.unlocked) == 4, "структури: 8 всього, 4 відкриті без досліджень (цегла/сталь/бруківка замкнені)")
+	ok(int(s0.afford) == 4, "усі 4 відкриті структури купуються з тестовим складом (wood 50 / stone 20)")
+	# research readout
+	ok(bool(snap.research.available) and int(snap.research.total) == 31, "research slice бачить усе дерево (31 проєкт)")
+	ok((snap.research.avail as Array).size() == 6, "research slice пропонує до 6 стартових проєктів ери-1")
+	sess.kernel.research.try_start(&"pottery")
+	sess.kernel.research.progress = 1.0            # pottery cost 2.0 -> 50%
+	var snap2 := HudModel.snapshot(sess, world, {"day": 1}, bal)
+	ok(String(snap2.research.active.label) == "Гончарство" and int(snap2.research.active.pct) == 50,
+		"активний проєкт мапиться в label+pct (Гончарство 50%)")
+	# bills readout
+	ok(bool(snap.bills.available) and (snap.bills.rows as Array).size() == 2, "bills slice: 2 білли з кернел-верстата")
+	ok(snap.bills.rows[0].state == &"good" and snap.bills.rows[1].state == &"warn", "stalled білл -> warn enum (R11 icon+enum)")
+	ok(String(snap.bills.rows[0].value) == "до 10", "until-білл показує 'до N'")
+	ok(String(snap.bills.rows[0].label) == "Дошки", "рядок білла підписаний ресурсом ВИХОДУ з каталогу")
+	# R8 on the kernel-backed snapshot: no Def object/live ref may leak through the new slices
+	ok(_all_value_data(snap2), "kernel-backed snapshot лишається чистими value-data (R8)")
+
+# ---------------- Batch-6 panels: BuildPanel / ResearchPanel / CraftPanel (R2 + binding) ----------------
+func _t_catalog_panels() -> void:
+	var sess = _fake_kernel_session()
+	var bal = Balance.Balance.new()
+	var world := {"buildings": [], "stock": sess.sim.stock, "items": []}
+	var snap := HudModel.snapshot(sess, world, {"day": 1}, bal)
+
+	var bp = Panels.BuildPanel.new()
+	bp.bind(snap)
+	var n0: int = bp.get_child(0).get_child_count()
+	bp.bind(snap)
+	ok(bp.rebuild_count == 1 and bp.rebind_count == 2 and bp.get_child(0).get_child_count() == n0,
+		"BuildPanel будується один раз, бінд щокадру (R2)")
+	ok(bp._rows[0].value.contains("4/8"), "BuildPanel показує 🔓4/8 для структур")
+
+	var rp = Panels.ResearchPanel.new()
+	rp.bind(snap)
+	rp.bind(snap)
+	ok(rp.rebuild_count == 1 and rp.rebind_count == 2, "ResearchPanel R2 (build-once)")
+	ok(rp._done.value == "0/31", "ResearchPanel: відкрито 0/31")
+	ok(rp._avail[0].value.ends_with("д"), "стартові проєкти показують вартість у днях")
+
+	var cp = Panels.CraftPanel.new()
+	cp.bind(snap)
+	cp.bind(snap)
+	ok(cp.rebuild_count == 1 and cp.rebind_count == 2, "CraftPanel R2 (build-once)")
+	ok(cp._rows[0].value == "до 10", "CraftPanel: рядок until-білла")
+	ok(cp._rows[1]._glyph.text == "⛔", "stalled білл маркується ⛔ (icon, не лише колір — R11)")
+	# a kernel with no benches surfaces the honest empty state
+	sess.kernel.things.clear()
+	var snap_e := HudModel.snapshot(sess, world, {"day": 1}, bal)
+	cp.bind(snap_e)
+	ok(cp._rows[0]._label.text == "верстатів немає", "CraftPanel: порожній стан без верстатів")
+	# a kernel-less session (old save / fake) degrades to available:false and binds without crashing
+	var plain = _fake_session()
+	var snap_p := HudModel.snapshot(plain, {"buildings": [], "stock": plain.sim.stock, "items": []}, {"day": 1}, bal)
+	ok(not bool(snap_p.catalog.available) and not bool(snap_p.research.available) and not bool(snap_p.bills.available),
+		"сесія без кернела деградує в available:false у всіх трьох слайсах")
+	bp.bind(snap_p); rp.bind(snap_p); cp.bind(snap_p)
+	ok(true, "панелі біндяться на kernel-less снапшот без падіння")
+	bp.free(); rp.free(); cp.free()
+
 # ---------------- PanelRegistry == SystemRegistry (sort/get/by_dock/bind_visible) ----------------
 func _t_panel_registry() -> void:
 	var reg = PanelReg.PanelRegistry.new()
@@ -372,6 +445,25 @@ class _FakeSession extends RefCounted:
 	var sim
 	func chain_head() -> String: return "abcdef1234567890"
 	func stored_region_count() -> int: return 1
+
+# A fake session that ALSO carries the Batch-6 kernel world (db/research/benches), like session.gd does.
+class _FakeSessionK extends _FakeSession:
+	var kernel: Dictionary = {}
+
+func _fake_kernel_session():
+	var s := _FakeSessionK.new()
+	s.sim = _FakeSim.new()
+	s.sim.stock = {"wood": 50, "stone": 20}
+	s.sim.player = {"hp": 100.0, "hunger": 82.0, "rest": 92.0, "carry_cap": 30,
+		"sleeping": false, "equipped": {"tool": "", "weapon": ""}, "items": [], "carry": {}}
+	var db = Catalog.build_db()
+	var bench = Catalog.make_building_thing(db, &"workbench")
+	bench.get_comp(Production.CompWorkbench).add_bill(Production.Bill.new(&"r_planks", &"until", 10))
+	var stalled = Production.Bill.new(&"r_rope", &"count", 2)
+	stalled.stalled = true
+	bench.get_comp(Production.CompWorkbench).add_bill(stalled)
+	s.kernel = {"db": db, "research": Production.ResearchState.new(db), "things": [bench], "spawn": [], "zones": []}
+	return s
 
 class _FakeSim extends RefCounted:
 	var player: Dictionary = {"hp": 100.0, "hunger": 82.0, "rest": 92.0, "carry_cap": 30, "sleeping": false, "equipped": {"tool": "", "weapon": ""}, "items": [], "carry": {}}

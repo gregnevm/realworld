@@ -36,6 +36,7 @@ const Systems = preload("res://scripts/kernel/systems.gd")
 const Things = preload("res://scripts/kernel/things.gd")
 const Stats = preload("res://scripts/kernel/stats.gd")
 const Defs = preload("res://scripts/kernel/defs.gd")
+const Power = preload("res://scripts/kernel/power.gd")
 
 # ============================================================================================
 # 1. RECIPES & BILLS (spec 0003 #9)
@@ -45,8 +46,12 @@ const Defs = preload("res://scripts/kernel/defs.gd")
 #   inputs   : {res:StringName -> amt:int}   consumed from world.stock on completion.
 #   output   : {id:StringName, count:int, thing?:bool, comps?:Array}
 #              a bulk resource added to world.stock, OR (thing==true) a spawned Things.Thing.
+#   byproducts : {res:StringName -> amt:int} (optional) extra bulk yields on completion (butchering
+#              a carcass gives meat AND hide) — always bulk, never Things.
 #   work     : float                         game-days of work the bill accumulates before it completes.
 #   requires_research : StringName (optional) project id that must be unlocked to run this recipe.
+#   station  : StringName (optional)         workbench kind (CompWorkbench.station) this recipe needs;
+#              "" == any bench. A bill for a foreign-station recipe stalls (Batch 6 catalogue gate).
 # Behaviour lives in ProductionSystem + the can_make() helper, never on the Def (kernel rule).
 
 # A recipe Def with a self-validating payload (fails loudly at load, like every other Def).
@@ -65,6 +70,12 @@ class RecipeDef extends Defs.Def:
 
 	func requires_research() -> StringName:
 		return StringName(str(data.get("requires_research", "")))
+
+	func station() -> StringName:
+		return StringName(str(data.get("station", "")))
+
+	func byproducts() -> Dictionary:
+		return data.get("byproducts", {})
 
 	func validate(_db) -> String:
 		if work_days() <= 0.0:
@@ -113,12 +124,17 @@ class Bill extends RefCounted:
 
 # The workbench comp: a Thing that owns a queue of Bills. ProductionSystem finds benches by this comp,
 # exactly as PowerNetSystem finds generators by CompPowerSource. A bench also carries a `maker_level`
-# (its operator's competence) used to stamp quality + drive cook poisoning. props: {maker_level}.
+# (its operator's competence) used to stamp quality + drive cook poisoning, and a `station` kind that
+# recipes gate on ("" == generic bench, runs only station-less recipes plus everything when the recipe
+# itself is station-less). props: {maker_level, station}.
 class CompWorkbench extends Things.ThingComp:
 	var bills: Array = []               # Array[Bill]
 
 	func maker_level() -> float:
 		return float(props.get("maker_level", 0.0))
+
+	func station() -> StringName:
+		return StringName(str(props.get("station", "")))
 
 	func add_bill(b: Bill) -> void:
 		bills.append(b)
@@ -170,15 +186,24 @@ class ProductionSystem extends Systems.SimSystem:
 			if wb == null:
 				continue
 			var maker_level: float = wb.maker_level()
+			var station: StringName = wb.station()
+			var powered: bool = _bench_powered(t)
 			var survivors: Array = []
 			for b in wb.bills:
-				_tick_bill(b, db, research, stock, world, dday, maker_level, ctx)
+				_tick_bill(b, db, research, stock, world, dday, maker_level, ctx, station, powered)
 				if not b.finished():
 					survivors.append(b)
 			wb.bills = survivors
 
+	# A bench that participates in the power net (carries a CompPowerTrader) crafts only while the net
+	# delivers (PowerNetSystem @15 has already settled `powered` this tick). An unpowered-by-design bench
+	# (no trader comp) always works — hand tools need no grid.
+	static func _bench_powered(t) -> bool:
+		var tr = t.get_comp(Power.CompPowerTrader)
+		return tr == null or tr.is_live()
+
 	# Advance a single bill one tick. Mutates stock/world on completion.
-	func _tick_bill(b: Bill, db, research, stock: Dictionary, world, dday: float, maker_level: float, ctx: Dictionary) -> void:
+	func _tick_bill(b: Bill, db, research, stock: Dictionary, world, dday: float, maker_level: float, ctx: Dictionary, station: StringName = &"", powered: bool = true) -> void:
 		var recipe = db.get_def(b.recipe_id) if db != null else null
 		if recipe == null:
 			b.stalled = true
@@ -187,6 +212,14 @@ class ProductionSystem extends Systems.SimSystem:
 		var out_id: StringName = StringName(str(out.get("id", "")))
 		var out_stock: int = int(stock.get(out_id, 0))
 		if not b.wants(out_stock):
+			return
+		# station gate: a station-bound recipe runs only on a bench providing that station (Batch 6).
+		if recipe.station() != &"" and recipe.station() != station:
+			b.stalled = true
+			return
+		# power gate: a grid-connected bench crafts only while the net delivers (Batch 2 <-> 6 seam).
+		if not powered:
+			b.stalled = true
 			return
 		# research gate
 		if not Production.can_make(recipe, research):
@@ -237,6 +270,10 @@ class ProductionSystem extends Systems.SimSystem:
 			stock[out_id] = int(stock.get(out_id, 0)) + count
 		else:
 			stock[out_id] = int(stock.get(out_id, 0)) + count
+		# byproducts are always bulk (butchering: meat is the output, hide the byproduct).
+		var bps: Dictionary = recipe.byproducts()
+		for bp in bps:
+			stock[bp] = int(stock.get(bp, 0)) + int(bps[bp])
 
 	# The seeded rng used to roll crafted-output quality at creation. Prefers the host-provided world.rng
 	# (so a save/replay reproduces exactly); falls back to a fixed-seed rng so the contract still holds —

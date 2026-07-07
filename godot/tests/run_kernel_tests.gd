@@ -16,6 +16,7 @@ const Power = preload("res://scripts/kernel/power.gd")
 const Production = preload("res://scripts/kernel/production.gd")
 const Gear = preload("res://scripts/kernel/gear.gd")
 const Combat = preload("res://scripts/kernel/combat.gd")
+const Catalog = preload("res://scripts/kernel/catalog.gd")
 
 var passed := 0
 var failed := 0
@@ -36,6 +37,7 @@ func _init() -> void:
 	_t_production()
 	_t_gear()
 	_t_combat()
+	_t_catalog()
 	_t_integration()
 	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
 	quit(1 if failed > 0 else 0)
@@ -1247,6 +1249,221 @@ func _run_spine_signature(seed_val: int, n: int) -> Dictionary:
 		"hediffs": world.hero_health.hediffs.size(),
 		"neighbor_on_fire": world._neighbor.get_comp(Combat.CompFlammable).on_fire(),
 	}
+
+# ---------------- Content catalogue (Batch 6) ----------------
+func _t_catalog() -> void:
+	print("  -- catalogue: the full content tree --")
+	var db = Catalog.build_db()
+
+	# --- 1. the catalogue loads with real depth ------------------------------------------------
+	ok(db.all_of_type(&"resource").size() >= 60, "каталог: 60+ ресурсів (%d)" % db.all_of_type(&"resource").size())
+	ok(db.all_of_type(&"node").size() >= 10, "каталог: 10+ гатер-нод (%d)" % db.all_of_type(&"node").size())
+	ok(db.all_of_type(&"crop").size() >= 5, "каталог: 5+ культур (%d)" % db.all_of_type(&"crop").size())
+	ok(db.all_of_type(&"building").size() >= 40, "каталог: 40+ будівель (%d)" % db.all_of_type(&"building").size())
+	ok(db.all_of_type(&"recipe").size() >= 50, "каталог: 50+ рецептів (%d)" % db.all_of_type(&"recipe").size())
+	ok(db.all_of_type(&"research").size() >= 30, "каталог: 30+ досліджень (%d)" % db.all_of_type(&"research").size())
+
+	# --- 2. the deep validator passes on the shipped content ------------------------------------
+	var errs: Array = Catalog.validate_catalog(db)
+	for e in errs:
+		printerr("    [catalog] ", e)
+	ok(errs.is_empty(), "validate_catalog: 0 помилок (цілісність + ациклічність + розв'язність)")
+
+	# legacy parity: every resource the frozen JS/data.gd sim uses exists in the catalogue.
+	var legacy_ok := true
+	for res in ["wood", "stone", "food", "scrap", "planks", "components"]:
+		if db.get_def(StringName(res)) == null:
+			legacy_ok = false
+	ok(legacy_ok, "усі 6 legacy-ресурсів data.gd присутні в каталозі")
+
+	# --- 3. the validator actually catches broken content (negative tests) ----------------------
+	var bad = Defs.DefDatabase.new()
+	bad.register(Defs.Def.new(&"resource", &"wood", {"label": "Дерево", "icon": "🪵", "source": "gather"}))
+	bad.register(Production.RecipeDef.new(&"r_bad", {"inputs": {"unobtanium": 1}, "output": {"id": "wood", "count": 1}, "work": 1.0}))
+	ok(_errs_mention(Catalog.validate_catalog(bad), "unobtanium"), "валідатор ловить невідомий інпут рецепта")
+
+	var cyc = Defs.DefDatabase.new()
+	cyc.register(Production.ResearchDef.new(&"a", {"cost": 1.0, "prereqs": ["b"], "label": "A", "icon": "x", "tier": 1}))
+	cyc.register(Production.ResearchDef.new(&"b", {"cost": 1.0, "prereqs": ["a"], "label": "B", "icon": "x", "tier": 1}))
+	ok(_errs_mention(Catalog.validate_catalog(cyc), "цикл"), "валідатор ловить цикл у дереві досліджень")
+
+	var dead = Defs.DefDatabase.new()
+	dead.register(Production.ResearchDef.new(&"orphan", {"cost": 1.0, "prereqs": [], "label": "X", "icon": "x", "tier": 1}))
+	ok(_errs_mention(Catalog.validate_catalog(dead), "мертва гілка"), "валідатор ловить мертву гілку досліджень")
+
+	# bootstrap deadlock: the only bench that makes `part` costs `part` itself.
+	var boot = Defs.DefDatabase.new()
+	boot.register(Defs.Def.new(&"resource", &"ore", {"label": "Руда", "icon": "x", "source": "gather"}))
+	boot.register(Defs.Def.new(&"resource", &"part", {"label": "Деталь", "icon": "x", "source": "craft"}))
+	boot.register(Defs.Def.new(&"building", &"magic_bench", {"label": "Стіл", "icon": "x", "cost": {"part": 1}, "station": "magic"}))
+	boot.register(Production.RecipeDef.new(&"r_part", {"station": "magic", "inputs": {"ore": 1}, "output": {"id": "part", "count": 1}, "work": 1.0}))
+	var boot_errs: Array = Catalog.validate_catalog(boot)
+	ok(_errs_mention(boot_errs, "bootstrap"), "валідатор ловить bootstrap-глухий кут станції")
+	ok(_errs_mention(boot_errs, "недосяжн"), "bootstrap-кут також позначає недосяжний ресурс")
+
+	# --- 4. station gate: a recipe crafts only on its station -----------------------------------
+	var research = Production.ResearchState.new(db)
+	var prod = Production.ProductionSystem.new()
+	var kiln = Catalog.make_building_thing(db, &"kiln")
+	ok(kiln != null and kiln.get_comp(Production.CompWorkbench).station() == &"kiln", "make_building_thing ставить station-тег верстата")
+	var wrong_bill = Production.Bill.new(&"r_planks", &"count", 1)      # planks = workbench recipe
+	kiln.get_comp(Production.CompWorkbench).add_bill(wrong_bill)
+	var w_station := {"things": [kiln], "db": db, "stock": {"wood": 50}, "research": research}
+	for i in 3:
+		prod.system_tick(w_station, {"dday": 1.0})
+	ok(int(w_station.stock.get("planks", 0)) == 0 and wrong_bill.stalled, "рецепт чужої станції стопориться (дошки на печі не робляться)")
+	var bench_wb = Catalog.make_building_thing(db, &"workbench")
+	bench_wb.get_comp(Production.CompWorkbench).add_bill(Production.Bill.new(&"r_planks", &"count", 1))
+	var w_station2 := {"things": [bench_wb], "db": db, "stock": {"wood": 50}, "research": research}
+	for i in 3:
+		prod.system_tick(w_station2, {"dday": 1.0})
+	ok(int(w_station2.stock.get("planks", 0)) == 2, "той самий рецепт на правильній станції крафтить (дошки ×2)")
+
+	# --- 5. power gate: the electronics bench needs a live net ----------------------------------
+	var research_e = Production.ResearchState.new(db)
+	research_e.unlock(&"electronics_tech")
+	var ebench = Catalog.make_building_thing(db, &"electronics_bench")
+	ok(ebench.get_comp(Power.CompPowerTrader) != null, "електромонтажний стіл несе CompPowerTrader з каталогу")
+	var wire_bill = Production.Bill.new(&"r_wire", &"until", 3)
+	ebench.get_comp(Production.CompWorkbench).add_bill(wire_bill)
+	var reg_pw = Systems.SystemRegistry.new()
+	reg_pw.add(Power.PowerNetSystem.new())
+	reg_pw.add(Production.ProductionSystem.new())
+	var w_power := {"things": [ebench], "db": db, "stock": {"copper": 20}, "research": research_e}
+	for i in 3:
+		reg_pw.tick_all(w_power, {"dday": 1.0})
+	ok(int(w_power.stock.get("wire", 0)) == 0 and wire_bill.stalled, "живлена станція без мережі стопориться")
+	var gen = Catalog.make_building_thing(db, &"generator_fuel")
+	w_power.things.append(gen)
+	for i in 5:
+		reg_pw.tick_all(w_power, {"dday": 0.2})
+	ok(int(w_power.stock.get("wire", 0)) >= 3, "з генератором мережа оживає і дріт крафтиться (%d)" % int(w_power.stock.get("wire", 0)))
+
+	# --- 6. the real research path grinds to the industrial era ---------------------------------
+	var rs = Production.ResearchState.new(db)
+	ok(rs.can_start(&"pottery") and not rs.can_start(&"gunsmithing"), "ера-1 стартує одразу; ера-4 замкнена пререквізитами")
+	for pid in [&"pottery", &"metallurgy", &"smithing", &"machining"]:
+		ok(rs.try_start(pid), "try_start %s (пререквізити виконані по порядку)" % pid)
+		for i in 100:
+			if rs.advance(0.5):
+				break
+	ok(rs.is_unlocked(&"machining"), "шлях гончарство→металургія→ковальство→механообробка пройдений")
+
+	# --- 7. end-to-end industry: from raw ore to a quality-stamped rifle ------------------------
+	var all_research = Production.ResearchState.new(db)
+	for r in db.all_of_type(&"research"):
+		all_research.unlock(r.id)
+	var b_kiln = Catalog.make_building_thing(db, &"kiln")
+	var b_smelter = Catalog.make_building_thing(db, &"smelter")
+	var b_mach = Catalog.make_building_thing(db, &"machining_table")
+	b_kiln.get_comp(Production.CompWorkbench).add_bill(Production.Bill.new(&"r_charcoal", &"until", 12))
+	b_smelter.get_comp(Production.CompWorkbench).add_bill(Production.Bill.new(&"r_iron", &"until", 8))
+	b_smelter.get_comp(Production.CompWorkbench).add_bill(Production.Bill.new(&"r_copper", &"until", 4))
+	b_smelter.get_comp(Production.CompWorkbench).add_bill(Production.Bill.new(&"r_steel", &"until", 10))
+	b_mach.get_comp(Production.CompWorkbench).add_bill(Production.Bill.new(&"r_components", &"until", 4))
+	var rifle_bill = Production.Bill.new(&"r_rifle", &"count", 1)
+	b_mach.get_comp(Production.CompWorkbench).add_bill(rifle_bill)
+	var w_ind := {"things": [b_kiln, b_smelter, b_mach], "db": db, "research": all_research,
+		"stock": {"wood": 200, "iron_ore": 60, "copper_ore": 30, "coal": 40}, "spawn": [], "rng": _rng(7)}
+	for i in 120:
+		prod.system_tick(w_ind, {"dday": 0.5})
+	ok(int(w_ind.stock.get("rifle", 0)) == 1, "наскрізний ланцюг руда→вугілля→залізо→сталь→компоненти→гвинтівка (%d)" % int(w_ind.stock.get("rifle", 0)))
+	var rifle_thing = null
+	for t in w_ind.spawn:
+		if t.flags.get("res", &"") == &"rifle":
+			rifle_thing = t
+	ok(rifle_thing != null and rifle_thing.get_comp(Things.CompQuality) != null and rifle_thing.flags.has("quality"),
+		"гвинтівка — Thing зі штампом якості, зролленим при створенні")
+
+	# --- 8. apparel chain with a byproduct: carcass -> (meat + hide) -> leather -> parka --------
+	var b_butcher = Catalog.make_building_thing(db, &"butcher_table")
+	var b_tannery = Catalog.make_building_thing(db, &"tannery")
+	var b_loom = Catalog.make_building_thing(db, &"loom")
+	var b_tailor = Catalog.make_building_thing(db, &"tailor_bench")
+	b_butcher.get_comp(Production.CompWorkbench).add_bill(Production.Bill.new(&"r_butcher", &"count", 4))
+	b_tannery.get_comp(Production.CompWorkbench).add_bill(Production.Bill.new(&"r_leather", &"until", 6))
+	b_loom.get_comp(Production.CompWorkbench).add_bill(Production.Bill.new(&"r_cloth", &"until", 6))
+	b_tailor.get_comp(Production.CompWorkbench).add_bill(Production.Bill.new(&"r_parka", &"count", 1))
+	var w_app := {"things": [b_butcher, b_tannery, b_loom, b_tailor], "db": db, "research": all_research,
+		"stock": {"carcass": 4, "fiber": 40}, "spawn": [], "rng": _rng(11)}
+	for i in 80:
+		prod.system_tick(w_app, {"dday": 0.5})
+	# 4 туші -> м'ясо 16 + шкура 8; парка з'їла 6 шкіри, решта 2 лишилась як шкура/шкіра (until-чинбарня
+	# докручує залишок після витрати) — сумарний матеріальний баланс сходиться точно.
+	ok(int(w_app.stock.get("raw_meat", 0)) == 16 and int(w_app.stock.get("hide", 0)) + int(w_app.stock.get("leather", 0)) == 2,
+		"розбирання туші дає м'ясо + шкуру як побічний продукт (баланс 4 туш сходиться)")
+	var parka = null
+	for t in w_app.spawn:
+		if t.flags.get("res", &"") == &"parka":
+			parka = t
+	ok(parka != null and parka.get_comp(Gear.CompApparel) != null, "парка — Thing із CompApparel з каталогу")
+	if parka != null:
+		var eq = Gear.EquipModel.new()
+		eq.equip(parka)
+		ok(eq.total_insulation() >= 17.9, "вдягнена парка гріє на +18°C (%.1f)" % eq.total_insulation())
+
+	# --- 9. meals rot; packaged meals outlast simple ones ----------------------------------------
+	var b_fire = Catalog.make_building_thing(db, &"campfire")
+	b_fire.get_comp(Production.CompWorkbench).add_bill(Production.Bill.new(&"r_meal_campfire", &"count", 1))
+	var w_meal := {"things": [b_fire], "db": db, "research": all_research, "stock": {"food": 10}, "spawn": [], "rng": _rng(3)}
+	for i in 3:
+		prod.system_tick(w_meal, {"dday": 0.5})
+	ok(w_meal.spawn.size() == 1 and w_meal.spawn[0].get_comp(Things.CompRottable) != null, "страва з багаття несе CompRottable")
+	var meal = w_meal.spawn[0]
+	for i in 20:
+		meal.tick({"temp_c": 25.0, "dday": 0.5})
+	ok(meal.destroyed, "проста страва гниє в теплі (каталожні rot_days)")
+
+	# --- 10. medicine chain feeds the Batch-4 tend service ---------------------------------------
+	var b_loom2 = Catalog.make_building_thing(db, &"loom")
+	var b_apoth = Catalog.make_building_thing(db, &"apothecary")
+	var b_ref = Catalog.make_building_thing(db, &"refinery")
+	var b_lab = Catalog.make_building_thing(db, &"lab")
+	b_loom2.get_comp(Production.CompWorkbench).add_bill(Production.Bill.new(&"r_cloth", &"until", 6))
+	b_apoth.get_comp(Production.CompWorkbench).add_bill(Production.Bill.new(&"r_herbal_medicine", &"until", 2))
+	b_ref.get_comp(Production.CompWorkbench).add_bill(Production.Bill.new(&"r_chem_fuel_wood", &"until", 2))
+	b_lab.get_comp(Production.CompWorkbench).add_bill(Production.Bill.new(&"r_medicine", &"count", 1))
+	var w_med := {"things": [b_loom2, b_apoth, b_ref, b_lab], "db": db, "research": all_research,
+		"stock": {"herbs": 12, "fiber": 40, "wood": 30}, "spawn": [], "rng": _rng(5)}
+	for i in 60:
+		prod.system_tick(w_med, {"dday": 0.5})
+	ok(int(w_med.stock.get("medicine", 0)) == 2, "ланцюг трави→трав'яні ліки→медикаменти дає 2 медикаменти (%d)" % int(w_med.stock.get("medicine", 0)))
+	var medbed = Catalog.make_building_thing(db, &"medbed")
+	ok(medbed.get_comp(Gear.CompMedbed) != null and medbed.get_comp(Gear.CompMedbed).med_quality() == 3,
+		"каталожне медичне ліжко несе CompMedbed(якість 3)")
+	w_med.things.append(medbed)
+	var tracker = Health.HealthTracker.new()
+	tracker.injure(&"torso", 15.0)
+	var tend: Dictionary = Gear.TendService.tend(tracker, w_med, 2.0)
+	ok(bool(tend.ok) and int(w_med.stock.get("medicine", 0)) == 1, "каталожні медикаменти живлять tend (спожито рівно 1)")
+
+	# --- 11. crops: catalogue defs drive CompGrower + harvest ------------------------------------
+	var wheat = Catalog.make_crop_thing(db, &"grain_crop")
+	ok(wheat != null and wheat.get_comp(Things.CompGrower) != null, "make_crop_thing будує рослину з CompGrower")
+	for i in 16:
+		wheat.tick({"temp_c": 20.0, "light": 1.0, "dday": 0.5})
+	ok(wheat.get_comp(Things.CompGrower).mature(), "пшениця дозріває за каталожні grow_days у сезон")
+	var farm_stock := {}
+	ok(Catalog.harvest_crop(db, wheat, farm_stock) == 8 and int(farm_stock.get(&"grain", 0)) == 8, "жнива дають каталожний урожай зерна (8)")
+	var frozen = Catalog.make_crop_thing(db, &"grain_crop")
+	for i in 16:
+		frozen.tick({"temp_c": -5.0, "light": 1.0, "dday": 0.5})
+	ok(not frozen.get_comp(Things.CompGrower).mature(), "поза температурною смугою культура не росте (мороз)")
+
+	# --- 12. HUD helpers: categories, stations, tiers --------------------------------------------
+	ok(Catalog.buildings_in_category(db, &"production").size() >= 15, "категорія «виробництво» має 15+ будівель")
+	ok(Catalog.buildings_in_category(db, &"defense").size() >= 5, "категорія «оборона» має 5+ будівель")
+	ok(Catalog.recipes_at_station(db, &"machining").size() >= 6, "токарний верстат має 6+ рецептів")
+	var tiers: Dictionary = Catalog.research_tiers(db)
+	ok(tiers.has(1) and tiers.has(2) and tiers.has(3) and tiers.has(4), "дослідження розкладені по 4 ерах")
+	ok(Catalog.building_unlocked(db.get_def(&"workbench"), null), "верстак відкритий без досліджень")
+	ok(not Catalog.building_unlocked(db.get_def(&"turret"), Production.ResearchState.new(db)), "турель замкнена до Автотурелей")
+
+func _errs_mention(errs: Array, needle: String) -> bool:
+	for e in errs:
+		if String(e).contains(needle):
+			return true
+	return false
 
 func _t_integration() -> void:
 	print("  -- capstone: five layers in one tick spine --")
