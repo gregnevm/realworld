@@ -274,6 +274,10 @@ func _t_catalog_view() -> void:
 			metallurgy_available = (r.status == &"available")
 	ok(metallurgy_available, "metallurgy flips locked->available once smelting is unlocked (prereq gate)")
 	ok(not bool(CatalogView.snapshot(null).get("available", false)), "null db -> {available:false} (graceful)")
+	# per-tier progress climbs 1..9 (neolithic -> ship); values reflect the unlocked set
+	var tiers: Array = snap2.tiers
+	ok(tiers.size() == 9 and int(tiers[0].tier) == 1 and int(tiers[8].tier) == 9, "tiers slice spans 9 eras ascending")
+	ok(int(tiers[0].unlocked) == 1 and int(tiers[0].total) == 5, "tier-1 shows 1/5 unlocked (fire_mastery; smelting is tier-2)")
 
 # ---------------- TechPanel: build-once + value bind, same contract as StockPanel (R2/R8) ----------------
 func _t_tech_panel() -> void:
@@ -287,6 +291,15 @@ func _t_tech_panel() -> void:
 	ok(panel.rebind_count == 2, "TechPanel rebinds each frame (bind != rebuild)")
 	ok(panel.get_child(0).get_child_count() == n0, "child count stable across rebind (R2)")
 	ok(panel.panel_id == &"tech" and panel.dock == 1, "TechPanel: id=tech, RIGHT dock (registered via mechanics.gd)")
+	# ResearchTiersPanel — 9 fixed era rows, build-once + bind (R2)
+	var tp = CatalogPanels.ResearchTiersPanel.new()
+	tp.bind(vm)
+	var t0: int = tp.get_child(0).get_child_count()   # header + 9 tier rows
+	tp.bind(vm)
+	ok(tp.rebuild_count == 1 and tp.rebind_count == 2, "ResearchTiersPanel builds once, binds each frame (R2)")
+	ok(tp.get_child(0).get_child_count() == t0 and tp._rows.size() == 9, "ResearchTiersPanel holds 9 fixed era rows")
+	ok(tp.panel_id == &"research_tiers" and tp.dock == 1, "ResearchTiersPanel: id, RIGHT dock")
+	tp.free()
 	# the HudModel snapshot now carries the catalog slice end to end (pipeline surfaced in the HUD)
 	var sess = _fake_session()
 	var full := HudModel.snapshot(sess, {"buildings": [], "stock": sess.sim.stock, "items": []}, {"day": 5}, Balance.Balance.new())

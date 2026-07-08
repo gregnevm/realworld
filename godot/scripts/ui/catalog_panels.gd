@@ -63,3 +63,46 @@ class TechPanel extends PanelBase.Base:
 		_craftable.set_value("%d/%d" % [int(s.get("craftable", 0)), int(s.get("recipes", 0))])
 		var nxt: Array = cat.get("next", [])
 		_next.set_value(String(nxt[0]) if nxt.size() > 0 else "—")
+
+# ---- ResearchTiersPanel (RIGHT dock) — the tech-era climb, one row per research tier ----
+class ResearchTiersPanel extends PanelBase.Base:
+	const MAX_TIERS := 9         # the catalogue spans tiers 1..9 (neolithic → ship); fixed rows keep R2
+	var _rows: Array = []        # StatRow per tier slot
+
+	func _init() -> void:
+		panel_id = &"research_tiers"
+		dock = PanelBase.DOCK_RIGHT
+		priority = 40
+		hotkey = KEY_Y
+		default_open = false
+
+	func _build() -> void:
+		rebuild_count += 1
+		var vb := VBoxContainer.new()
+		vb.add_theme_constant_override("separation", 4)
+		add_child(vb)
+		var head := Widgets.H2Header.new()
+		vb.add_child(head)
+		head.set_header("Ери", "tiers")
+		for i in MAX_TIERS:
+			var row := Widgets.StatRow.new()
+			vb.add_child(row)
+			row.set_row("◆", "—", "—")
+			_rows.append(row)
+
+	func bind(vm) -> void:
+		rebind_count += 1
+		build_once()
+		if not (vm is Dictionary) or not vm.has("catalog"):
+			return
+		var cat: Dictionary = vm.catalog
+		if not bool(cat.get("available", false)):
+			return
+		var tiers: Array = cat.get("tiers", [])
+		for i in _rows.size():
+			if i < tiers.size():
+				var t: Dictionary = tiers[i]
+				_rows[i].set_row("◆", "Тір %d" % int(t.get("tier", 0)),
+					"%d/%d" % [int(t.get("unlocked", 0)), int(t.get("total", 0))])
+			else:
+				_rows[i].set_row(" ", "—", "")

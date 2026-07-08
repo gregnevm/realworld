@@ -71,8 +71,26 @@ static func snapshot(db, state: Dictionary = {}) -> Dictionary:
 		"available": true,
 		"summary": _summary(db, unlocked, stock),
 		"research": _research_rows(db, unlocked),
+		"tiers": _tiers(db, unlocked),
 		"next": _next_research(db, unlocked),
 	}
+
+# Per-tier research progress: [{tier, unlocked, total}] ascending — the tech-era climb (neolithic→spacer).
+static func _tiers(db, unlocked: Dictionary) -> Array:
+	var by_tier: Dictionary = {}
+	for r in Catalog.research_projects(db):
+		var t: int = int(r.data.get("tier", 0))
+		if not by_tier.has(t):
+			by_tier[t] = {"unlocked": 0, "total": 0}
+		by_tier[t]["total"] = int(by_tier[t]["total"]) + 1
+		if unlocked.has(r.id):
+			by_tier[t]["unlocked"] = int(by_tier[t]["unlocked"]) + 1
+	var keys: Array = by_tier.keys()
+	keys.sort()
+	var out: Array = []
+	for t in keys:
+		out.append({"tier": int(t), "unlocked": int(by_tier[t]["unlocked"]), "total": int(by_tier[t]["total"])})
+	return out
 
 static func _summary(db, unlocked: Dictionary, stock: Dictionary) -> Dictionary:
 	var research: Array = Catalog.research_projects(db)

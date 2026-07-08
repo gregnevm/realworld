@@ -17,6 +17,7 @@ static func register_all(panel_registry, overlay_registry) -> void:
 	panel_registry.register(Panels.StockPanel.new())
 	panel_registry.register(Panels.BalancePanel.new())
 	panel_registry.register(CatalogPanels.TechPanel.new())
+	panel_registry.register(CatalogPanels.ResearchTiersPanel.new())
 	# world overlays (spatial state) keyed to their LOCKED hotkeys (design-system §3)
 	overlay_registry.register(Overlays.LightOverlay.new())
 	overlay_registry.register(Overlays.TemperatureOverlay.new())
