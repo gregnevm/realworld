@@ -266,7 +266,8 @@ func _t_research_surface() -> void:
 	ok((snap.research.options as Array).size() > 0, "researchable options surfaced")
 	ok(int(snap.research.counts.buildings.total) == prog.catalog_counts().buildings.total and int(snap.research.counts.items.total) > 0, "catalog counts surfaced (per-category unlocked/total)")
 	ok(snap.research.next_unlocks.has("total"), "active-project unlock preview surfaced")
-	ok(_all_value_data(snap.research), "research slice is pure value data incl. counts + next_unlocks (R8)")
+	ok(snap.research.has("rate") and snap.research.has("active_eta_days"), "research rate + active ETA surfaced")
+	ok(_all_value_data(snap.research), "research slice is pure value data incl. counts + next_unlocks + eta (R8)")
 	# a null-progression session degrades to {wired:false} (the fake-session default path)
 	ok(not bool(HudModel.snapshot(_fake_session(), {"buildings": [], "stock": {}, "items": []}, {"day": 1}, Balance.Balance.new()).research.wired),
 		"no progression -> research slice degrades to {wired:false}")

@@ -225,9 +225,11 @@ func _t_planner() -> void:
 	for id in path:
 		p.enqueue(StringName(str(id)))
 		total += float(p.db.get_def(StringName(str(id))).cost())
+	ok(absf(p.remaining_cost(tid) - total) < 1e-4, "remaining_cost == Σ full path cost at cold start")
 	var done: Array = p.add_points(total)
 	ok(done.size() == path.size() and p.is_unlocked(tid), "enqueuing the path unlocks the target in path order")
 	ok(p.steps_to_unlock(tid).size() == 0, "no steps remain once the target is unlocked")
+	ok(absf(p.remaining_cost(tid)) < 1e-9, "remaining_cost is zero once the target is unlocked")
 
 # --- 7c. unlocks_of partition + catalog_counts ---------------------------------------------------
 func _t_unlocks_and_counts() -> void:

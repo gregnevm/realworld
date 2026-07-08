@@ -179,8 +179,15 @@ static func _research_slice(session) -> Dictionary:
 	var queue: Array = []
 	for qid in (s.get("queue", []) as Array):
 		queue.append({"id": qid, "label": prog.label_of(qid), "tier": prog.tier_of(qid)})
+	var rate := 0.0
+	if session != null and session.has_method("research_rate"):
+		rate = float(session.research_rate())
+	var active_remaining: float = maxf(0.0, float(s.get("active_cost", 0.0)) - float(s.get("active_progress", 0.0)))
+	var eta: float = (active_remaining / rate) if (rate > 0.0 and float(s.get("active_cost", 0.0)) > 0.0) else -1.0
 	return {
 		"wired": true,
+		"rate": rate,
+		"active_eta_days": eta,
 		"level": int(s.get("level", 0)),
 		"unlocked": int(s.get("unlocked", 0)),
 		"total": int(s.get("total", 0)),

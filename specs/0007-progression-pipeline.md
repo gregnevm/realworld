@@ -34,7 +34,8 @@ tree through `catalog.gd`'s typed accessors (so `sim.gd`/`main.gd`/`data.gd` are
 | `add_points(p, auto)` | burn `p` points; when a project completes the **leftover rolls into the next** queued (or, if `auto`, the next available) project — a real pipeline, not stop-start. Returns the ids unlocked by this call |
 | `unlocked_buildings()` / `_recipes()` / `_items()` | the catalogue slice the current tech state opens; `tech_level()` = deepest unlocked tier |
 | `research_path(id)` | the ordered, deduped, valid-topo prerequisite chain ending at `id` (the planner) |
-| `steps_to_unlock(gate)` | that path minus what's already unlocked — what a locked build/craft row still needs |
+| `steps_to_unlock(gate)` / `remaining_cost(target)` | that path minus what's unlocked, and the Σ research-points still to spend — a live "N steps / M points (≈ D days at the current rate)" readout |
+| `unlocks_of(research_id)` / `catalog_counts()` | what completing a project OPENS (reverse of the gate), and per-category unlocked/total — the "researching X unlocks N" preview + tech dashboard |
 | `summary()` / `to_dict()` / `from_dict()` | pure value-data ViewModel slice + save/load of the whole pipeline |
 
 **Determinism note:** `add_points` spends leftover points across project boundaries in one call by computing

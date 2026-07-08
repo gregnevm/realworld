@@ -188,7 +188,9 @@ class ResearchPanel extends PanelBase.Base:
 		var al := String(r.get("active_label", ""))
 		var pct: int = int(round(float(r.get("active_pct", 0.0)) * 100.0))
 		_active_bar.bind({"icon": "🔬", "pct": pct, "state": (&"good" if al != "" else &"warn")})
-		_active_lbl.set_value(al if al != "" else "—")
+		var eta: float = float(r.get("active_eta_days", -1.0))
+		var eta_str: String = (" ≈%.1fд" % eta) if (al != "" and eta >= 0.0) else ""
+		_active_lbl.set_value((al + eta_str) if al != "" else "—")
 		var nu: Dictionary = r.get("next_unlocks", {})
 		var nu_total: int = int(nu.get("total", 0))
 		_unlocks.set_value(("%d (%dб %dр %dп)" % [nu_total, int(nu.get("buildings", 0)), int(nu.get("recipes", 0)), int(nu.get("items", 0))]) if nu_total > 0 else "—")

@@ -247,6 +247,16 @@ func steps_to_unlock(gate) -> Array:
 			out.append(id)
 	return out
 
+# Total research-points still to spend to reach a target project (Σ cost of the not-yet-unlocked steps,
+# counting the target itself). Combined with a points/day rate this yields a live ETA. 0 once unlocked.
+func remaining_cost(target) -> float:
+	var total := 0.0
+	for id in steps_to_unlock(target):
+		var d = db.get_def(id)
+		if d != null:
+			total += d.cost()
+	return total
+
 # ============================================================================================
 # UNLOCK GATES OVER CATALOG CONTENT (what the current tech state opens)
 # ============================================================================================

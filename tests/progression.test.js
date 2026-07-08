@@ -129,6 +129,7 @@ class Progression {
     return out;
   }
   stepsToUnlock(gate) { return !gate ? [] : this.researchPath(gate).filter((x) => !this.unlocked.has(x)); }
+  remainingCost(target) { return this.stepsToUnlock(target).reduce((s, id) => s + this.researchById.get(id).cost, 0); }
   // --- unlock gates over catalog content ---
   gateOk(ref) { return ref === undefined || ref === null || ref === "" || this.unlocked.has(ref); }
   unlockedBuildings() { return this.cat.buildings.filter((b) => this.gateOk(b.research)); }
@@ -342,6 +343,23 @@ test("progression: enqueuing a research_path unlocks the target; steps_to_unlock
   assert.deepStrictEqual(done, path, "the whole path unlocks, in path order, from one grant");
   assert.ok(p.isUnlocked(target.id), "the target is unlocked");
   assert.strictEqual(p.stepsToUnlock(target.id).length, 0, "no steps remain once the target is unlocked");
+});
+
+test("progression: remaining_cost equals the sum of remaining path costs and drains to zero", () => {
+  const cat = loadCatalog();
+  const p = new Progression(cat);
+  const target = cat.research.slice().sort((a, b) => (b.tier || 0) - (a.tier || 0))[0]; // deepest
+  const path = p.researchPath(target.id);
+  const fullCost = path.reduce((s, id) => s + p.researchById.get(id).cost, 0);
+  assert.ok(Math.abs(p.remainingCost(target.id) - fullCost) < 1e-9, "cold start: remaining_cost == Σ full path cost");
+  let prev = p.remainingCost(target.id);
+  for (const id of path) {
+    p.start(id); p.addPoints(p.researchById.get(id).cost);
+    const now = p.remainingCost(target.id);
+    assert.ok(now < prev + 1e-9, "remaining_cost never grows as the path is researched");
+    prev = now;
+  }
+  assert.strictEqual(p.remainingCost(target.id), 0, "remaining_cost is zero once the target is unlocked");
 });
 
 test("progression: steps_to_unlock shrinks as the path is researched", () => {
