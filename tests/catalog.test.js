@@ -268,6 +268,78 @@ test("catalog: no resource is wholly unused (every refined/intermediate feeds so
   assert.deepStrictEqual(dangling, [], `resources that feed nothing (dead-end intermediates): ${dangling.join(", ")}`);
 });
 
+// --- Bill-of-materials planner (spec 0008 phase 1) — mirrors catalog.gd producer_of/production_chain. ---
+function producerOf(cat, resId) {
+  const rc = cat.recipes.find((r) => r.output && r.output.id === resId);
+  return rc ? rc.id : "";
+}
+function productionChain(cat, resId) {
+  const raws = new Set(cat.resources.filter(isRaw).map((r) => r.id));
+  const byOut = new Map();
+  for (const rc of cat.recipes) if (rc.output && !byOut.has(rc.output.id)) byOut.set(rc.output.id, rc);
+  const out = [], seen = new Set(), stack = new Set();
+  const visit = (rid) => {
+    if (raws.has(rid) || !byOut.has(rid)) return;
+    const recipe = byOut.get(rid);
+    if (seen.has(recipe.id) || stack.has(recipe.id)) return;
+    stack.add(recipe.id);
+    for (const inp of Object.keys(recipe.inputs || {})) visit(inp);
+    stack.delete(recipe.id);
+    seen.add(recipe.id);
+    out.push(recipe.id);
+  };
+  visit(resId);
+  return out;
+}
+function missingFor(cost, stock) {
+  const out = {};
+  for (const k of Object.keys(cost || {})) { const d = (cost[k] | 0) - ((stock[k] | 0)); if (d > 0) out[k] = d; }
+  return out;
+}
+
+test("catalog: production_chain is a valid dependency order ending at the target's recipe", () => {
+  const cat = loadCatalog();
+  const raws = new Set(cat.resources.filter(isRaw).map((r) => r.id));
+  const byOut = new Map();
+  for (const rc of cat.recipes) if (rc.output && !byOut.has(rc.output.id)) byOut.set(rc.output.id, rc);
+  // every non-raw, recipe-produced resource has a chain that ends at its own producer, with no dups,
+  // and every non-raw input of each step is produced by an EARLIER step in the chain.
+  for (const res of cat.resources) {
+    if (raws.has(res.id)) { assert.deepStrictEqual(productionChain(cat, res.id), [], `raw ${res.id} needs no recipe`); continue; }
+    if (!byOut.has(res.id)) continue; // meal/thing-only outputs live elsewhere; skip non-resource outputs
+    const chain = productionChain(cat, res.id);
+    assert.ok(chain.length > 0, `non-raw ${res.id} has a production chain`);
+    assert.strictEqual(chain[chain.length - 1], producerOf(cat, res.id), `chain for ${res.id} ends at its producer`);
+    assert.strictEqual(new Set(chain).size, chain.length, `no duplicate steps in chain for ${res.id}`);
+    const pos = new Map(chain.map((id, i) => [id, i]));
+    const recById = new Map(cat.recipes.map((r) => [r.id, r]));
+    for (const recId of chain) {
+      for (const inp of Object.keys(recById.get(recId).inputs || {})) {
+        if (raws.has(inp) || !byOut.has(inp)) continue;
+        const prod = producerOf(cat, inp);
+        assert.ok(pos.get(prod) < pos.get(recId), `input ${inp} of ${recId} is produced earlier in the chain`);
+      }
+    }
+  }
+});
+
+test("catalog: production_chain resolves the advanced electronics chain end to end", () => {
+  const cat = loadCatalog();
+  const chain = productionChain(cat, "circuit");
+  assert.ok(chain.includes(producerOf(cat, "circuit")), "chain makes the circuit");
+  assert.ok(chain.includes(producerOf(cat, "copper_wire")), "chain first makes copper wire");
+  assert.ok(chain.includes(producerOf(cat, "copper_bar")), "chain first smelts copper bar");
+  // dependency order: bar before wire before circuit
+  const pos = (r) => chain.indexOf(producerOf(cat, r));
+  assert.ok(pos("copper_bar") < pos("copper_wire") && pos("copper_wire") < pos("circuit"), "smelt -> wire -> circuit order");
+});
+
+test("catalog: missing_for reports exactly the shortfall", () => {
+  assert.deepStrictEqual(missingFor({ wood: 10, stone: 5 }, { wood: 4, stone: 5 }), { wood: 6 }, "only the deficient resource, by its deficit");
+  assert.deepStrictEqual(missingFor({ wood: 3 }, { wood: 3 }), {}, "exactly affordable -> nothing missing");
+  assert.deepStrictEqual(missingFor({ steel: 2 }, {}), { steel: 2 }, "absent resource counts as fully missing");
+});
+
 test("catalog: tree has real depth (chain length >= 3 to advanced tier)", () => {
   const cat = loadCatalog();
   // circuit depends on copper_wire<-copper_bar<-copper_ore : a >=3-step production chain.

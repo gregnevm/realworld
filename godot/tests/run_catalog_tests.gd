@@ -28,8 +28,30 @@ func _init() -> void:
 	_t_accessors()
 	_t_production_integration()
 	_t_research_gate()
+	_t_bom_planner()
 	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
 	quit(1 if failed > 0 else 0)
+
+# --- BOM planner parity (spec 0008 phase 1) — mirrors tests/catalog.test.js -----------------
+func _t_bom_planner() -> void:
+	var cat: Dictionary = Catalog.load_json()
+	# raw resources need no recipe step
+	ok(Catalog.production_chain(cat, "wood").is_empty(), "raw resource has an empty production chain")
+	# the advanced electronics chain resolves in dependency order: bar -> wire -> circuit
+	var chain: Array = Catalog.production_chain(cat, "circuit")
+	var pos: Dictionary = {}
+	for i in chain.size():
+		pos[str(chain[i])] = i
+	var p_bar := str(Catalog.producer_of(cat, "copper_bar"))
+	var p_wire := str(Catalog.producer_of(cat, "copper_wire"))
+	var p_circ := str(Catalog.producer_of(cat, "circuit"))
+	ok(chain.size() > 0 and str(chain[chain.size() - 1]) == p_circ, "chain ends at the circuit's own recipe")
+	ok(pos.has(p_bar) and pos.has(p_wire) and int(pos[p_bar]) < int(pos[p_wire]) and int(pos[p_wire]) < int(pos[p_circ]),
+		"smelt -> wire -> circuit dependency order")
+	# missing_for reports exactly the shortfall
+	var miss: Dictionary = Catalog.missing_for({"wood": 10, "stone": 5}, {"wood": 4, "stone": 5})
+	ok(miss.size() == 1 and int(miss.get("wood", 0)) == 6, "missing_for reports only the deficient resource by its deficit")
+	ok(Catalog.missing_for({"wood": 3}, {"wood": 3}).is_empty(), "exactly affordable -> nothing missing")
 
 func ok(cond: bool, name: String) -> void:
 	if cond:

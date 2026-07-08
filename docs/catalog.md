@@ -10,7 +10,9 @@ This is the Phase-1 content tree the kernel's `Defs.load_pack` seam was built fo
 shipped `Def / RecipeDef / ResearchDef` grammar, so **adding content never touches the tick loop**.
 The 41-project research DAG is now **walked** end-to-end by the research→unlock pipeline
 (`kernel/progression.gd`, **spec 0007**) — two research benches (`research_bench`,
-`hi_tech_research_bench`) fund it in play.
+`hi_tech_research_bench`) fund it in play. A pure **bill-of-materials planner** (`catalog.gd`:
+`production_chain(res)` — the ordered recipe steps from raws; `producer_of(res)`; `missing_for(cost, stock)`)
+turns the tree into the production PIPELINE a gated build/craft menu will consume (**spec 0008** phase 1).
 It composes on the existing mechanics kernel (production/power/environment/gear/combat) rather than
 replacing it, and it does **not** touch `data.gd` — the Phase-0 playable slice keeps its own 6-resource
 table; this catalogue is the forward-engine superset.

@@ -69,7 +69,10 @@ tech-path planner. It is **live** — a Phase-0 `research_bench` funds it (`sess
 and unlocks toast through the feed. Verified in Node (`tests/progression.test.js`, 12) + headless Godot
 (`run_progression_tests.gd`) against the same `catalog.json`. The **remaining** surfacing is the catalog
 *build/craft menu gated by unlock* (bridging the slice's 6-resource table to the catalog's 78) — deferred
-so this pass stays additive; see spec 0007 §5.
+so this pass stays additive; see spec 0007 §5. That next step is now designed in **spec 0008** (ADR,
+design-only) with its safe phase-1 companion already shipped: a pure **bill-of-materials planner** in
+`catalog.gd` (`production_chain` / `producer_of` / `missing_for`), Node + Godot mirrored, that the gated
+build/craft menu and "to make X you need …" tooltips will consume.
 
 ## How to read this
 
