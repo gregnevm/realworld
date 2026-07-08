@@ -39,6 +39,7 @@ func _init() -> void:
 	_t_friend_geography()
 	_t_session_travel()
 	_t_session_respawn()
+	_t_environment()
 	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
 	quit(1 if failed > 0 else 0)
 
@@ -518,3 +519,115 @@ func _t_session_respawn() -> void:
 			has_storage = true
 			break
 	ok(has_storage, "new pawn respawns at the home settlement (storage present)")
+
+# ---------------- Batch 8a: живе довкілля (клімат/погода/світло/приміщення/обігрів) ----------------
+func _t_environment() -> void:
+	# a flat 16x16 grass arena away from map-gen noise; Kyiv latitude drives the climate
+	var nn := 16
+	var tiles := PackedByteArray()
+	tiles.resize(nn * nn)
+	tiles.fill(WorldGen.GRASS)
+	var s = Sim.new()
+	s.new_game({"n": nn, "tiles": tiles, "nodes": {}, "spawn": Vector2i(2, 2), "lat": 50.4501, "lon": 30.5234})
+
+	# --- 1. the climate is live and latitude-real: Kyiv winter noon colder than summer noon --------
+	s.weather = &"clear"
+	s.time.frac = 0.5
+	s.time.day = 15
+	var t_winter: float = s.ambient_temp_c()
+	s.time.day = 195
+	var t_summer: float = s.ambient_temp_c()
+	ok(t_winter < t_summer, "Київ: зима холодніша за літо (%.1f < %.1f)" % [t_winter, t_summer])
+	ok(s.season_name() != "", "season readable (%s)" % s.season_name())
+
+	# --- 2. incident anomaly seam (spec E6): shift, then expiry --------------------------------------
+	s.apply_temp_anomaly(-15.0, 2.0)
+	ok(absf(s.ambient_temp_c() - (t_summer - 15.0)) < 0.01, "cold-snap anomaly shifts ambient by −15°C")
+	s._update_environment(2.1)
+	ok(s.temp_offset == 0.0 and s.temp_offset_days == 0.0, "anomaly expires after its days run out")
+	s.weather = &"clear"
+
+	# --- 3. weather stream is deterministic from the region seed -------------------------------------
+	var a = Sim.new()
+	a.new_game({"n": nn, "tiles": tiles.duplicate(), "nodes": {}, "spawn": Vector2i(2, 2), "lat": 50.4501, "lon": 30.5234})
+	var b = Sim.new()
+	b.new_game({"n": nn, "tiles": tiles.duplicate(), "nodes": {}, "spawn": Vector2i(2, 2), "lat": 50.4501, "lon": 30.5234})
+	var seq_a := []
+	var seq_b := []
+	for i in 8:
+		a._update_environment(0.3)
+		b._update_environment(0.3)
+		seq_a.append(a.weather)
+		seq_b.append(b.weather)
+	ok(str(seq_a) == str(seq_b), "weather stream reproduces from the region seed")
+	var c2 = Sim.new()
+	c2.new_game({"n": nn, "tiles": tiles.duplicate(), "nodes": {}, "spawn": Vector2i(2, 2), "lat": 35.0116, "lon": 135.7681})
+	var seq_c := []
+	for i in 8:
+		c2._update_environment(0.3)
+		seq_c.append(c2.weather)
+	ok(str(seq_c) != str(seq_a) or c2.region_seed() != a.region_seed(), "different coordinate -> different weather stream")
+
+	# --- 4. cold_snap weather dips ambient by the kernel-parity constant -----------------------------
+	s.weather = &"clear"
+	var t_clear: float = s.ambient_temp_c()
+	s.weather = &"cold_snap"
+	ok(absf(s.ambient_temp_c() - (t_clear - 6.0)) < 0.01, "cold_snap weather dips ambient −6°C")
+	s.weather = &"snow"
+	ok(s.is_wet(), "snow is wet weather")
+	s.weather = &"clear"
+	ok(not s.is_wet(), "clear is dry weather")
+
+	# --- 5. enclosure flood-fill (spec B4): 4 walls make a room; a breach un-rooms it -----------------
+	var cx := 8
+	var cy := 8
+	ok(not s.is_indoor(cx, cy), "open cell starts outdoor")
+	s._place_building("wall", cx + 1, cy, -1)
+	s._place_building("wall", cx - 1, cy, -1)
+	s._place_building("wall", cx, cy + 1, -1)
+	var last_wall = s._place_building("wall", cx, cy - 1, -1)
+	ok(s.is_indoor(cx, cy), "cell enclosed by 4 walls becomes indoor")
+	ok(not s.is_indoor(cx + 2, cy), "cell outside the room stays outdoor")
+	s._remove_building(last_wall)
+	ok(not s.is_indoor(cx, cy), "breached room is outdoor again")
+	# a door seals the room like a wall (air-wise) while staying passable for the hero
+	s._place_building("door", cx, cy - 1, -1)
+	ok(s.is_indoor(cx, cy), "door seals the room (indoor again)")
+	ok(not s.is_blocked(cx, cy - 1), "door stays passable for pathing")
+
+	# --- 6. indoor buffers temperature toward the setpoint in winter ---------------------------------
+	s.time.day = 15   # winter
+	s.weather = &"clear"
+	var out_t: float = s.ambient_temp_c()
+	var in_t: float = s.temp_at(cx, cy)
+	ok(absf(in_t - 21.0) < absf(out_t - 21.0), "indoor closer to 21°C than outdoor (%.1f vs %.1f)" % [in_t, out_t])
+
+	# --- 7. campfire heats nearby cells ---------------------------------------------------------------
+	var probe_x := 3
+	var probe_y := 12
+	var before: float = s.temp_at(probe_x, probe_y)
+	s._place_building("campfire", probe_x + 1, probe_y, -1)
+	ok(s.temp_at(probe_x, probe_y) > before, "campfire raises nearby felt temperature")
+	ok(absf(s.temp_at(probe_x + 1, probe_y) - (before + 4.0)) < 0.01, "campfire adds its +4°C at its own cell")
+
+	# --- 8. light & the darkness work penalty (spec B3) ----------------------------------------------
+	s.time.frac = 0.5
+	ok(s.daylight_level() > 0.9, "midday is bright")
+	s.time.frac = 0.02
+	ok(s.daylight_level() < 0.1, "deep night is dark")
+	ok(s.daylight() > 0.35, "night overlay dense at night")
+	# hero far from any light: work slows
+	s.player.px = 14.5
+	s.player.py = 2.5
+	var night_mult: float = s.dark_work_mult()
+	ok(night_mult > 1.2, "night work penalty active (×%.2f)" % night_mult)
+	var node := {"kind": "tree", "amount": 5}
+	var t_night: float = s.gather_time(node)
+	s.time.frac = 0.5
+	var t_day: float = s.gather_time(node)
+	ok(t_night > t_day, "gathering is slower in the dark (%.2f > %.2f)" % [t_night, t_day])
+	# a torch next to the hero cancels the penalty
+	s.time.frac = 0.02
+	s._place_building("torch", 14, 3, -1)
+	ok(s.dark_work_mult() < night_mult, "torch light reduces the darkness penalty")
+	ok(s.light_at(14, 2) > 0.6, "torch cell is lit at night")

@@ -4,6 +4,7 @@ extends RefCounted
 const GameData = preload("res://scripts/data.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
 const Social = preload("res://scripts/social.gd")
+const Climate = preload("res://scripts/kernel/climate.gd")
 
 var map: Dictionary
 var n: int = 0
@@ -32,6 +33,28 @@ var flash_t := 0.0
 var capsule: Dictionary = {}
 var invites: Array = []
 var social = null                 # optional social graph (Social.new_graph); null in headless unit tests
+
+# Batch 8a: живе довкілля (spec 0004 A9/B3/B4/E6). The region's REAL latitude drives temperature,
+# season, daylight and weather through the SAME deterministic climate model the kernel proves out;
+# enclosure ("roofing" collapsed to 2D) buffers indoor cells; campfires/heaters emit heat; torches/
+# lamps emit light. Constants mirror kernel/environment.gd so both layers agree on the physics.
+var climate = Climate.ClimateModel_Deterministic.new()
+var weather: StringName = &"clear"
+var weather_t := 0.0                # game-days until the next weather reroll
+var temp_offset := 0.0              # transient regional °C shift (cold snap / heat wave incidents)
+var temp_offset_days := 0.0         # remaining days of the shift; <=0 == none
+var env_rng := RandomNumberGenerator.new()   # seeded from the region seed -> deterministic weather
+var indoor: Dictionary = {}         # cell index -> true : enclosed room cells (flood-fill)
+
+const INDOOR_SETPOINT_C := 21.0     # kernel environment.gd parity
+const INDOOR_INSULATION := 0.6
+const EMITTER_RADIUS := 6           # Manhattan reach of heat emitters (kernel parity)
+const MAX_ROOM_CELLS := 120         # bigger enclosed pockets are courtyards/caves, not rooms
+const LIGHT_RADIUS := {"campfire": 3.5, "torch": 3.0, "lamp": 5.0}
+const DARK_LIGHT_THRESHOLD := 0.35  # below this working slows (spec B3 «−темрява»)
+const DARK_WORK_PENALTY := 0.5      # up to +50% gather time in pitch black
+const COLD_SNAP_DIP_C := 6.0        # kernel WeatherSystem parity
+const WEATHER_LABEL := {&"clear": "ясно", &"rain": "дощ", &"snow": "сніг", &"fog": "туман", &"cold_snap": "мороз"}
 
 var astar: AStarGrid2D            # terrain + blocking buildings (player)
 var astar_terrain: AStarGrid2D    # terrain only (raiders smash walls)
@@ -66,6 +89,7 @@ func new_game(m: Dictionary) -> void:
 		ly = sp.y + 1
 	_place_building("storage", lx, ly, -1)
 	_init_regions()
+	_env_init()
 
 # Arrive in a NEW region by capsule: your pawn + full personal inventory, but no base/stock here.
 func arrive_region(m: Dictionary, pawn: Dictionary) -> void:
@@ -82,6 +106,7 @@ func arrive_region(m: Dictionary, pawn: Dictionary) -> void:
 	bgrid = {}
 	_reset_local_threats()
 	_init_regions()
+	_env_init()
 	dead = false
 
 # Region-local state (raiders, convoys, pending raid) does not travel between regions.
@@ -159,6 +184,7 @@ func load_region(data: Dictionary) -> void:
 	for b in data.buildings:
 		_place_building(str(b.kind), int(b.x), int(b.y), float(b.hp))
 	_init_regions()
+	_env_init()
 	dead = false
 
 func _build_astar() -> void:
@@ -207,6 +233,7 @@ func after_map_change() -> void:
 			b.y = ly
 			bgrid[ly * n + lx] = b
 			break
+	_recompute_indoor()
 
 func _init_regions() -> void:
 	var home := {"name": map.get("place_name", "Поселення"), "lat": map.lat, "lon": map.lon, "home": true}
@@ -297,6 +324,162 @@ func _flash(text: String) -> void:
 	flash_msg = text
 	flash_t = 2.2
 
+# ---------------- environment (Batch 8a) ----------------
+# Seed the deterministic environment for THIS region: the weather stream reproduces from the region
+# seed (координати — це seed: погода теж адреса світу), and the indoor map is derived from geometry.
+func _env_init() -> void:
+	env_rng = RandomNumberGenerator.new()
+	env_rng.seed = region_seed()
+	temp_offset = 0.0
+	temp_offset_days = 0.0
+	weather = climate.weather(float(map.lat), float(map.lon), int(time.day), float(time.frac), env_rng)
+	weather_t = 0.15 + env_rng.randf() * 0.2
+	_recompute_indoor()
+
+func _update_environment(dday: float) -> void:
+	weather_t -= dday
+	if weather_t <= 0.0:
+		var prev := weather
+		weather = climate.weather(float(map.lat), float(map.lon), int(time.day), float(time.frac), env_rng)
+		weather_t = 0.15 + env_rng.randf() * 0.2
+		if weather != prev:
+			_log("⛅ Погода: %s." % WEATHER_LABEL.get(weather, str(weather)))
+	if temp_offset_days > 0.0:
+		temp_offset_days -= dday
+		if temp_offset_days <= 0.0:
+			temp_offset = 0.0
+			temp_offset_days = 0.0
+			_log("🌡 Температурна аномалія минула.", "good")
+
+# Regional temperature anomaly (cold snap −, heat wave +) for `days` — Balance incidents (spec E6).
+func apply_temp_anomaly(delta_c: float, days: float) -> void:
+	temp_offset = delta_c
+	temp_offset_days = maxf(0.0, days)
+
+# Outdoor ambient °C right now: the real-latitude climate model + weather dip + incident anomaly.
+func ambient_temp_c() -> float:
+	var t: float = climate.temperature_c(float(map.lat), float(map.lon), int(time.day), float(time.frac))
+	if weather == &"cold_snap":
+		t -= COLD_SNAP_DIP_C
+	return t + temp_offset
+
+func is_indoor(x: int, y: int) -> bool:
+	return indoor.has(y * n + x)
+
+# Felt °C on a tile: ambient → indoor buffering toward the setpoint → nearby active heat emitters.
+func temp_at(x: int, y: int) -> float:
+	var t := ambient_temp_c()
+	if is_indoor(x, y):
+		t += (INDOOR_SETPOINT_C - t) * INDOOR_INSULATION
+	for b in buildings:
+		var heat := float(GameData.BUILDINGS[b.kind].get("extra", {}).get("heat", 0.0))
+		if heat <= 0.0 or not device_active(b):
+			continue
+		if absi(b.x - x) + absi(b.y - y) <= EMITTER_RADIUS:
+			t += heat
+	return t
+
+func hero_temp_c() -> float:
+	return temp_at(int(player.px), int(player.py))
+
+# Ambient daylight 0..1 from the real-latitude model (long winter nights at high latitude).
+func daylight_level() -> float:
+	return climate.daylight(float(map.lat), int(time.day), float(time.frac))
+
+# Light 0..1 on a tile: ambient daylight vs the brightest reachable light source (linear falloff).
+func light_at(x: int, y: int) -> float:
+	var light := daylight_level()
+	for b in buildings:
+		if not bool(GameData.BUILDINGS[b.kind].get("extra", {}).get("light", false)):
+			continue
+		if not device_active(b):
+			continue
+		var radius: float = float(LIGHT_RADIUS.get(b.kind, 3.0))
+		var dist := float(absi(b.x - x) + absi(b.y - y))
+		if dist <= radius:
+			light = maxf(light, clampf(1.0 - dist / radius, 0.0, 1.0))
+	return clampf(light, 0.0, 1.0)
+
+# Does this device run right now? Fuel-free passives (багаття/смолоскип) always do; grid devices
+# (heater/lamp/cooler/turret) gate on the power net once Batch 8c wires it — this is that seam.
+func device_active(_b) -> bool:
+	return true
+
+func is_wet() -> bool:
+	return weather == &"rain" or weather == &"snow"
+
+func season_name() -> String:
+	return str(Climate.SEASON_NAME.get(climate.season(float(map.lat), int(time.day)), "?"))
+
+# spec B3: unlit night work is slower — up to +50% time in pitch black; torches/lamps cancel it.
+func dark_work_mult() -> float:
+	var light := light_at(int(player.px), int(player.py))
+	if light >= DARK_LIGHT_THRESHOLD:
+		return 1.0
+	return 1.0 + DARK_WORK_PENALTY * (DARK_LIGHT_THRESHOLD - light) / DARK_LIGHT_THRESHOLD
+
+# spec B4 ("roofing") collapsed to 2D: a cell is INDOOR when outside air can't reach it from the map
+# edge without crossing a wall/door/blocked terrain, and its enclosed pocket is room-sized. One BFS
+# floods the outdoor air in from the edges; enclosed leftovers are grouped into components.
+func _recompute_indoor() -> void:
+	indoor = {}
+	var open := PackedByteArray()
+	open.resize(n * n)
+	for i in n * n:
+		open[i] = 0 if WorldGen.is_terrain_blocked(map.tiles[i]) else 1
+	for b in buildings:
+		if GameData.BUILDINGS[b.kind].get("blocks", false) or String(b.kind).begins_with("door"):
+			open[b.y * n + b.x] = 0
+	var outdoor := PackedByteArray()
+	outdoor.resize(n * n)
+	var queue: Array = []
+	for i in n:
+		for cell in [Vector2i(i, 0), Vector2i(i, n - 1), Vector2i(0, i), Vector2i(n - 1, i)]:
+			var idx: int = cell.y * n + cell.x
+			if open[idx] == 1 and outdoor[idx] == 0:
+				outdoor[idx] = 1
+				queue.append(idx)
+	while not queue.is_empty():
+		var idx: int = queue.pop_back()
+		var cx := idx % n
+		var cy := idx / n
+		for d in [[1, 0], [-1, 0], [0, 1], [0, -1]]:
+			var nx: int = cx + d[0]
+			var ny: int = cy + d[1]
+			if nx < 0 or ny < 0 or nx >= n or ny >= n:
+				continue
+			var ni := ny * n + nx
+			if open[ni] == 1 and outdoor[ni] == 0:
+				outdoor[ni] = 1
+				queue.append(ni)
+	# every open cell the air didn't reach is enclosed; small pockets are rooms, big ones stay outdoor
+	for i in n * n:
+		if open[i] != 1 or outdoor[i] == 1 or indoor.has(i):
+			continue
+		var comp: Array = [i]
+		var seen := {i: true}
+		var head := 0
+		while head < comp.size():
+			var idx2: int = comp[head]
+			head += 1
+			var cx2 := idx2 % n
+			var cy2 := idx2 / n
+			for d2 in [[1, 0], [-1, 0], [0, 1], [0, -1]]:
+				var nx2: int = cx2 + d2[0]
+				var ny2: int = cy2 + d2[1]
+				if nx2 < 0 or ny2 < 0 or nx2 >= n or ny2 >= n:
+					continue
+				var ni2 := ny2 * n + nx2
+				if open[ni2] == 1 and outdoor[ni2] == 0 and not seen.has(ni2):
+					seen[ni2] = true
+					comp.append(ni2)
+		if comp.size() <= MAX_ROOM_CELLS:
+			for c in comp:
+				indoor[c] = true
+		else:
+			for c in comp:
+				outdoor[c] = 1
+
 # ---------------- building ----------------
 func _place_building(kind: String, x: int, y: int, hp: float):
 	var def = GameData.BUILDINGS[kind]
@@ -305,12 +488,16 @@ func _place_building(kind: String, x: int, y: int, hp: float):
 	bgrid[y * n + x] = b
 	if def.get("blocks", false):
 		_refresh_solid(x, y)
+	if def.get("blocks", false) or kind.begins_with("door"):
+		_recompute_indoor()   # enclosure geometry changed (spec B4)
 	return b
 
 func _remove_building(b) -> void:
 	buildings.erase(b)
 	bgrid.erase(b.y * n + b.x)
 	_refresh_solid(b.x, b.y)
+	if GameData.BUILDINGS[b.kind].get("blocks", false) or String(b.kind).begins_with("door"):
+		_recompute_indoor()
 
 func build_valid(x: int, y: int) -> bool:
 	if not _in(x, y):
@@ -365,7 +552,7 @@ func gather_time(node) -> float:
 	var tool: String = player.equipped.get("tool", "")
 	if tool != "" and GameData.ITEMS.has(tool):
 		mult *= float(GameData.ITEMS[tool].get("gather_mult", 1.0))
-	return info.time / mult
+	return info.time / mult * dark_work_mult()
 
 func melee_damage() -> float:
 	var dmg: float = 12.0 + player.skills.combat
@@ -501,6 +688,7 @@ func update(dt: float) -> void:
 		time.day += 1
 		_log("🌅 Новий день: %d" % time.day)
 		_grant_daily_capsule()
+	_update_environment(dt / time.day_len)
 	_update_player(dt)
 	_update_crafting(dt)
 	_update_raids(dt)
@@ -929,8 +1117,8 @@ func _update_convoys(dt: float) -> void:
 
 # ---------------- presentation helpers ----------------
 func daylight() -> float:
-	var sun := -cos(time.frac * TAU)
-	return clampf(0.46 * (1.0 - (sun * 0.5 + 0.5)), 0.0, 0.46)
+	# night-overlay alpha from the REAL daylight curve: high latitude gets long winter nights.
+	return clampf(0.46 * (1.0 - daylight_level()), 0.0, 0.46)
 
 func phase_name() -> String:
 	var f = time.frac

@@ -90,6 +90,9 @@ const C_WARN := "ffcf5c"
 const C_BAD := "ff6b6b"
 const C_DIM := "8fa3b5"
 
+# Batch 8a: environment chips (colorblind rule: icon + word, never color alone)
+const WEATHER_ICON := {&"clear": "☀", &"rain": "🌧", &"snow": "❄", &"fog": "🌫", &"cold_snap": "🥶"}
+
 func _ready() -> void:
 	_init_theme()
 	_build_world_nodes()
@@ -606,6 +609,20 @@ func _update_hud() -> void:
 
 func _hud_info(p) -> String:
 	var s := "[b]День %d · %s %s[/b]\n" % [sim.time.day, sim.clock_str(), sim.phase_name()]
+	# Batch 8a: живе довкілля — температура з реальної широти, погода, сезон, приміщення, темрява
+	var tc: float = sim.hero_temp_c()
+	var tcol := C_DIM
+	if tc < 5.0:
+		tcol = C_ACCENT
+	elif tc > 30.0:
+		tcol = C_WARN
+	var env := "[color=#%s]🌡 %+d°C[/color] · %s %s · %s" % [tcol, int(round(tc)),
+		WEATHER_ICON.get(sim.weather, "⛅"), Sim.WEATHER_LABEL.get(sim.weather, "?"), sim.season_name()]
+	if sim.is_indoor(int(p.px), int(p.py)):
+		env += " · 🏠"
+	if sim.dark_work_mult() > 1.001:
+		env += " · [color=#%s]🌑 −темрява[/color]" % C_WARN
+	s += env + "\n"
 	s += "HP    %s\n" % _bbar(p.hp)
 	s += "Голод %s\n" % _bbar(p.hunger)
 	s += "Відп. %s\n" % _bbar(p.rest)

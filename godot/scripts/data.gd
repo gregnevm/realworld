@@ -29,8 +29,11 @@ const BUILDINGS := {
 	# Research station: generates research-points/game-day while it stands (session.research_rate);
 	# drives the tech pipeline (kernel/progression.gd). Appended last so keys 1–7 keep their buildings.
 	"research_bench": {"name": "Дослідницький стіл", "cost": {"wood": 25, "stone": 6}, "hp": 100.0, "blocks": true, "research_rate": 1.0},
+	# Batch 8a: environment emitters — campfire warms nearby cells (extra.heat), torch lights them (extra.light).
+	"campfire": {"name": "Багаття", "cost": {"wood": 8}, "hp": 30.0, "blocks": false, "extra": {"heat": 4.0, "light": true}},
+	"torch": {"name": "Смолоскип", "cost": {"wood": 3}, "hp": 15.0, "blocks": false, "extra": {"light": true}},
 }
-const BUILD_ORDER := ["wall", "door", "floor", "storage", "workbench", "bed", "turret", "research_bench"]
+const BUILD_ORDER := ["wall", "door", "floor", "storage", "workbench", "bed", "turret", "research_bench", "campfire", "torch"]
 
 # craftable equipment (spec 0001). tool -> faster gather; weapon -> more melee damage.
 const ITEMS := {
