@@ -70,15 +70,23 @@ func _ready() -> void:
 	hud.add_child(hud_root)
 	hud_root.setup(session, balance, bus, preg, oreg)
 	hud_root.mount()
+	# Bridge panel intents -> the verb router -> sim/session (R9). Generic: names no mechanic.
+	for p in preg.panels:
+		p.intent.connect(_route_intent)
 
 	if "newhud" in OS.get_cmdline_user_args() and "shot" in OS.get_cmdline_user_args():
 		shot_mode = true
+
+# A panel emitted an intent (e.g. the ResearchPanel's enqueue_research); dispatch it through the router.
+func _route_intent(verb: StringName, args: Dictionary) -> void:
+	router.dispatch(verb, args, session)
 
 func _process(dt: float) -> void:
 	if session == null:
 		return
 	if not session.sim.dead:
 		session.sim.update(dt)
+		session.tick_research(dt)   # research benches fund the tech pipeline each frame
 	cam.global_position = Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE)
 	view.queue_redraw()
 	overlay_host.map_n = int(session.sim.n)   # keep in lockstep with the live region (survives travel)
@@ -113,11 +121,16 @@ func _build_demo_base() -> void:
 	_put("door", c.x, c.y + 3)
 	_put("workbench", c.x - 1, c.y - 1)
 	_put("bed", c.x + 1, c.y - 1)
+	_put("research_bench", c.x + 1, c.y + 1)
 	_put("turret", c.x - 2, c.y + 2)
 	_put("turret", c.x + 2, c.y - 2)
 	sim.player.px = c.x + 0.5; sim.player.py = c.y + 1.5
 	router.dispatch(&"craft", {"id": "axe"}, session)
 	router.dispatch(&"craft", {"id": "spear"}, session)
+	# populate the research pipeline so the ResearchPanel reads live in the screenshot
+	router.dispatch(&"enqueue_research", {"id": "carpentry"}, session)
+	router.dispatch(&"enqueue_research", {"id": "masonry"}, session)
+	session.progression.add_points(0.8)   # ~half of carpentry so the active bar is visibly filled
 
 func _put(kind: String, x: int, y: int) -> void:
 	if session.sim.build_valid(x, y) and GameData.can_afford(session.sim.stock, GameData.BUILDINGS[kind].cost):

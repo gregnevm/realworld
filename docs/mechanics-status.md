@@ -22,7 +22,8 @@
 | `gathering` | ✅ | ✅ | ✅ | ✅ | tool multipliers formalized (axe 1.6× / pick 1.9×) |
 | `base_building` | ✅ | ✅ | ✅ | ✅ | building costs/HP in `data.gd` |
 | `crafting_automation` | ✅ | ✅ | 🟡 | ✅ | `kernel/production.gd` bills (count/until); quality 0–6. **Content tree now authored** — see below |
-| `content_tree` | ✅ | ✅ | 🟡 | ✅ | `content/catalog.json` + `kernel/catalog.gd`: 333 defs (78 res · 41 research · 85 build · 58 recipe · 71 item), reachability-validated |
+| `content_tree` | ✅ | ✅ | 🟡 | ✅ | `content/catalog.json` + `kernel/catalog.gd`: 335 defs (78 res · 41 research · 87 build · 58 recipe · 71 item), reachability-validated |
+| `progression_research` | ✅ | ✅ | ✅ | ✅ | **spec 0007** — `kernel/progression.gd` queueable research pipeline over the tree; live from research benches (`session.tick_research`), surfaced in `ResearchPanel` (LEFT dock); planner (`research_path`/`steps_to_unlock`). Node + Godot mirrored tests |
 | `raids_pvp` | ✅ | ✅ | ✅ | ✅ | threat-driven waves + tactic escalation via Balance |
 | `balance_director` | ✅ | ✅ | 🟡 | ✅ | `kernel/balance.gd`; `decide()` AI seam; incident MTB pacing |
 | `convoy_logistics` | ✅ | ✅ | ✅ | ✅ | real hubs (Kyiv/Lviv/Odesa/…); trade offers |
@@ -59,6 +60,16 @@ validated **content catalogue** — the "повне дерево крафтів,
 The catalogue is **additive** — `data.gd` (Phase-0 playable slice) is untouched, so the shipped game and
 its suites are unchanged. Remaining work is *surfacing*: wiring the catalogue into the HUD build/craft
 menus so this depth becomes *felt in play*, not just *validated*.
+
+**Update (2026-07-08, spec 0007):** the first walk of the tree now ships — a **research→unlock pipeline**
+(`kernel/progression.gd`) drives it end to end. `ResearchState` (spec 0003) got the missing layer above it:
+a queue, "what's researchable now", "what does this tech state unlock", a tech-level readout, and a
+tech-path planner. It is **live** — a Phase-0 `research_bench` funds it (`session.tick_research`), the
+`ResearchPanel` (LEFT dock) shows level + active-project bar + a clickable available-projects list + queue,
+and unlocks toast through the feed. Verified in Node (`tests/progression.test.js`, 12) + headless Godot
+(`run_progression_tests.gd`) against the same `catalog.json`. The **remaining** surfacing is the catalog
+*build/craft menu gated by unlock* (bridging the slice's 6-resource table to the catalog's 78) — deferred
+so this pass stays additive; see spec 0007 §5.
 
 ## How to read this
 
