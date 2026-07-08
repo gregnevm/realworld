@@ -30,6 +30,7 @@ func _init() -> void:
 	_t_monotonic_unlock()
 	_t_illegal_starts()
 	_t_planner()
+	_t_unlocks_and_counts()
 	_t_serialization()
 	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
 	quit(1 if failed > 0 else 0)
@@ -227,6 +228,43 @@ func _t_planner() -> void:
 	var done: Array = p.add_points(total)
 	ok(done.size() == path.size() and p.is_unlocked(tid), "enqueuing the path unlocks the target in path order")
 	ok(p.steps_to_unlock(tid).size() == 0, "no steps remain once the target is unlocked")
+
+# --- 7c. unlocks_of partition + catalog_counts ---------------------------------------------------
+func _t_unlocks_and_counts() -> void:
+	var cat: Dictionary = Catalog.load_json()
+	var p := Progression.new(cat)
+	# unlocks_of partitions gated content: each gated def appears under exactly one project
+	var seen: Dictionary = {}
+	var dup := false
+	var gated_count := 0
+	for r in cat.get("research", []):
+		var u: Dictionary = p.unlocks_of(StringName(str(r.get("id"))))
+		for section in ["buildings", "recipes", "items"]:
+			for id in u[section]:
+				if seen.has(str(id)):
+					dup = true
+				seen[str(id)] = true
+				gated_count += 1
+	ok(not dup, "no gated def is opened by two projects")
+	var expect_gated := 0
+	for section in ["buildings", "recipes", "items"]:
+		for rec in cat.get(section, []):
+			if str(rec.get("research", "")) != "":
+				expect_gated += 1
+	ok(gated_count == expect_gated, "unlocks_of covers exactly the gated content (%d)" % expect_gated)
+	ok(p.unlocks_of(&"").get("buildings").is_empty(), "no project opens ungated content")
+	# catalog_counts: cold start == ungated; fully researched == totals
+	var c0: Dictionary = p.catalog_counts()
+	ok(int(c0.buildings.total) == cat.get("buildings", []).size(), "counts report full totals")
+	var guard := 0
+	while p.unlocked_count() < p.total_projects() and guard < 1000:
+		guard += 1
+		p.start(p.auto_next())
+		p.add_points(p.active_cost())
+	var c1: Dictionary = p.catalog_counts()
+	ok(int(c1.buildings.unlocked) == int(c1.buildings.total)
+		and int(c1.recipes.unlocked) == int(c1.recipes.total)
+		and int(c1.items.unlocked) == int(c1.items.total), "fully researched -> all categories counted unlocked")
 
 # --- 8. serialization round-trip -----------------------------------------------------------------
 func _t_serialization() -> void:

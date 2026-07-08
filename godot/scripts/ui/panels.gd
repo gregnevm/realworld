@@ -135,6 +135,8 @@ class ResearchPanel extends PanelBase.Base:
 	var _counts: Widgets.StatRow
 	var _active_bar: Widgets.NeedBar
 	var _active_lbl: Widgets.StatRow
+	var _unlocks: Widgets.StatRow
+	var _cat: Widgets.StatRow
 	var _rows: Array = []      # ChoiceRow pool (researchable options), built ONCE (R2)
 	var _qrows: Array = []     # StatRow pool (the queue)
 	func _init() -> void:
@@ -150,6 +152,8 @@ class ResearchPanel extends PanelBase.Base:
 		_counts = Widgets.StatRow.new(); vb.add_child(_counts); _counts.set_row("✔", "Відкрито", "0/0")
 		_active_bar = Widgets.NeedBar.new(); vb.add_child(_active_bar)
 		_active_lbl = Widgets.StatRow.new(); vb.add_child(_active_lbl); _active_lbl.set_row("▶", "Активне", "—")
+		_unlocks = Widgets.StatRow.new(); vb.add_child(_unlocks); _unlocks.set_row("🔓", "Відкриє", "—")
+		_cat = Widgets.StatRow.new(); vb.add_child(_cat); _cat.set_row("📚", "Каталог", "—")
 		var h2 := Widgets.H2Header.new(); vb.add_child(h2); h2.set_header("Доступні", "queue")
 		for i in AVAIL_MAX:
 			var row := Widgets.ChoiceRow.new()
@@ -173,6 +177,7 @@ class ResearchPanel extends PanelBase.Base:
 			_level.set_value("—"); _counts.set_value("—/—")
 			_active_bar.bind({"icon": "🔬", "pct": 0, "state": &"warn"})
 			_active_lbl.set_value("немає стола")
+			_unlocks.set_value("—"); _cat.set_value("—")
 			for row in _rows:
 				row.bind({"id": &"", "shown": false})
 			for q in _qrows:
@@ -184,6 +189,14 @@ class ResearchPanel extends PanelBase.Base:
 		var pct: int = int(round(float(r.get("active_pct", 0.0)) * 100.0))
 		_active_bar.bind({"icon": "🔬", "pct": pct, "state": (&"good" if al != "" else &"warn")})
 		_active_lbl.set_value(al if al != "" else "—")
+		var nu: Dictionary = r.get("next_unlocks", {})
+		var nu_total: int = int(nu.get("total", 0))
+		_unlocks.set_value(("%d (%dб %dр %dп)" % [nu_total, int(nu.get("buildings", 0)), int(nu.get("recipes", 0)), int(nu.get("items", 0))]) if nu_total > 0 else "—")
+		var cc: Dictionary = r.get("counts", {})
+		var cb: Dictionary = cc.get("buildings", {})
+		var cr: Dictionary = cc.get("recipes", {})
+		var ci: Dictionary = cc.get("items", {})
+		_cat.set_value("%dб %dр %dп" % [int(cb.get("unlocked", 0)), int(cr.get("unlocked", 0)), int(ci.get("unlocked", 0))])
 		var opts: Array = r.get("options", [])
 		for i in _rows.size():
 			if i < opts.size():

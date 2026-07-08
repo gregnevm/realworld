@@ -285,6 +285,32 @@ func unlocked_items() -> Array:
 			out.append(it)
 	return out
 
+# What completing a given research project OPENS: the buildings/recipes/items gated exactly on it. The
+# reverse of the gate — powers the "researching X will unlock …" preview. Ungated content is in no set.
+func unlocks_of(research_id) -> Dictionary:
+	var rid := StringName(research_id)
+	var out: Dictionary = {"buildings": [], "recipes": [], "items": []}
+	if rid == &"":
+		return out
+	for b in Catalog.buildings(db):
+		if b.research() == rid:
+			out.buildings.append(b.id)
+	for r in Catalog.recipes(db):
+		if r.requires_research() == rid:
+			out.recipes.append(r.id)
+	for it in Catalog.items(db):
+		if it.research() == rid:
+			out.items.append(it.id)
+	return out
+
+# Per-category unlocked/total of the catalogue under the current tech state — the tech-dashboard readout.
+func catalog_counts() -> Dictionary:
+	return {
+		"buildings": {"unlocked": unlocked_buildings().size(), "total": Catalog.buildings(db).size()},
+		"recipes": {"unlocked": unlocked_recipes().size(), "total": Catalog.recipes(db).size()},
+		"items": {"unlocked": unlocked_items().size(), "total": Catalog.items(db).size()},
+	}
+
 # The research id gating a building/recipe/item ("" when ungated) — the label the UI shows on a locked row.
 func building_gate(id) -> StringName:
 	var b = db.get_def(StringName(id))

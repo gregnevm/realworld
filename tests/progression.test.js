@@ -134,6 +134,21 @@ class Progression {
   unlockedBuildings() { return this.cat.buildings.filter((b) => this.gateOk(b.research)); }
   unlockedRecipes() { return this.cat.recipes.filter((r) => this.gateOk(r.research)); }
   unlockedItems() { return this.cat.items.filter((i) => this.gateOk(i.research)); }
+  unlocksOf(rid) {
+    if (!rid) return { buildings: [], recipes: [], items: [] };
+    return {
+      buildings: this.cat.buildings.filter((b) => b.research === rid).map((b) => b.id),
+      recipes: this.cat.recipes.filter((r) => r.research === rid).map((r) => r.id),
+      items: this.cat.items.filter((i) => i.research === rid).map((i) => i.id),
+    };
+  }
+  catalogCounts() {
+    return {
+      buildings: { unlocked: this.unlockedBuildings().length, total: this.cat.buildings.length },
+      recipes: { unlocked: this.unlockedRecipes().length, total: this.cat.recipes.length },
+      items: { unlocked: this.unlockedItems().length, total: this.cat.items.length },
+    };
+  }
   // --- viewmodel + serialization ---
   summary() {
     return { active: this.active, active_label: this.labelOf(this.active), active_pct: this.activePct(),
@@ -344,6 +359,41 @@ test("progression: steps_to_unlock shrinks as the path is researched", () => {
     prev = now;
   }
   assert.strictEqual(p.stepsToUnlock(target.id).length, 1, "only the target itself remains");
+});
+
+test("progression: unlocks_of partitions all gated content by its gate", () => {
+  const cat = loadCatalog();
+  const p = new Progression(cat);
+  // union of unlocks_of over every research == exactly the gated content; each gated def appears once
+  const seenB = new Map(), seenR = new Map(), seenI = new Map();
+  for (const r of cat.research) {
+    const u = p.unlocksOf(r.id);
+    for (const id of u.buildings) { assert.ok(!seenB.has(id), `building ${id} gated by two projects`); seenB.set(id, r.id); }
+    for (const id of u.recipes) { assert.ok(!seenR.has(id), `recipe ${id} gated by two projects`); seenR.set(id, r.id); }
+    for (const id of u.items) { assert.ok(!seenI.has(id), `item ${id} gated by two projects`); seenI.set(id, r.id); }
+  }
+  const gatedB = cat.buildings.filter((b) => b.research).map((b) => b.id).sort();
+  const gatedR = cat.recipes.filter((r) => r.research).map((r) => r.id).sort();
+  const gatedI = cat.items.filter((i) => i.research).map((i) => i.id).sort();
+  assert.deepStrictEqual([...seenB.keys()].sort(), gatedB, "every gated building is opened by exactly its gate");
+  assert.deepStrictEqual([...seenR.keys()].sort(), gatedR, "every gated recipe is opened by exactly its gate");
+  assert.deepStrictEqual([...seenI.keys()].sort(), gatedI, "every gated item is opened by exactly its gate");
+  assert.deepStrictEqual(p.unlocksOf(""), { buildings: [], recipes: [], items: [] }, "no project opens ungated content");
+});
+
+test("progression: catalog_counts starts at ungated and grows to full", () => {
+  const cat = loadCatalog();
+  const p = new Progression(cat);
+  const c0 = p.catalogCounts();
+  assert.strictEqual(c0.buildings.total, cat.buildings.length, "counts report the full totals");
+  assert.strictEqual(c0.buildings.unlocked, cat.buildings.filter((b) => !b.research).length, "cold start: only ungated buildings counted unlocked");
+  assert.strictEqual(c0.items.unlocked, cat.items.filter((i) => !i.research).length, "cold start: only ungated items counted unlocked");
+  let guard = 0;
+  while (p.unlockedCount() < p.totalProjects() && guard++ < 1000) { const n = p.autoNext(); p.start(n); p.addPoints(p.activeCost()); }
+  const c1 = p.catalogCounts();
+  assert.strictEqual(c1.buildings.unlocked, c1.buildings.total, "fully researched: all buildings counted unlocked");
+  assert.strictEqual(c1.recipes.unlocked, c1.recipes.total, "fully researched: all recipes counted unlocked");
+  assert.strictEqual(c1.items.unlocked, c1.items.total, "fully researched: all items counted unlocked");
 });
 
 test("progression: auto_next is deterministic across fresh runs", () => {

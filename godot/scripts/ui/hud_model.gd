@@ -189,7 +189,20 @@ static func _research_slice(session) -> Dictionary:
 		"active_pct": float(s.get("active_pct", 0.0)),
 		"options": options,
 		"queue": queue,
+		"counts": prog.catalog_counts(),
+		"next_unlocks": _next_unlocks(prog),
 	}
+
+# How much the ACTIVE project will open (per-category counts) — the "researching X unlocks N" preview.
+static func _next_unlocks(prog) -> Dictionary:
+	var a: StringName = prog.active_id()
+	if a == &"":
+		return {"buildings": 0, "recipes": 0, "items": 0, "total": 0}
+	var u: Dictionary = prog.unlocks_of(a)
+	var nb: int = (u.buildings as Array).size()
+	var nr: int = (u.recipes as Array).size()
+	var ni: int = (u.items as Array).size()
+	return {"buildings": nb, "recipes": nr, "items": ni, "total": nb + nr + ni}
 
 # --- raid (state enum for the banner; no live enemy refs — R8) ---
 static func _raid_slice(sim) -> Dictionary:
