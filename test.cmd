@@ -12,6 +12,9 @@ echo.
 echo === Kernel tests (spec 0003) ===
 "%GODOT%" --headless --path "%~dp0godot" -s res://tests/run_kernel_tests.gd
 echo.
+echo === Content catalogue tests (deep craft/resource/building tree) ===
+"%GODOT%" --headless --path "%~dp0godot" -s res://tests/run_catalog_tests.gd
+echo.
 echo === UI view-layer tests (spec 0005) ===
 "%GODOT%" --headless --path "%~dp0godot" -s res://tests/run_ui_tests.gd
 echo.

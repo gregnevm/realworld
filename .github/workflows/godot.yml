@@ -17,7 +17,19 @@ jobs:
           chmod +x godot-bin
       - name: Sim unit tests
         run: ./godot-bin --headless --path godot -s res://tests/run_tests.gd
+      - name: Content catalogue tests
+        run: ./godot-bin --headless --path godot -s res://tests/run_catalog_tests.gd
       - name: Playthrough smoke test
         run: ./godot-bin --headless --path godot -s res://tests/run_smoke.gd
       - name: Scene parse check
         run: ./godot-bin --headless --path godot -s res://tests/parse_check.gd
+
+  content-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Deterministic sim + content-tree validation (node --test)
+        run: npm test

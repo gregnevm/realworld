@@ -1,0 +1,207 @@
+{
+  "meta": {
+    "id": "realworld-core",
+    "version": "0.1.0",
+    "note": "Deep content tree for the forward engine — the full graph of resources, research, buildings, recipes and items. Single source of truth, consumed by godot/scripts/kernel/catalog.gd (via Defs.load_pack seam) and validated headless by godot/tests/run_catalog_tests.gd + tests/catalog.test.js. RimWorld canon; Factorio for the automation/production chains. Amounts are integers (JSON round-trip yields floats in Godot — the loader int-casts). This does NOT replace data.gd (the Phase-0 playable slice); it is the Phase-1 catalogue the kernel's load_pack was designed for."
+  },
+
+  "resources": [
+    {"id": "wood",             "label": "Дерево",        "icon": "🪵", "tier": 0, "sources": ["chop"],          "stack": 200, "fuel_value": 1.0},
+    {"id": "stone",            "label": "Камінь",        "icon": "🪨", "tier": 0, "sources": ["mine"],          "stack": 200},
+    {"id": "scrap",            "label": "Брухт",         "icon": "⚙",       "tier": 0, "sources": ["gather"],        "stack": 150},
+    {"id": "clay",             "label": "Глина",         "icon": "🟤", "tier": 0, "sources": ["mine"],          "stack": 150},
+    {"id": "sand",             "label": "Пісок",         "icon": "⏳",       "tier": 0, "sources": ["mine"],          "stack": 150},
+    {"id": "coal",             "label": "Вугілля",       "icon": "⚫",       "tier": 0, "sources": ["mine"],          "stack": 150, "fuel_value": 2.5},
+    {"id": "iron_ore",         "label": "Залізна руда",  "icon": "⛰",       "tier": 0, "sources": ["mine"],          "stack": 150},
+    {"id": "copper_ore",       "label": "Мідна руда",    "icon": "🟠", "tier": 0, "sources": ["mine"],          "stack": 150},
+    {"id": "raw_food",         "label": "Сирі овочі",    "icon": "🥔", "tier": 0, "sources": ["farm", "gather"], "stack": 75, "rot_days": 8.0},
+    {"id": "meat",             "label": "М'ясо",         "icon": "🍖", "tier": 0, "sources": ["hunt"],          "stack": 75, "rot_days": 4.0},
+    {"id": "hide",             "label": "Шкіра-сирець",  "icon": "🦬", "tier": 0, "sources": ["hunt"],          "stack": 100},
+    {"id": "plant_fiber",      "label": "Волокно",       "icon": "🌾", "tier": 0, "sources": ["farm", "gather"], "stack": 150},
+    {"id": "herbal",           "label": "Цілющі трави",  "icon": "🌿", "tier": 0, "sources": ["gather", "farm"], "stack": 100, "rot_days": 15.0},
+
+    {"id": "planks",           "label": "Дошки",         "icon": "🟫", "tier": 1, "sources": ["craft"], "stack": 200},
+    {"id": "charcoal",         "label": "Деревне вугілля","icon": "▪",      "tier": 1, "sources": ["craft"], "stack": 150, "fuel_value": 2.0},
+    {"id": "brick",            "label": "Цегла",         "icon": "🧱", "tier": 1, "sources": ["craft"], "stack": 200},
+    {"id": "stone_block",      "label": "Тесаний камінь","icon": "▦",       "tier": 1, "sources": ["craft"], "stack": 200},
+    {"id": "glass",            "label": "Скло",          "icon": "🔷", "tier": 1, "sources": ["craft"], "stack": 100},
+    {"id": "iron_bar",         "label": "Залізний брусок","icon": "⬛",      "tier": 1, "sources": ["craft"], "stack": 150},
+    {"id": "copper_bar",       "label": "Мідний брусок", "icon": "🟧", "tier": 1, "sources": ["craft"], "stack": 150},
+    {"id": "cloth",            "label": "Тканина",       "icon": "🧵", "tier": 1, "sources": ["craft"], "stack": 150},
+    {"id": "leather",          "label": "Шкіра",         "icon": "🟤", "tier": 1, "sources": ["craft"], "stack": 150},
+
+    {"id": "steel",            "label": "Сталь",         "icon": "▬",       "tier": 2, "sources": ["craft"], "stack": 150},
+    {"id": "components",       "label": "Компоненти",    "icon": "🔩", "tier": 2, "sources": ["craft"], "stack": 75},
+    {"id": "copper_wire",      "label": "Мідний дріт",   "icon": "🧷", "tier": 2, "sources": ["craft"], "stack": 150},
+    {"id": "gear_wheel",       "label": "Шестерня",      "icon": "⚙️", "tier": 2, "sources": ["craft"], "stack": 100},
+    {"id": "nails",            "label": "Цвяхи",         "icon": "📌", "tier": 2, "sources": ["craft"], "stack": 200},
+    {"id": "chemfuel",         "label": "Хемпаливо",     "icon": "🛢", "tier": 2, "sources": ["craft"], "stack": 100, "fuel_value": 4.0},
+    {"id": "gunpowder",        "label": "Порох",         "icon": "💥", "tier": 2, "sources": ["craft"], "stack": 100},
+    {"id": "ammo",             "label": "Набої",         "icon": "🔫", "tier": 2, "sources": ["craft"], "stack": 200},
+    {"id": "herbal_medicine",  "label": "Трав'яні ліки", "icon": "🌱", "tier": 2, "sources": ["craft"], "stack": 50, "rot_days": 30.0},
+
+    {"id": "circuit",          "label": "Мікросхема",    "icon": "🖲", "tier": 3, "sources": ["craft"], "stack": 75},
+    {"id": "machine_frame",    "label": "Каркас машини", "icon": "🔲", "tier": 3, "sources": ["craft"], "stack": 50},
+    {"id": "reinforced_plate", "label": "Броньова плита","icon": "🛡", "tier": 3, "sources": ["craft"], "stack": 75},
+    {"id": "medicine",         "label": "Ліки",          "icon": "💊", "tier": 3, "sources": ["craft"], "stack": 50, "rot_days": 60.0}
+  ],
+
+  "research": [
+    {"id": "carpentry",         "label": "Столярство",      "tier": 1, "cost": 1.5, "prereqs": []},
+    {"id": "fire_mastery",      "label": "Приборкання вогню","tier": 1, "cost": 1.5, "prereqs": []},
+    {"id": "masonry",           "label": "Каменярство",     "tier": 1, "cost": 2.0, "prereqs": []},
+    {"id": "agriculture",       "label": "Землеробство",    "tier": 1, "cost": 2.0, "prereqs": []},
+    {"id": "hunting",           "label": "Полювання",       "tier": 1, "cost": 1.5, "prereqs": []},
+
+    {"id": "smelting",          "label": "Виплавка",        "tier": 2, "cost": 3.0, "prereqs": ["fire_mastery"]},
+    {"id": "cooking",           "label": "Кулінарія",       "tier": 2, "cost": 2.0, "prereqs": ["fire_mastery"]},
+    {"id": "textiles",          "label": "Ткацтво",         "tier": 2, "cost": 2.5, "prereqs": ["agriculture"]},
+    {"id": "leatherworking",    "label": "Чинбарство",      "tier": 2, "cost": 2.5, "prereqs": ["hunting"]},
+
+    {"id": "smithing",          "label": "Ковальство",      "tier": 3, "cost": 4.0, "prereqs": ["smelting"]},
+    {"id": "machining",         "label": "Механіка",        "tier": 3, "cost": 4.0, "prereqs": ["smelting"]},
+
+    {"id": "steelmaking",       "label": "Сталеваріння",    "tier": 4, "cost": 5.0, "prereqs": ["smithing", "machining"]},
+    {"id": "chemistry",         "label": "Хімія",           "tier": 4, "cost": 5.0, "prereqs": ["smelting"]},
+    {"id": "medicine_research", "label": "Медицина",        "tier": 4, "cost": 4.5, "prereqs": ["cooking", "agriculture"]},
+
+    {"id": "electricity",       "label": "Електрика",       "tier": 5, "cost": 6.0, "prereqs": ["machining"]},
+    {"id": "firearms",          "label": "Вогнепальна зброя","tier": 5, "cost": 6.0, "prereqs": ["machining", "chemistry"]},
+
+    {"id": "electronics",       "label": "Електроніка",     "tier": 6, "cost": 7.0, "prereqs": ["electricity", "chemistry"]},
+    {"id": "fortification",     "label": "Фортифікація",    "tier": 6, "cost": 6.0, "prereqs": ["masonry", "steelmaking"]},
+
+    {"id": "automation",        "label": "Автоматизація",   "tier": 7, "cost": 9.0, "prereqs": ["electronics", "steelmaking"]},
+    {"id": "defense_systems",   "label": "Системи оборони", "tier": 7, "cost": 8.0, "prereqs": ["firearms", "electronics"]},
+    {"id": "bionics",           "label": "Біоніка",         "tier": 7, "cost": 9.0, "prereqs": ["electronics", "medicine_research"]},
+
+    {"id": "industrialization", "label": "Індустріалізація","tier": 8, "cost": 12.0, "prereqs": ["automation"]}
+  ],
+
+  "buildings": [
+    {"id": "wall",             "label": "Стіна",          "category": "structure", "cost": {"wood": 5},                        "hp": 120.0, "blocks": true},
+    {"id": "door",             "label": "Двері",          "category": "structure", "cost": {"wood": 4},                        "hp": 80.0,  "blocks": false},
+    {"id": "floor",            "label": "Підлога",        "category": "structure", "cost": {"wood": 1},                        "hp": 30.0,  "blocks": false},
+    {"id": "stone_wall",       "label": "Кам'яна стіна",  "category": "structure", "cost": {"stone_block": 5},                 "hp": 220.0, "blocks": true,  "research": "masonry"},
+    {"id": "stone_floor",      "label": "Кам'яна підлога","category": "structure", "cost": {"stone_block": 1},                 "hp": 60.0,  "blocks": false, "research": "masonry"},
+    {"id": "brick_wall",       "label": "Цегляна стіна",  "category": "structure", "cost": {"brick": 5},                       "hp": 280.0, "blocks": true,  "research": "masonry"},
+    {"id": "steel_wall",       "label": "Сталева стіна",  "category": "structure", "cost": {"steel": 5},                       "hp": 420.0, "blocks": true,  "research": "fortification"},
+    {"id": "sandbags",         "label": "Мішки з піском", "category": "structure", "cost": {"sand": 8},                        "hp": 100.0, "blocks": false, "cover": 0.65, "research": "fortification"},
+    {"id": "embrasure",        "label": "Бійниця",        "category": "structure", "cost": {"stone_block": 4},                 "hp": 240.0, "blocks": true,  "cover": 0.5,  "research": "fortification"},
+
+    {"id": "workbench",        "label": "Верстак",        "category": "production", "cost": {"wood": 18, "stone": 4},          "hp": 100.0, "station": true},
+    {"id": "campfire",         "label": "Багаття",        "category": "production", "cost": {"wood": 12},                      "hp": 40.0,  "station": true, "emits_heat": 2.0, "emits_light": true},
+    {"id": "fueled_stove",     "label": "Дров'яна плита", "category": "production", "cost": {"iron_bar": 8, "components": 2},   "hp": 120.0, "station": true, "research": "cooking"},
+    {"id": "kiln",             "label": "Піч для випалу", "category": "production", "cost": {"clay": 12, "stone": 8},          "hp": 140.0, "station": true, "research": "fire_mastery"},
+    {"id": "stonecutter_table","label": "Каменотесний стіл","category": "production","cost": {"wood": 12, "stone": 10},        "hp": 110.0, "station": true, "research": "masonry"},
+    {"id": "smelter",          "label": "Плавильна піч",  "category": "production", "cost": {"stone": 20, "clay": 10},         "hp": 160.0, "station": true, "research": "smelting"},
+    {"id": "smithy",           "label": "Кузня",          "category": "production", "cost": {"iron_bar": 10, "brick": 8},      "hp": 140.0, "station": true, "research": "smithing"},
+    {"id": "machining_table",  "label": "Механічний стіл","category": "production", "cost": {"iron_bar": 12, "planks": 10, "stone": 8}, "hp": 150.0, "station": true, "research": "machining"},
+    {"id": "loom",             "label": "Ткацький верстат","category": "production","cost": {"wood": 20, "plant_fiber": 10},   "hp": 90.0,  "station": true, "research": "textiles"},
+    {"id": "tailoring_bench",  "label": "Швацький стіл",  "category": "production", "cost": {"wood": 16, "cloth": 8},          "hp": 90.0,  "station": true, "research": "textiles"},
+    {"id": "tannery",          "label": "Чинбарня",       "category": "production", "cost": {"wood": 16, "plant_fiber": 8},    "hp": 90.0,  "station": true, "research": "leatherworking"},
+    {"id": "chemistry_bench",  "label": "Хімічний стіл",  "category": "production", "cost": {"steel": 10, "glass": 6},         "hp": 130.0, "station": true, "research": "chemistry"},
+    {"id": "drug_lab",         "label": "Аптечна лабораторія","category": "production","cost": {"steel": 12, "glass": 8, "components": 4}, "hp": 130.0, "station": true, "research": "medicine_research"},
+    {"id": "electronics_bench","label": "Стіл електроніки","category": "production","cost": {"steel": 12, "copper_wire": 10, "glass": 8}, "hp": 130.0, "station": true, "research": "electronics"},
+    {"id": "fabrication_bench","label": "Фабрикатор",     "category": "production", "cost": {"steel": 20, "components": 8, "glass": 6}, "hp": 160.0, "station": true, "research": "industrialization"},
+    {"id": "assembler",        "label": "Складальник",    "category": "production", "cost": {"machine_frame": 2, "circuit": 4, "components": 6}, "hp": 180.0, "station": true, "autocraft": true, "power": {"role": "trader", "draw": 150.0, "priority": 5}, "research": "automation"},
+
+    {"id": "wood_generator",   "label": "Дров'яний генератор","category": "power",  "cost": {"planks": 20, "components": 4},   "hp": 130.0, "power": {"role": "source", "kind": "fuel", "rated": 400.0, "fuel": 8.0, "fuel_max": 8.0, "burn_per_day": 4.0}, "research": "electricity"},
+    {"id": "watermill",        "label": "Водяне колесо",  "category": "power",       "cost": {"planks": 24, "components": 6, "stone": 20}, "hp": 150.0, "power": {"role": "source", "kind": "wind", "rated": 700.0}, "research": "electricity"},
+    {"id": "windmill",         "label": "Вітряк",         "category": "power",       "cost": {"planks": 24, "components": 6},   "hp": 120.0, "power": {"role": "source", "kind": "wind", "rated": 500.0}, "research": "electricity"},
+    {"id": "solar_panel",      "label": "Сонячна панель", "category": "power",       "cost": {"steel": 10, "glass": 8, "circuit": 2}, "hp": 90.0,  "power": {"role": "source", "kind": "solar", "rated": 600.0}, "research": "electronics"},
+    {"id": "battery",          "label": "Акумулятор",     "category": "power",       "cost": {"steel": 8, "components": 4},     "hp": 90.0,  "power": {"role": "battery", "capacity": 2000.0}, "research": "electricity"},
+    {"id": "power_conduit",    "label": "Кабель",         "category": "power",       "cost": {"copper_wire": 1},                "hp": 30.0,  "research": "electricity"},
+
+    {"id": "storage",          "label": "Склад",          "category": "storage",     "cost": {"wood": 10},                      "hp": 90.0,  "capacity": 250},
+    {"id": "shelf",            "label": "Полиця",         "category": "storage",     "cost": {"planks": 8},                     "hp": 70.0,  "capacity": 120, "research": "carpentry"},
+    {"id": "warehouse",        "label": "Ангар",          "category": "storage",     "cost": {"planks": 20, "steel": 8, "nails": 20}, "hp": 200.0, "capacity": 800, "research": "steelmaking"},
+    {"id": "fridge",           "label": "Холодильник",    "category": "storage",     "cost": {"steel": 10, "components": 4},    "hp": 110.0, "capacity": 200, "keeps_cold": true, "power": {"role": "trader", "draw": 100.0, "priority": 8}, "research": "electricity"},
+
+    {"id": "bedroll",          "label": "Спальник",       "category": "comfort",     "cost": {"plant_fiber": 8},                "hp": 40.0,  "bed": true, "comfort": 0.4},
+    {"id": "bed",              "label": "Ліжко",          "category": "comfort",     "cost": {"wood": 14},                      "hp": 60.0,  "bed": true, "comfort": 0.7},
+    {"id": "well",             "label": "Криниця",        "category": "comfort",     "cost": {"stone": 16},                     "hp": 120.0, "water_source": true},
+    {"id": "lamp",             "label": "Лампа",          "category": "comfort",     "cost": {"planks": 4, "copper_wire": 2},   "hp": 40.0,  "power": {"role": "trader", "draw": 25.0, "priority": 3}, "emits_light": true, "research": "electricity"},
+    {"id": "heater",           "label": "Обігрівач",      "category": "comfort",     "cost": {"components": 3, "copper_wire": 4}, "hp": 70.0,  "power": {"role": "trader", "draw": 200.0, "priority": 6}, "emits_heat": 8.0, "research": "electricity"},
+    {"id": "cooler",           "label": "Кондиціонер",    "category": "comfort",     "cost": {"components": 3, "copper_wire": 4}, "hp": 70.0,  "power": {"role": "trader", "draw": 200.0, "priority": 6}, "emits_heat": -8.0, "research": "electricity"},
+    {"id": "medbed",           "label": "Медичне ліжко",  "category": "comfort",     "cost": {"planks": 12, "cloth": 8, "components": 4}, "hp": 90.0, "bed": true, "medbed": true, "med_quality": 3, "research": "medicine_research"},
+
+    {"id": "grow_zone",        "label": "Грядка",         "category": "farming",     "cost": {"wood": 2},                       "hp": 20.0,  "grow": true, "research": "agriculture"},
+    {"id": "hydroponics",      "label": "Гідропоніка",    "category": "farming",     "cost": {"steel": 10, "components": 4, "copper_wire": 4}, "hp": 90.0, "grow": true, "grow_mult": 2.4, "power": {"role": "trader", "draw": 140.0, "priority": 4}, "research": "electricity"},
+
+    {"id": "turret",           "label": "Турель",         "category": "defense",     "cost": {"scrap": 14, "components": 2},    "hp": 90.0,  "blocks": true, "range": 6.2, "damage": 14.0, "cooldown": 1.0, "ammo_max": 40, "research": "machining"},
+    {"id": "auto_turret",      "label": "Автотурель",     "category": "defense",     "cost": {"steel": 16, "components": 6, "circuit": 2}, "hp": 130.0, "blocks": true, "range": 8.4, "damage": 22.0, "cooldown": 0.7, "ammo_max": 80, "power": {"role": "trader", "draw": 120.0, "priority": 9}, "research": "defense_systems"},
+    {"id": "spike_trap",       "label": "Кілкова пастка", "category": "defense",     "cost": {"wood": 10, "scrap": 6},          "hp": 50.0,  "trap": true, "damage": 30.0, "uses": 1, "research": "fortification"},
+    {"id": "mortar",           "label": "Міномет",        "category": "defense",     "cost": {"steel": 18, "components": 6, "gear_wheel": 4}, "hp": 140.0, "blocks": true, "blast_radius": 2, "damage": 45.0, "research": "defense_systems"}
+  ],
+
+  "recipes": [
+    {"id": "make_planks",      "label": "Розпиляти дошки",   "station": "workbench",        "inputs": {"wood": 3},                          "output": {"id": "planks", "count": 2},          "work": 0.35, "research": "carpentry"},
+    {"id": "make_charcoal",    "label": "Випалити вугілля",  "station": "kiln",             "inputs": {"wood": 4},                          "output": {"id": "charcoal", "count": 2},        "work": 0.4,  "research": "fire_mastery"},
+    {"id": "make_brick",       "label": "Обпалити цеглу",    "station": "kiln",             "inputs": {"clay": 3},                          "output": {"id": "brick", "count": 2},           "work": 0.4,  "research": "fire_mastery"},
+    {"id": "make_glass",       "label": "Виплавити скло",    "station": "kiln",             "inputs": {"sand": 3, "charcoal": 1},           "output": {"id": "glass", "count": 2},           "work": 0.5,  "research": "fire_mastery"},
+    {"id": "cut_block",        "label": "Тесати камінь",     "station": "stonecutter_table","inputs": {"stone": 3},                         "output": {"id": "stone_block", "count": 2},     "work": 0.4,  "research": "masonry"},
+
+    {"id": "smelt_iron",       "label": "Виплавити залізо",  "station": "smelter",          "inputs": {"iron_ore": 2, "coal": 1},           "output": {"id": "iron_bar", "count": 1},        "work": 0.6,  "research": "smelting"},
+    {"id": "smelt_copper",     "label": "Виплавити мідь",    "station": "smelter",          "inputs": {"copper_ore": 2, "coal": 1},         "output": {"id": "copper_bar", "count": 1},      "work": 0.6,  "research": "smelting"},
+    {"id": "smelt_steel",      "label": "Виплавити сталь",   "station": "smelter",          "inputs": {"iron_bar": 2, "charcoal": 2},       "output": {"id": "steel", "count": 1},           "work": 0.9,  "research": "steelmaking"},
+
+    {"id": "weave_cloth",      "label": "Зіткати тканину",   "station": "loom",             "inputs": {"plant_fiber": 3},                   "output": {"id": "cloth", "count": 2},           "work": 0.5,  "research": "textiles"},
+    {"id": "tan_leather",      "label": "Вичинити шкіру",    "station": "tannery",          "inputs": {"hide": 2},                          "output": {"id": "leather", "count": 2},         "work": 0.5,  "research": "leatherworking"},
+
+    {"id": "make_components",  "label": "Скласти компоненти","station": "machining_table",  "inputs": {"iron_bar": 2, "copper_bar": 1},     "output": {"id": "components", "count": 1},      "work": 1.0,  "research": "machining"},
+    {"id": "make_wire",        "label": "Витягти дріт",      "station": "machining_table",  "inputs": {"copper_bar": 1},                    "output": {"id": "copper_wire", "count": 3},     "work": 0.5,  "research": "machining"},
+    {"id": "make_gear",        "label": "Виточити шестерні", "station": "machining_table",  "inputs": {"iron_bar": 2},                      "output": {"id": "gear_wheel", "count": 2},      "work": 0.6,  "research": "machining"},
+    {"id": "forge_nails",      "label": "Викувати цвяхи",    "station": "smithy",           "inputs": {"iron_bar": 1},                      "output": {"id": "nails", "count": 8},           "work": 0.4,  "research": "smithing"},
+
+    {"id": "make_chemfuel",    "label": "Переробити хемпаливо","station": "chemistry_bench","inputs": {"wood": 6},                          "output": {"id": "chemfuel", "count": 2},        "work": 0.8,  "research": "chemistry"},
+    {"id": "make_gunpowder",   "label": "Змішати порох",     "station": "chemistry_bench",  "inputs": {"coal": 2, "chemfuel": 1},           "output": {"id": "gunpowder", "count": 3},       "work": 0.8,  "research": "chemistry"},
+    {"id": "make_ammo",        "label": "Спорядити набої",   "station": "machining_table",  "inputs": {"gunpowder": 1, "steel": 1},         "output": {"id": "ammo", "count": 10},           "work": 0.6,  "research": "firearms"},
+
+    {"id": "make_herbal_med",  "label": "Приготувати трав'яні ліки","station": "drug_lab",  "inputs": {"herbal": 3, "cloth": 1},            "output": {"id": "herbal_medicine", "count": 1},  "work": 0.7,  "research": "medicine_research"},
+    {"id": "make_medicine",    "label": "Синтезувати ліки",  "station": "drug_lab",         "inputs": {"herbal_medicine": 1, "components": 1, "chemfuel": 1}, "output": {"id": "medicine", "count": 1}, "work": 1.2, "research": "medicine_research"},
+
+    {"id": "make_circuit",     "label": "Спаяти мікросхему", "station": "electronics_bench","inputs": {"copper_wire": 2, "glass": 1, "components": 1}, "output": {"id": "circuit", "count": 1}, "work": 1.4, "research": "electronics"},
+    {"id": "make_frame",       "label": "Зварити каркас",    "station": "fabrication_bench","inputs": {"steel": 4, "components": 2, "gear_wheel": 2}, "output": {"id": "machine_frame", "count": 1}, "work": 2.0, "research": "industrialization"},
+    {"id": "make_plate",       "label": "Викувати броньоплиту","station": "fabrication_bench","inputs": {"steel": 3, "circuit": 1},         "output": {"id": "reinforced_plate", "count": 2},"work": 1.6,  "research": "industrialization"},
+
+    {"id": "cook_simple_meal", "label": "Приготувати просту страву","station": "campfire",  "inputs": {"raw_food": 1, "meat": 1},           "output": {"id": "simple_meal", "count": 1, "thing": true, "nutrition": 0.9, "rot_days": 6.0}, "work": 0.3, "research": ""},
+    {"id": "cook_fine_meal",   "label": "Приготувати вишукану страву","station": "fueled_stove","inputs": {"raw_food": 2, "meat": 1},       "output": {"id": "fine_meal", "count": 1, "thing": true, "nutrition": 1.3, "rot_days": 6.0}, "work": 0.5, "research": "cooking"},
+    {"id": "make_pemmican",    "label": "Заготовити пеммікан","station": "fueled_stove",     "inputs": {"raw_food": 2, "meat": 2},           "output": {"id": "pemmican", "count": 4, "thing": true, "nutrition": 0.5, "rot_days": 40.0}, "work": 0.7, "research": "cooking"}
+  ],
+
+  "items": [
+    {"id": "stone_axe",   "label": "Кам'яна сокира", "kind": "tool",   "slot": "tool",   "recipe": {"wood": 8, "stone": 6},          "station": "workbench", "gather_mult": 1.4, "research": ""},
+    {"id": "stone_pick",  "label": "Кам'яне кайло",  "kind": "tool",   "slot": "tool",   "recipe": {"wood": 6, "stone": 8},          "station": "workbench", "gather_mult": 1.5, "research": ""},
+    {"id": "iron_axe",    "label": "Залізна сокира", "kind": "tool",   "slot": "tool",   "recipe": {"planks": 4, "iron_bar": 4},     "station": "smithy",    "gather_mult": 1.8, "research": "smithing"},
+    {"id": "iron_pick",   "label": "Залізне кайло",  "kind": "tool",   "slot": "tool",   "recipe": {"planks": 4, "iron_bar": 5},     "station": "smithy",    "gather_mult": 2.1, "research": "smithing"},
+    {"id": "steel_axe",   "label": "Сталева сокира", "kind": "tool",   "slot": "tool",   "recipe": {"planks": 4, "steel": 4},        "station": "smithy",    "gather_mult": 2.2, "research": "steelmaking"},
+    {"id": "steel_pick",  "label": "Сталеве кайло",  "kind": "tool",   "slot": "tool",   "recipe": {"planks": 4, "steel": 5},        "station": "smithy",    "gather_mult": 2.6, "research": "steelmaking"},
+
+    {"id": "wooden_club", "label": "Дерев'яний кийок","kind": "weapon", "slot": "weapon", "recipe": {"wood": 10},                     "station": "workbench", "dmg_bonus": 6.0,  "dmg_type": "blunt", "research": ""},
+    {"id": "wooden_spear","label": "Дерев'яний спис", "kind": "weapon", "slot": "weapon", "recipe": {"wood": 14},                     "station": "workbench", "dmg_bonus": 9.0,  "dmg_type": "sharp", "research": ""},
+    {"id": "bow",         "label": "Лук",            "kind": "weapon", "slot": "weapon", "recipe": {"wood": 10, "plant_fiber": 6},   "station": "workbench", "dmg_bonus": 14.0, "dmg_type": "sharp", "ranged": true, "range": 8.0, "research": "hunting"},
+    {"id": "iron_sword",  "label": "Залізний меч",   "kind": "weapon", "slot": "weapon", "recipe": {"iron_bar": 6, "leather": 2},    "station": "smithy",    "dmg_bonus": 16.0, "dmg_type": "sharp", "research": "smithing"},
+    {"id": "iron_mace",   "label": "Залізна булава", "kind": "weapon", "slot": "weapon", "recipe": {"iron_bar": 7},                  "station": "smithy",    "dmg_bonus": 18.0, "dmg_type": "blunt", "research": "smithing"},
+    {"id": "steel_sword", "label": "Сталевий меч",   "kind": "weapon", "slot": "weapon", "recipe": {"steel": 6, "leather": 2},       "station": "smithy",    "dmg_bonus": 22.0, "dmg_type": "sharp", "research": "steelmaking"},
+    {"id": "revolver",    "label": "Револьвер",      "kind": "weapon", "slot": "weapon", "recipe": {"components": 3, "gunpowder": 4}, "station": "machining_table", "dmg_bonus": 18.0, "dmg_type": "sharp", "ranged": true, "range": 10.0, "research": "firearms"},
+    {"id": "bolt_rifle",  "label": "Гвинтівка",      "kind": "weapon", "slot": "weapon", "recipe": {"steel": 4, "components": 3, "gunpowder": 6}, "station": "machining_table", "dmg_bonus": 28.0, "dmg_type": "sharp", "ranged": true, "range": 13.0, "research": "firearms"},
+
+    {"id": "tribal_top",   "label": "Племінна сорочка","kind": "apparel", "slot": "torso", "recipe": {"cloth": 6},                   "station": "tailoring_bench", "insulation_c": 8.0,  "armor": {"sharp": 0.06},              "research": "textiles"},
+    {"id": "tribal_pants", "label": "Племінні штани", "kind": "apparel", "slot": "legs",  "recipe": {"cloth": 5},                    "station": "tailoring_bench", "insulation_c": 6.0,  "armor": {"sharp": 0.04},              "research": "textiles"},
+    {"id": "cloth_cap",    "label": "Шапка",          "kind": "apparel", "slot": "head",  "recipe": {"cloth": 3},                    "station": "tailoring_bench", "insulation_c": 4.0,  "armor": {},                          "research": "textiles"},
+    {"id": "parka",        "label": "Парка",          "kind": "apparel", "slot": "torso", "recipe": {"cloth": 8, "leather": 4},      "station": "tailoring_bench", "insulation_c": 32.0, "armor": {"sharp": 0.1, "blunt": 0.05}, "research": "textiles"},
+    {"id": "leather_tunic","label": "Шкіряна туніка", "kind": "apparel", "slot": "torso", "recipe": {"leather": 6},                  "station": "tailoring_bench", "insulation_c": 10.0, "armor": {"sharp": 0.12, "blunt": 0.06},"research": "leatherworking"},
+    {"id": "leather_pants","label": "Шкіряні штани",  "kind": "apparel", "slot": "legs",  "recipe": {"leather": 5},                  "station": "tailoring_bench", "insulation_c": 8.0,  "armor": {"sharp": 0.1},               "research": "leatherworking"},
+    {"id": "duster",       "label": "Плащ-дастер",    "kind": "apparel", "slot": "torso", "recipe": {"leather": 8},                  "station": "tailoring_bench", "insulation_c": 18.0, "armor": {"sharp": 0.15, "blunt": 0.08},"research": "leatherworking"},
+    {"id": "iron_helmet",  "label": "Залізний шолом", "kind": "apparel", "slot": "head",  "recipe": {"iron_bar": 4},                 "station": "smithy",          "insulation_c": 2.0,  "armor": {"sharp": 0.3, "blunt": 0.2},  "research": "smithing"},
+    {"id": "flak_vest",    "label": "Бронежилет",     "kind": "apparel", "slot": "torso", "recipe": {"steel": 4, "cloth": 6},        "station": "tailoring_bench", "insulation_c": 6.0,  "armor": {"sharp": 0.4, "blunt": 0.25}, "research": "steelmaking"},
+    {"id": "flak_helmet",  "label": "Бойовий шолом",  "kind": "apparel", "slot": "head",  "recipe": {"steel": 3},                    "station": "smithy",          "insulation_c": 2.0,  "armor": {"sharp": 0.45, "blunt": 0.3}, "research": "steelmaking"},
+
+    {"id": "peg_leg",       "label": "Дерев'яний протез", "kind": "prosthetic", "slot": "leg", "recipe": {"wood": 6},                       "station": "workbench",         "restores": "leg", "cap_factor": 0.6, "research": ""},
+    {"id": "prosthetic_arm","label": "Протез руки",       "kind": "prosthetic", "slot": "arm", "recipe": {"steel": 4, "components": 2},     "station": "smithy",            "restores": "arm", "cap_factor": 0.8, "research": "smithing"},
+    {"id": "bionic_arm",    "label": "Біонічна рука",     "kind": "prosthetic", "slot": "arm", "recipe": {"machine_frame": 1, "circuit": 2, "medicine": 2}, "station": "fabrication_bench", "restores": "arm", "cap_factor": 1.15, "research": "bionics"},
+    {"id": "bionic_leg",    "label": "Біонічна нога",     "kind": "prosthetic", "slot": "leg", "recipe": {"machine_frame": 1, "circuit": 2, "medicine": 2}, "station": "fabrication_bench", "restores": "leg", "cap_factor": 1.15, "research": "bionics"},
+    {"id": "bionic_eye",    "label": "Біонічне око",      "kind": "prosthetic", "slot": "eye", "recipe": {"circuit": 3, "glass": 2, "medicine": 2}, "station": "fabrication_bench", "restores": "eye", "cap_factor": 1.1, "research": "bionics"}
+  ]
+}
