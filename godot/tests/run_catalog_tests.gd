@@ -14,6 +14,7 @@ const Defs = preload("res://scripts/kernel/defs.gd")
 const Things = preload("res://scripts/kernel/things.gd")
 const Production = preload("res://scripts/kernel/production.gd")
 const Catalog = preload("res://scripts/kernel/catalog.gd")
+const CatalogSim = preload("res://scripts/catalog_sim.gd")
 
 var passed := 0
 var failed := 0
@@ -28,6 +29,7 @@ func _init() -> void:
 	_t_accessors()
 	_t_production_integration()
 	_t_research_gate()
+	_t_sim_playthrough()
 	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
 	quit(1 if failed > 0 else 0)
 
@@ -152,3 +154,41 @@ func _t_research_gate() -> void:
 	research.unlock(&"steelmaking")
 	prod.system_tick(world, {"dday": 1.0})
 	ok(int(world["stock"].get("steel", 0)) == 1, "same recipe crafts once steelmaking is unlocked")
+
+# --- 9. WRITE-SIDE playthrough: research -> build -> craft up the real chain on catalog_sim -------
+func _t_sim_playthrough() -> void:
+	var sim = CatalogSim.new()   # builds the catalogue DefDatabase
+	ok(sim.db != null and sim.db.count() > 300, "catalog_sim builds the tree (%d defs)" % sim.db.count())
+	sim.grant("wood", 200); sim.grant("stone", 100)
+	sim.grant("iron_ore", 40); sim.grant("coal", 40)
+
+	# 1) research a tier-1 project by ticking (passive research advance)
+	ok(sim.start_research("carpentry"), "start carpentry (no prereqs)")
+	for i in 4:
+		sim.tick(1.0)
+	ok(sim.researched("carpentry"), "carpentry researched by ticking to its cost")
+
+	# 2) build a station, queue a recipe, tick -> output appears in stock
+	ok(sim.build("workbench").ok and sim.has_building("workbench"), "built a workbench station (ungated)")
+	ok(sim.queue_craft("make_planks", &"count", 3).ok, "queued 3x make_planks at the workbench")
+	for i in 8:
+		sim.tick(1.0)
+	ok(sim.amount("planks") >= 6, "workbench crafted planks from wood (%d)" % sim.amount("planks"))
+
+	# 3) tech up two tiers and craft an intermediate from raw ore
+	ok(sim.start_research("fire_mastery"), "start fire_mastery")
+	for i in 4:
+		sim.tick(1.0)
+	ok(sim.start_research("smelting"), "start smelting (prereq fire_mastery now met)")
+	for i in 6:
+		sim.tick(1.0)
+	ok(sim.researched("smelting"), "smelting researched")
+	ok(sim.build("smelter").ok, "built a smelter (unlocked by smelting)")
+	ok(sim.queue_craft("smelt_iron", &"count", 2).ok, "queued smelt_iron on the smelter")
+	for i in 8:
+		sim.tick(1.0)
+	ok(sim.amount("iron_bar") >= 2, "smelter produced iron_bar from ore + coal (%d)" % sim.amount("iron_bar"))
+
+	# 4) the research gate holds end to end — a deeper station stays locked
+	ok(not sim.can_build("smithy"), "smithy stays locked until smithing is researched")
+	ok(not bool(sim.build("smithy").ok), "build(smithy) is refused while its research is locked")

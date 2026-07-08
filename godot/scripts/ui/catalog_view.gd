@@ -144,11 +144,12 @@ static func _research_rows(db, unlocked: Dictionary) -> Array:
 		})
 	return rows
 
-# The labels of research you could START right now (prereqs met, not yet unlocked) — the "next" hint.
+# Research you could START right now (prereqs met, not yet unlocked) as {id, label} — the "next" hint.
+# Carries the id so a panel can emit a &"cat_research" intent for it, not just show the label.
 static func _next_research(db, unlocked: Dictionary) -> Array:
 	var out: Array = []
 	for r in Catalog.research_projects(db):
 		if research_status(r, unlocked) == &"available":
-			out.append(String(r.data.get("label", str(r.id))))
-	out.sort()
+			out.append({"id": r.id, "label": String(r.data.get("label", str(r.id)))})
+	out.sort_custom(func(a, b): return String(a["label"]) < String(b["label"]))
 	return out

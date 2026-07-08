@@ -66,8 +66,20 @@ counts, next-available research) → `ui/catalog_panels.gd` `TechPanel` (build-o
 only via Widgets/Tokens) → registered in `ui/mechanics.gd`, so surfacing it never edited `hud_root.gd`
 (R4). `HudModel.snapshot()` carries a `catalog` slice end to end. Headless-tested in `run_ui_tests.gd`
 (value-data / R8, build-once / R2, prereq-gate status enums) with the R3/R7/R9/R10 tripwires extended to
-the new files. Remaining: interactive build/craft/research **actions** (intents → a router that mutates a
-catalogue-backed sim), and migrating the live sim off `data.gd` onto the catalogue.
+the new files.
+
+**Write-side — done (the tree is now operable, not just visible):** `catalog_sim.gd` is a scene-free,
+deterministic **catalogue-backed play model** on the shipped kernel — it holds stock + research +
+placed buildings and exposes the three verbs that USE the tree: RESEARCH a project
+(`Production.ResearchState` gate + advance), BUILD a station (pays cost, attaches a `CompWorkbench`),
+CRAFT a recipe (`Production.ProductionSystem` + `Bill` turn inputs into stock at the placed station).
+`ui/catalog_verbs.gd` is the router (spec 0005 §2.10 / R9): it binds `cat_research` / `cat_build` /
+`cat_craft` **intents** a panel emits to those commands — the panel never touches the sim. Proven end to
+end in `run_catalog_tests.gd` (`_t_sim_playthrough`: research carpentry → build a workbench → craft
+planks → tech up to smelting → build a smelter → smelt iron from raw ore, with the research gate holding)
+and in `run_ui_tests.gd` (intent → router → sim; `TechPanel.act_next_research()` fires the full
+panel → router → sim path). Remaining: migrating the *live* sim off `data.gd` onto `catalog_sim`, and a
+richer interactive build/craft browser UI.
 
 ## How to read this
 

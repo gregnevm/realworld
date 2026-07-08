@@ -13,6 +13,9 @@ const LatLon = preload("res://scripts/ui/latlon.gd")
 const HudModel = preload("res://scripts/ui/hud_model.gd")
 const CatalogView = preload("res://scripts/ui/catalog_view.gd")
 const CatalogPanels = preload("res://scripts/ui/catalog_panels.gd")
+const CatalogVerbs = preload("res://scripts/ui/catalog_verbs.gd")
+const CatalogSim = preload("res://scripts/catalog_sim.gd")
+const InputCtl = preload("res://scripts/ui/input_controller.gd")
 const FeedbackBus = preload("res://scripts/ui/feedback_bus.gd")
 const Widgets = preload("res://scripts/ui/widgets.gd")
 const Panels = preload("res://scripts/ui/panels.gd")
@@ -41,6 +44,8 @@ func _init() -> void:
 	_t_stock_spine()
 	_t_catalog_view()
 	_t_tech_panel()
+	_t_catalog_verbs()
+	_t_tech_intent()
 	_t_panel_registry()
 	_t_overlay_registry()
 	_t_bus_no_dangling()
@@ -306,6 +311,37 @@ func _t_tech_panel() -> void:
 	ok(full.has("catalog") and bool(full.catalog.available), "HudModel.snapshot surfaces the catalog slice (pipeline end to end)")
 	panel.free()
 
+# ---------------- CatalogVerbs: the write-side router (intent -> catalog_sim command, R9) ----------------
+func _t_catalog_verbs() -> void:
+	var sim = CatalogSim.new()
+	sim.grant("wood", 100); sim.grant("stone", 50)
+	var ic = InputCtl.InputController.new()
+	CatalogVerbs.install(ic, sim)
+	ok(ic.has(&"cat_build") and ic.has(&"cat_research") and ic.has(&"cat_craft"), "catalog verbs installed on the router")
+	ic.dispatch(&"cat_build", {"id": "workbench"}, null)
+	ok(sim.has_building("workbench"), "dispatch cat_build -> station placed (intent -> router -> sim, R9)")
+	ic.dispatch(&"cat_research", {"id": "carpentry"}, null)
+	ok(String(sim.research.active) == "carpentry", "dispatch cat_research -> project started")
+	for i in 4:
+		sim.tick(1.0)
+	ic.dispatch(&"cat_craft", {"id": "make_planks", "mode": "count", "target": 2}, null)
+	for i in 6:
+		sim.tick(1.0)
+	ok(sim.amount("planks") >= 4, "dispatch cat_craft -> the recipe runs and yields stock (%d planks)" % sim.amount("planks"))
+
+# ---------------- TechPanel intent: panel action -> router -> sim (the full interactive path) ----------------
+func _t_tech_intent() -> void:
+	var sim = CatalogSim.new()
+	var ic = InputCtl.InputController.new()
+	CatalogVerbs.install(ic, sim)
+	var cat: Dictionary = CatalogView.snapshot(sim.db, sim.view_state())
+	var panel = CatalogPanels.TechPanel.new()
+	panel.bind({"catalog": cat})
+	panel.intent.connect(func(v, a): ic.dispatch(v, a, null))   # HudRoot/InputController wiring
+	panel.act_next_research()                                    # simulates the "research next" affordance
+	ok(String(sim.research.active) != "", "panel action -> intent -> router -> sim starts research (%s)" % String(sim.research.active))
+	panel.free()
+
 # ---------------- PanelRegistry == SystemRegistry (sort/get/by_dock/bind_visible) ----------------
 func _t_panel_registry() -> void:
 	var reg = PanelReg.PanelRegistry.new()
@@ -353,7 +389,8 @@ func _t_bus_no_dangling() -> void:
 func _t_rule_tripwires() -> void:
 	# R1 — one-way flow: no sim/kernel/session/social/persistence file references res://scripts/ui
 	var sim_side := ["res://scripts/sim.gd", "res://scripts/session.gd", "res://scripts/social.gd",
-		"res://scripts/persistence.gd", "res://scripts/world_gen.gd", "res://scripts/kernel/balance.gd"]
+		"res://scripts/persistence.gd", "res://scripts/world_gen.gd", "res://scripts/kernel/balance.gd",
+		"res://scripts/catalog_sim.gd"]
 	var r1 := true
 	for f in sim_side:
 		if "res://scripts/ui" in _read_code(f):

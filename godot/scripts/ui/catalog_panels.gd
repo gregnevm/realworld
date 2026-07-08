@@ -18,6 +18,7 @@ class TechPanel extends PanelBase.Base:
 	var _buildable: Widgets.StatRow
 	var _craftable: Widgets.StatRow
 	var _next: Widgets.StatRow
+	var _next_id: StringName = &""    # id of the next-available research (for the cat_research intent)
 
 	func _init() -> void:
 		panel_id = &"tech"
@@ -62,7 +63,18 @@ class TechPanel extends PanelBase.Base:
 		_buildable.set_value("%d/%d" % [int(s.get("buildable", 0)), int(s.get("buildings", 0))])
 		_craftable.set_value("%d/%d" % [int(s.get("craftable", 0)), int(s.get("recipes", 0))])
 		var nxt: Array = cat.get("next", [])
-		_next.set_value(String(nxt[0]) if nxt.size() > 0 else "—")
+		if nxt.size() > 0:
+			_next_id = StringName(nxt[0].get("id", &""))
+			_next.set_value(String(nxt[0].get("label", "—")))
+		else:
+			_next_id = &""
+			_next.set_value("—")
+
+	# Player action: begin the next-available research. Emits an INTENT (R9) — the router (catalog_verbs)
+	# turns it into the sim command; the panel never touches the sim itself.
+	func act_next_research() -> void:
+		if _next_id != &"":
+			emit_intent(&"cat_research", {"id": _next_id})
 
 # ---- ResearchTiersPanel (RIGHT dock) — the tech-era climb, one row per research tier ----
 class ResearchTiersPanel extends PanelBase.Base:
