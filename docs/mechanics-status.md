@@ -21,7 +21,8 @@
 | `inventory_gear` | ✅ | ⚠️ | ⬜ | ⚠️ | `gear.gd` exists but **untracked**; not yet wired into the sim loop |
 | `gathering` | ✅ | ✅ | ✅ | ✅ | tool multipliers formalized (axe 1.6× / pick 1.9×) |
 | `base_building` | ✅ | ✅ | ✅ | ✅ | building costs/HP in `data.gd` |
-| `crafting_automation` | ✅ | ✅ | 🟡 | ✅ | `kernel/production.gd` bills (count/until); quality 0–6 |
+| `crafting_automation` | ✅ | ✅ | 🟡 | ✅ | `kernel/production.gd` bills (count/until); quality 0–6. **Content tree now authored** — see below |
+| `content_tree` | ✅ | ✅ | 🟡 | ✅ | `content/catalog.json` + `kernel/catalog.gd`: 159 defs (35 res · 22 research · 48 build · 25 recipe · 29 item), reachability-validated |
 | `raids_pvp` | ✅ | ✅ | ✅ | ✅ | threat-driven waves + tactic escalation via Balance |
 | `balance_director` | ✅ | ✅ | 🟡 | ✅ | `kernel/balance.gd`; `decide()` AI seam; incident MTB pacing |
 | `convoy_logistics` | ✅ | ✅ | ✅ | ✅ | real hubs (Kyiv/Lviv/Odesa/…); trade offers |
@@ -37,10 +38,31 @@ Locked out of Phase 0 scope on purpose (`section:scope`): **mood/thoughts**, **t
 **skills as mechanics**, **beauty / room-quality buffs**, **multi-pawn management** (one hero only),
 **additional human pawns** (MMO-only). Tracked here so «designed» never gets mistaken for «coming».
 
+## The content tree (closing the infrastructure-vs-content gap)
+
+The snapshot above flagged the core tension: the kernel is deep but the *content* was thin (6 resources,
+7 buildings, 4 items in `data.gd`). That gap is now closed on the forward-engine side by a full,
+validated **content catalogue** — the "повне дерево крафтів, ресурсів, будівель" tree:
+
+- **`godot/content/catalog.json`** — 159 typed defs across 4 resource tiers, an 8-tier research DAG,
+  48 buildings and 25 recipes forming real multi-step production chains (ore → bar → intermediate →
+  advanced), and 29 tools/weapons/apparel/prosthetics bound to the shipped `gear.gd` stats (apparel →
+  `CompApparel`, prosthetics → `Hediff_Implant`, ammo → `combat.gd` turrets/firearms).
+- **`godot/scripts/kernel/catalog.gd`** — typed loader (reuses `RecipeDef`/`ResearchDef`) + graph
+  validators.
+- Verified two ways: **`tests/catalog.test.js`** (Node, every push) and
+  **`godot/tests/run_catalog_tests.gd`** (headless Godot, CI) — both assert the tree is an acyclic DAG
+  with **full reachability from raw roots** (nothing stranded) and craft a real recipe through the live
+  `ProductionSystem`. Full reference: [`docs/catalog.md`](catalog.md).
+
+The catalogue is **additive** — `data.gd` (Phase-0 playable slice) is untouched, so the shipped game and
+its suites are unchanged. Remaining work is *surfacing*: wiring the catalogue into the HUD build/craft
+menus so this depth becomes *felt in play*, not just *validated*.
+
 ## How to read this
 
 The right-hand columns tell the real story: several deep systems are **coded + tested in the kernel
-but only partially surfaced in a playable slice**. The single highest-leverage move to close the gap
-is **`inventory_gear` (Batch 4)** — commit it, then wire gear/water/medicine into the sim so the depth
-becomes *felt*, not just *tested*. See `GDD_BOOK/gdd.json` `section:risks` (risk #5) and the CTO
-integration-fixtures recommendation.
+but only partially surfaced in a playable slice**. With the content tree now authored, the highest-
+leverage move is **surfacing** — bind the catalogue to the build/craft UI (via the `catalog.gd`
+accessors) so the tree is playable, then wire gear/water/medicine into the sim so the depth becomes
+*felt*, not just *tested*. See `GDD_BOOK/gdd.json` `section:risks` (risk #5).
