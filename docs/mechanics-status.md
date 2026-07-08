@@ -90,7 +90,10 @@ shared model each frame — so the HUD reads and the router writes the SAME stat
 it, watch the counts move. `HudModel.snapshot()` sources the catalog slice from that shared model, and
 `parse_check.gd` now preloads `newhud_main` so the whole HUD wiring is compile-checked in CI. Proven in
 `run_ui_tests.gd` `_t_action_browsers` (build-once/R2, slot click → intent → router → `catalog_sim`
-places the building). Remaining: migrating the *live* data.gd sim onto `catalog_sim` (one world, not two).
+places the building). Remaining: migrating the *live* data.gd sim onto `catalog_sim` (one world, not
+two) — a large data-model migration, so it is decided on paper first in
+[`specs/0007-catalogue-sim-unification.md`](../specs/0007-catalogue-sim-unification.md) (ADR + 5-stage,
+each-stage-CI-green plan), per the AGENTS.md "big migration ⇒ ADR before code" rule.
 
 ## How to read this
 
