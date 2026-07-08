@@ -257,6 +257,38 @@ static func missing_for(cost: Dictionary, stock: Dictionary) -> Dictionary:
 			out[k] = deficit
 	return out
 
+# Roll a cost/input dict all the way down to the total RAW resources it consumes — the full "budget"
+# to make something from scratch, honouring each recipe's output count (runs = ceil(need/count)). Every
+# key of the result is a raw (map-obtained) resource. This is the build/craft budget a gated menu shows.
+static func raw_requirements(cat: Dictionary, cost: Dictionary) -> Dictionary:
+	var raws: Dictionary = {}
+	for r in cat.get("resources", []):
+		if _is_raw_sources(r.get("sources", [])):
+			raws[StringName(str(r.get("id", "")))] = true
+	var by_out: Dictionary = {}
+	for rc in cat.get("recipes", []):
+		var oid := StringName(str(rc.get("output", {}).get("id", "")))
+		if not by_out.has(oid):
+			by_out[oid] = rc
+	var out: Dictionary = {}
+	for res in cost:
+		_accumulate_raw(StringName(str(res)), int(cost[res]), raws, by_out, out, {})
+	return out
+
+static func _accumulate_raw(rid: StringName, amount: int, raws: Dictionary, by_out: Dictionary, out: Dictionary, stack: Dictionary) -> void:
+	if amount <= 0:
+		return
+	if raws.has(rid) or not by_out.has(rid) or stack.has(rid):   # raw / terminal / cycle-guard -> book it
+		out[rid] = int(out.get(rid, 0)) + amount
+		return
+	stack[rid] = true
+	var recipe: Dictionary = by_out[rid]
+	var count: int = maxi(1, int(recipe.get("output", {}).get("count", 1)))
+	var runs: int = int(ceil(float(amount) / float(count)))
+	for inp in recipe.get("inputs", {}):
+		_accumulate_raw(StringName(str(inp)), runs * int(recipe.inputs[inp]), raws, by_out, out, stack)
+	stack.erase(rid)
+
 # ============================================================================================
 # GRAPH VALIDATION (the depth guarantee)
 # ============================================================================================

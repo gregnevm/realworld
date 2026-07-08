@@ -296,6 +296,24 @@ function missingFor(cost, stock) {
   for (const k of Object.keys(cost || {})) { const d = (cost[k] | 0) - ((stock[k] | 0)); if (d > 0) out[k] = d; }
   return out;
 }
+function rawRequirements(cat, cost) {
+  const raws = new Set(cat.resources.filter(isRaw).map((r) => r.id));
+  const byOut = new Map();
+  for (const rc of cat.recipes) if (rc.output && !byOut.has(rc.output.id)) byOut.set(rc.output.id, rc);
+  const out = {};
+  const acc = (rid, amount, stack) => {
+    if (amount <= 0) return;
+    if (raws.has(rid) || !byOut.has(rid) || stack.has(rid)) { out[rid] = (out[rid] || 0) + amount; return; }
+    stack.add(rid);
+    const recipe = byOut.get(rid);
+    const count = Math.max(1, (recipe.output.count | 0) || 1);
+    const runs = Math.ceil(amount / count);
+    for (const inp of Object.keys(recipe.inputs || {})) acc(inp, runs * recipe.inputs[inp], stack);
+    stack.delete(rid);
+  };
+  for (const res of Object.keys(cost || {})) acc(res, cost[res], new Set());
+  return out;
+}
 
 test("catalog: production_chain is a valid dependency order ending at the target's recipe", () => {
   const cat = loadCatalog();
@@ -332,6 +350,27 @@ test("catalog: production_chain resolves the advanced electronics chain end to e
   // dependency order: bar before wire before circuit
   const pos = (r) => chain.indexOf(producerOf(cat, r));
   assert.ok(pos("copper_bar") < pos("copper_wire") && pos("copper_wire") < pos("circuit"), "smelt -> wire -> circuit order");
+});
+
+test("catalog: raw_requirements rolls every cost down to raw resources only", () => {
+  const cat = loadCatalog();
+  const raws = new Set(cat.resources.filter(isRaw).map((r) => r.id));
+  // for EVERY building cost + recipe input + item recipe, the budget resolves to raws only, all > 0
+  const check = (cost, where) => {
+    const req = rawRequirements(cat, cost);
+    for (const [k, v] of Object.entries(req)) {
+      assert.ok(raws.has(k), `${where}: budget key "${k}" bottoms out at a raw resource`);
+      assert.ok(v > 0, `${where}: raw requirement "${k}" is positive`);
+    }
+  };
+  for (const b of cat.buildings) check(b.cost, `building ${b.id}`);
+  for (const r of cat.recipes) check(r.inputs, `recipe ${r.id}`);
+  for (const i of cat.items) check(i.recipe, `item ${i.id}`);
+  // a pure-raw cost passes through unchanged; a deep chain accumulates a real raw budget
+  assert.deepStrictEqual(rawRequirements(cat, { wood: 30, stone: 8 }), { wood: 30, stone: 8 }, "raw cost passes through");
+  const circuitReq = rawRequirements(cat, { circuit: 4 });
+  assert.ok(Object.keys(circuitReq).length > 0 && Object.values(circuitReq).every((v) => v > 0), "a deep target yields a non-empty raw budget");
+  assert.ok(Object.keys(circuitReq).every((k) => raws.has(k)), "the circuit budget is entirely raw resources");
 });
 
 test("catalog: missing_for reports exactly the shortfall", () => {

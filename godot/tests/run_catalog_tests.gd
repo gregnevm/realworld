@@ -52,6 +52,23 @@ func _t_bom_planner() -> void:
 	var miss: Dictionary = Catalog.missing_for({"wood": 10, "stone": 5}, {"wood": 4, "stone": 5})
 	ok(miss.size() == 1 and int(miss.get("wood", 0)) == 6, "missing_for reports only the deficient resource by its deficit")
 	ok(Catalog.missing_for({"wood": 3}, {"wood": 3}).is_empty(), "exactly affordable -> nothing missing")
+	# raw_requirements rolls every building cost + recipe input down to raw resources only, all > 0
+	var raws: Dictionary = {}
+	for r in cat.get("resources", []):
+		if Catalog._is_raw_sources(r.get("sources", [])):
+			raws[str(r.get("id"))] = true
+	var raw_ok := true
+	for b in cat.get("buildings", []):
+		for k in Catalog.raw_requirements(cat, b.get("cost", {})):
+			if not raws.has(str(k)):
+				raw_ok = false
+	for rc in cat.get("recipes", []):
+		for k in Catalog.raw_requirements(cat, rc.get("inputs", {})):
+			if not raws.has(str(k)):
+				raw_ok = false
+	ok(raw_ok, "raw_requirements bottoms out at raw resources for every building cost + recipe input")
+	var passthru: Dictionary = Catalog.raw_requirements(cat, {"wood": 30, "stone": 8})
+	ok(int(passthru.get("wood", 0)) == 30 and int(passthru.get("stone", 0)) == 8, "a pure-raw cost passes through unchanged")
 
 func ok(cond: bool, name: String) -> void:
 	if cond:
