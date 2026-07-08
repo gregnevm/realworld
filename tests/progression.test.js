@@ -112,6 +112,23 @@ class Progression {
     }
     if (this.active === "" && auto) { const n = this.autoNext(); if (n !== "") this.tryStart(n); }
   }
+  // --- tech-path planner ---
+  researchPath(id) {
+    if (!this.researchById.has(id)) return [];
+    const out = [], seen = new Set(), stack = new Set();
+    const visit = (rid) => {
+      if (seen.has(rid) || stack.has(rid)) return;
+      stack.add(rid);
+      const d = this.researchById.get(rid);
+      if (d) for (const p of d.prereqs || []) visit(p);
+      stack.delete(rid);
+      seen.add(rid);
+      out.push(rid);
+    };
+    visit(id);
+    return out;
+  }
+  stepsToUnlock(gate) { return !gate ? [] : this.researchPath(gate).filter((x) => !this.unlocked.has(x)); }
   // --- unlock gates over catalog content ---
   gateOk(ref) { return ref === undefined || ref === null || ref === "" || this.unlocked.has(ref); }
   unlockedBuildings() { return this.cat.buildings.filter((b) => this.gateOk(b.research)); }
@@ -276,6 +293,57 @@ test("progression: serialization round-trips the whole pipeline", () => {
   assert.strictEqual(q.active, p.active, "active project restored");
   assert.ok(Math.abs(q.progress - p.progress) < 1e-9, "progress restored");
   assert.deepStrictEqual(q.summary(), p.summary(), "the whole viewmodel summary is identical after a round-trip");
+});
+
+test("progression: research_path is a valid topo order ending at the target", () => {
+  const cat = loadCatalog();
+  const p = new Progression(cat);
+  const deep = cat.research.filter((r) => (r.tier || 0) >= 5);
+  assert.ok(deep.length, "tree reaches tier 5+ for a meaty path");
+  for (const target of deep) {
+    const path = p.researchPath(target.id);
+    assert.strictEqual(path[path.length - 1], target.id, "path ends at the target");
+    assert.strictEqual(new Set(path).size, path.length, `no duplicate steps in path to ${target.id}`);
+    const pos = new Map(path.map((id, i) => [id, i]));
+    for (const id of path)
+      for (const pr of p.researchById.get(id).prereqs || [])
+        assert.ok(pos.get(pr) < pos.get(id), `prereq "${pr}" precedes "${id}" in the path`);
+    // the path contains the full transitive closure of prereqs
+    const closure = new Set();
+    const walk = (id) => { for (const pr of p.researchById.get(id).prereqs || []) { closure.add(pr); walk(pr); } };
+    walk(target.id);
+    for (const c of closure) assert.ok(path.includes(c), `path to ${target.id} includes transitive prereq ${c}`);
+  }
+});
+
+test("progression: enqueuing a research_path unlocks the target; steps_to_unlock drains to empty", () => {
+  const cat = loadCatalog();
+  const p = new Progression(cat);
+  const target = cat.research.slice().sort((a, b) => (b.tier || 0) - (a.tier || 0))[0]; // deepest
+  const path = p.researchPath(target.id);
+  assert.strictEqual(p.stepsToUnlock(target.id).length, path.length, "cold start: every step of the path is still to do");
+  for (const id of path) assert.ok(p.enqueue(id), `enqueue path step ${id}`);
+  const done = p.addPoints(path.reduce((s, id) => s + p.researchById.get(id).cost, 0));
+  assert.deepStrictEqual(done, path, "the whole path unlocks, in path order, from one grant");
+  assert.ok(p.isUnlocked(target.id), "the target is unlocked");
+  assert.strictEqual(p.stepsToUnlock(target.id).length, 0, "no steps remain once the target is unlocked");
+});
+
+test("progression: steps_to_unlock shrinks as the path is researched", () => {
+  const cat = loadCatalog();
+  const p = new Progression(cat);
+  const target = cat.research.find((r) => (r.tier || 0) === 4) || cat.research.find((r) => (r.tier || 0) >= 3);
+  const path = p.researchPath(target.id);
+  let prev = p.stepsToUnlock(target.id).length;
+  assert.strictEqual(prev, path.length, "starts at full path length");
+  for (const id of path.slice(0, path.length - 1)) {
+    // research just this one step (it is a root at this point because its prereqs precede it in path)
+    p.start(id); p.addPoints(p.researchById.get(id).cost);
+    const now = p.stepsToUnlock(target.id).length;
+    assert.ok(now < prev, `steps_to_unlock shrinks after researching ${id}`);
+    prev = now;
+  }
+  assert.strictEqual(p.stepsToUnlock(target.id).length, 1, "only the target itself remains");
 });
 
 test("progression: auto_next is deterministic across fresh runs", () => {

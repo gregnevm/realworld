@@ -29,6 +29,7 @@ func _init() -> void:
 	_t_enqueue_topo()
 	_t_monotonic_unlock()
 	_t_illegal_starts()
+	_t_planner()
 	_t_serialization()
 	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
 	quit(1 if failed > 0 else 0)
@@ -189,6 +190,43 @@ func _t_illegal_starts() -> void:
 			other = StringName(str(r.get("id")))
 			break
 	ok(p.start(other) == false, "cannot start a second project while one is active")
+
+# --- 7b. tech-path planner (research_path + steps_to_unlock) --------------------------------------
+func _t_planner() -> void:
+	var cat: Dictionary = Catalog.load_json()
+	var p := Progression.new(cat)
+	# deepest project by tier
+	var target: Dictionary = {}
+	var best := -1
+	for r in cat.get("research", []):
+		if int(r.get("tier", 0)) > best:
+			best = int(r.get("tier", 0))
+			target = r
+	var tid := StringName(str(target.get("id")))
+	var path: Array = p.research_path(tid)
+	ok(path.size() > 0 and str(path[path.size() - 1]) == str(tid), "research_path ends at the target")
+	# valid topo order: every prereq precedes its dependent
+	var pos: Dictionary = {}
+	for i in path.size():
+		pos[str(path[i])] = i
+	var topo_ok := true
+	var dedup_ok := path.size() == pos.size()
+	for id in path:
+		var d = p.db.get_def(StringName(str(id)))
+		for pr in d.prereqs():
+			if int(pos.get(str(pr), 1 << 30)) >= int(pos.get(str(id), -1)):
+				topo_ok = false
+	ok(topo_ok, "research_path is a valid topological order (prereqs precede dependents)")
+	ok(dedup_ok, "research_path has no duplicate steps")
+	# cold start: steps_to_unlock == whole path; enqueue it -> target unlocks; steps drain to 0
+	ok(p.steps_to_unlock(tid).size() == path.size(), "cold start: every path step is still to do")
+	var total := 0.0
+	for id in path:
+		p.enqueue(StringName(str(id)))
+		total += float(p.db.get_def(StringName(str(id))).cost())
+	var done: Array = p.add_points(total)
+	ok(done.size() == path.size() and p.is_unlocked(tid), "enqueuing the path unlocks the target in path order")
+	ok(p.steps_to_unlock(tid).size() == 0, "no steps remain once the target is unlocked")
 
 # --- 8. serialization round-trip -----------------------------------------------------------------
 func _t_serialization() -> void:

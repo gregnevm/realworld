@@ -208,6 +208,46 @@ func _ensure_active(auto: bool) -> void:
 			research.try_start(nxt)
 
 # ============================================================================================
+# TECH-PATH PLANNER (the "what do I need to unlock this" pipeline, as data)
+# ============================================================================================
+
+# The ordered research prerequisite chain ending at `id` — a valid topological order (every project's
+# prereqs precede it), deduped. This is the tech PATH the UI shows for a locked target. [] if id unknown.
+func research_path(id) -> Array:
+	var target := StringName(id)
+	var d = db.get_def(target)
+	if d == null or not (d is Production.ResearchDef):
+		return []
+	var out: Array = []
+	var seen: Dictionary = {}
+	_visit_path(target, out, seen, {})
+	return out
+
+func _visit_path(id: StringName, out: Array, seen: Dictionary, stack: Dictionary) -> void:
+	if seen.has(id) or stack.has(id):        # dedupe + cycle guard (the tree is a DAG, but stay total)
+		return
+	stack[id] = true
+	var d = db.get_def(id)
+	if d != null:
+		for p in d.prereqs():
+			_visit_path(StringName(str(p)), out, seen, stack)
+	stack.erase(id)
+	seen[id] = true
+	out.append(id)
+
+# The research still to do to open a gate ("" gate -> [] : already open). The path minus what's unlocked —
+# so a locked build/craft row can read "N дослідж." and expand to the exact remaining steps, in order.
+func steps_to_unlock(gate) -> Array:
+	var g := str(gate)
+	if g == "":
+		return []
+	var out: Array = []
+	for id in research_path(StringName(g)):
+		if not research.is_unlocked(id):
+			out.append(id)
+	return out
+
+# ============================================================================================
 # UNLOCK GATES OVER CATALOG CONTENT (what the current tech state opens)
 # ============================================================================================
 

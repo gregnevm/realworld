@@ -28,6 +28,7 @@ static func snapshot(session, world: Dictionary, ctx: Dictionary, balance) -> Di
 		"threat":    _threat_slice(world, ctx, balance),
 		"equipment": _equipment_slice(sim),
 		"raid":      _raid_slice(sim),
+		"research":  _research_slice(session),
 	}
 
 # Build the Balance `world` dict {buildings,stock,items} from the sim. Lives HERE (not in HudRoot) so
@@ -157,6 +158,38 @@ static func _equipment_slice(sim) -> Dictionary:
 
 static func _item_name(id: String) -> String:
 	return String(GameData.ITEMS[id].name) if (id != "" and GameData.ITEMS.has(id)) else "—"
+
+# --- research (the tech-pipeline readout; value data only — a Progression summary + option/queue lists).
+# Reads an optional session.progression (kernel/progression.gd); {wired:false} when research isn't wired
+# yet, so the panel degrades gracefully and the fake-session tests stay green. ---
+static func _research_slice(session) -> Dictionary:
+	var prog = session.progression if (session != null and "progression" in session) else null
+	if prog == null:
+		return {"wired": false}
+	var s: Dictionary = prog.summary()
+	var options: Array = []
+	for r in prog.available():
+		options.append({
+			"id": r.id,
+			"label": prog.label_of(r.id),
+			"tier": prog.tier_of(r.id),
+			"cost": float(r.cost()),
+		})
+	options.sort_custom(func(a, b): return (int(a.tier) < int(b.tier)) if int(a.tier) != int(b.tier) else (float(a.cost) < float(b.cost)))
+	var queue: Array = []
+	for qid in (s.get("queue", []) as Array):
+		queue.append({"id": qid, "label": prog.label_of(qid), "tier": prog.tier_of(qid)})
+	return {
+		"wired": true,
+		"level": int(s.get("level", 0)),
+		"unlocked": int(s.get("unlocked", 0)),
+		"total": int(s.get("total", 0)),
+		"active": StringName(s.get("active", &"")),
+		"active_label": String(s.get("active_label", "")),
+		"active_pct": float(s.get("active_pct", 0.0)),
+		"options": options,
+		"queue": queue,
+	}
 
 # --- raid (state enum for the banner; no live enemy refs — R8) ---
 static func _raid_slice(sim) -> Dictionary:
