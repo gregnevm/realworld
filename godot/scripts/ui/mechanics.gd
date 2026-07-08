@@ -6,15 +6,17 @@
 extends RefCounted
 
 const Panels = preload("res://scripts/ui/panels.gd")
+const CatalogPanels = preload("res://scripts/ui/catalog_panels.gd")
 const Overlays = preload("res://scripts/ui/overlays.gd")
 
 # Register the currently-implemented UI surfaces into the given registries.
 static func register_all(panel_registry, overlay_registry) -> void:
 	# LEFT dock — hero body
 	panel_registry.register(Panels.VitalsPanel.new())
-	# RIGHT dock — world / economy / director
+	# RIGHT dock — world / economy / director / content tree
 	panel_registry.register(Panels.StockPanel.new())
 	panel_registry.register(Panels.BalancePanel.new())
+	panel_registry.register(CatalogPanels.TechPanel.new())
 	# world overlays (spatial state) keyed to their LOCKED hotkeys (design-system §3)
 	overlay_registry.register(Overlays.LightOverlay.new())
 	overlay_registry.register(Overlays.TemperatureOverlay.new())

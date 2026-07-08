@@ -7,6 +7,7 @@
 extends RefCounted
 const Fmt = preload("res://scripts/ui/format.gd")
 const GameData = preload("res://scripts/data.gd")
+const CatalogView = preload("res://scripts/ui/catalog_view.gd")
 
 # session: the SessionScript (has .sim). world/ctx: the same shapes the kernel consumes (built by HudRoot).
 # balance: a Balance director constructed ONCE by HudRoot and reused (never new() per frame).
@@ -28,7 +29,15 @@ static func snapshot(session, world: Dictionary, ctx: Dictionary, balance) -> Di
 		"threat":    _threat_slice(world, ctx, balance),
 		"equipment": _equipment_slice(sim),
 		"raid":      _raid_slice(sim),
+		"catalog":   _catalog_slice(sim),
 	}
+
+# --- content tree (the deep catalogue surfaced in the HUD via the CatalogView pipeline) ---
+# Value-data only (R8): CatalogView maps the DefDatabase to a summary + research rows + next hint.
+# The live sim carries no research state yet, so the play state is {unlocked: none, stock: sim.stock} —
+# an honest "encyclopedia at the neolithic start" readout that becomes live once research is wired.
+static func _catalog_slice(sim) -> Dictionary:
+	return CatalogView.snapshot(CatalogView.default_db(), {"unlocked": {}, "stock": sim.stock})
 
 # Build the Balance `world` dict {buildings,stock,items} from the sim. Lives HERE (not in HudRoot) so
 # the thin controller never names an economy field (R4 keeps hud_root.gd free of mechanic tokens).

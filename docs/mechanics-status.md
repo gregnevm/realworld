@@ -57,8 +57,17 @@ validated **content catalogue** — the "повне дерево крафтів,
   `ProductionSystem`. Full reference: [`docs/catalog.md`](catalog.md).
 
 The catalogue is **additive** — `data.gd` (Phase-0 playable slice) is untouched, so the shipped game and
-its suites are unchanged. Remaining work is *surfacing*: wiring the catalogue into the HUD build/craft
-menus so this depth becomes *felt in play*, not just *validated*.
+its suites are unchanged.
+
+**Surfacing — first increment (done):** the catalogue now flows into the HUD through a proper view-layer
+pipeline: `ui/catalog_view.gd` (a pure ViewModel — the `HudModel.snapshot()` analogue — that maps the
+DefDatabase + play-state `{unlocked, stock}` to value-data slices: research progress, buildable/craftable
+counts, next-available research) → `ui/catalog_panels.gd` `TechPanel` (build-once + value bind, styled
+only via Widgets/Tokens) → registered in `ui/mechanics.gd`, so surfacing it never edited `hud_root.gd`
+(R4). `HudModel.snapshot()` carries a `catalog` slice end to end. Headless-tested in `run_ui_tests.gd`
+(value-data / R8, build-once / R2, prereq-gate status enums) with the R3/R7/R9/R10 tripwires extended to
+the new files. Remaining: interactive build/craft/research **actions** (intents → a router that mutates a
+catalogue-backed sim), and migrating the live sim off `data.gd` onto the catalogue.
 
 ## How to read this
 
