@@ -420,7 +420,7 @@ func _t_rule_tripwires() -> void:
 	# R1 — one-way flow: no sim/kernel/session/social/persistence file references res://scripts/ui
 	var sim_side := ["res://scripts/sim.gd", "res://scripts/session.gd", "res://scripts/social.gd",
 		"res://scripts/persistence.gd", "res://scripts/world_gen.gd", "res://scripts/kernel/balance.gd",
-		"res://scripts/catalog_sim.gd"]
+		"res://scripts/catalog_sim.gd", "res://scripts/data_bridge.gd"]
 	var r1 := true
 	for f in sim_side:
 		if "res://scripts/ui" in _read_code(f):

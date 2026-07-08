@@ -15,6 +15,8 @@ const Things = preload("res://scripts/kernel/things.gd")
 const Production = preload("res://scripts/kernel/production.gd")
 const Catalog = preload("res://scripts/kernel/catalog.gd")
 const CatalogSim = preload("res://scripts/catalog_sim.gd")
+const DataBridge = preload("res://scripts/data_bridge.gd")
+const GameData = preload("res://scripts/data.gd")
 
 var passed := 0
 var failed := 0
@@ -30,6 +32,7 @@ func _init() -> void:
 	_t_production_integration()
 	_t_research_gate()
 	_t_sim_playthrough()
+	_t_data_bridge()
 	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
 	quit(1 if failed > 0 else 0)
 
@@ -192,3 +195,14 @@ func _t_sim_playthrough() -> void:
 	# 4) the research gate holds end to end — a deeper station stays locked
 	ok(not sim.can_build("smithy"), "smithy stays locked until smithing is researched")
 	ok(not bool(sim.build("smithy").ok), "build(smithy) is refused while its research is locked")
+
+# --- 10. Spec 0007 Stage 1: the live<->catalogue resource bridge is TOTAL (no behaviour change) ------
+func _t_data_bridge() -> void:
+	var db = Catalog.build_db()
+	ok(DataBridge.validate(db).is_empty(), "every data.gd resource id maps to a real catalogue ResourceDef")
+	for id in GameData.RES_ORDER:
+		ok(db.get_def(DataBridge.to_catalog(id)) != null, "data.gd '%s' -> catalogue '%s' resolves" % [id, String(DataBridge.to_catalog(id))])
+	ok(DataBridge.to_catalog("wood") == &"wood", "1:1 ids pass through unchanged")
+	ok(DataBridge.to_catalog("food") == &"raw_food", "live 'food' maps to catalogue 'raw_food'")
+	ok(DataBridge.from_catalog("raw_food") == &"food", "reverse map recovers the live id")
+	ok(DataBridge.from_catalog("plasteel") == &"plasteel", "catalogue-only ids pass through the reverse map")
