@@ -17,8 +17,12 @@ jobs:
           chmod +x godot-bin
       - name: Sim unit tests
         run: ./godot-bin --headless --path godot -s res://tests/run_tests.gd
+      - name: Kernel tests
+        run: ./godot-bin --headless --path godot -s res://tests/run_kernel_tests.gd
       - name: Content catalogue tests
         run: ./godot-bin --headless --path godot -s res://tests/run_catalog_tests.gd
+      - name: UI view-layer tests
+        run: ./godot-bin --headless --path godot -s res://tests/run_ui_tests.gd
       - name: Playthrough smoke test
         run: ./godot-bin --headless --path godot -s res://tests/run_smoke.gd
       - name: Scene parse check
