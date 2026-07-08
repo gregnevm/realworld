@@ -13,6 +13,22 @@ const Catalog = preload("res://scripts/kernel/catalog.gd")
 const Production = preload("res://scripts/kernel/production.gd")
 const Things = preload("res://scripts/kernel/things.gd")
 const Defs = preload("res://scripts/kernel/defs.gd")
+const CatalogSim = preload("res://scripts/catalog_sim.gd")   # self-alias for the shared() static
+
+# A process-shared instance so the HUD (read: catalog_view slice) and the router (write: catalog_verbs)
+# operate the SAME forward-engine model — browse an action, click it, watch the state move. Built once
+# with a neolithic starter stock. The live data.gd sim is untouched; this is a parallel catalogue model.
+static var _shared = null
+static func shared(p_db = null):
+	if _shared == null:
+		_shared = CatalogSim.new(p_db)
+		_shared._grant_starter()
+	return _shared
+
+func _grant_starter() -> void:
+	for pair in [["wood", 120], ["stone", 80], ["clay", 40], ["sand", 30], ["coal", 40],
+			["iron_ore", 40], ["copper_ore", 30], ["plant_fiber", 30], ["herbal", 20]]:
+		grant(pair[0], int(pair[1]))
 
 var db                              # Defs.DefDatabase (the catalogue)
 var stock: Dictionary = {}          # res id (String) -> amount
@@ -130,6 +146,14 @@ func tick(dday: float) -> void:
 		research.advance(dday)
 	_prod.system_tick(world(), {"dday": dday})
 
+# The set of placed station building ids (a recipe is craftable only where its station stands).
+func placed_stations() -> Dictionary:
+	var out: Dictionary = {}
+	for t in things:
+		if t.get_comp(Production.CompWorkbench) != null:
+			out[StringName(str(t.flags.get("building", "")))] = true
+	return out
+
 # ---- view binding (feeds ui/catalog_view.gd — the read pipeline) --------------------------------
 func view_state() -> Dictionary:
-	return {"unlocked": research.unlocked, "stock": stock}
+	return {"unlocked": research.unlocked, "stock": stock, "stations": placed_stations()}

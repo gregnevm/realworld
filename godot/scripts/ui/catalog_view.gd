@@ -73,7 +73,49 @@ static func snapshot(db, state: Dictionary = {}) -> Dictionary:
 		"research": _research_rows(db, unlocked),
 		"tiers": _tiers(db, unlocked),
 		"next": _next_research(db, unlocked),
+		"build_actions": _build_actions(db, unlocked, stock),
+		"craft_actions": _craft_actions(db, unlocked, stock, state.get("stations", {})),
+		"research_actions": _research_actions(db, unlocked),
 	}
+
+# --- actionable slices: the rows an interactive browser turns into clickable, intent-emitting slots.
+# Each row is value-data {id, label, sub}. Capped so a fixed-size (R2) browser can bind a page of them.
+const ACTION_CAP := 12
+
+# Buildings you can place right now (research unlocked + cost affordable).
+static func _build_actions(db, unlocked: Dictionary, stock: Dictionary) -> Array:
+	var out: Array = []
+	for b in Catalog.buildings(db):
+		if out.size() >= ACTION_CAP:
+			break
+		if _gate_ok(b.research(), unlocked) and _afford(b.cost(), stock):
+			out.append({"id": b.id, "label": String(b.label()), "sub": cost_str(db, b.cost())})
+	return out
+
+# Recipes you can craft right now: their station is PLACED, research unlocked, inputs in stock.
+static func _craft_actions(db, unlocked: Dictionary, stock: Dictionary, stations: Dictionary) -> Array:
+	var out: Array = []
+	for rc in Catalog.recipes(db):
+		if out.size() >= ACTION_CAP:
+			break
+		if not stations.has(StringName(str(rc.data.get("station", "")))):
+			continue
+		if _gate_ok(rc.requires_research(), unlocked) and _afford(rc.inputs(), stock):
+			var oid := StringName(str(rc.output().get("id", "")))
+			var od = db.get_def(oid)
+			var olabel: String = String(od.label()) if od != null and od.has_method("label") else str(oid)
+			out.append({"id": rc.id, "label": String(rc.data.get("label", str(rc.id))), "sub": "→ " + olabel})
+	return out
+
+# Research you can start right now (prereqs met, not yet unlocked).
+static func _research_actions(db, unlocked: Dictionary) -> Array:
+	var out: Array = []
+	for r in Catalog.research_projects(db):
+		if out.size() >= ACTION_CAP:
+			break
+		if research_status(r, unlocked) == &"available":
+			out.append({"id": r.id, "label": String(r.data.get("label", str(r.id))), "sub": "%d дн." % int(r.cost())})
+	return out
 
 # Per-tier research progress: [{tier, unlocked, total}] ascending — the tech-era climb (neolithic→spacer).
 static func _tiers(db, unlocked: Dictionary) -> Array:

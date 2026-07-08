@@ -118,3 +118,61 @@ class ResearchTiersPanel extends PanelBase.Base:
 					"%d/%d" % [int(t.get("unlocked", 0)), int(t.get("total", 0))])
 			else:
 				_rows[i].set_row(" ", "—", "")
+
+# ---- ActionBrowser (LEFT dock) — a fixed pool of clickable CatalogSlots bound to an actions slice ----
+# Base for the three interactive browsers. Each slot's press emits an INTENT (the browser's verb) with
+# the row id (R9 — the panel never touches the sim; the router turns the intent into a catalog_sim call).
+class ActionBrowser extends PanelBase.Base:
+	const POOL := 12               # fixed slot pool (R2); the slice is capped to match
+	var _slots: Array = []
+	var _verb: StringName = &""    # intent verb this browser emits (cat_build / cat_craft / cat_research)
+	var _slice: String = ""        # catalog slice key it binds (build_actions / craft_actions / …)
+	var _title: String = ""
+
+	func _build() -> void:
+		rebuild_count += 1
+		var vb := VBoxContainer.new()
+		vb.add_theme_constant_override("separation", 3)
+		add_child(vb)
+		var head := Widgets.H2Header.new()
+		vb.add_child(head)
+		head.set_header(_title, "act")
+		for i in POOL:
+			var slot := Widgets.CatalogSlot.new()
+			vb.add_child(slot)
+			slot.chosen.connect(_on_chosen)
+			_slots.append(slot)
+
+	func _on_chosen(id: StringName) -> void:
+		if id != &"":
+			emit_intent(_verb, {"id": id})
+
+	func bind(vm) -> void:
+		rebind_count += 1
+		build_once()
+		if not (vm is Dictionary) or not vm.has("catalog"):
+			return
+		var cat: Dictionary = vm.catalog
+		if not bool(cat.get("available", false)):
+			return
+		var rows: Array = cat.get(_slice, [])
+		for i in _slots.size():
+			if i < rows.size():
+				_slots[i].bind(rows[i])
+			else:
+				_slots[i].bind({"id": &"", "label": "", "sub": ""})
+
+class BuildBrowser extends ActionBrowser:
+	func _init() -> void:
+		panel_id = &"build_browser"; dock = PanelBase.DOCK_LEFT; priority = 50; hotkey = KEY_B
+		_verb = &"cat_build"; _slice = "build_actions"; _title = "Будувати"
+
+class CraftBrowser extends ActionBrowser:
+	func _init() -> void:
+		panel_id = &"craft_browser"; dock = PanelBase.DOCK_LEFT; priority = 60; hotkey = KEY_C
+		_verb = &"cat_craft"; _slice = "craft_actions"; _title = "Крафт"
+
+class ResearchBrowser extends ActionBrowser:
+	func _init() -> void:
+		panel_id = &"research_browser"; dock = PanelBase.DOCK_LEFT; priority = 70; hotkey = KEY_R
+		_verb = &"cat_research"; _slice = "research_actions"; _title = "Дослідити"

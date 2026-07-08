@@ -14,6 +14,8 @@ const OverlayReg = preload("res://scripts/ui/overlay_registry.gd")
 const FeedbackBus = preload("res://scripts/ui/feedback_bus.gd")
 const InputController = preload("res://scripts/ui/input_controller.gd")
 const InputVerbs = preload("res://scripts/ui/input_verbs.gd")
+const CatalogVerbs = preload("res://scripts/ui/catalog_verbs.gd")
+const CatalogSim = preload("res://scripts/catalog_sim.gd")
 const Mechanics = preload("res://scripts/ui/mechanics.gd")
 const Balance = preload("res://scripts/kernel/balance.gd")
 const UITheme = preload("res://scripts/ui/theme.gd")
@@ -57,6 +59,7 @@ func _ready() -> void:
 	bus = FeedbackBus.FeedbackBus.new()
 	router = InputController.InputController.new()
 	InputVerbs.install(router)
+	CatalogVerbs.install(router, CatalogSim.shared())   # forward-engine build/craft/research commands
 	Mechanics.register_all(preg, oreg)     # mechanics register themselves — no controller edit (R4)
 	overlay_host.oreg = oreg
 	overlay_host.map_n = int(session.sim.n)   # match the tilemap's cull extent (avoids overlay drift)
@@ -71,6 +74,11 @@ func _ready() -> void:
 	hud_root.setup(session, balance, bus, preg, oreg)
 	hud_root.mount()
 
+	# Wire every registered panel's intent bubble to the router (browsers emit cat_build/craft/research).
+	for p in preg.panels:
+		if p.has_signal("intent"):
+			p.intent.connect(func(verb, args): router.dispatch(verb, args, session))
+
 	if "newhud" in OS.get_cmdline_user_args() and "shot" in OS.get_cmdline_user_args():
 		shot_mode = true
 
@@ -79,6 +87,7 @@ func _process(dt: float) -> void:
 		return
 	if not session.sim.dead:
 		session.sim.update(dt)
+	CatalogSim.shared().tick(dt)   # advance the forward-engine catalogue model (research + station bills)
 	cam.global_position = Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE)
 	view.queue_redraw()
 	overlay_host.map_n = int(session.sim.n)   # keep in lockstep with the live region (survives travel)

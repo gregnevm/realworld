@@ -78,8 +78,19 @@ CRAFT a recipe (`Production.ProductionSystem` + `Bill` turn inputs into stock at
 end in `run_catalog_tests.gd` (`_t_sim_playthrough`: research carpentry → build a workbench → craft
 planks → tech up to smelting → build a smelter → smelt iron from raw ore, with the research gate holding)
 and in `run_ui_tests.gd` (intent → router → sim; `TechPanel.act_next_research()` fires the full
-panel → router → sim path). Remaining: migrating the *live* sim off `data.gd` onto `catalog_sim`, and a
-richer interactive build/craft browser UI.
+panel → router → sim path).
+
+**Interactive browser UI — done:** three LEFT-dock browsers (`BuildBrowser` / `CraftBrowser` /
+`ResearchBrowser`, hotkeys B/C/R) render the actionable slices (`build_actions` / `craft_actions` /
+`research_actions` — buildable/craftable/startable-now rows the ViewModel caps to a fixed pool) as
+clickable `CatalogSlot` widgets; a slot press emits the `cat_build` / `cat_craft` / `cat_research` intent
+(R9 — the panel never touches the sim). `newhud_main` now installs `catalog_verbs` on the router with a
+process-shared `CatalogSim.shared()`, wires every panel's intent bubble to the router, and ticks the
+shared model each frame — so the HUD reads and the router writes the SAME state: browse an action, click
+it, watch the counts move. `HudModel.snapshot()` sources the catalog slice from that shared model, and
+`parse_check.gd` now preloads `newhud_main` so the whole HUD wiring is compile-checked in CI. Proven in
+`run_ui_tests.gd` `_t_action_browsers` (build-once/R2, slot click → intent → router → `catalog_sim`
+places the building). Remaining: migrating the *live* data.gd sim onto `catalog_sim` (one world, not two).
 
 ## How to read this
 

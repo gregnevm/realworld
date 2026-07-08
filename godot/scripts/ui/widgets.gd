@@ -221,6 +221,30 @@ class BuildSlot extends WidgetBase.Widget:
 		_btn.disabled = bool(vm.get("locked", false))
 		_btn.modulate = Tokens.WHITE if bool(vm.get("afford", true)) else Tokens.DIMMED
 
+# ---- CatalogSlot: a clickable content-tree row (build/craft/research action); emits chosen(id) ----
+# bind({id, label, sub, enabled}). An empty id hides the slot so a fixed-size pool (R2) shows a page.
+class CatalogSlot extends WidgetBase.Widget:
+	var item_id: StringName = &""
+	var _btn: Button
+	signal chosen(id: StringName)
+	func _build() -> void:
+		custom_minimum_size = Vector2(0, 22)
+		_btn = Button.new()
+		_btn.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_btn.pressed.connect(func(): chosen.emit(item_id))
+		add_child(_btn)
+	func bind(vm) -> void:
+		build_once()
+		if not (vm is Dictionary):
+			return
+		item_id = StringName(vm.get("id", &""))
+		var lbl := String(vm.get("label", ""))
+		var sub := String(vm.get("sub", ""))
+		_btn.text = ("%s   %s" % [lbl, sub]) if sub != "" else lbl
+		_btn.disabled = not bool(vm.get("enabled", true))
+		visible = item_id != &""
+
 # ---- OverlayChip (.ov-chip .on): label · hotkey · on-state (toolbar toggle for a map overlay) ----
 class OverlayChip extends WidgetBase.Widget:
 	var overlay_id: StringName = &""

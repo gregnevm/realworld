@@ -46,6 +46,7 @@ func _init() -> void:
 	_t_tech_panel()
 	_t_catalog_verbs()
 	_t_tech_intent()
+	_t_action_browsers()
 	_t_panel_registry()
 	_t_overlay_registry()
 	_t_bus_no_dangling()
@@ -341,6 +342,35 @@ func _t_tech_intent() -> void:
 	panel.act_next_research()                                    # simulates the "research next" affordance
 	ok(String(sim.research.active) != "", "panel action -> intent -> router -> sim starts research (%s)" % String(sim.research.active))
 	panel.free()
+
+# ---------------- ActionBrowser: clickable build/craft/research slots -> intent -> router -> sim ----------------
+func _t_action_browsers() -> void:
+	var sim = CatalogSim.new()
+	sim.grant("wood", 100); sim.grant("stone", 50)
+	var ic = InputCtl.InputController.new()
+	CatalogVerbs.install(ic, sim)
+	var cat: Dictionary = CatalogView.snapshot(sim.db, sim.view_state())
+	ok((cat.build_actions as Array).size() > 0, "catalog build_actions non-empty (buildable-now rows, %d)" % (cat.build_actions as Array).size())
+	ok((cat.craft_actions as Array).size() == 0, "craft_actions empty until a station is placed")
+	ok((cat.research_actions as Array).size() >= 5, "research_actions lists the startable tier-1 projects (%d)" % (cat.research_actions as Array).size())
+	var bb = CatalogPanels.BuildBrowser.new()
+	bb.bind({"catalog": cat})
+	var n0: int = bb.get_child(0).get_child_count()   # header + 12 slot pool
+	bb.bind({"catalog": cat})
+	ok(bb.rebuild_count == 1 and bb.rebind_count == 2, "BuildBrowser builds once, binds each frame (R2)")
+	ok(bb._slots.size() == 12 and bb.panel_id == &"build_browser" and bb.dock == 0, "BuildBrowser: fixed 12-slot pool, LEFT dock")
+	ok(bb.get_child(0).get_child_count() == n0, "child count stable across rebind (R2)")
+	# full interactive loop: a slot press bubbles an intent through the router into the sim
+	bb.intent.connect(func(v, a): ic.dispatch(v, a, null))
+	var slot0 = bb._slots[0]
+	ok(slot0.item_id != &"", "first build slot bound to a real building id (%s)" % String(slot0.item_id))
+	slot0.chosen.emit(slot0.item_id)   # simulate the click
+	ok(sim.has_building(slot0.item_id), "click a build slot -> intent -> router -> catalog_sim places it")
+	# HudModel snapshot carries the actionable slices too (shared sim -> browsers -> router coherent)
+	var sess = _fake_session()
+	var full := HudModel.snapshot(sess, {"buildings": [], "stock": sess.sim.stock, "items": []}, {"day": 5}, Balance.Balance.new())
+	ok(full.catalog.has("build_actions") and full.catalog.has("research_actions"), "HudModel catalog slice carries the actionable rows")
+	bb.free()
 
 # ---------------- PanelRegistry == SystemRegistry (sort/get/by_dock/bind_visible) ----------------
 func _t_panel_registry() -> void:

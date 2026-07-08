@@ -11,8 +11,11 @@ const Overlays = preload("res://scripts/ui/overlays.gd")
 
 # Register the currently-implemented UI surfaces into the given registries.
 static func register_all(panel_registry, overlay_registry) -> void:
-	# LEFT dock — hero body
+	# LEFT dock — hero body + interactive content-tree browsers (build / craft / research)
 	panel_registry.register(Panels.VitalsPanel.new())
+	panel_registry.register(CatalogPanels.BuildBrowser.new())
+	panel_registry.register(CatalogPanels.CraftBrowser.new())
+	panel_registry.register(CatalogPanels.ResearchBrowser.new())
 	# RIGHT dock — world / economy / director / content tree
 	panel_registry.register(Panels.StockPanel.new())
 	panel_registry.register(Panels.BalancePanel.new())
