@@ -28,6 +28,7 @@ static func snapshot(session, world: Dictionary, ctx: Dictionary, balance) -> Di
 		"threat":    _threat_slice(world, ctx, balance),
 		"equipment": _equipment_slice(sim),
 		"raid":      _raid_slice(sim),
+		"research":  _research_slice(session),
 	}
 
 # Build the Balance `world` dict {buildings,stock,items} from the sim. Lives HERE (not in HudRoot) so
@@ -157,6 +158,58 @@ static func _equipment_slice(sim) -> Dictionary:
 
 static func _item_name(id: String) -> String:
 	return String(GameData.ITEMS[id].name) if (id != "" and GameData.ITEMS.has(id)) else "—"
+
+# --- research (the tech-pipeline readout; value data only — a Progression summary + option/queue lists).
+# Reads an optional session.progression (kernel/progression.gd); {wired:false} when research isn't wired
+# yet, so the panel degrades gracefully and the fake-session tests stay green. ---
+static func _research_slice(session) -> Dictionary:
+	var prog = session.progression if (session != null and "progression" in session) else null
+	if prog == null:
+		return {"wired": false}
+	var s: Dictionary = prog.summary()
+	var options: Array = []
+	for r in prog.available():
+		options.append({
+			"id": r.id,
+			"label": prog.label_of(r.id),
+			"tier": prog.tier_of(r.id),
+			"cost": float(r.cost()),
+		})
+	options.sort_custom(func(a, b): return (int(a.tier) < int(b.tier)) if int(a.tier) != int(b.tier) else (float(a.cost) < float(b.cost)))
+	var queue: Array = []
+	for qid in (s.get("queue", []) as Array):
+		queue.append({"id": qid, "label": prog.label_of(qid), "tier": prog.tier_of(qid)})
+	var rate := 0.0
+	if session != null and session.has_method("research_rate"):
+		rate = float(session.research_rate())
+	var active_remaining: float = maxf(0.0, float(s.get("active_cost", 0.0)) - float(s.get("active_progress", 0.0)))
+	var eta: float = (active_remaining / rate) if (rate > 0.0 and float(s.get("active_cost", 0.0)) > 0.0) else -1.0
+	return {
+		"wired": true,
+		"rate": rate,
+		"active_eta_days": eta,
+		"level": int(s.get("level", 0)),
+		"unlocked": int(s.get("unlocked", 0)),
+		"total": int(s.get("total", 0)),
+		"active": StringName(s.get("active", &"")),
+		"active_label": String(s.get("active_label", "")),
+		"active_pct": float(s.get("active_pct", 0.0)),
+		"options": options,
+		"queue": queue,
+		"counts": prog.catalog_counts(),
+		"next_unlocks": _next_unlocks(prog),
+	}
+
+# How much the ACTIVE project will open (per-category counts) — the "researching X unlocks N" preview.
+static func _next_unlocks(prog) -> Dictionary:
+	var a: StringName = prog.active_id()
+	if a == &"":
+		return {"buildings": 0, "recipes": 0, "items": 0, "total": 0}
+	var u: Dictionary = prog.unlocks_of(a)
+	var nb: int = (u.buildings as Array).size()
+	var nr: int = (u.recipes as Array).size()
+	var ni: int = (u.items as Array).size()
+	return {"buildings": nb, "recipes": nr, "items": ni, "total": nb + nr + ni}
 
 # --- raid (state enum for the banner; no live enemy refs — R8) ---
 static func _raid_slice(sim) -> Dictionary:

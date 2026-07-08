@@ -221,6 +221,33 @@ class BuildSlot extends WidgetBase.Widget:
 		_btn.disabled = bool(vm.get("locked", false))
 		_btn.modulate = Tokens.WHITE if bool(vm.get("afford", true)) else Tokens.DIMMED
 
+# ---- ChoiceRow: a full-width action row (label · right-aligned meta · click -> picked(id)). The
+# research/catalog pick primitive: it emits a semantic id and the PANEL turns that into an intent, so
+# R9 stays clean (a widget never names a sim mutator). Tooltip carries the R5 explain. ----
+class ChoiceRow extends WidgetBase.Widget:
+	var id: StringName = &""
+	var _btn: Button
+	signal picked(id: StringName)
+	func _build() -> void:
+		custom_minimum_size = Vector2(0, 22)
+		_btn = Button.new()
+		_btn.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_btn.clip_text = true
+		_btn.pressed.connect(func(): picked.emit(id))
+		add_child(_btn)
+	func bind(vm) -> void:
+		build_once()
+		if not (vm is Dictionary):
+			return
+		id = StringName(vm.get("id", ""))
+		var meta := String(vm.get("meta", ""))
+		_btn.text = ("%s   %s" % [String(vm.get("label", "")), meta]) if meta != "" else String(vm.get("label", ""))
+		_btn.tooltip_text = String(vm.get("tip", ""))
+		_btn.disabled = bool(vm.get("disabled", false))
+		_btn.modulate = Tokens.DIMMED if bool(vm.get("dim", false)) else Tokens.WHITE
+		visible = bool(vm.get("shown", true))
+
 # ---- OverlayChip (.ov-chip .on): label · hotkey · on-state (toolbar toggle for a map overlay) ----
 class OverlayChip extends WidgetBase.Widget:
 	var overlay_id: StringName = &""

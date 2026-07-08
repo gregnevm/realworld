@@ -124,3 +124,98 @@ class BalancePanel extends PanelBase.Base:
 			&"raid": return "рейд"
 			&"siege": return "облога"
 			_: return "сплеск"
+
+# ---- ResearchPanel (LEFT dock) — the tech-pipeline surface: level + active progress bar, a clickable
+# list of researchable projects (click -> enqueue_research intent), and the research queue. This is the
+# whole progression PIPELINE made visible + drivable; it reads ONLY vm.research (a pure Progression slice). ----
+class ResearchPanel extends PanelBase.Base:
+	const AVAIL_MAX := 5
+	const QUEUE_MAX := 3
+	var _level: Widgets.StatRow
+	var _counts: Widgets.StatRow
+	var _active_bar: Widgets.NeedBar
+	var _active_lbl: Widgets.StatRow
+	var _unlocks: Widgets.StatRow
+	var _cat: Widgets.StatRow
+	var _rows: Array = []      # ChoiceRow pool (researchable options), built ONCE (R2)
+	var _qrows: Array = []     # StatRow pool (the queue)
+	func _init() -> void:
+		panel_id = &"research"; dock = PanelBase.DOCK_LEFT; priority = 20
+	func _build() -> void:
+		rebuild_count += 1
+		var vb := VBoxContainer.new()
+		vb.add_theme_constant_override("separation", 5)
+		add_child(vb)
+		var head := Widgets.H2Header.new()
+		vb.add_child(head); head.set_header("Дослідження", "tech")
+		_level = Widgets.StatRow.new(); vb.add_child(_level); _level.set_row("🔬", "Рівень", "0")
+		_counts = Widgets.StatRow.new(); vb.add_child(_counts); _counts.set_row("✔", "Відкрито", "0/0")
+		_active_bar = Widgets.NeedBar.new(); vb.add_child(_active_bar)
+		_active_lbl = Widgets.StatRow.new(); vb.add_child(_active_lbl); _active_lbl.set_row("▶", "Активне", "—")
+		_unlocks = Widgets.StatRow.new(); vb.add_child(_unlocks); _unlocks.set_row("🔓", "Відкриє", "—")
+		_cat = Widgets.StatRow.new(); vb.add_child(_cat); _cat.set_row("📚", "Каталог", "—")
+		var h2 := Widgets.H2Header.new(); vb.add_child(h2); h2.set_header("Доступні", "queue")
+		for i in AVAIL_MAX:
+			var row := Widgets.ChoiceRow.new()
+			vb.add_child(row)
+			row.picked.connect(_on_pick)
+			_rows.append(row)
+		var h3 := Widgets.H2Header.new(); vb.add_child(h3); h3.set_header("Черга", "")
+		for i in QUEUE_MAX:
+			var q := Widgets.StatRow.new()
+			vb.add_child(q); q.set_row("→", "—", "")
+			_qrows.append(q)
+	func _on_pick(id: StringName) -> void:
+		emit_intent(&"enqueue_research", {"id": String(id)})   # panel emits intent; router calls sim (R9)
+	func bind(vm) -> void:
+		rebind_count += 1
+		build_once()
+		if not (vm is Dictionary) or not vm.has("research"):
+			return
+		var r: Dictionary = vm.research
+		if not bool(r.get("wired", false)):
+			_level.set_value("—"); _counts.set_value("—/—")
+			_active_bar.bind({"icon": "🔬", "pct": 0, "state": &"warn"})
+			_active_lbl.set_value("немає стола")
+			_unlocks.set_value("—"); _cat.set_value("—")
+			for row in _rows:
+				row.bind({"id": &"", "shown": false})
+			for q in _qrows:
+				q.visible = false
+			return
+		_level.set_value("%d" % int(r.get("level", 0)))
+		_counts.set_value("%d/%d" % [int(r.get("unlocked", 0)), int(r.get("total", 0))])
+		var al := String(r.get("active_label", ""))
+		var pct: int = int(round(float(r.get("active_pct", 0.0)) * 100.0))
+		_active_bar.bind({"icon": "🔬", "pct": pct, "state": (&"good" if al != "" else &"warn")})
+		var eta: float = float(r.get("active_eta_days", -1.0))
+		var eta_str: String = (" ≈%.1fд" % eta) if (al != "" and eta >= 0.0) else ""
+		_active_lbl.set_value((al + eta_str) if al != "" else "—")
+		var nu: Dictionary = r.get("next_unlocks", {})
+		var nu_total: int = int(nu.get("total", 0))
+		_unlocks.set_value(("%d (%dб %dр %dп)" % [nu_total, int(nu.get("buildings", 0)), int(nu.get("recipes", 0)), int(nu.get("items", 0))]) if nu_total > 0 else "—")
+		var cc: Dictionary = r.get("counts", {})
+		var cb: Dictionary = cc.get("buildings", {})
+		var cr: Dictionary = cc.get("recipes", {})
+		var ci: Dictionary = cc.get("items", {})
+		_cat.set_value("%dб %dр %dп" % [int(cb.get("unlocked", 0)), int(cr.get("unlocked", 0)), int(ci.get("unlocked", 0))])
+		var opts: Array = r.get("options", [])
+		for i in _rows.size():
+			if i < opts.size():
+				var o: Dictionary = opts[i]
+				_rows[i].bind({
+					"id": o.id,
+					"label": String(o.label),
+					"meta": "T%d·%d" % [int(o.tier), int(round(float(o.cost)))],
+					"tip": "Тир %d · вартість %.1f — додати в чергу досліджень" % [int(o.tier), float(o.cost)],
+					"shown": true,
+				})
+			else:
+				_rows[i].bind({"id": &"", "shown": false})
+		var q: Array = r.get("queue", [])
+		for i in _qrows.size():
+			if i < q.size():
+				_qrows[i].set_row("→", String(q[i].label), "T%d" % int(q[i].tier))
+				_qrows[i].visible = true
+			else:
+				_qrows[i].visible = false

@@ -14,6 +14,10 @@ static func install(ic) -> void:
 	ic.bind(&"craft",        func(s, a): s.sim.craft_item(String(a.id)))
 	ic.bind(&"equip",        func(s, a): s.sim.equip(String(a.id)))
 	ic.bind(&"send_convoy",  func(s, a): s.sim.dispatch_convoy(int(a.hub), String(a.res), int(a.amt)))
+	# research pipeline — the ResearchPanel emits these; the session drives kernel/progression.gd (R9)
+	ic.bind(&"enqueue_research", func(s, a): s.enqueue_research(String(a.id)))
+	ic.bind(&"start_research",   func(s, a): s.start_research(String(a.id)))
+	ic.bind(&"clear_research",   func(s, a): s.clear_research_queue())
 	ic.bind(&"launch_capsule", func(s, a):
 		var r = s.sim.try_launch_capsule(float(a.lat), float(a.lon), String(a.name))
 		if r.ok: s.travel_to(float(a.lat), float(a.lon), String(a.name)))

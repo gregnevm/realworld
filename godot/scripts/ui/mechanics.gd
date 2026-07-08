@@ -10,8 +10,9 @@ const Overlays = preload("res://scripts/ui/overlays.gd")
 
 # Register the currently-implemented UI surfaces into the given registries.
 static func register_all(panel_registry, overlay_registry) -> void:
-	# LEFT dock — hero body
+	# LEFT dock — hero body + tech pipeline
 	panel_registry.register(Panels.VitalsPanel.new())
+	panel_registry.register(Panels.ResearchPanel.new())
 	# RIGHT dock — world / economy / director
 	panel_registry.register(Panels.StockPanel.new())
 	panel_registry.register(Panels.BalancePanel.new())

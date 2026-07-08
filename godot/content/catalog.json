@@ -1300,6 +1300,30 @@
       "station": true
     },
     {
+      "id": "research_bench",
+      "label": "Дослідницький стіл",
+      "category": "production",
+      "cost": {
+        "wood": 30,
+        "stone": 8
+      },
+      "hp": 100,
+      "research_rate": 1.0
+    },
+    {
+      "id": "hi_tech_research_bench",
+      "label": "Hi-tech дослідницький стіл",
+      "category": "production",
+      "cost": {
+        "steel": 20,
+        "components": 8,
+        "glass": 6
+      },
+      "hp": 140,
+      "research": "electronics",
+      "research_rate": 2.4
+    },
+    {
       "id": "campfire",
       "label": "Багаття",
       "category": "production",

@@ -28,8 +28,47 @@ func _init() -> void:
 	_t_accessors()
 	_t_production_integration()
 	_t_research_gate()
+	_t_bom_planner()
 	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
 	quit(1 if failed > 0 else 0)
+
+# --- BOM planner parity (spec 0008 phase 1) — mirrors tests/catalog.test.js -----------------
+func _t_bom_planner() -> void:
+	var cat: Dictionary = Catalog.load_json()
+	# raw resources need no recipe step
+	ok(Catalog.production_chain(cat, "wood").is_empty(), "raw resource has an empty production chain")
+	# the advanced electronics chain resolves in dependency order: bar -> wire -> circuit
+	var chain: Array = Catalog.production_chain(cat, "circuit")
+	var pos: Dictionary = {}
+	for i in chain.size():
+		pos[str(chain[i])] = i
+	var p_bar := str(Catalog.producer_of(cat, "copper_bar"))
+	var p_wire := str(Catalog.producer_of(cat, "copper_wire"))
+	var p_circ := str(Catalog.producer_of(cat, "circuit"))
+	ok(chain.size() > 0 and str(chain[chain.size() - 1]) == p_circ, "chain ends at the circuit's own recipe")
+	ok(pos.has(p_bar) and pos.has(p_wire) and int(pos[p_bar]) < int(pos[p_wire]) and int(pos[p_wire]) < int(pos[p_circ]),
+		"smelt -> wire -> circuit dependency order")
+	# missing_for reports exactly the shortfall
+	var miss: Dictionary = Catalog.missing_for({"wood": 10, "stone": 5}, {"wood": 4, "stone": 5})
+	ok(miss.size() == 1 and int(miss.get("wood", 0)) == 6, "missing_for reports only the deficient resource by its deficit")
+	ok(Catalog.missing_for({"wood": 3}, {"wood": 3}).is_empty(), "exactly affordable -> nothing missing")
+	# raw_requirements rolls every building cost + recipe input down to raw resources only, all > 0
+	var raws: Dictionary = {}
+	for r in cat.get("resources", []):
+		if Catalog._is_raw_sources(r.get("sources", [])):
+			raws[str(r.get("id"))] = true
+	var raw_ok := true
+	for b in cat.get("buildings", []):
+		for k in Catalog.raw_requirements(cat, b.get("cost", {})):
+			if not raws.has(str(k)):
+				raw_ok = false
+	for rc in cat.get("recipes", []):
+		for k in Catalog.raw_requirements(cat, rc.get("inputs", {})):
+			if not raws.has(str(k)):
+				raw_ok = false
+	ok(raw_ok, "raw_requirements bottoms out at raw resources for every building cost + recipe input")
+	var passthru: Dictionary = Catalog.raw_requirements(cat, {"wood": 30, "stone": 8})
+	ok(int(passthru.get("wood", 0)) == 30 and int(passthru.get("stone", 0)) == 8, "a pure-raw cost passes through unchanged")
 
 func ok(cond: bool, name: String) -> void:
 	if cond:

@@ -9,7 +9,7 @@ Survival-MMORPG із симуляційною глибиною RimWorld на **�
 |---|---|
 | `game/` | Граний веб-прототип (HTML5 Canvas, vanilla JS, без збірки) |
 | `godot/` | Порт у Godot 4.7 (GDScript): AStarGrid2D, детермінований worldgen, headless-тести |
-| `godot/content/` | Дерево контенту — `catalog.json`: 333 def (ресурси/дослідження/будівлі/рецепти/предмети, від неоліту до космічного корабля), валідоване на досяжність від сирих ресурсів. Довідник — [`docs/catalog.md`](docs/catalog.md) |
+| `godot/content/` | Дерево контенту — `catalog.json`: 335 def (ресурси/дослідження/будівлі/рецепти/предмети, від неоліту до космічного корабля), валідоване на досяжність від сирих ресурсів. Дерево досліджень **проходиться** пайплайном прогресії (`kernel/progression.gd`, spec 0007). Довідник — [`docs/catalog.md`](docs/catalog.md) |
 | `GDD_BOOK/` | Інтерактивний Game Design Document (джерело істини — `gdd.json`) |
 | `tests/` | Тести детермінованого ядра симуляції + валідація дерева контенту (`node --test`) |
 | `specs/` | Специфікації фіч (цикл Specify → Plan → Tasks → Implement) |

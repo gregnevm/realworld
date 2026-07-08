@@ -26,8 +26,11 @@ const BUILDINGS := {
 	"workbench": {"name": "Верстак", "cost": {"wood": 18, "stone": 4}, "hp": 100.0, "blocks": true, "craft": true},
 	"bed": {"name": "Ліжко", "cost": {"wood": 14}, "hp": 60.0, "blocks": false, "bed": true},
 	"turret": {"name": "Турель", "cost": {"scrap": 14, "components": 2}, "hp": 90.0, "blocks": true, "range": 6.2, "dps": 14.0},
+	# Research station: generates research-points/game-day while it stands (session.research_rate);
+	# drives the tech pipeline (kernel/progression.gd). Appended last so keys 1–7 keep their buildings.
+	"research_bench": {"name": "Дослідницький стіл", "cost": {"wood": 25, "stone": 6}, "hp": 100.0, "blocks": true, "research_rate": 1.0},
 }
-const BUILD_ORDER := ["wall", "door", "floor", "storage", "workbench", "bed", "turret"]
+const BUILD_ORDER := ["wall", "door", "floor", "storage", "workbench", "bed", "turret", "research_bench"]
 
 # craftable equipment (spec 0001). tool -> faster gather; weapon -> more melee damage.
 const ITEMS := {

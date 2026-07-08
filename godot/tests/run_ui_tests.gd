@@ -19,6 +19,8 @@ const OverlayReg = preload("res://scripts/ui/overlay_registry.gd")
 const Overlays = preload("res://scripts/ui/overlays.gd")
 const Balance = preload("res://scripts/kernel/balance.gd")
 const GameData = preload("res://scripts/data.gd")
+const Progression = preload("res://scripts/kernel/progression.gd")
+const Catalog = preload("res://scripts/kernel/catalog.gd")
 
 var passed := 0
 var failed := 0
@@ -37,6 +39,7 @@ func _init() -> void:
 	_t_feed_self_heal()
 	_t_widgets()
 	_t_stock_spine()
+	_t_research_surface()
 	_t_panel_registry()
 	_t_overlay_registry()
 	_t_bus_no_dangling()
@@ -248,6 +251,41 @@ func _t_stock_spine() -> void:
 	ok(int(snap.stock.rows.wood) == 12, "proof spine: snapshot -> panel binds fake stock, no live sim ref (R8)")
 	panel.free()
 
+# ---------------- Research surface: the tech-pipeline slice + panel (spec 0007) ----------------
+func _t_research_surface() -> void:
+	var prog = Progression.new(Catalog.load_json())
+	prog.start(prog.auto_next())                 # one active project
+	prog.enqueue(prog.auto_next())               # and one queued
+	var sess = _fake_session()
+	sess.progression = prog
+	var snap := HudModel.snapshot(sess, {"buildings": [], "stock": sess.sim.stock, "items": []}, {"day": 2}, Balance.Balance.new())
+	# slice is wired + pure value data (R8), reports totals, surfaces researchable options
+	ok(bool(snap.research.wired), "research slice is wired when the session carries a progression")
+	ok(int(snap.research.total) >= 40 and int(snap.research.unlocked) >= 0, "research slice reports unlocked/total")
+	ok(String(snap.research.active_label) != "", "active project label surfaced")
+	ok((snap.research.options as Array).size() > 0, "researchable options surfaced")
+	ok(int(snap.research.counts.buildings.total) == prog.catalog_counts().buildings.total and int(snap.research.counts.items.total) > 0, "catalog counts surfaced (per-category unlocked/total)")
+	ok(snap.research.next_unlocks.has("total"), "active-project unlock preview surfaced")
+	ok(snap.research.has("rate") and snap.research.has("active_eta_days"), "research rate + active ETA surfaced")
+	ok(_all_value_data(snap.research), "research slice is pure value data incl. counts + next_unlocks + eta (R8)")
+	# a null-progression session degrades to {wired:false} (the fake-session default path)
+	ok(not bool(HudModel.snapshot(_fake_session(), {"buildings": [], "stock": {}, "items": []}, {"day": 1}, Balance.Balance.new()).research.wired),
+		"no progression -> research slice degrades to {wired:false}")
+	# panel build-once + bind-twice (R2), like the stock proof slice
+	var panel = Panels.ResearchPanel.new()
+	panel.bind(snap)
+	panel.bind(snap)
+	ok(panel.rebuild_count == 1, "ResearchPanel builds exactly once across two binds (R2)")
+	ok(panel.rebind_count == 2, "ResearchPanel rebinds each frame (bind != rebuild)")
+	# a row click bubbles an enqueue_research intent carrying the project id (R9: panel emits, sim untouched)
+	var got := []
+	panel.intent.connect(func(v, a): got.append([v, a]))
+	var first_id: StringName = StringName(snap.research.options[0].id)
+	panel._rows[0].picked.emit(first_id)
+	ok(got.size() == 1 and got[0][0] == &"enqueue_research" and String(got[0][1].id) == String(first_id),
+		"row click -> enqueue_research intent with the project id")
+	panel.free()
+
 # ---------------- PanelRegistry == SystemRegistry (sort/get/by_dock/bind_visible) ----------------
 func _t_panel_registry() -> void:
 	var reg = PanelReg.PanelRegistry.new()
@@ -370,6 +408,7 @@ func _fake_session():
 
 class _FakeSession extends RefCounted:
 	var sim
+	var progression = null
 	func chain_head() -> String: return "abcdef1234567890"
 	func stored_region_count() -> int: return 1
 

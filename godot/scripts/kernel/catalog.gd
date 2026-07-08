@@ -203,6 +203,93 @@ static func buildings_in(db, category: StringName) -> Array:
 	return out
 
 # ============================================================================================
+# BILL-OF-MATERIALS PLANNER (spec 0008 phase 1 — pure, no sim change)
+# ============================================================================================
+# The production PIPELINE as data: given a target resource, the ordered recipe steps to make it from
+# raws; given a cost + a stock, the shortfall. These are what a gated build/craft menu (spec 0008) and
+# "to make X you need …" tooltips consume. Pure graph walk over the raw catalog dict — mirrored by
+# tests/catalog.test.js so the Node validator and this loader never disagree.
+
+# The recipe id that produces `res_id` (the first by declaration order; "" for a raw / unproduced res).
+static func producer_of(cat: Dictionary, res_id) -> StringName:
+	var rid := StringName(res_id)
+	for rc in cat.get("recipes", []):
+		if StringName(str(rc.get("output", {}).get("id", ""))) == rid:
+			return StringName(str(rc.get("id", "")))
+	return &""
+
+# The ordered recipe steps to produce `res_id` from raw roots — dependencies FIRST, the target's own
+# recipe LAST, deduped. [] for a raw resource (obtained straight from the map) or one with no recipe.
+static func production_chain(cat: Dictionary, res_id) -> Array:
+	var raws: Dictionary = {}
+	for r in cat.get("resources", []):
+		if _is_raw_sources(r.get("sources", [])):
+			raws[StringName(str(r.get("id", "")))] = true
+	var by_out: Dictionary = {}
+	for rc in cat.get("recipes", []):
+		var oid := StringName(str(rc.get("output", {}).get("id", "")))
+		if not by_out.has(oid):
+			by_out[oid] = rc
+	var out: Array = []
+	_chain_visit(StringName(res_id), raws, by_out, out, {}, {})
+	return out
+
+static func _chain_visit(rid: StringName, raws: Dictionary, by_out: Dictionary, out: Array, seen: Dictionary, stack: Dictionary) -> void:
+	if raws.has(rid) or not by_out.has(rid):        # raw, or nothing produces it -> no step to add
+		return
+	var recipe: Dictionary = by_out[rid]
+	var recid := StringName(str(recipe.get("id", "")))
+	if seen.has(recid) or stack.has(recid):         # dedupe + cycle guard (the tree is acyclic anyway)
+		return
+	stack[recid] = true
+	for inp in recipe.get("inputs", {}):
+		_chain_visit(StringName(str(inp)), raws, by_out, out, seen, stack)
+	stack.erase(recid)
+	seen[recid] = true
+	out.append(recid)
+
+# The shortfall to afford `cost` from `stock`: {res -> missing_amount} (empty == affordable now).
+static func missing_for(cost: Dictionary, stock: Dictionary) -> Dictionary:
+	var out: Dictionary = {}
+	for k in cost:
+		var deficit: int = int(cost[k]) - int(stock.get(k, 0))
+		if deficit > 0:
+			out[k] = deficit
+	return out
+
+# Roll a cost/input dict all the way down to the total RAW resources it consumes — the full "budget"
+# to make something from scratch, honouring each recipe's output count (runs = ceil(need/count)). Every
+# key of the result is a raw (map-obtained) resource. This is the build/craft budget a gated menu shows.
+static func raw_requirements(cat: Dictionary, cost: Dictionary) -> Dictionary:
+	var raws: Dictionary = {}
+	for r in cat.get("resources", []):
+		if _is_raw_sources(r.get("sources", [])):
+			raws[StringName(str(r.get("id", "")))] = true
+	var by_out: Dictionary = {}
+	for rc in cat.get("recipes", []):
+		var oid := StringName(str(rc.get("output", {}).get("id", "")))
+		if not by_out.has(oid):
+			by_out[oid] = rc
+	var out: Dictionary = {}
+	for res in cost:
+		_accumulate_raw(StringName(str(res)), int(cost[res]), raws, by_out, out, {})
+	return out
+
+static func _accumulate_raw(rid: StringName, amount: int, raws: Dictionary, by_out: Dictionary, out: Dictionary, stack: Dictionary) -> void:
+	if amount <= 0:
+		return
+	if raws.has(rid) or not by_out.has(rid) or stack.has(rid):   # raw / terminal / cycle-guard -> book it
+		out[rid] = int(out.get(rid, 0)) + amount
+		return
+	stack[rid] = true
+	var recipe: Dictionary = by_out[rid]
+	var count: int = maxi(1, int(recipe.get("output", {}).get("count", 1)))
+	var runs: int = int(ceil(float(amount) / float(count)))
+	for inp in recipe.get("inputs", {}):
+		_accumulate_raw(StringName(str(inp)), runs * int(recipe.inputs[inp]), raws, by_out, out, stack)
+	stack.erase(rid)
+
+# ============================================================================================
 # GRAPH VALIDATION (the depth guarantee)
 # ============================================================================================
 
