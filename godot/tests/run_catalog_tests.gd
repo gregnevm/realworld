@@ -159,7 +159,7 @@ func _t_research_gate() -> void:
 func _t_sim_playthrough() -> void:
 	var sim = CatalogSim.new()   # builds the catalogue DefDatabase
 	ok(sim.db != null and sim.db.count() > 300, "catalog_sim builds the tree (%d defs)" % sim.db.count())
-	sim.grant("wood", 200); sim.grant("stone", 100)
+	sim.grant("wood", 200); sim.grant("stone", 100); sim.grant("clay", 40)
 	sim.grant("iron_ore", 40); sim.grant("coal", 40)
 
 	# 1) research a tier-1 project by ticking (passive research advance)
