@@ -6,14 +6,15 @@
 > [`godot/tests/run_catalog_tests.gd`](../godot/tests/run_catalog_tests.gd) (headless Godot, CI).
 
 This is the Phase-1 content tree the kernel's `Defs.load_pack` seam was built for. It is **pure data**:
-159 typed defs (35 resources · 22 research · 48 buildings · 25 recipes · 29 items) expressed in the
+333 typed defs (78 resources · 41 research · 85 buildings · 58 recipes · 71 items) expressed in the
 shipped `Def / RecipeDef / ResearchDef` grammar, so **adding content never touches the tick loop**.
 It composes on the existing mechanics kernel (production/power/environment/gear/combat) rather than
 replacing it, and it does **not** touch `data.gd` — the Phase-0 playable slice keeps its own 6-resource
 table; this catalogue is the forward-engine superset.
 
-Design canon: **RimWorld** for the survival/needs/quality flavour, **Factorio** for the multi-step
-automation chains (ore → bar → intermediate → advanced) where RimWorld is thin on intermediates.
+Design canon: **RimWorld** for the survival/needs/quality/medical flavour, **Factorio** for the
+multi-step automation chains (ore → bar → intermediate → advanced) where RimWorld is thin on
+intermediates. The arc runs from a bare neolithic start to a spacer endgame (a launchable ship).
 
 ## The load-bearing invariant: reachability
 
@@ -22,91 +23,103 @@ The tree is only "complete" if nothing is stranded. Both validators compute the 
 and assert that **every** resource is producible, **every** research reachable, **every** building
 buildable, and **every** recipe/item craftable. A recipe becomes reachable when its station is buildable,
 its research is unlocked, and all its inputs are already obtainable; its output then joins the obtainable
-set. This is a fixpoint over the whole graph — the guarantee that the player can actually climb from a
-bare map to end-game industry without a gap. The tech tree is additionally checked to be an acyclic DAG
-(so research can always finish) and every cross-reference (prereq, gate, station, cost) is checked to
-resolve.
+set. This is a fixpoint over the whole graph — the guarantee that the player can climb from a bare map to
+end-game industry without a gap. The tech tree is additionally checked to be an acyclic DAG (so research
+can always finish) and every cross-reference (prereq, gate, station, cost) is checked to resolve. Bootstrap
+cycles are forbidden by construction (e.g. `advanced_component` is crafted at the `electronics_bench`, not
+at the `advanced_fabrication_bench` whose own cost needs advanced components).
 
-## Resource tiers (34)
+## Resource tiers (78)
 
-| Tier | Resources |
-|---|---|
-| **0 · raw** (13) | wood, stone, scrap, clay, sand, coal, iron_ore, copper_ore, raw_food, meat, hide, plant_fiber, herbal |
-| **1 · refined** (9) | planks, charcoal, brick, stone_block, glass, iron_bar, copper_bar, cloth, leather |
-| **2 · intermediate** (9) | steel, components, copper_wire, gear_wheel, nails, chemfuel, gunpowder, ammo, herbal_medicine |
-| **3 · advanced** (4) | circuit, machine_frame, reinforced_plate, medicine |
+| Tier | Count | Examples |
+|---|---|---|
+| **0 · raw** | 26 | wood, stone, scrap, clay, sand, coal, iron/copper/tin/silver/gold/uranium ore, jade, marble, granite, raw_food, meat, hide, plant_fiber, herbal, grain, hops, psychoid_leaves, smokeleaf_leaves, wool, devilstrand_bud |
+| **1 · refined** | 23 | planks, charcoal, brick, stone/marble/granite block, glass, iron/copper/tin bar, silver, gold, uranium, cloth, leather, devilstrand, synthread, flour, wort, beer, kibble … |
+| **2 · intermediate** | 19 | steel, bronze, components, copper_wire, gear_wheel, nails, chemfuel, gunpowder, ammo, neutroamine, hyperweave, herbal_medicine, drugs (flake/yayo/wake_up/penoxycyline), shells (HE/incendiary/EMP) |
+| **3 · advanced** | 10 | circuit, plasteel, advanced_component, machine_frame, reinforced_plate, medicine, glitterworld_medicine, go_juice, luciferium, antigrain_shell |
 
-Every tier-1+ resource is produced by a recipe and consumed by a later one (or is a legitimate gameplay
-sink — `medicine`, `reinforced_plate`); the validator forbids dead-end intermediates.
+The "no dead-end intermediate" guard forbids a refined/intermediate resource that feeds nothing; the only
+allowed sinks are terminal products consumed by **gameplay at runtime** — drugs (ingested), shells & ammo
+(fired), beer/kibble (consumed), end-game armour/prosthetic stock.
 
 ### Example production chains (Factorio-style depth)
 
 ```
-copper_ore ──smelt──▶ copper_bar ──machining──▶ copper_wire ─┐
-sand ──kiln──▶ glass ────────────────────────────────────────┼─▶ circuit ─▶ solar_panel / auto_turret / assembler
-iron_ore + copper_bar ──machining──▶ components ──────────────┘
+copper_ore ─smelt▶ copper_bar ─machining▶ copper_wire ─┐
+sand ─kiln▶ glass ──────────────────────────────────────┼▶ circuit ─▶ solar / auto_turret / assembler
+iron_ore + copper_bar ─machining▶ components ───────────┘
 
-iron_ore + coal ──smelt──▶ iron_bar + charcoal ──smelt──▶ steel ──▶ machine_frame / reinforced_plate / flak gear
-wood ──kiln──▶ charcoal (reductant for glass & steel)
-herbal + cloth ──drug_lab──▶ herbal_medicine + components + chemfuel ──▶ medicine
+uranium_ore ─smelt▶ uranium ─┐
+iron_ore + coal ─smelt▶ iron_bar + charcoal ─smelt▶ steel ─┼─electric_smelter▶ plasteel ─┐
+                                                            │  circuit + silver ───────────┼▶ advanced_component
+                                                            └──────────────────────────────┘        │
+plasteel + advanced_component + glitterworld_medicine ─advanced_fabrication▶ archotech limbs         │
+plasteel + advanced_component + uranium + gold ─ship_construction▶ ship reactor / engine / core ◀────┘
+
+grain ─mill▶ flour ─stove▶ bread ; grain + hops ─brewery▶ wort ─▶ beer
+psychoid_leaves ─drug_lab▶ flake / yayo ─▶ go_juice / luciferium ; herbal + chemfuel ─▶ neutroamine ─▶ medicine
 ```
 
-## Research tree (22, DAG over 8 tiers)
+## Research tree (41 nodes, DAG over 9 tiers)
 
 ```
-T1  carpentry   fire_mastery   masonry   agriculture   hunting
-T2  smelting(fire)  cooking(fire)  textiles(agri)  leatherworking(hunt)
-T3  smithing(smelt)  machining(smelt)
-T4  steelmaking(smith+machining)  chemistry(smelt)  medicine_research(cook+agri)
-T5  electricity(machining)  firearms(machining+chemistry)
-T6  electronics(electricity+chemistry)  fortification(masonry+steelmaking)
-T7  automation(electronics+steelmaking)  defense_systems(firearms+electronics)  bionics(electronics+medicine_research)
-T8  industrialization(automation)
+T1  carpentry  fire_mastery  masonry  agriculture  hunting
+T2  smelting  cooking  textiles  leatherworking
+T3  smithing  machining  metallurgy(smelt)  brewing(cook)  husbandry(agri+hunt)  stonecarving(masonry)
+T4  steelmaking  chemistry  medicine_research  advanced_chemistry(chem)  advanced_metallurgy(metallurgy+steel)  advanced_textiles(textiles)
+T5  electricity  firearms  gunsmithing(firearms)  geothermal_power(electricity)  drug_production(adv_chem+medicine)
+T6  electronics  fortification
+T7  automation  defense_systems  bionics  microelectronics(electronics)  plasteel_working(adv_metallurgy+electronics)
+T8  industrialization  advanced_fabrication  spacer_tech  advanced_prosthetics  spacer_medicine  powered_armor  advanced_weapons
+T9  ship_construction(spacer_tech + advanced_fabrication)
 ```
 
-Research gates buildings, recipes and items. Each project costs research-points (game-days) and is
-consumed by `Production.ResearchState` exactly as the shipped kernel already does.
+Research gates buildings, recipes and items; each project costs research-points (game-days) consumed by
+`Production.ResearchState`, the shipped kernel's mechanism.
 
-## Buildings (48, by category)
+## Buildings (85, by category)
 
-- **structure** (9): wall, door, floor, stone_wall/floor, brick_wall, steel_wall, sandbags, embrasure
-- **production** (16): workbench, campfire, fueled_stove, kiln, stonecutter_table, smelter, smithy,
-  machining_table, loom, tailoring_bench, tannery, chemistry_bench, drug_lab, electronics_bench,
-  fabrication_bench, assembler (auto-crafts, powered)
-- **power** (6): wood_generator (fuel), watermill/windmill (wind), solar_panel (solar), battery,
+- **structure** (10): wood/stone/brick/steel/granite walls, doors, floors, sandbags, embrasure
+- **production** (20): workbench, campfire, fueled_stove, kiln, stonecutter, smelter, **electric_smelter**,
+  smithy, machining_table, loom, tailoring/tannery, chemistry_bench, drug_lab, **brewery**, **millstone**,
+  electronics_bench, fabrication_bench, **advanced_fabrication_bench**, assembler (auto-crafts)
+- **power** (9): wood/chemfuel/geothermal generators, watermill, windmill, solar, battery, large_battery,
   power_conduit — all bound to `power.gd`'s `CompPowerSource / CompBattery / CompPowerTrader`
-- **storage** (4): storage, shelf, warehouse, fridge (powered cold store)
-- **comfort** (7): bedroll, bed, well (water), lamp, heater, cooler, medbed (`gear.gd` `CompMedbed`)
-- **farming** (2): grow_zone, hydroponics (powered, faster growth)
-- **defense** (4): turret, auto_turret (powered), spike_trap (`CompTrap`), mortar (`CompMortar`)
+- **storage** (4): storage, shelf, warehouse, fridge
+- **comfort** (19): bedrolls & beds (incl. royal & hospital), well, lamps/heater/cooler, chairs/stools/
+  tables/dressers, torches/braziers, medbed, grave, sarcophagus
+- **farming** (2): grow_zone, hydroponics
+- **defense** (9): turret, auto/autocannon/uranium-slug/sniper turrets, spike/deadfall/IED traps, mortar
+- **art** (3): small / large / grand sculptures (marble → granite+silver → jade+gold+plasteel)
+- **utility** (3): comms console, orbital trade beacon, biosculpter pod
+- **ship** (6): structural beam, reactor, engine, computer core, cryptosleep casket, sensor cluster
 
-Buildings marked `station:true` (or `autocraft:true`) host recipe bills; power buildings carry a
-`power` block; heaters/coolers/lamps carry emitter hints the Batch-1/Batch-2 seam already understands.
-
-## Items (29)
+## Items (71)
 
 - **tools** (6): stone → iron → steel axe & pick (`gather_mult` 1.4 → 2.6)
-- **weapons** (8): wooden club/spear, bow, iron sword/mace, steel sword, revolver, bolt_rifle
-  (melee `dmg_bonus` + `dmg_type`; ranged carry `ranged`/`range`) — firearms/turrets spend the `ammo`
-  resource (`make_ammo`: gunpowder + steel) at runtime
-- **apparel** (10): tribal/leather/parka/duster torso & legs, caps & helmets — each with
-  `insulation_c` and per-damage-type `armor{sharp,blunt,heat}` that bind straight onto `gear.gd`'s
-  `CompApparel` / `EquipModel`
-- **prosthetics** (5): peg_leg → prosthetic_arm → bionic arm/leg/eye, each with a `restores` body part
-  and a `cap_factor` (0.6 peg → 1.15 bionic) that binds onto `gear.gd`'s `Hediff_Implant` /
-  `install_prosthetic` surgery — bionics restore a capacity *above* baseline
+- **weapons** (26): clubs/spears/bow → knife/gladius/sword/mace/warhammer → plasteel_sword/monosword;
+  ranged bow → revolver/autopistol/shotgun/assault/sniper/LMG/minigun → charge_rifle; grenades (frag/EMP/
+  molotov). Melee carry `dmg_bonus`+`dmg_type`; ranged carry `ranged`/`range`; guns/turrets spend `ammo`
+  and mortars spend HE/incendiary/EMP/antigrain shells (`combat.gd`)
+- **apparel** (23): tribal/leather/parka/duster → flak set → plate → marine/power armour; devilstrand &
+  hyperweave layers; hats/helmets; utility belts (shield/smokepop/jump-pack). Each carries `insulation_c`
+  and per-damage-type `armor{sharp,blunt,heat}` that bind onto `gear.gd`'s `CompApparel` / `EquipModel`
+- **prosthetics** (16): peg_leg → prosthetic arm → power_claw/drill_arm → bionic ear/spine/stomach/heart →
+  **archotech** eye/arm/leg; joywire/painstopper. Each has a `restores` body part and a `cap_factor`
+  (0.6 peg → 1.3 archotech) binding onto `gear.gd`'s `Hediff_Implant` / `install_prosthetic` surgery
 
 ## How it plugs into the kernel
 
 `Catalog.build_db()` returns a `Defs.DefDatabase` of typed defs. Recipes/research are literally
 `Production.RecipeDef` / `Production.ResearchDef`, so a workbench `Thing` carrying a `CompWorkbench`
-runs catalogue bills through the unchanged `ProductionSystem`, honouring the research gate — this is
-exercised end-to-end in `run_catalog_tests.gd` (`_t_production_integration`, `_t_research_gate`). The
-JSON `"research"` gate key is normalised to the `"requires_research"` key `RecipeDef` reads, so no kernel
-edit is needed.
+runs catalogue bills through the unchanged `ProductionSystem`, honouring the research gate — exercised
+end-to-end in `run_catalog_tests.gd`. The JSON `"research"` gate key is normalised to the
+`"requires_research"` key `RecipeDef` reads, so no kernel edit is needed.
 
 ## Extending
 
 Add a record to the relevant array in `catalog.json`. `npm test` (or the Godot suite) will immediately
 tell you if it strands content, references a missing id, introduces a tech cycle, or leaves an
-intermediate feeding nothing. Keep amounts as integers (the Godot loader int-casts JSON floats).
+intermediate feeding nothing. Keep amounts as integers (the Godot loader int-casts JSON floats). A new
+terminal consumable (a drug, a shell) that is spent at runtime rather than by a recipe goes in the test's
+`allowedSinks` set with a one-word note on how gameplay consumes it.

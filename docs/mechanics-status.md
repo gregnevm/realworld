@@ -22,7 +22,7 @@
 | `gathering` | ✅ | ✅ | ✅ | ✅ | tool multipliers formalized (axe 1.6× / pick 1.9×) |
 | `base_building` | ✅ | ✅ | ✅ | ✅ | building costs/HP in `data.gd` |
 | `crafting_automation` | ✅ | ✅ | 🟡 | ✅ | `kernel/production.gd` bills (count/until); quality 0–6. **Content tree now authored** — see below |
-| `content_tree` | ✅ | ✅ | 🟡 | ✅ | `content/catalog.json` + `kernel/catalog.gd`: 159 defs (35 res · 22 research · 48 build · 25 recipe · 29 item), reachability-validated |
+| `content_tree` | ✅ | ✅ | 🟡 | ✅ | `content/catalog.json` + `kernel/catalog.gd`: 333 defs (78 res · 41 research · 85 build · 58 recipe · 71 item), reachability-validated |
 | `raids_pvp` | ✅ | ✅ | ✅ | ✅ | threat-driven waves + tactic escalation via Balance |
 | `balance_director` | ✅ | ✅ | 🟡 | ✅ | `kernel/balance.gd`; `decide()` AI seam; incident MTB pacing |
 | `convoy_logistics` | ✅ | ✅ | ✅ | ✅ | real hubs (Kyiv/Lviv/Odesa/…); trade offers |
@@ -44,10 +44,11 @@ The snapshot above flagged the core tension: the kernel is deep but the *content
 7 buildings, 4 items in `data.gd`). That gap is now closed on the forward-engine side by a full,
 validated **content catalogue** — the "повне дерево крафтів, ресурсів, будівель" tree:
 
-- **`godot/content/catalog.json`** — 159 typed defs across 4 resource tiers, an 8-tier research DAG,
-  48 buildings and 25 recipes forming real multi-step production chains (ore → bar → intermediate →
-  advanced), and 29 tools/weapons/apparel/prosthetics bound to the shipped `gear.gd` stats (apparel →
-  `CompApparel`, prosthetics → `Hediff_Implant`, ammo → `combat.gd` turrets/firearms).
+- **`godot/content/catalog.json`** — 333 typed defs across 4 resource tiers, a 9-tier research DAG
+  (neolithic → spacer/ship), 85 buildings and 58 recipes forming real multi-step production chains (ore →
+  bar → alloy → advanced_component → ship parts), and 71 tools/weapons/apparel/prosthetics bound to the
+  shipped `gear.gd` stats (apparel → `CompApparel`, prosthetics/archotech → `Hediff_Implant`, ammo &
+  mortar shells → `combat.gd`, drugs/beer → `needs.gd`, power/geothermal → `power.gd`).
 - **`godot/scripts/kernel/catalog.gd`** — typed loader (reuses `RecipeDef`/`ResearchDef`) + graph
   validators.
 - Verified two ways: **`tests/catalog.test.js`** (Node, every push) and

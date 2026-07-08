@@ -51,10 +51,10 @@ func _t_load() -> void:
 # --- 2. build typed DefDatabase --------------------------------------------------------------
 func _t_build_db() -> void:
 	var db = Catalog.build_db()
-	ok(db.count() > 100, "build_db registers the whole tree (%d defs)" % db.count())
-	ok(Catalog.resources(db).size() >= 30, "resources loaded as typed defs (%d)" % Catalog.resources(db).size())
-	ok(Catalog.recipes(db).size() >= 20, "recipes loaded as typed defs (%d)" % Catalog.recipes(db).size())
-	ok(Catalog.items(db).size() >= 20, "items loaded as typed defs (%d)" % Catalog.items(db).size())
+	ok(db.count() > 300, "build_db registers the whole tree (%d defs)" % db.count())
+	ok(Catalog.resources(db).size() >= 70, "resources loaded as typed defs (%d)" % Catalog.resources(db).size())
+	ok(Catalog.recipes(db).size() >= 50, "recipes loaded as typed defs (%d)" % Catalog.recipes(db).size())
+	ok(Catalog.items(db).size() >= 60, "items loaded as typed defs (%d)" % Catalog.items(db).size())
 	# a recipe def is a real Production.RecipeDef with a working accessor + normalised research gate
 	var comp = db.get_def(&"make_components")
 	ok(comp != null and comp is Production.RecipeDef, "make_components is a RecipeDef")
@@ -90,10 +90,14 @@ func _t_depth() -> void:
 	var obtainable: Dictionary = reach["obtainable"]
 	ok(obtainable.has(&"medicine"), "medicine (tier-3) is reachable from raw roots")
 	var unlocked: Dictionary = reach["unlocked"]
-	ok(unlocked.has(&"industrialization"), "deepest research tier is reachable")
+	ok(unlocked.has(&"industrialization"), "industrial research tier is reachable")
 	ok(unlocked.has(&"bionics"), "bionics branch (electronics + medicine) is reachable")
+	ok(unlocked.has(&"spacer_tech") and unlocked.has(&"ship_construction"), "spacer + ship-construction research is reachable")
+	ok(obtainable.has(&"plasteel") and obtainable.has(&"advanced_component"), "deep alloy/electronics chain (plasteel, advanced_component) resolves")
 	var made_items: Dictionary = reach["made_items"]
-	ok(made_items.has(&"bionic_arm"), "end-game prosthetic (bind to gear.gd implants) is craftable")
+	ok(made_items.has(&"bionic_arm"), "mid-tier prosthetic (bind to gear.gd implants) is craftable")
+	ok(made_items.has(&"archotech_arm"), "archotech-tier prosthetic (deepest chain) is craftable")
+	ok(reach["built"].has(&"ship_reactor"), "end-game ship reactor is buildable")
 
 # --- 6. typed accessors ----------------------------------------------------------------------
 func _t_accessors() -> void:
