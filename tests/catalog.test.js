@@ -252,10 +252,16 @@ test("catalog: no resource is wholly unused (every refined/intermediate feeds so
   for (const r of cat.recipes) eat(r.inputs);
   for (const b of cat.buildings) eat(b.cost);
   for (const i of cat.items) eat(i.recipe);
-  // Terminal products consumed by GAMEPLAY (tending, shooting, end-game armor/prosthetic stock)
-  // rather than by another recipe — legitimate sinks. Every other resource must feed something.
-  // `medicine` also feeds bionic recipes; `ammo` is spent at runtime by guns/turrets (combat.gd).
-  const allowedSinks = new Set(["reinforced_plate", "ammo"]);
+  // Terminal products consumed by GAMEPLAY at runtime — drunk, ingested, fired, eaten, or worn as
+  // end-game stock — rather than by another recipe. These are legitimate sinks; every OTHER resource
+  // must still feed something (the guard that catches genuinely stranded intermediates).
+  const allowedSinks = new Set([
+    "reinforced_plate",                                             // end-game armour stock
+    "ammo", "he_shell", "incendiary_shell", "emp_shell", "antigrain_shell", // fired by guns/turrets/mortars (combat.gd)
+    "beer", "kibble",                                               // drunk / eaten (needs.gd)
+    "smokeleaf_joint", "psychite_tea", "flake", "wake_up",          // recreational/combat drugs (ingested)
+    "go_juice", "penoxycyline", "luciferium",                       // combat/medical drugs (ingested)
+  ]);
   const dangling = cat.resources
     .filter((r) => !used.has(r.id) && !allowedSinks.has(r.id))
     .map((r) => r.id);
