@@ -15,22 +15,9 @@
 
 const test = require("node:test");
 const assert = require("node:assert");
-const fs = require("node:fs");
-const path = require("node:path");
-
-const CATALOG_PATH = path.join(__dirname, "..", "godot", "content", "catalog.json");
-
-function loadCatalog() {
-  const raw = fs.readFileSync(CATALOG_PATH, "utf8");
-  return JSON.parse(raw);
-}
-
-// A raw resource is one a player can obtain directly from the map, not by crafting.
-const RAW_SOURCES = new Set(["mine", "chop", "gather", "hunt", "farm"]);
-
-function isRaw(res) {
-  return (res.sources || []).some((s) => RAW_SOURCES.has(s));
-}
+// loadCatalog (memoized), isRaw and the reachability closure live in one shared fixture so this suite
+// and progression.test.js can never drift apart on the ground-truth "nothing stranded" algorithm.
+const { loadCatalog, isRaw, reachability } = require("./_catalog");
 
 // Build the fast lookup maps + the set of ids that count as "obtainable stock" (real
 // resources plus meal/thing outputs that recipes spawn and tally into stock).
@@ -160,55 +147,8 @@ test("catalog: power buildings declare a valid role", () => {
   }
 });
 
-// The load-bearing invariant: reachability closure from raw roots. Nothing may be stranded.
-function reachability(cat) {
-  const { resById, researchById, buildingById, stockIds } = index(cat);
-
-  const obtainable = new Set(); // stock ids you can currently have
-  for (const r of cat.resources) if (isRaw(r)) obtainable.add(r.id);
-
-  const unlockedResearch = new Set();
-  const builtBuildings = new Set();
-  const madeRecipes = new Set();
-  const madeItems = new Set();
-
-  const researchReachable = (id) => {
-    const r = researchById.get(id);
-    if (!r) return false;
-    return (r.prereqs || []).every((p) => unlockedResearch.has(p));
-  };
-  const gateOk = (ref) => ref === undefined || ref === null || ref === "" || unlockedResearch.has(ref);
-  const costOk = (cost) => Object.keys(cost || {}).every((c) => obtainable.has(c));
-
-  let changed = true;
-  while (changed) {
-    changed = false;
-    // 1. research whose prereqs are all unlocked
-    for (const r of cat.research) {
-      if (!unlockedResearch.has(r.id) && researchReachable(r.id)) { unlockedResearch.add(r.id); changed = true; }
-    }
-    // 2. buildings whose cost is obtainable and research unlocked
-    for (const b of cat.buildings) {
-      if (builtBuildings.has(b.id)) continue;
-      if (gateOk(b.research) && costOk(b.cost)) { builtBuildings.add(b.id); changed = true; }
-    }
-    // 3. recipes whose station is built, research unlocked, inputs obtainable -> output obtainable
-    for (const r of cat.recipes) {
-      if (madeRecipes.has(r.id)) continue;
-      if (builtBuildings.has(r.station) && gateOk(r.research) && costOk(r.inputs)) {
-        madeRecipes.add(r.id);
-        obtainable.add(r.output.id);
-        changed = true;
-      }
-    }
-    // 4. items whose station is built, research unlocked, recipe inputs obtainable
-    for (const i of cat.items) {
-      if (madeItems.has(i.id)) continue;
-      if (builtBuildings.has(i.station) && gateOk(i.research) && costOk(i.recipe)) { madeItems.add(i.id); changed = true; }
-    }
-  }
-  return { obtainable, unlockedResearch, builtBuildings, madeRecipes, madeItems, resById, researchById, buildingById };
-}
+// The load-bearing invariant — the reachability closure from raw roots — lives in ./_catalog.js and
+// is imported above (shared verbatim with progression.test.js so the two can never disagree).
 
 test("catalog: every resource is obtainable from raw roots", () => {
   const cat = loadCatalog();

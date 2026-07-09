@@ -15,11 +15,9 @@
 
 const test = require("node:test");
 const assert = require("node:assert");
-const fs = require("node:fs");
-const path = require("node:path");
-
-const CATALOG_PATH = path.join(__dirname, "..", "godot", "content", "catalog.json");
-const loadCatalog = () => JSON.parse(fs.readFileSync(CATALOG_PATH, "utf8"));
+// Shared with catalog.test.js: the memoized loader and the one reachability closure (the end-state a
+// fully-researched pipeline must match). Keeps the ground-truth algorithm in a single place.
+const { loadCatalog, reachability } = require("./_catalog");
 
 // ---- The JS mirror of progression.gd (+ the ResearchState primitive it wraps) --------------------
 class Progression {
@@ -165,25 +163,8 @@ class Progression {
   }
 }
 
-// The catalog-reachability closure (copied minimal, same as catalog.test.js) — the ground truth the
-// pipeline's end-state must match: everything is reachable, so a fully-researched tree opens everything.
-function fullReachability(cat) {
-  const RAW = new Set(["mine", "chop", "gather", "hunt", "farm"]);
-  const isRaw = (r) => (r.sources || []).some((s) => RAW.has(s));
-  const obtainable = new Set(cat.resources.filter(isRaw).map((r) => r.id));
-  const unlocked = new Set(), built = new Set(), recs = new Set(), items = new Set();
-  const gate = (g) => !g || unlocked.has(g);
-  const cost = (c) => Object.keys(c || {}).every((k) => obtainable.has(k));
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const r of cat.research) if (!unlocked.has(r.id) && (r.prereqs || []).every((p) => unlocked.has(p))) { unlocked.add(r.id); changed = true; }
-    for (const b of cat.buildings) if (!built.has(b.id) && gate(b.research) && cost(b.cost)) { built.add(b.id); changed = true; }
-    for (const r of cat.recipes) if (!recs.has(r.id) && built.has(r.station) && gate(r.research) && cost(r.inputs)) { recs.add(r.id); obtainable.add(r.output.id); changed = true; }
-    for (const i of cat.items) if (!items.has(i.id) && built.has(i.station) && gate(i.research) && cost(i.recipe)) { items.add(i.id); changed = true; }
-  }
-  return { unlocked, built, recs, items };
-}
+// The catalog-reachability closure that the pipeline's end-state must match (a fully-researched tree
+// opens everything) is imported from ./_catalog.js — the same closure catalog.test.js uses.
 
 test("progression: builds over the whole research tree", () => {
   const p = new Progression(loadCatalog());
@@ -274,11 +255,11 @@ test("progression: unlocked catalogue grows monotonically and ends at full reach
     assert.ok(b >= lastB && r >= lastR && i >= lastI, "unlocked catalogue never shrinks as tech advances");
     lastB = b; lastR = r; lastI = i;
   }
-  const reach = fullReachability(cat);
+  const reach = reachability(cat);
   assert.strictEqual(p.unlockedBuildings().length, cat.buildings.length, "all buildings open once fully researched");
   assert.strictEqual(p.unlockedRecipes().length, cat.recipes.length, "all recipes open once fully researched");
   assert.strictEqual(p.unlockedItems().length, cat.items.length, "all items open once fully researched");
-  assert.strictEqual(reach.built.size, cat.buildings.length, "catalog reachability agrees: nothing is stranded");
+  assert.strictEqual(reach.builtBuildings.size, cat.buildings.length, "catalog reachability agrees: nothing is stranded");
 });
 
 test("progression: refuses illegal starts", () => {

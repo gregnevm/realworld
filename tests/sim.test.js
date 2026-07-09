@@ -18,7 +18,11 @@ for (const f of ["util.js", "worldgen.js", "entities.js", "logistics.js", "game.
   vm.runInThisContext(fs.readFileSync(path.join(jsDir, f), "utf8"), { filename: f });
 }
 const RW = global.window.RW;
-RW.log = () => {}; // stub the UI logger used by logistics
+// Stub the small UI surface the sim tick reaches (all defined in the unloaded ui.js) so the whole
+// RW.update graph runs headless — the sim itself stays DOM-free, these are just its output hooks.
+RW.log = () => {};
+RW.setTicker = () => {};
+RW.raidBanner = () => {};
 
 test("RNG seed is deterministic for the same coordinates", () => {
   assert.strictEqual(RW.hashSeed(50.4501, 30.5234), RW.hashSeed(50.4501, 30.5234));
@@ -118,4 +122,121 @@ test("convoy round-trip deducts cargo, then deposits the traded goods", () => {
   } finally { Math.random = realRandom; }
   assert.strictEqual(G.convoys.length, 0, "convoy completed");
   assert.strictEqual(stock.components, 2, "traded components delivered to stock");
+});
+
+// ---------------------------------------------------------------------------
+// Core tick loop (RW.update). Previously untested: the ~290-line update graph
+// (needs decay, auto-eat/deposit, crafting, gather, raids, day rollover, enemy
+// movement) has zero Node coverage. The sim reaches the DOM only through the
+// RW.log/setTicker/raidBanner hooks stubbed above, so it runs fully headless.
+// ---------------------------------------------------------------------------
+
+// A fresh, DOM-free game: real deterministic map + auto-placed landing crate.
+function makeGame() {
+  const map = RW.generateMap(50.4501, 30.5234, 56);
+  map.placeName = "Тест";
+  const G = RW.newGame(map);   // builds state and auto-places the storage crate near spawn
+  G.keys = {};                 // the input layer normally seeds this; updatePlayer reads G.keys.*
+  return G;
+}
+
+// A passable tile adjacent to (cx,cy) that holds neither a building nor a node.
+function freeTileNear(G, cx, cy) {
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]];
+  for (const [dx, dy] of dirs) {
+    const x = cx + dx, y = cy + dy;
+    if (x < 1 || y < 1 || x >= G.map.N - 1 || y >= G.map.N - 1) continue;
+    const i = y * G.map.N + x;
+    if (RW.isTerrainBlocked(G.map.tiles[i])) continue;
+    if (G.bgrid.has(i) || G.map.nodes.has(i)) continue;
+    return { x, y, i };
+  }
+  return null;
+}
+
+test("update: the day advances when the clock wraps past midnight", () => {
+  const G = makeGame();
+  G.time.frac = 0.99; G.time.day = 1;
+  RW.update(G, 3.0);   // 3s / 150s-day = 0.02 > the 0.01 remaining -> exactly one rollover
+  assert.strictEqual(G.time.day, 2, "one day rollover");
+  assert.ok(G.time.frac >= 0 && G.time.frac < 1, "fraction normalised into [0,1)");
+});
+
+test("update: hunger and rest decay while awake", () => {
+  const G = makeGame();
+  const p = G.player;
+  p.hunger = 80; p.rest = 80; p.sleeping = false;   // >55 so auto-eat stays off
+  RW.update(G, 1.0);
+  assert.ok(Math.abs(p.hunger - (80 - 0.42)) < 1e-9, `hunger decays ~0.42/s (got ${p.hunger})`);
+  assert.ok(Math.abs(p.rest - (80 - 0.30)) < 1e-9, `rest decays ~0.30/s (got ${p.rest})`);
+});
+
+test("update: starvation and exhaustion drain HP", () => {
+  const G = makeGame();
+  const p = G.player;
+  p.hunger = 0; p.rest = 0; p.hp = 100;
+  RW.update(G, 1.0);   // -2.0/s starving, -1.0/s exhausted, no regen while starving
+  assert.ok(Math.abs(p.hp - 97.0) < 1e-6, `hp loses 3.0/s when starved and exhausted (got ${p.hp})`);
+});
+
+test("update: auto-eats from storage when hungry and nearby", () => {
+  const G = makeGame();
+  const p = G.player;
+  p.hunger = 50; p.eatCd = 0;
+  const food0 = G.base.stock.food;
+  RW.update(G, 0.1);
+  assert.strictEqual(G.base.stock.food, food0 - 1, "one food consumed from the crate");
+  assert.ok(p.hunger > 80, `the meal restores hunger (got ${p.hunger})`);
+});
+
+test("update: auto-deposits carried goods at storage", () => {
+  const G = makeGame();
+  const p = G.player;
+  p.carry = { wood: 5 }; p.depCd = 0;
+  const wood0 = G.base.stock.wood;
+  RW.update(G, 0.1);
+  assert.strictEqual(RW.carryTotal(p), 0, "carry emptied at the crate");
+  assert.strictEqual(G.base.stock.wood, wood0 + 5, "the wood is delivered to stock");
+});
+
+test("deposit clamps to storage capacity and drops the overflow", () => {
+  const G = makeGame();
+  const cap = RW.storageCap(G);
+  G.base.stock = { wood: cap, stone: 0, food: 0, scrap: 0, planks: 0, components: 0 };
+  const added = RW.deposit(G, "stone", 10);
+  assert.strictEqual(added, 0, "nothing fits at capacity");
+  assert.strictEqual(G.base.stock.stone, 0, "overflow is lost, not stored");
+});
+
+test("update: a full gather cycle harvests a node into stock", () => {
+  const G = makeGame();
+  const p = G.player;
+  const spot = freeTileNear(G, Math.floor(p.px), Math.floor(p.py));
+  assert.ok(spot, "found a free tile next to the player");
+  G.map.nodes.set(spot.i, { kind: "tree", amount: 5 });
+  RW.orderGather(G, spot.x, spot.y);
+  for (let k = 0; k < 40; k++) RW.update(G, 0.1);   // tree takes ~1.3s/unit; 4s harvests a few
+  const node = G.map.nodes.get(spot.i);
+  const gained = (p.carry.wood || 0) + (G.base.stock.wood - 50); // carried or auto-deposited
+  assert.ok(gained > 0, "at least one wood harvested (carried or deposited)");
+  assert.ok(node === undefined || node.amount < 5, "the node was drawn down");
+});
+
+test("update: enemies advance toward the base (followPath movement)", () => {
+  const realRandom = Math.random;
+  Math.random = () => 0.5;   // freeze raid/repath jitter for a deterministic assertion
+  try {
+    const G = makeGame();
+    const center = RW.baseCenter(G);
+    let ex = Math.min(center.x + 10, G.map.N - 3), ey = center.y;
+    while (ex > center.x + 2 && RW.isTerrainBlocked(G.map.tiles[ey * G.map.N + ex])) ex--;
+    const e = RW.makeRaider(ex + 0.5, ey + 0.5, 1);
+    G.enemies.push(e);
+    const d0 = RW.dist(e.px, e.py, center.x + 0.5, center.y + 0.5);
+    for (let k = 0; k < 30; k++) RW.update(G, 0.1);
+    const d1 = RW.dist(e.px, e.py, center.x + 0.5, center.y + 0.5);
+    assert.ok(d1 < d0, `raider closed on the base (${d0.toFixed(2)} -> ${d1.toFixed(2)})`);
+  } finally {
+    Math.random = realRandom;
+  }
 });
