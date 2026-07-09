@@ -62,10 +62,17 @@ jobs:
           xvfb-run -a --server-args="-screen 0 1280x720x24" \
             ./godot-bin --path godot --resolution 1280x720 res://newhud.tscn -- newhud shot
       - name: Show result
-        run: ls -la godot/newhud_shot.png && file godot/newhud_shot.png
+        run: ls -la godot/newhud_shot.png godot/newhud_thumb.png && file godot/newhud_shot.png
+      - name: Emit thumb as base64 (log readback channel)
+        run: |
+          echo "NEWHUD_THUMB_B64_BEGIN"
+          base64 -w 120 godot/newhud_thumb.png
+          echo "NEWHUD_THUMB_B64_END"
       - name: Upload HUD screenshot
         uses: actions/upload-artifact@v4
         with:
           name: newhud-screenshot
-          path: godot/newhud_shot.png
+          path: |
+            godot/newhud_shot.png
+            godot/newhud_thumb.png
           if-no-files-found: error

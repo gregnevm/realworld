@@ -109,9 +109,10 @@ func _shot_step(dt: float) -> void:
 		var img := get_viewport().get_texture().get_image()
 		# Portable output: res:// maps to the godot/ project dir (writable in a source run — editor/CI),
 		# so CI can pick it up at godot/newhud_shot.png. Gitignored via godot/*_shot*.png.
-		var out_path := "res://newhud_shot.png"
-		img.save_png(out_path)
-		print("NEWHUD_SHOT saved -> ", ProjectSettings.globalize_path(out_path))
+		img.save_png("res://newhud_shot.png")                       # full-res artifact
+		img.resize(854, 480, Image.INTERPOLATE_BILINEAR)
+		img.save_png("res://newhud_thumb.png")                      # small copy for a text-channel readback
+		print("NEWHUD_SHOT saved -> ", ProjectSettings.globalize_path("res://newhud_shot.png"))
 		get_tree().quit()
 
 func _build_demo_base() -> void:
