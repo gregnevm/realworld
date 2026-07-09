@@ -1,7 +1,7 @@
 # AGENTS.md — RealWorld
 
 > Машиночитний контекст проєкту для AI-агентів (Claude Code, Cursor, Codex, Copilot, Gemini CLI, Windsurf). Тримай актуальним: застарілий AGENTS.md гірший за відсутній.
-> last_reviewed: 2026-06
+> last_reviewed: 2026-07
 
 ## Огляд
 - **Що це:** RealWorld — survival-MMORPG із симуляційною глибиною RimWorld на **картах зі справжньої географії (OSM/GPS)**; один глибоко симульований персонаж, persistent-світ, логістика конвоями. Репозиторій містить дизайн-документ і граний прототип.
@@ -39,7 +39,15 @@ realworld/
       ui.js            DOM-HUD, меню, спавн-екран, світова карта
       input.js         миша/клавіатура/тач
       game.js          стан, симуляція, бій, рейди, цикл, save/load
+  godot/               порт у Godot 4.7 — форвардний рушій (деталі в розділі «Godot-порт»)
+    scripts/kernel/       механічний кернел (spec 0003) + дерево контенту (catalog.gd)
+    content/catalog.json  335 def; валідовано catalog.gd ↔ tests/catalog.test.js
+    tests/                headless-сьюти Godot (run_*.gd)
   GDD_BOOK/            інтерактивний GDD; правда — gdd.json
+  tests/               Node-тести (node --test): sim-ядро, catalog, progression
+  specs/               специфікації фіч (0001…0008)
+  docs/                довідники: catalog.md, mechanics-status.md, ux/
+  .github/workflows/   CI: ci.yml (Node) + godot.yml (Godot headless)
   .claude/launch.json  dev-сервер прев'ю
 ```
 
@@ -66,7 +74,7 @@ realworld/
 ## Команди
 - **Запуск гри (dev):** `cd game && python -m http.server 8765` → http://localhost:8765
 - **Запуск GDD:** `python "C:\Users\gregn\.claude\skills\gdd_build\scripts\serve.py" "O:\realworld\GDD_BOOK"`
-- **Тести:** _поки немає_ (план: `node --test` на чистій логіці симуляції).
+- **Тести:** `npm test` (Node `node --test` — детерміноване sim-ядро + валідація `catalog.json`/пайплайну прогресії); headless-сьюти Godot — `test.cmd` у корені (перелік — у розділі «Godot-порт» вище). Обидва набори ганяються в CI (`.github/workflows/ci.yml` + `godot.yml`).
 - **Білд/деплой:** білду немає; статичний хостинг (GitHub Pages / Railway / itch.io).
 
 ## Ключові рішення (ADR-лайт)
