@@ -3,6 +3,12 @@
   "use strict";
   const idx = (G, x, y) => y * G.map.N + x;
   const inB = (G, x, y) => x >= 0 && y >= 0 && x < G.map.N && y < G.map.N;
+  // where the landing crate sits: one tile east of spawn, or south if that neighbour is blocked
+  function landingSpot(G, sp) {
+    let lx = sp.x + 1, ly = sp.y;
+    if (!RW.buildValid(G, lx, ly)) { lx = sp.x; ly = sp.y + 1; }
+    return { x: lx, y: ly };
+  }
 
   // ---------- small state helpers ----------
   RW.carryTotal = (p) => { let s = 0; for (const k in p.carry) s += p.carry[k]; return s; };
@@ -96,13 +102,12 @@
       raid: { timer: 0, next: 95, active: false, warned: false, wave: 0 },
       convoys: [], regions: [], convoySeq: 0,
       selectedBuild: null, hover: null, speed: 1, speedIdx: 0,
-      craftTimer: 0, saveTimer: 0, depCd: 0, log: []
+      craftTimer: 0, saveTimer: 0, log: []
     };
     if (!bare) {
       // landing crate beside the player, plus the player starts with a clearing
-      let lx = sp.x + 1, ly = sp.y;
-      if (!RW.buildValid(G, lx, ly)) { lx = sp.x; ly = sp.y + 1; }
-      placeBuilding(G, "storage", lx, ly);
+      const ls = landingSpot(G, sp);
+      placeBuilding(G, "storage", ls.x, ls.y);
     }
     return G;
   };
@@ -133,9 +138,8 @@
     const crate = G.buildings.find(b => b.kind === "storage");
     if (crate) {
       G.bgrid.delete(idx(G, crate.x, crate.y));
-      let lx = sp.x + 1, ly = sp.y;
-      if (!RW.buildValid(G, lx, ly)) { lx = sp.x; ly = sp.y + 1; }
-      crate.x = lx; crate.y = ly; G.bgrid.set(idx(G, lx, ly), crate);
+      const ls = landingSpot(G, sp);
+      crate.x = ls.x; crate.y = ls.y; G.bgrid.set(idx(G, ls.x, ls.y), crate);
     }
   };
 
@@ -424,7 +428,7 @@
           e.face = Math.atan2(nx.y + 0.5 - e.py, nx.x + 0.5 - e.px);
           if (e.atkCd <= 0) { damageBuilding(G, b, e.dmg); e.atkCd = 1.0; }
         } else {
-          if (stepTo(e, nx.x + 0.5, nx.y + 0.5, step)) e.path.shift();
+          followPath(e, e.path, step);   // same step-then-shift rule the player uses
         }
       } else {
         stepTo(e, center.x + 0.5, center.y + 0.5, step);

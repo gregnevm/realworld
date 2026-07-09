@@ -23,13 +23,13 @@
 
   // buildable structures
   RW.BUILDINGS = {
-    wall: { name: "Стіна", icon: "🧱", cost: { stone: 5 }, hp: 120, solid: true, blocks: true },
-    door: { name: "Двері", icon: "🚪", cost: { wood: 4 }, hp: 80, solid: false, blocks: false },
-    floor: { name: "Підлога", icon: "▢", cost: { wood: 1 }, hp: 30, solid: false, blocks: false },
-    storage: { name: "Склад", icon: "📦", cost: { wood: 10 }, hp: 90, solid: false, blocks: false, capacity: 250 },
-    workbench: { name: "Верстак", icon: "🛠", cost: { wood: 18, stone: 4 }, hp: 100, solid: true, blocks: true, craft: true },
-    bed: { name: "Ліжко", icon: "🛏", cost: { wood: 14 }, hp: 60, solid: false, blocks: false, bed: true },
-    turret: { name: "Турель", icon: "🔫", cost: { scrap: 14, components: 2 }, hp: 90, solid: true, blocks: true, range: 6.2, dps: 14 }
+    wall: { name: "Стіна", icon: "🧱", cost: { stone: 5 }, hp: 120, blocks: true },
+    door: { name: "Двері", icon: "🚪", cost: { wood: 4 }, hp: 80, blocks: false },
+    floor: { name: "Підлога", icon: "▢", cost: { wood: 1 }, hp: 30, blocks: false },
+    storage: { name: "Склад", icon: "📦", cost: { wood: 10 }, hp: 90, blocks: false, capacity: 250 },
+    workbench: { name: "Верстак", icon: "🛠", cost: { wood: 18, stone: 4 }, hp: 100, blocks: true },
+    bed: { name: "Ліжко", icon: "🛏", cost: { wood: 14 }, hp: 60, blocks: false },
+    turret: { name: "Турель", icon: "🔫", cost: { scrap: 14, components: 2 }, hp: 90, blocks: true, range: 6.2, dps: 14 }
   };
   RW.BUILD_ORDER = ["wall", "door", "floor", "storage", "workbench", "bed", "turret"];
 
