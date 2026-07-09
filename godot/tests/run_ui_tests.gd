@@ -11,6 +11,11 @@ const Fmt = preload("res://scripts/ui/format.gd")
 const ViewGeom = preload("res://scripts/ui/view_geom.gd")
 const LatLon = preload("res://scripts/ui/latlon.gd")
 const HudModel = preload("res://scripts/ui/hud_model.gd")
+const CatalogView = preload("res://scripts/ui/catalog_view.gd")
+const CatalogPanels = preload("res://scripts/ui/catalog_panels.gd")
+const CatalogVerbs = preload("res://scripts/ui/catalog_verbs.gd")
+const CatalogSim = preload("res://scripts/catalog_sim.gd")
+const InputCtl = preload("res://scripts/ui/input_controller.gd")
 const FeedbackBus = preload("res://scripts/ui/feedback_bus.gd")
 const Widgets = preload("res://scripts/ui/widgets.gd")
 const Panels = preload("res://scripts/ui/panels.gd")
@@ -40,6 +45,11 @@ func _init() -> void:
 	_t_widgets()
 	_t_stock_spine()
 	_t_research_surface()
+	_t_catalog_view()
+	_t_tech_panel()
+	_t_catalog_verbs()
+	_t_tech_intent()
+	_t_action_browsers()
 	_t_panel_registry()
 	_t_overlay_registry()
 	_t_bus_no_dangling()
@@ -286,6 +296,120 @@ func _t_research_surface() -> void:
 		"row click -> enqueue_research intent with the project id")
 	panel.free()
 
+# ---------------- CatalogView: the content-tree pipeline (deep catalogue -> value-data slices) ----------------
+func _t_catalog_view() -> void:
+	var db = CatalogView.default_db()
+	ok(db != null and db.count() > 300, "CatalogView.default_db builds the full tree (%d defs)" % db.count())
+	# neolithic start: nothing unlocked, starter stock
+	var snap: Dictionary = CatalogView.snapshot(db, {"unlocked": {}, "stock": {"wood": 50, "stone": 30}})
+	ok(bool(snap.available), "catalog snapshot available")
+	var s: Dictionary = snap.summary
+	ok(int(s.research) == 41 and int(s.researched) == 0, "summary: 0/41 researched at the neolithic start")
+	ok(int(s.buildings) == 87 and int(s.buildable) > 0, "some no-research buildings buildable from starter stock (%d)" % int(s.buildable))
+	ok(is_equal_approx(float(s.progress), 0.0), "research progress is 0 at the start")
+	ok((snap.next as Array).size() >= 5, "tier-1 research is available next (%d options)" % (snap.next as Array).size())
+	ok(_all_value_data(snap), "catalog slice is all value data (R8 — no DefDatabase / Callable leaks)")
+	# advancing state: unlocking smelting makes its dependent (metallurgy) AVAILABLE
+	var snap2: Dictionary = CatalogView.snapshot(db, {"unlocked": {&"smelting": true, &"fire_mastery": true}, "stock": {}})
+	ok(int(snap2.summary.researched) == 2, "researched count reflects the unlocked set")
+	var metallurgy_available := false
+	for r in snap2.research:
+		if r.id == &"metallurgy":
+			metallurgy_available = (r.status == &"available")
+	ok(metallurgy_available, "metallurgy flips locked->available once smelting is unlocked (prereq gate)")
+	ok(not bool(CatalogView.snapshot(null).get("available", false)), "null db -> {available:false} (graceful)")
+	# per-tier progress climbs 1..9 (neolithic -> ship); values reflect the unlocked set
+	var tiers: Array = snap2.tiers
+	ok(tiers.size() == 9 and int(tiers[0].tier) == 1 and int(tiers[8].tier) == 9, "tiers slice spans 9 eras ascending")
+	ok(int(tiers[0].unlocked) == 1 and int(tiers[0].total) == 5, "tier-1 shows 1/5 unlocked (fire_mastery; smelting is tier-2)")
+
+# ---------------- TechPanel: build-once + value bind, same contract as StockPanel (R2/R8) ----------------
+func _t_tech_panel() -> void:
+	var cat: Dictionary = CatalogView.snapshot(CatalogView.default_db(), {"unlocked": {}, "stock": {"wood": 50, "stone": 30}})
+	var vm := {"catalog": cat}
+	var panel = CatalogPanels.TechPanel.new()
+	panel.bind(vm)
+	var n0: int = panel.get_child(0).get_child_count()   # header + gauge + 4 stat rows
+	panel.bind(vm)                                        # second bind must NOT rebuild
+	ok(panel.rebuild_count == 1, "TechPanel builds exactly once across two binds (R2)")
+	ok(panel.rebind_count == 2, "TechPanel rebinds each frame (bind != rebuild)")
+	ok(panel.get_child(0).get_child_count() == n0, "child count stable across rebind (R2)")
+	ok(panel.panel_id == &"tech" and panel.dock == 1, "TechPanel: id=tech, RIGHT dock (registered via mechanics.gd)")
+	# ResearchTiersPanel — 9 fixed era rows, build-once + bind (R2)
+	var tp = CatalogPanels.ResearchTiersPanel.new()
+	tp.bind(vm)
+	var t0: int = tp.get_child(0).get_child_count()   # header + 9 tier rows
+	tp.bind(vm)
+	ok(tp.rebuild_count == 1 and tp.rebind_count == 2, "ResearchTiersPanel builds once, binds each frame (R2)")
+	ok(tp.get_child(0).get_child_count() == t0 and tp._rows.size() == 9, "ResearchTiersPanel holds 9 fixed era rows")
+	ok(tp.panel_id == &"research_tiers" and tp.dock == 1, "ResearchTiersPanel: id, RIGHT dock")
+	tp.free()
+	# the HudModel snapshot now carries the catalog slice end to end (pipeline surfaced in the HUD)
+	var sess = _fake_session()
+	var full := HudModel.snapshot(sess, {"buildings": [], "stock": sess.sim.stock, "items": []}, {"day": 5}, Balance.Balance.new())
+	ok(full.has("catalog") and bool(full.catalog.available), "HudModel.snapshot surfaces the catalog slice (pipeline end to end)")
+	panel.free()
+
+# ---------------- CatalogVerbs: the write-side router (intent -> catalog_sim command, R9) ----------------
+func _t_catalog_verbs() -> void:
+	var sim = CatalogSim.new()
+	sim.grant("wood", 100); sim.grant("stone", 50)
+	var ic = InputCtl.InputController.new()
+	CatalogVerbs.install(ic, sim)
+	ok(ic.has(&"cat_build") and ic.has(&"cat_research") and ic.has(&"cat_craft"), "catalog verbs installed on the router")
+	ic.dispatch(&"cat_build", {"id": "workbench"}, null)
+	ok(sim.has_building("workbench"), "dispatch cat_build -> station placed (intent -> router -> sim, R9)")
+	ic.dispatch(&"cat_research", {"id": "carpentry"}, null)
+	ok(String(sim.research.active) == "carpentry", "dispatch cat_research -> project started")
+	for i in 4:
+		sim.tick(1.0)
+	ic.dispatch(&"cat_craft", {"id": "make_planks", "mode": "count", "target": 2}, null)
+	for i in 6:
+		sim.tick(1.0)
+	ok(sim.amount("planks") >= 4, "dispatch cat_craft -> the recipe runs and yields stock (%d planks)" % sim.amount("planks"))
+
+# ---------------- TechPanel intent: panel action -> router -> sim (the full interactive path) ----------------
+func _t_tech_intent() -> void:
+	var sim = CatalogSim.new()
+	var ic = InputCtl.InputController.new()
+	CatalogVerbs.install(ic, sim)
+	var cat: Dictionary = CatalogView.snapshot(sim.db, sim.view_state())
+	var panel = CatalogPanels.TechPanel.new()
+	panel.bind({"catalog": cat})
+	panel.intent.connect(func(v, a): ic.dispatch(v, a, null))   # HudRoot/InputController wiring
+	panel.act_next_research()                                    # simulates the "research next" affordance
+	ok(String(sim.research.active) != "", "panel action -> intent -> router -> sim starts research (%s)" % String(sim.research.active))
+	panel.free()
+
+# ---------------- ActionBrowser: clickable build/craft/research slots -> intent -> router -> sim ----------------
+func _t_action_browsers() -> void:
+	var sim = CatalogSim.new()
+	sim.grant("wood", 100); sim.grant("stone", 50)
+	var ic = InputCtl.InputController.new()
+	CatalogVerbs.install(ic, sim)
+	var cat: Dictionary = CatalogView.snapshot(sim.db, sim.view_state())
+	ok((cat.build_actions as Array).size() > 0, "catalog build_actions non-empty (buildable-now rows, %d)" % (cat.build_actions as Array).size())
+	ok((cat.craft_actions as Array).size() == 0, "craft_actions empty until a station is placed")
+	ok((cat.research_actions as Array).size() >= 5, "research_actions lists the startable tier-1 projects (%d)" % (cat.research_actions as Array).size())
+	var bb = CatalogPanels.BuildBrowser.new()
+	bb.bind({"catalog": cat})
+	var n0: int = bb.get_child(0).get_child_count()   # header + 12 slot pool
+	bb.bind({"catalog": cat})
+	ok(bb.rebuild_count == 1 and bb.rebind_count == 2, "BuildBrowser builds once, binds each frame (R2)")
+	ok(bb._slots.size() == 12 and bb.panel_id == &"build_browser" and bb.dock == 0, "BuildBrowser: fixed 12-slot pool, LEFT dock")
+	ok(bb.get_child(0).get_child_count() == n0, "child count stable across rebind (R2)")
+	# full interactive loop: a slot press bubbles an intent through the router into the sim
+	bb.intent.connect(func(v, a): ic.dispatch(v, a, null))
+	var slot0 = bb._slots[0]
+	ok(slot0.item_id != &"", "first build slot bound to a real building id (%s)" % String(slot0.item_id))
+	slot0.chosen.emit(slot0.item_id)   # simulate the click
+	ok(sim.has_building(slot0.item_id), "click a build slot -> intent -> router -> catalog_sim places it")
+	# HudModel snapshot carries the actionable slices too (shared sim -> browsers -> router coherent)
+	var sess = _fake_session()
+	var full := HudModel.snapshot(sess, {"buildings": [], "stock": sess.sim.stock, "items": []}, {"day": 5}, Balance.Balance.new())
+	ok(full.catalog.has("build_actions") and full.catalog.has("research_actions"), "HudModel catalog slice carries the actionable rows")
+	bb.free()
+
 # ---------------- PanelRegistry == SystemRegistry (sort/get/by_dock/bind_visible) ----------------
 func _t_panel_registry() -> void:
 	var reg = PanelReg.PanelRegistry.new()
@@ -333,7 +457,8 @@ func _t_bus_no_dangling() -> void:
 func _t_rule_tripwires() -> void:
 	# R1 — one-way flow: no sim/kernel/session/social/persistence file references res://scripts/ui
 	var sim_side := ["res://scripts/sim.gd", "res://scripts/session.gd", "res://scripts/social.gd",
-		"res://scripts/persistence.gd", "res://scripts/world_gen.gd", "res://scripts/kernel/balance.gd"]
+		"res://scripts/persistence.gd", "res://scripts/world_gen.gd", "res://scripts/kernel/balance.gd",
+		"res://scripts/catalog_sim.gd", "res://scripts/data_bridge.gd"]
 	var r1 := true
 	for f in sim_side:
 		if "res://scripts/ui" in _read_code(f):
@@ -341,7 +466,8 @@ func _t_rule_tripwires() -> void:
 	ok(r1, "R1: sim/kernel/session/social/persistence never reference res://scripts/ui")
 	# R3 — no raw color/stylebox under ui/ except tokens.gd + theme.gd
 	var ui_files := ["widgets.gd", "panels.gd", "overlays.gd", "hud_model.gd", "hud_root.gd",
-		"panel.gd", "widget.gd", "overlay.gd", "feedback_bus.gd", "format.gd", "view_geom.gd"]
+		"panel.gd", "widget.gd", "overlay.gd", "feedback_bus.gd", "format.gd", "view_geom.gd",
+		"catalog_view.gd", "catalog_panels.gd"]
 	var r3 := true
 	for f in ui_files:
 		var body := _read_code("res://scripts/ui/" + f)   # comment-stripped: doc comments may mention them
@@ -359,7 +485,7 @@ func _t_rule_tripwires() -> void:
 	ok(r4, "R4: hud_root.gd contains no mechanic name (registered, not hand-wired)")
 	# R7 — resize-safe anchoring only via pin_* (no raw .position/PRESET_TOP_RIGHT in panels/widgets/overlays)
 	var r7 := true
-	for f in ["panels.gd", "widgets.gd", "overlays.gd"]:
+	for f in ["panels.gd", "widgets.gd", "overlays.gd", "catalog_panels.gd"]:
 		var body := _read_code("res://scripts/ui/" + f)
 		if ".position =" in body or "PRESET_TOP_RIGHT" in body:
 			r7 = false
@@ -368,7 +494,7 @@ func _t_rule_tripwires() -> void:
 	var cmds := ["try_build", "demolish", "craft_item", "dispatch_convoy", "try_launch_capsule",
 		"order_move", "order_gather", "order_attack", "accept_invite"]
 	var r9 := true
-	for f in ["panels.gd", "widgets.gd"]:
+	for f in ["panels.gd", "widgets.gd", "catalog_panels.gd"]:
 		var body := _read_code("res://scripts/ui/" + f)
 		for cmd in cmds:
 			if cmd in body:
@@ -378,7 +504,7 @@ func _t_rule_tripwires() -> void:
 	# .flash_msg/.flash_t/.messages are sim-only names; use "sim.banner" (not ".banner") since the
 	# FeedbackBus SIGNAL is also named `banner` and BannerWidget legitimately subscribes to bus.banner.
 	var r10 := true
-	for f in ["widgets.gd", "panels.gd", "hud_model.gd", "hud_root.gd", "overlays.gd"]:
+	for f in ["widgets.gd", "panels.gd", "hud_model.gd", "hud_root.gd", "overlays.gd", "catalog_view.gd", "catalog_panels.gd"]:
 		var body := _read_code("res://scripts/ui/" + f)
 		if ".messages" in body or "sim.banner" in body or ".flash_msg" in body or ".flash_t" in body:
 			r10 = false

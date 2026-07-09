@@ -7,6 +7,8 @@
 extends RefCounted
 const Fmt = preload("res://scripts/ui/format.gd")
 const GameData = preload("res://scripts/data.gd")
+const CatalogView = preload("res://scripts/ui/catalog_view.gd")
+const CatalogSim = preload("res://scripts/catalog_sim.gd")
 
 # session: the SessionScript (has .sim). world/ctx: the same shapes the kernel consumes (built by HudRoot).
 # balance: a Balance director constructed ONCE by HudRoot and reused (never new() per frame).
@@ -29,7 +31,17 @@ static func snapshot(session, world: Dictionary, ctx: Dictionary, balance) -> Di
 		"equipment": _equipment_slice(sim),
 		"raid":      _raid_slice(sim),
 		"research":  _research_slice(session),
+		"catalog":   _catalog_slice(sim),
 	}
+
+# --- content tree (the deep catalogue surfaced in the HUD via the CatalogView pipeline) ---
+# Value-data only (R8). Reads the process-shared forward-engine model (catalog_sim) so the browsers'
+# actionable rows and the router's build/craft/research commands operate the SAME state — browse an
+# action, click it, watch the counts move. The live data.gd sim (`sim`) is untouched; this is a
+# parallel catalogue model whose db is the cached default catalogue.
+static func _catalog_slice(_sim) -> Dictionary:
+	var cs = CatalogSim.shared(CatalogView.default_db())
+	return CatalogView.snapshot(cs.db, cs.view_state())
 
 # Build the Balance `world` dict {buildings,stock,items} from the sim. Lives HERE (not in HudRoot) so
 # the thin controller never names an economy field (R4 keeps hud_root.gd free of mechanic tokens).
