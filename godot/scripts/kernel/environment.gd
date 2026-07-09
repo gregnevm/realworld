@@ -164,7 +164,12 @@ class WeatherSystem extends Systems.SimSystem:
 			var r = world.get("rng", null)
 			if r != null:
 				return r
-		return RandomNumberGenerator.new()
+		# No world rng (standalone tick / test): fall back to a FIXED-seed generator so weather stays
+		# reproducible. Mirrors Production._world_rng — an unseeded RandomNumberGenerator.new() is
+		# randomly seeded in Godot 4 and would break the module's "only seeded rng" determinism rule.
+		var fallback := RandomNumberGenerator.new()
+		fallback.seed = 0
+		return fallback
 
 # --- LightSystem (spec 0004 B3) : writes ctx.light ---------------------------
 #
