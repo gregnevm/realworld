@@ -50,6 +50,7 @@ func _init() -> void:
 	_t_catalog_verbs()
 	_t_tech_intent()
 	_t_action_browsers()
+	_t_bom_tips()
 	_t_panel_registry()
 	_t_overlay_registry()
 	_t_bus_no_dangling()
@@ -409,6 +410,31 @@ func _t_action_browsers() -> void:
 	var full := HudModel.snapshot(sess, {"buildings": [], "stock": sess.sim.stock, "items": []}, {"day": 5}, Balance.Balance.new())
 	ok(full.catalog.has("build_actions") and full.catalog.has("research_actions"), "HudModel catalog slice carries the actionable rows")
 	bb.free()
+
+# ---------------- BOM guidance: the planner wired into the browser slots (spec 0008 phase 1) ----------------
+func _t_bom_tips() -> void:
+	var db = CatalogView.default_db()
+	# a thin stock affords almost nothing, so unlocked buildings surface as dimmed near-miss rows
+	var snap: Dictionary = CatalogView.snapshot(db, {"unlocked": {}, "stock": {"wood": 3}})
+	var builds: Array = snap.build_actions
+	ok(builds.size() > 0, "build_actions surfaced with a thin stock (near-miss rows included, %d)" % builds.size())
+	var all_tipped := true
+	for r in builds:
+		if not (r.has("tip") and r.has("enabled")) or String(r.tip) == "":
+			all_tipped = false
+	ok(all_tipped, "every build row carries a non-empty BOM tip + enabled flag (R8 value-data)")
+	ok(_all_value_data(snap), "BOM-tipped slices are still pure value data (R8)")
+	var near_found := false
+	for r in builds:
+		if not bool(r.enabled) and String(r.tip).begins_with("Потрібно ще:"):
+			near_found = true
+	ok(near_found, "an unaffordable building shows as a disabled 'Потрібно ще: …' near-miss row")
+	# raw budget rolls a crafted input all the way down to raw resources (planner consumed)
+	var bill := CatalogView.raw_bill_str(db, {"components": 1})
+	ok(bill != "", "raw_bill_str expands a crafted input to a raw budget (%s)" % bill)
+	# research rows advertise what they unlock
+	var ra: Array = snap.research_actions
+	ok(ra.size() > 0 and String(ra[0].tip).begins_with("Відкриє:"), "research rows tip names what the project unlocks")
 
 # ---------------- PanelRegistry == SystemRegistry (sort/get/by_dock/bind_visible) ----------------
 func _t_panel_registry() -> void:

@@ -160,7 +160,7 @@ class ActionBrowser extends PanelBase.Base:
 			if i < rows.size():
 				_slots[i].bind(rows[i])
 			else:
-				_slots[i].bind({"id": &"", "label": "", "sub": ""})
+				_slots[i].bind({"id": &"", "label": "", "sub": "", "tip": "", "enabled": true})
 
 class BuildBrowser extends ActionBrowser:
 	func _init() -> void:

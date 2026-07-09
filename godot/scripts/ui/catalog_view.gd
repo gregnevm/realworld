@@ -22,6 +22,14 @@ static func default_db():
 		_db = Catalog.build_db()
 	return _db
 
+# Lazily-built, process-cached raw catalogue JSON — the BOM planner in catalog.gd walks this dict (not the
+# DefDatabase). Same on-disk source as default_db(), so ids align; cached once like the db (cheap hot path).
+static var _cat = null
+static func default_cat() -> Dictionary:
+	if _cat == null:
+		_cat = Catalog.load_json()
+	return _cat
+
 # ---- state helpers -------------------------------------------------------------------------------
 
 # Every prereq of a research def already in `unlocked`?
@@ -79,43 +87,104 @@ static func snapshot(db, state: Dictionary = {}) -> Dictionary:
 	}
 
 # --- actionable slices: the rows an interactive browser turns into clickable, intent-emitting slots.
-# Each row is value-data {id, label, sub}. Capped so a fixed-size (R2) browser can bind a page of them.
+# Each row is value-data {id, label, sub, enabled, tip}. Affordable rows come first (enabled + clickable);
+# unlocked-but-unaffordable "near-miss" rows follow, dimmed, their tip naming the shortfall — the spec 0008
+# phase-1 "to make X you need …" guidance, powered by the BOM planner (production_chain / raw_requirements /
+# missing_for) in catalog.gd. Capped so a fixed-size (R2) browser binds one page; tips are computed only for
+# the rows that survive the cap, so the per-frame snapshot never walks the graph for hidden rows.
 const ACTION_CAP := 12
 
-# Buildings you can place right now (research unlocked + cost affordable).
-static func _build_actions(db, unlocked: Dictionary, stock: Dictionary) -> Array:
+# Affordable defs first, then near-miss, up to the cap — so slot 0 is always the actionable one.
+static func _cap_merge(ready: Array, near: Array) -> Array:
 	var out: Array = []
-	for b in Catalog.buildings(db):
-		if out.size() >= ACTION_CAP:
-			break
-		if _gate_ok(b.research(), unlocked) and _afford(b.cost(), stock):
-			out.append({"id": b.id, "label": String(b.label()), "sub": cost_str(db, b.cost())})
+	for x in ready:
+		if out.size() >= ACTION_CAP: break
+		out.append(x)
+	for x in near:
+		if out.size() >= ACTION_CAP: break
+		out.append(x)
 	return out
 
-# Recipes you can craft right now: their station is PLACED, research unlocked, inputs in stock.
-static func _craft_actions(db, unlocked: Dictionary, stock: Dictionary, stations: Dictionary) -> Array:
+# The shortfall line ("🪨5") for a cost the player cannot yet afford, via the planner's missing_for.
+static func _short_str(db, cost: Dictionary, stock: Dictionary) -> String:
+	return cost_str(db, Catalog.missing_for(cost, stock))
+
+# The full raw budget of a cost rolled down to map-obtained resources ("🪵18 🪨4") — raw_requirements.
+static func raw_bill_str(db, cost: Dictionary) -> String:
+	return cost_str(db, Catalog.raw_requirements(default_cat(), cost))
+
+# Buildings whose research is unlocked: affordable ones first (clickable), then unaffordable (dimmed).
+static func _build_actions(db, unlocked: Dictionary, stock: Dictionary) -> Array:
+	var ready: Array = []
+	var near: Array = []
+	for b in Catalog.buildings(db):
+		if not _gate_ok(b.research(), unlocked):
+			continue
+		(ready if _afford(b.cost(), stock) else near).append(b)
 	var out: Array = []
+	for b in _cap_merge(ready, near):
+		var afford := _afford(b.cost(), stock)
+		out.append({
+			"id": b.id, "label": String(b.label()), "sub": cost_str(db, b.cost()), "enabled": afford,
+			"tip": ("Уся сировина: %s" % raw_bill_str(db, b.cost())) if afford else ("Потрібно ще: %s" % _short_str(db, b.cost(), stock)),
+		})
+	return out
+
+# Recipes whose station is PLACED and research unlocked: craftable-now first, then input-short (dimmed).
+static func _craft_actions(db, unlocked: Dictionary, stock: Dictionary, stations: Dictionary) -> Array:
+	var ready: Array = []
+	var near: Array = []
 	for rc in Catalog.recipes(db):
-		if out.size() >= ACTION_CAP:
-			break
 		if not stations.has(StringName(str(rc.data.get("station", "")))):
 			continue
-		if _gate_ok(rc.requires_research(), unlocked) and _afford(rc.inputs(), stock):
-			var oid := StringName(str(rc.output().get("id", "")))
-			var od = db.get_def(oid)
-			var olabel: String = String(od.label()) if od != null and od.has_method("label") else str(oid)
-			out.append({"id": rc.id, "label": String(rc.data.get("label", str(rc.id))), "sub": "→ " + olabel})
+		if not _gate_ok(rc.requires_research(), unlocked):
+			continue
+		(ready if _afford(rc.inputs(), stock) else near).append(rc)
+	var out: Array = []
+	for rc in _cap_merge(ready, near):
+		var oid := StringName(str(rc.output().get("id", "")))
+		var od = db.get_def(oid)
+		var olabel: String = String(od.label()) if od != null and od.has_method("label") else str(oid)
+		var afford := _afford(rc.inputs(), stock)
+		var tip: String
+		if afford:
+			var chain: Array = Catalog.production_chain(default_cat(), oid)
+			tip = "%s ← %s · шлях %d кр." % [olabel, cost_str(db, rc.inputs()), chain.size()]
+		else:
+			tip = "Потрібно ще: %s" % _short_str(db, rc.inputs(), stock)
+		out.append({
+			"id": rc.id, "label": String(rc.data.get("label", str(rc.id))), "sub": "→ " + olabel,
+			"enabled": afford, "tip": tip,
+		})
 	return out
 
-# Research you can start right now (prereqs met, not yet unlocked).
+# Research you can start right now (prereqs met, not yet unlocked); tip advertises what it unlocks.
 static func _research_actions(db, unlocked: Dictionary) -> Array:
 	var out: Array = []
 	for r in Catalog.research_projects(db):
 		if out.size() >= ACTION_CAP:
 			break
 		if research_status(r, unlocked) == &"available":
-			out.append({"id": r.id, "label": String(r.data.get("label", str(r.id))), "sub": "%d дн." % int(r.cost())})
+			out.append({
+				"id": r.id, "label": String(r.data.get("label", str(r.id))),
+				"sub": "%d дн." % int(r.cost()), "enabled": true, "tip": _unlocks_tip(r.id),
+			})
 	return out
+
+# "Відкриє: 🏛3 ⚒2 🔧1" — how many buildings/recipes/items this research gates (scanned from the tree).
+static func _unlocks_tip(research_id) -> String:
+	var rid := StringName(str(research_id))
+	var cat := default_cat()
+	var nb := 0
+	var nr := 0
+	var ni := 0
+	for b in cat.get("buildings", []):
+		if StringName(str(b.get("research", ""))) == rid: nb += 1
+	for rc in cat.get("recipes", []):
+		if StringName(str(rc.get("research", ""))) == rid: nr += 1
+	for it in cat.get("items", []):
+		if StringName(str(it.get("research", ""))) == rid: ni += 1
+	return "Відкриє: 🏛%d ⚒%d 🔧%d" % [nb, nr, ni]
 
 # Per-tier research progress: [{tier, unlocked, total}] ascending — the tech-era climb (neolithic→spacer).
 static func _tiers(db, unlocked: Dictionary) -> Array:

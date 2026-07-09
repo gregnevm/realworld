@@ -106,8 +106,21 @@ and unlocks toast through the feed. Verified in Node (`tests/progression.test.js
 *build/craft menu gated by unlock* (bridging the slice's 6-resource table to the catalog's 78) — deferred
 so this pass stays additive; see spec 0007 §5. That next step is now designed in **spec 0008** (ADR,
 design-only) with its safe phase-1 companion already shipped: a pure **bill-of-materials planner** in
-`catalog.gd` (`production_chain` / `producer_of` / `missing_for`), Node + Godot mirrored, that the gated
-build/craft menu and "to make X you need …" tooltips will consume.
+`catalog.gd` (`production_chain` / `producer_of` / `missing_for` / `raw_requirements`), Node + Godot
+mirrored, that the gated build/craft menu and "to make X you need …" tooltips will consume.
+
+**Update (2026-07-10, spec 0008 phase 1 — BOM guidance wired):** the planner now has its first UI
+consumer. `ui/catalog_view.gd` folds it into the interactive browsers' actionable slices, so the
+`CatalogSim`-backed Build/Craft/Research browsers show, beside every affordable row, the **near-miss**
+rows too — unlocked-but-unaffordable buildings/recipes rendered dimmed (`enabled:false`) with a
+`Потрібно ще: …` shortfall tip (`missing_for`); affordable rows carry an `Уся сировина: …` deep raw
+budget (`raw_requirements`); crafts carry their production-chain tip (`production_chain`); and research
+rows advertise `Відкриє: 🏛N ⚒N 🔧N` (tree scan). This also fixes the dead/empty CraftBrowser — once a
+station is placed it lists that station's recipes with their input shortfall. Purely additive (the
+`CatalogSim` forward model, not the live `data.gd` sim), so the shipped slice and its suites are
+untouched; tips are computed only for the ≤12 rows that survive the cap (no per-frame graph walk for
+hidden rows). Verified in `run_ui_tests.gd` `_t_bom_tips`. Spec 0008 phases 2–4 (the flagged
+`use_catalog` migration of the **live** sim onto the catalogue) remain owner-gated per the ADR.
 
 ## How to read this
 

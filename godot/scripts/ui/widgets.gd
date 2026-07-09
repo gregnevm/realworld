@@ -270,6 +270,8 @@ class CatalogSlot extends WidgetBase.Widget:
 		var sub := String(vm.get("sub", ""))
 		_btn.text = ("%s   %s" % [lbl, sub]) if sub != "" else lbl
 		_btn.disabled = not bool(vm.get("enabled", true))
+		_btn.tooltip_text = String(vm.get("tip", ""))
+		_btn.modulate = Tokens.DIMMED if _btn.disabled else Tokens.WHITE
 		visible = item_id != &""
 
 # ---- OverlayChip (.ov-chip .on): label · hotkey · on-state (toolbar toggle for a map overlay) ----
