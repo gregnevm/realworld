@@ -21,7 +21,8 @@
     scrap: { res: "scrap", time: 1.5, icon: "⚙", color: "#86d0d6" }
   };
 
-  // buildable structures
+  // buildable structures. `research` = the gating node in the content catalog's tech tree
+  // (godot/content/catalog.json — the same gate ids the Godot kernel uses); absent = ungated.
   RW.BUILDINGS = {
     wall: { name: "Стіна", icon: "🧱", cost: { stone: 5 }, hp: 120, blocks: true },
     door: { name: "Двері", icon: "🚪", cost: { wood: 4 }, hp: 80, blocks: false },
@@ -29,9 +30,13 @@
     storage: { name: "Склад", icon: "📦", cost: { wood: 10 }, hp: 90, blocks: false, capacity: 250 },
     workbench: { name: "Верстак", icon: "🛠", cost: { wood: 18, stone: 4 }, hp: 100, blocks: true },
     bed: { name: "Ліжко", icon: "🛏", cost: { wood: 14 }, hp: 60, blocks: false },
-    turret: { name: "Турель", icon: "🔫", cost: { scrap: 14, components: 2 }, hp: 90, blocks: true, range: 6.2, dps: 14 }
+    research_bench: { name: "Дослідний стіл", icon: "🔬", cost: { wood: 30, stone: 8 }, hp: 100, blocks: true },
+    shelf: { name: "Полиця", icon: "🗄", cost: { planks: 8 }, hp: 70, blocks: false, capacity: 60, research: "carpentry" },
+    grow_zone: { name: "Грядка", icon: "🌱", cost: { wood: 2 }, hp: 20, blocks: false, research: "agriculture" },
+    turret: { name: "Турель", icon: "🔫", cost: { scrap: 14, components: 2 }, hp: 90, blocks: true, range: 6.2, dps: 14, research: "machining" },
+    spike_trap: { name: "Пастка", icon: "🪤", cost: { wood: 10, scrap: 6 }, hp: 50, blocks: false, trapDps: 16, research: "fortification" }
   };
-  RW.BUILD_ORDER = ["wall", "door", "floor", "storage", "workbench", "bed", "turret"];
+  RW.BUILD_ORDER = ["wall", "door", "floor", "storage", "workbench", "bed", "research_bench", "shelf", "grow_zone", "turret", "spike_trap"];
 
   RW.canAfford = function (stock, cost) {
     for (const k in cost) if ((stock[k] || 0) < cost[k]) return false;

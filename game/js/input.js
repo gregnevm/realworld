@@ -50,8 +50,9 @@
       G.keys[k] = true;
       if (k === "escape") { RW.cancelBuild(G); G.player.action = null; }
       if (k === "m") RW.openWorld(G);
+      if (k === "r") RW.toggleResearch(G);
       if (k === "h") document.getElementById("helpModal").classList.toggle("hidden");
-      if (k >= "1" && k <= "7") {
+      if (k >= "1" && k <= "9") {
         const key = RW.BUILD_ORDER[+k - 1];
         if (key) { G.selectedBuild = (G.selectedBuild === key ? null : key); RW.syncBuildBar(G); }
       }

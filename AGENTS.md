@@ -18,7 +18,8 @@
 - **Зовнішні залежності/API:** OpenStreetMap **Overpass API** (генерація карти з реальних координат) з детермінованим процедурним fallback. Жодних npm-залежностей у рантаймі.
 
 ## Архітектура
-- Гра — єдиний глобальний неймспейс **`RW`**, розкладений по файлах у `game/js/`, які підключаються **у фіксованому порядку** в `game/index.html`: `util → worldgen → entities → render → logistics → ui → input → game`. `game.js` стартує на `DOMContentLoaded`.
+- Гра — єдиний глобальний неймспейс **`RW`**, розкладений по файлах у `game/js/`, які підключаються **у фіксованому порядку** в `game/index.html`: `util → worldgen → entities → catalog_data → progression → render → logistics → ui → input → game`. `game.js` стартує на `DOMContentLoaded`.
+- **Прогресія у веб-зрізі:** `G.research = RW.Progression(RW.CATALOG)` — той самий tech-DAG, що і в Godot (`catalog.json`); дослідні столи генерують прогрес у `RW.update`; будівлі з `research:`-гейтом заблоковані до розблокування (клік по локу планує весь шлях). Після зміни `catalog.json` — `node tools/sync-catalog.mjs` (CI-тест ловить розсинхрон).
 - Цикл: `requestAnimationFrame` → `RW.update(G, dt)` (симуляція) + `RW.render(ctx, G)`. Уся ігрова модель — в об'єкті `G` (`RW.G`).
 - World-gen: `lat/lon` → детермінований seed (`mulberry32`) → процедурна карта; за потреби зверху накладається реальна геометрія OSM (`RW.overlayOSM`).
 - GDD: фронтенд читає `gdd.json` через `fetch` (потрібен HTTP-origin, не `file://`).
@@ -33,7 +34,9 @@ realworld/
     js/
       util.js          RNG, A*-pathfinding, математика, неймспейс RW
       worldgen.js      lat/lon → тайлмапа; Overpass + fallback
-      entities.js      дані: ресурси, будівлі, ноди, рейдери
+      entities.js      дані: ресурси, будівлі (з research-гейтами), ноди, рейдери
+      catalog_data.js  ЗГЕНЕРОВАНИЙ зріз godot/content/catalog.json (node tools/sync-catalog.mjs)
+      progression.js   RW.Progression — JS-дзеркало kernel/progression.gd (дерево досліджень)
       render.js        малювання канвасу, камера, день/ніч
       logistics.js     конвої між реальними регіонами
       ui.js            DOM-HUD, меню, спавн-екран, світова карта
@@ -51,7 +54,7 @@ realworld/
   .claude/launch.json  dev-сервер прев'ю
 ```
 
-## Godot-порт (форвардний рушій — нові фічі сюди; JS-версія заморожена як референс)
+## Godot-порт (форвардний рушій — нові фічі сюди; JS-версія — граний браузерний зріз, який несе пайплайн прогресії поверх спільного catalog.json)
 - **Де:** `godot/` — повний порт на **Godot 4.7 (GDScript)**. Симуляція scene-free, детермінована (PCG32 із FNV-хешу координат), тестовна headless. Пиляр: «координати — це seed» (світ = чиста функція `lat/lon`). UI — **українською**.
 - **Шари:**
   - `godot/scripts/` — `sim.gd` (детермінований сим), `session.gd` (оркестрація регіонів/подорожей/респавну), `social.gd`, `persistence.gd`, `world_gen.gd`, `world_view.gd` (custom-draw тайлмапи), `main.gd` (поточний HUD-моноліт — досі дефолтна сцена).

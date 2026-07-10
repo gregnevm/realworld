@@ -14,7 +14,7 @@ global.innerWidth = 800;
 global.innerHeight = 600;
 
 const jsDir = path.join(__dirname, "..", "game", "js");
-for (const f of ["util.js", "worldgen.js", "entities.js", "logistics.js", "game.js"]) {
+for (const f of ["util.js", "worldgen.js", "entities.js", "catalog_data.js", "progression.js", "logistics.js", "game.js"]) {
   vm.runInThisContext(fs.readFileSync(path.join(jsDir, f), "utf8"), { filename: f });
 }
 const RW = global.window.RW;
@@ -23,6 +23,8 @@ const RW = global.window.RW;
 RW.log = () => {};
 RW.setTicker = () => {};
 RW.raidBanner = () => {};
+RW.syncBuildBar = () => {};
+RW.buildBuildBar = () => {};
 
 test("RNG seed is deterministic for the same coordinates", () => {
   assert.strictEqual(RW.hashSeed(50.4501, 30.5234), RW.hashSeed(50.4501, 30.5234));
@@ -220,6 +222,76 @@ test("update: a full gather cycle harvests a node into stock", () => {
   const gained = (p.carry.wood || 0) + (G.base.stock.wood - 50); // carried or auto-deposited
   assert.ok(gained > 0, "at least one wood harvested (carried or deposited)");
   assert.ok(node === undefined || node.amount < 5, "the node was drawn down");
+});
+
+// ---------------------------------------------------------------------------
+// Research pipeline in the web slice (spec 0007): the catalog tech tree gates
+// buildings and recipes; research benches generate progress through RW.update.
+// ---------------------------------------------------------------------------
+
+test("catalog_data.js is in sync with godot/content/catalog.json", () => {
+  const canon = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "godot", "content", "catalog.json"), "utf8"));
+  assert.deepStrictEqual(RW.CATALOG, canon, "regenerate with: node tools/sync-catalog.mjs");
+});
+
+test("research: bench generates points through RW.update and completes carpentry", () => {
+  const G = makeGame();
+  assert.ok(G.research, "a new game carries the progression pipeline");
+  const spot = freeTileNear(G, Math.floor(G.player.px), Math.floor(G.player.py));
+  G.selectedBuild = "research_bench";
+  RW.tryBuild(G, spot.x, spot.y);
+  assert.ok(G.buildings.some(b => b.kind === "research_bench"), "research bench built (ungated)");
+  assert.ok(G.research.enqueue("carpentry"), "carpentry is enqueueable from a cold start");
+  for (let k = 0; k < 320 && !G.research.isUnlocked("carpentry"); k++) RW.update(G, 0.1);
+  assert.ok(G.research.isUnlocked("carpentry"), "carpentry completes from bench-generated points (~28s)");
+  assert.ok(G.research.gateOk("carpentry"), "the carpentry gate now reads unlocked");
+});
+
+test("research: a locked building is refused and its research path auto-planned", () => {
+  const G = makeGame();
+  G.base.stock.scrap = 50; G.base.stock.components = 10;
+  const spot = freeTileNear(G, Math.floor(G.player.px), Math.floor(G.player.py));
+  G.selectedBuild = "turret";   // machining-gated in the catalog
+  RW.tryBuild(G, spot.x, spot.y);
+  assert.ok(!G.buildings.some(b => b.kind === "turret"), "locked turret is not placed");
+  const pipeline = new Set([G.research.active, ...G.research.queue]);
+  assert.ok(pipeline.has("machining"), "the machining gate landed in the research pipeline");
+  for (const pre of G.research.researchById.get("machining").prereqs || [])
+    assert.ok(pipeline.has(pre) || G.research.isUnlocked(pre), `prereq ${pre} planned ahead of machining`);
+});
+
+test("crafting: workbench planks are gated by carpentry (catalog make_planks gate)", () => {
+  const G = makeGame();
+  const spot = freeTileNear(G, Math.floor(G.player.px), Math.floor(G.player.py));
+  G.selectedBuild = "workbench";
+  RW.tryBuild(G, spot.x, spot.y);
+  assert.ok(G.buildings.some(b => b.kind === "workbench"), "workbench built");
+  for (let k = 0; k < 100; k++) RW.update(G, 0.1);   // 10s: enough for ~2 crafts if unlocked
+  assert.strictEqual(G.base.stock.planks, 0, "no planks while carpentry is locked");
+  G.research.enqueue("carpentry");
+  G.research.addPoints(999);
+  for (let k = 0; k < 100; k++) RW.update(G, 0.1);
+  assert.ok(G.base.stock.planks > 0, "planks flow once carpentry is researched");
+});
+
+test("defense: a spike trap wears down enemies standing on it", () => {
+  const G = makeGame();
+  G.research.addPoints(1000, true);   // auto-walk the whole tree -> fortification unlocked
+  assert.ok(G.research.gateOk("fortification"), "full tree unlocks fortification");
+  const spot = freeTileNear(G, Math.floor(G.player.px), Math.floor(G.player.py));
+  G.base.stock.scrap = 20;
+  G.selectedBuild = "spike_trap";
+  RW.tryBuild(G, spot.x, spot.y);
+  const trap = G.buildings.find(b => b.kind === "spike_trap");
+  assert.ok(trap, "trap placed once researched");
+  const e = RW.makeRaider(spot.x + 0.5, spot.y + 0.5, 1);
+  G.enemies.push(e);
+  const hp0 = e.hp, trapHp0 = trap.hp;
+  const realRandom = Math.random;
+  Math.random = () => 0.5;
+  try { for (let k = 0; k < 10; k++) RW.update(G, 0.1); } finally { Math.random = realRandom; }
+  assert.ok(e.hp < hp0 || e.dead || G.enemies.indexOf(e) < 0, "the trap damaged the raider");
+  assert.ok(trap.hp < trapHp0 || !G.buildings.includes(trap), "the trap wears out as it bites");
 });
 
 test("update: enemies advance toward the base (followPath movement)", () => {
