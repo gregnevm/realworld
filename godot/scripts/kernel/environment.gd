@@ -66,6 +66,16 @@ static func _cell_indoor(world, cell: Vector2i) -> bool:
 		return false
 	return roof.is_indoor(cell)
 
+# The world's ClimateProvider (world.climate), or a fresh deterministic model when absent.
+# Shared by all three systems below so the fallback rule lives once.
+static func _climate(world):
+	var c: Variant = null
+	if world != null and typeof(world) == TYPE_DICTIONARY:
+		c = world.get("climate", null)
+	if c == null:
+		c = Climate.ClimateModel_Deterministic.new()
+	return c
+
 # --- TemperatureSystem (spec 0003 #17) : writes ctx.temp_c -------------------
 #
 # Priority ~10: ticks early so CompRottable / CompGrower (and later heat/cold-stress) read a fresh
@@ -81,7 +91,7 @@ class TemperatureSystem extends Systems.SimSystem:
 		priority = 10
 
 	func system_tick(world, ctx: Dictionary) -> void:
-		var climate: Variant = _climate(world)
+		var climate: Variant = Env._climate(world)
 		var cell: Vector2i = Env._query_cell(world, ctx)
 		var indoor: bool = Env._cell_indoor(world, cell)
 		ctx["cell"] = cell
@@ -110,14 +120,6 @@ class TemperatureSystem extends Systems.SimSystem:
 
 		ctx["temp_c"] = t
 
-	func _climate(world):
-		var c: Variant = null
-		if world != null and typeof(world) == TYPE_DICTIONARY:
-			c = world.get("climate", null)
-		if c == null:
-			c = Climate.ClimateModel_Deterministic.new()
-		return c
-
 # --- WeatherSystem (spec 0003 #18) : writes ctx.weather + effects ------------
 #
 # Priority ~11. A pure ctx-writer: pulls a weather StringName from ClimateProvider.weather() with the
@@ -132,7 +134,7 @@ class WeatherSystem extends Systems.SimSystem:
 		priority = 11
 
 	func system_tick(world, ctx: Dictionary) -> void:
-		var climate: Variant = _climate(world)
+		var climate: Variant = Env._climate(world)
 		var rng := _rng(world)
 		var w: StringName = climate.weather(
 			float(world.get("lat", 0.0)), float(world.get("lon", 0.0)),
@@ -150,14 +152,6 @@ class WeatherSystem extends Systems.SimSystem:
 			if indoor:
 				dip *= (1.0 - Env.INDOOR_INSULATION)
 			ctx["temp_c"] = float(ctx.get("temp_c", 20.0)) - dip
-
-	func _climate(world):
-		var c: Variant = null
-		if world != null and typeof(world) == TYPE_DICTIONARY:
-			c = world.get("climate", null)
-		if c == null:
-			c = Climate.ClimateModel_Deterministic.new()
-		return c
 
 	func _rng(world) -> RandomNumberGenerator:
 		if world != null and typeof(world) == TYPE_DICTIONARY:
@@ -182,7 +176,7 @@ class LightSystem extends Systems.SimSystem:
 		priority = 12
 
 	func system_tick(world, ctx: Dictionary) -> void:
-		var climate: Variant = _climate(world)
+		var climate: Variant = Env._climate(world)
 		var cell: Vector2i = Env._query_cell(world, ctx)
 		var light: float = climate.daylight(
 			float(world.get("lat", 0.0)), int(world.get("day", 1)), float(world.get("frac", 0.5)))
@@ -201,14 +195,6 @@ class LightSystem extends Systems.SimSystem:
 				light = maxf(light, lamp_light)
 
 		ctx["light"] = clampf(light, 0.0, 1.0)
-
-	func _climate(world):
-		var c: Variant = null
-		if world != null and typeof(world) == TYPE_DICTIONARY:
-			c = world.get("climate", null)
-		if c == null:
-			c = Climate.ClimateModel_Deterministic.new()
-		return c
 
 # --- CompDeteriorate (spec 0003 #14) : outdoor wear -------------------------
 #

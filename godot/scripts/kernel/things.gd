@@ -8,6 +8,13 @@
 # rot, growth, quality, power, fuel, fire and deterioration are all just Comps.
 extends RefCounted
 
+# The world's Thing list (world.things), [] when the world is absent or not a dict. The power and
+# production systems both scan this list every tick — the guard lives here once, not per-system.
+static func world_things(world) -> Array:
+	if world != null and typeof(world) == TYPE_DICTIONARY:
+		return world.get("things", [])
+	return []
+
 # --- base interface -----------------------------------------------------------
 
 # One orthogonal behaviour bolted onto a Thing. Override the hooks you need; ignore the rest.

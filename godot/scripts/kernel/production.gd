@@ -149,9 +149,7 @@ class ProductionSystem extends Systems.SimSystem:
 		priority = 20
 
 	func _things(world) -> Array:
-		if world != null and typeof(world) == TYPE_DICTIONARY:
-			return world.get("things", [])
-		return []
+		return Things.world_things(world)
 
 	func system_tick(world, ctx: Dictionary) -> void:
 		if typeof(world) != TYPE_DICTIONARY:
