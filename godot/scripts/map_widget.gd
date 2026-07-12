@@ -55,7 +55,7 @@ func _draw() -> void:
 			draw_line(home, screen[i], Color(0.36, 0.69, 1.0, 0.28), 1.0)
 	# markers
 	for i in points.size():
-		var p = points[i]
+		var p: Dictionary = points[i]
 		var s: Vector2 = screen[i]
 		var col: Color = p.get("color", Color.WHITE)
 		match str(p.get("kind", "")):

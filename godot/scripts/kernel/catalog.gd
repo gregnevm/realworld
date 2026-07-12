@@ -141,7 +141,7 @@ static func load_json(path: String = CATALOG_PATH) -> Dictionary:
 		push_error("cannot open catalog: %s" % path)
 		return {}
 	var text := f.get_as_text()
-	var parsed = JSON.parse_string(text)
+	var parsed: Variant = JSON.parse_string(text)
 	if typeof(parsed) != TYPE_DICTIONARY:
 		push_error("catalog root is not a JSON object")
 		return {}
@@ -399,7 +399,7 @@ static func _tech_is_acyclic(cat: Dictionary) -> bool:
 			queue.append(k)
 	var removed := 0
 	while not queue.is_empty():
-		var id = queue.pop_front()
+		var id: StringName = queue.pop_front()
 		removed += 1
 		for d in dependents.get(id, []):
 			indeg[d] = int(indeg[d]) - 1

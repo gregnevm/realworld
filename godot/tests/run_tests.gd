@@ -8,6 +8,7 @@ const GameData = preload("res://scripts/data.gd")
 const Social = preload("res://scripts/social.gd")
 const Persistence = preload("res://scripts/persistence.gd")
 const SessionScript = preload("res://scripts/session.gd")
+const Catalog = preload("res://scripts/kernel/catalog.gd")
 
 var passed := 0
 var failed := 0
@@ -24,6 +25,7 @@ func _init() -> void:
 	_t_raid_scaling()
 	_t_data_integrity()
 	_t_convoy_round_trip()
+	_t_open_stock()
 	_t_death_freeze()
 	_t_items()
 	_t_demolish()
@@ -40,6 +42,14 @@ func _init() -> void:
 	_t_session_travel()
 	_t_session_respawn()
 	_t_environment()
+	_t_raid_determinism()
+	_t_patrols()
+	_t_content_pack()
+	_t_research_gates()
+	_t_use_catalog_persist()
+	_t_no_global_rng()
+	_t_static_typing()
+	_t_stock_seam()
 	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
 	quit(1 if failed > 0 else 0)
 
@@ -287,6 +297,53 @@ func _t_convoy_round_trip() -> void:
 	ok(sim.convoys.is_empty(), "convoy completed")
 	var gained: int = int(sim.stock.get(sells, 0)) - before
 	ok(gained >= 1 and gained <= expected, "traded goods delivered (%d, <= %d)" % [gained, expected])
+
+# ---------------- spec 0008 phase 2: open catalogue-keyed stock behind use_catalog ----------------
+# OFF must stay byte-identical to the shipped slice (guarded by exact keys below); ON re-keys the same
+# game onto catalogue ids through data_bridge, so catalogue recipes can afford against the LIVE stock.
+func _t_open_stock() -> void:
+	# flag OFF (default): the shipped 6-key vocabulary, untouched
+	var a = Sim.new()
+	a.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
+	ok(not a.use_catalog, "use_catalog defaults to OFF (shipped slice unchanged)")
+	var off_keys := true
+	for k in ["wood", "stone", "food", "scrap", "planks", "components"]:
+		if not a.stock.has(k):
+			off_keys = false
+	ok(off_keys and a.stock.size() == 6, "flag OFF: stock carries exactly the 6 live ids")
+	ok(a.res_key("food") == "food" and a.res_amount("food") == 18, "flag OFF: res_key is the identity")
+
+	# flag ON: the same new game speaks catalogue ids (set BEFORE new_game, never mid-save)
+	var b = Sim.new()
+	b.use_catalog = true
+	b.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
+	ok(b.stock.has("raw_food") and not b.stock.has("food"), "flag ON: live 'food' lands on catalogue 'raw_food'")
+	ok(b.res_amount("food") == 18, "flag ON: res_amount reads a live id through the bridge")
+	b.deposit("food", 4)
+	ok(int(b.stock["raw_food"]) == 22, "flag ON: deposit('food') lands on 'raw_food'")
+	# build affords + pays the re-keyed cost from the open stock
+	b.stock[b.res_key("wood")] = 200
+	b.stock[b.res_key("stone")] = 200
+	b.stock[b.res_key("scrap")] = 200
+	var c: Vector2i = b.base_center()
+	var placed := false
+	for dy in range(-2, 3):
+		for dx in range(-2, 3):
+			if not placed and b.build_valid(c.x + dx, c.y + dy):
+				b.try_build("workbench", c.x + dx, c.y + dy)
+				placed = true
+	ok(b.has_workbench(), "flag ON: try_build pays the re-keyed cost and places the building")
+	ok(b.res_amount("wood") < 200, "flag ON: the build consumed wood from the open stock")
+	# convoy dispatch draws through the same seam
+	var hub = b.regions[1]
+	b.stock[b.res_key(String(hub.offer.buys))] = 80
+	ok(b.dispatch_convoy(1, String(hub.offer.buys), 10).ok, "flag ON: convoy affords against the open stock")
+	# the hunger path eats catalogue-keyed food (player spawns beside the starter storage)
+	b.player.hunger = 40.0
+	b.player.eat_cd = 0.0
+	var food_before: int = b.res_amount("food")
+	b.update(0.05)
+	ok(b.res_amount("food") == food_before - 1, "flag ON: eating consumes 'raw_food' through the seam")
 
 # ---------------- spec 0002 ----------------
 func _t_social() -> void:
@@ -631,3 +688,278 @@ func _t_environment() -> void:
 	s._place_building("torch", 14, 3, -1)
 	ok(s.dark_work_mult() < night_mult, "torch light reduces the darkness penalty")
 	ok(s.light_at(14, 2) > 0.6, "torch cell is lit at night")
+
+# «координати — це seed» поширюється й на загрози: рейд-хвилі, засідки на конвої та лут
+# ідуть з окремого seeded потоку (sim.threat_rng), незалежного від погодного (env_rng).
+func _t_raid_determinism() -> void:
+	var a = Sim.new()
+	a.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
+	var b = Sim.new()
+	b.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
+	a._spawn_wave()
+	b._spawn_wave()
+	var pos_a := []
+	var pos_b := []
+	for e in a.enemies:
+		pos_a.append([e.px, e.py])
+	for e in b.enemies:
+		pos_b.append([e.px, e.py])
+	ok(not pos_a.is_empty(), "wave spawned raiders (%d)" % pos_a.size())
+	ok(str(pos_a) == str(pos_b), "same region seed -> identical raid wave placement")
+	# the reroll of the next-raid timer comes from the same seeded stream
+	a.enemies = []
+	b.enemies = []
+	a._update_raids(0.1)
+	b._update_raids(0.1)
+	ok(absf(float(a.raid.next) - float(b.raid.next)) < 0.0001, "same region seed -> identical next-raid timer")
+	# weather stream is untouched by threat consumption: raids never desync the climate
+	var c = Sim.new()
+	c.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
+	for i in 4:
+		a._update_environment(0.3)
+		c._update_environment(0.3)
+	ok(a.weather == c.weather, "threat stream does not consume from the weather stream")
+
+# Лор-контент: патрульні роботи Старого світу (постапокаліпсис) — амбієнтна загроза поза
+# рейд-циклом, з того самого seeded threat-потоку; розібраний робот — джерело компонентів.
+func _t_patrols() -> void:
+	var a = Sim.new()
+	a.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
+	ok(float(a.patrol.next) > 0.0 and int(a.patrol.wave) == 0, "патруль зведений і чекає свого часу")
+	a._spawn_patrol()
+	ok(not a.enemies.is_empty(), "патруль виходить на мапу (%d од.)" % a.enemies.size())
+	var bot: Dictionary = a.enemies[0]
+	ok(String(bot.get("kind", "")) == "bot", "патрульний юніт — робот, не рейдер")
+	ok(float(bot.hp) > float(GameData.make_raider(0.0, 0.0, 1).hp), "робот дня 1 міцніший за рейдера дня 1")
+	ok(float(bot.speed) < float(GameData.make_raider(0.0, 0.0, 1).speed), "робот повільніший — в'язкий танк")
+	# лут: розібрані роботи насипають брухт (і стохастично, але детерміновано — компоненти)
+	var scrap0 := int(a.stock.get("scrap", 0))
+	while not a.enemies.is_empty():
+		a._damage_enemy(a.enemies[0], 9999.0)
+	ok(int(a.stock.scrap) > scrap0, "розібраний робот дає брухт")
+	ok(GameData.patrol_size(1) == 1 and GameData.patrol_size(20) == 4 and GameData.patrol_size(99) == 4,
+		"патруль росте з днями і капиться на ланці з 4 машин")
+	# детермінізм: той самий seed -> ідентичний патруль (позиції обох сімів збігаються)
+	var b = Sim.new()
+	b.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
+	var c = Sim.new()
+	c.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
+	b._spawn_patrol()
+	c._spawn_patrol()
+	var pos_b := []
+	var pos_c := []
+	for e in b.enemies:
+		pos_b.append([e.px, e.py])
+	for e in c.enemies:
+		pos_c.append([e.px, e.py])
+	ok(str(pos_b) == str(pos_c), "той самий seed -> ідентичний маршрут входу патруля")
+	# рейд глушить появу патруля, але таймер перезаряджається (одна битва за раз)
+	var d = Sim.new()
+	d.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
+	d.raid.active = true
+	d.patrol.timer = 99999.0
+	var wave0 := int(d.patrol.wave)
+	d._update_patrols(0.1)
+	ok(int(d.patrol.wave) == wave0 and d.enemies.is_empty(), "під час рейду патруль не накладається")
+	ok(float(d.patrol.timer) == 0.0 and float(d.patrol.next) >= 95.0, "таймер патруля перезаряджений")
+
+# Контент-пак: лампа/обігрівач/шипи (будівлі), кувалда/лук/броня (спорядження), 5-хабова торгівля.
+func _t_content_pack() -> void:
+	var nn := 16
+	var tiles := PackedByteArray()
+	tiles.resize(nn * nn)
+	tiles.fill(WorldGen.GRASS)
+	var s = Sim.new()
+	s.new_game({"n": nn, "tiles": tiles, "nodes": {}, "spawn": Vector2i(2, 2), "lat": 50.4501, "lon": 30.5234})
+	s.stock.scrap = 200
+	s.stock.components = 20
+	s.stock.wood = 200
+	s.stock.stone = 200
+	# лампа: міні-сонце свого радіуса вночі (генеричний light-емітер із data.gd)
+	s.time.frac = 0.02
+	ok(s.light_at(10, 8) < 0.1, "до лампи вночі темно")
+	s._place_building("lamp", 10, 10, -1)
+	ok(s.light_at(10, 8) > 0.5, "лампа освітлює сусідні клітини вночі")
+	# обігрівач: +6°C на своїй клітині (генеричний heat-емітер)
+	s.time.day = 15
+	s.weather = &"clear"
+	var t0: float = s.temp_at(3, 12)
+	s._place_building("heater", 3, 12, -1)
+	ok(absf(s.temp_at(3, 12) - (t0 + 6.0)) < 0.01, "обігрівач додає +6°C на своїй клітині")
+	# шипи: ворог на пастці отримує урон, пастка зношується
+	var trap: Variant = s._place_building("spike_trap", 8, 3, -1)
+	var raider: Dictionary = GameData.make_raider(8.5, 3.5, 1)
+	s.enemies.append(raider)
+	var hp0: float = raider.hp
+	var trap_hp0: float = trap.hp
+	s._update_enemies(0.5)
+	ok(float(raider.hp) < hp0, "шипи ранять ворога на клітині (%.1f → %.1f)" % [hp0, float(raider.hp)])
+	ok(float(trap.hp) < trap_hp0, "шипи зношуються від використання")
+	s.enemies.clear()
+	# ворота досліджень: до відкриття гейтові предмети/будівлі відмовляють з поясненням
+	s._place_building("workbench", 4, 4, -1)
+	var refused: Dictionary = s.craft_item("plate")
+	ok(not bool(refused.ok) and "дослідження" in String(refused.msg), "панцир заборонений до Ковальства")
+	s.stock.stone = 200
+	var stone0 := int(s.stock.stone)
+	s.try_build("turret", 12, 12)
+	ok(int(s.stock.stone) == stone0 and "дослідження" in s.flash_msg, "турель заборонена до Механіки (кошти цілі)")
+	# відкриваємо гілки — все стає доступним
+	s.research_unlocked = {"masonry": true, "hunting": true, "smelting": true, "smithing": true, "machining": true}
+	# броня: панцир ріже вхідний урон удвічі
+	ok(bool(s.craft_item("plate").ok), "панцир скрафчено на верстаку (після Ковальства)")
+	ok(String(s.player.equipped.get("armor", "")) == "plate", "панцир екіповано у слот armor")
+	ok(absf(s.armor_mult() - 0.5) < 0.001, "панцир ріже урон удвічі")
+	var atk: Dictionary = GameData.make_raider(s.player.px + 0.5, s.player.py, 1)
+	atk.atk_cd = 0.0
+	s.enemies.append(atk)
+	var php0: float = float(s.player.hp)
+	s._update_enemies(0.01)
+	ok(absf((php0 - float(s.player.hp)) - float(atk.dmg) * 0.5) < 0.01, "вхідний удар порізаний бронею")
+	s.enemies.clear()
+	# кувалда і лук: топ-тір спорядження
+	ok(bool(s.craft_item("sledge").ok) and bool(s.craft_item("bow").ok), "кувалда і лук скрафчені")
+	ok(absf(s.melee_damage() - (12.0 + float(s.player.skills.combat) + 18.0)) < 0.01, "лук додає +18 урону")
+	ok(float(GameData.ITEMS.sledge.gather_mult) > float(GameData.ITEMS.pick.gather_mult), "кувалда швидша за кайло")
+	# торгова мережа: 5 хабів на регіон, усі оффери валідні
+	var s2 = Sim.new()
+	s2.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
+	ok(s2.regions.size() == 6, "регіон бачить 5 торгових хабів (+дім), маємо %d" % (s2.regions.size() - 1))
+	var offers_ok := true
+	for i in range(1, s2.regions.size()):
+		var off: Dictionary = s2.regions[i].offer
+		if not (GameData.RES.has(off.buys) and GameData.RES.has(off.sells)):
+			offers_ok = false
+	ok(offers_ok, "усі хаб-оффери посилаються на валідні ресурси")
+	ok(GameData.OFFERS.size() == 6, "торгова мережа розширена до 6 офферів")
+	# живий міст: unlock у kernel-прогресії відкриває sim-ворота через session.tick_research
+	var sess = SessionScript.new()
+	sess.start(50.4501, 30.5234, "Тест-міст")
+	ok(not sess.sim.research_ok(GameData.BUILDINGS.turret), "свіжий світ: турель за ворітьми")
+	sess.progression.research.unlock(&"machining")
+	sess.tick_research(0.016)
+	ok(sess.sim.research_ok(GameData.BUILDINGS.turret), "kernel-unlock відкриває турель через session-міст")
+
+# Tripwire (стиль run_ui_tests): глобальні randf()/randi()/randomize() заборонені у scripts/ —
+# лише seeded RandomNumberGenerator, інакше ламається стовп «світ = чиста функція lat/lon».
+func _t_no_global_rng() -> void:
+	var re := RegEx.new()
+	re.compile("(^|[^.\\w])(randf|randi|randfn|randf_range|randi_range|randomize)\\s*\\(")
+	var offenders := []
+	var files := _product_scripts()
+	for path in files:
+		if re.search(_read_code(path)) != null:
+			offenders.append(path)
+	ok(files.size() > 20, "rng tripwire scans the script tree (%d files)" % files.size())
+	ok(offenders.is_empty(), "no global randf()/randi() anywhere in scripts (seeded RNG only)%s"
+		% ("" if offenders.is_empty() else " — " + ", ".join(PackedStringArray(offenders))))
+
+# Tripwire: нові нетипізовані `var` у продуктових скриптах заборонені (AGENTS.md: «статична типізація
+# скрізь»). Редакторський ворнінг (untyped_declaration у project.godot) у headless/CI не емітиться —
+# перевірено: аналайзер друкує його лише в редакторі — тож примус живе тут. Ловить `var x = ...`
+# (без `:` типу і без `:=`) та голе `var x` (навіть із трейлінг-коментом).
+func _t_static_typing() -> void:
+	var re_assign := RegEx.new()
+	re_assign.compile("(^|[\\t ])var\\s+[A-Za-z_]\\w*\\s*=[^=]")
+	var re_bare := RegEx.new()
+	re_bare.compile("(^|[\\t ])var\\s+[A-Za-z_]\\w*[\\t ]*$")
+	var offenders := []
+	for path in _product_scripts():
+		var n_hits := 0
+		for line in _read_code(path).split("\n"):
+			# inline comments must not trip the scan; strip \r too — на CRLF-чекауті (Windows)
+			# "var x\r" інакше не матчить $-якір і tripwire зеленіє там, де Linux-CI впаде
+			var code := str(line).replace("\r", "").get_slice("#", 0)
+			if re_assign.search(code) != null or re_bare.search(code) != null:
+				n_hits += 1
+		if n_hits > 0:
+			offenders.append("%s (%d)" % [path, n_hits])
+	ok(offenders.is_empty(), "every product var declaration is statically typed%s"
+		% ("" if offenders.is_empty() else " — " + ", ".join(PackedStringArray(offenders))))
+
+# Tripwire spec 0008: «жодного прямого stock[...] поза швом res_key/res_amount/cost_keys/afford».
+# Поза корпусом: sim.gd (дім шва), hud_model.gd (документований фолбек для test-fakes), kernel/
+# (його world.stock — окремий контракт кернела), заморожений main.gd. Інлайн-патерни: індексація
+# без res_key усередині дужок та крапковий доступ (stock.wood / stock.get(...)).
+func _t_stock_seam() -> void:
+	var re_idx := RegEx.new()
+	re_idx.compile("\\.stock\\s*\\[(?![^\\]\\n]*res_key\\()")
+	var re_dot := RegEx.new()
+	re_dot.compile("\\.stock\\.[A-Za-z_]")
+	var offenders := []
+	for path in _product_scripts():
+		var p := str(path)
+		if p.ends_with("/sim.gd") or p.ends_with("/hud_model.gd") or "/kernel/" in p or p.ends_with("scripts/main.gd"):
+			continue
+		var body := _read_code(p)
+		if re_idx.search(body) != null or re_dot.search(body) != null:
+			offenders.append(p)
+	ok(offenders.is_empty(), "no direct stock access outside the res_key seam (spec 0008)%s"
+		% ("" if offenders.is_empty() else " — " + ", ".join(PackedStringArray(offenders))))
+
+# Ворота живого контенту (spec 0007): кожен research-id з data.gd існує в catalog.json, а
+# RESEARCH_LABEL — точне дзеркало його label. Інакше неіснуючий id = контент замкнено назавжди
+# (session не має що мостити), а 🔒-повідомлення деградує до сирого id — і жоден тест цього не бачив.
+func _t_research_gates() -> void:
+	var cat: Dictionary = Catalog.load_json()
+	var labels := {}
+	for r in cat.get("research", []):
+		labels[String((r as Dictionary).id)] = String((r as Dictionary).get("label", ""))
+	var gated := {}
+	for def in GameData.BUILDINGS.values():
+		if def.has("research"):
+			gated[String(def.research)] = true
+	for it in GameData.ITEMS.values():
+		if it.has("research"):
+			gated[String(it.research)] = true
+	ok(gated.size() >= 5, "gated content present (%d research gates)" % gated.size())
+	var missing := []
+	var drifted := []
+	for gid in gated:
+		if not labels.has(gid):
+			missing.append(gid)
+		elif String(GameData.RESEARCH_LABEL.get(gid, "")) != String(labels[gid]):
+			drifted.append(gid)
+	ok(missing.is_empty(), "every data.gd research gate exists in catalog.json%s"
+		% ("" if missing.is_empty() else " — " + ", ".join(PackedStringArray(missing))))
+	ok(drifted.is_empty(), "RESEARCH_LABEL mirrors catalogue labels exactly%s"
+		% ("" if drifted.is_empty() else " — " + ", ".join(PackedStringArray(drifted))))
+
+# spec 0008: сейв несе словник ключів складу — use_catalog мусить пережити роундтрип, інакше
+# save(ON) -> load(OFF) читає чужі ключі й склад «зникає» без діагностики.
+func _t_use_catalog_persist() -> void:
+	var s = Sim.new()
+	s.use_catalog = true
+	s.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
+	var rec := Persistence.serialize_region(s)
+	ok(bool(rec.use_catalog), "serialize_region persists use_catalog")
+	var s2 = Sim.new()
+	ok(not s2.use_catalog, "fresh sim defaults to OFF")
+	s2.load_region(rec)
+	ok(s2.use_catalog, "load_region restores the stock vocabulary flag")
+	ok(int(s2.res_amount("food")) == 18, "restored save reads food through the bridge (catalogue keys)")
+
+# every product .gd (the scripts tree + the scene entry) — the corpus for source-scan tripwires
+func _product_scripts() -> Array:
+	var files := ["res://newhud_main.gd"]
+	for dir_path in ["res://scripts", "res://scripts/sim", "res://scripts/kernel", "res://scripts/ui", "res://scripts/ui/dev", "res://scripts/net"]:
+		var dir := DirAccess.open(dir_path)
+		if dir == null:
+			continue
+		for f in dir.get_files():
+			if f.ends_with(".gd"):
+				files.append(dir_path + "/" + f)
+	return files
+
+func _read_file(path: String) -> String:
+	var f := FileAccess.open(path, FileAccess.READ)
+	return f.get_as_text() if f != null else ""
+
+# comment-stripped source (drops full-line # comments) so doc comments may mention forbidden calls
+func _read_code(path: String) -> String:
+	var out := PackedStringArray()
+	for line in _read_file(path).split("\n"):
+		if line.strip_edges().begins_with("#"):
+			continue
+		out.append(line)
+	return "\n".join(out)

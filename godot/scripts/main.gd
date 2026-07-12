@@ -13,7 +13,7 @@ const TILE := 28
 const MAP_N := 56
 const NEIGHBOR_STEP_DEG := 0.01   # ~1.1 km — "around" regions you scout on foot
 
-var sim
+var sim: Variant
 var view: Node2D
 var cam: Camera2D
 var playing := false
@@ -22,7 +22,7 @@ var speed_idx := 0
 const SPEEDS := [1.0, 2.0, 3.0, 0.0]
 
 # session orchestration lives in session.gd; social/home mirror it for read-only UI use
-var session
+var session: Variant
 var social: Dictionary = {}
 var home := {"lat": 0.0, "lon": 0.0, "name": ""}
 
@@ -178,7 +178,7 @@ func _build_spawn_screen() -> void:
 	title.add_theme_color_override("font_color", Color.html(C_ACCENT))
 	box.add_child(title)
 	var sub := Label.new()
-	sub.text = "Survival-MMORPG на справжній географії. Обери точку висадки:"
+	sub.text = "Survival-MMORPG на справжній географії після Колапсу. Руїни Старого світу досі обходять патрульні роботи. Обери точку висадки:"
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(sub)
 	var seed_note := Label.new()
@@ -262,8 +262,8 @@ func _use_real_gps() -> void:
 		var js := "navigator.geolocation && navigator.geolocation.getCurrentPosition(function(p){window.__rw_lat=p.coords.latitude;window.__rw_lon=p.coords.longitude;});"
 		JavaScriptBridge.eval(js, true)
 		await get_tree().create_timer(1.5).timeout
-		var lat = JavaScriptBridge.eval("window.__rw_lat", true)
-		var lon = JavaScriptBridge.eval("window.__rw_lon", true)
+		var lat: Variant = JavaScriptBridge.eval("window.__rw_lat", true)
+		var lon: Variant = JavaScriptBridge.eval("window.__rw_lon", true)
 		if lat != null and lon != null:
 			gps_lat_edit.text = str(lat)
 			gps_lon_edit.text = str(lon)
@@ -374,7 +374,7 @@ func _build_hud() -> void:
 	hud.add_child(build_bar)
 	var idx := 1
 	for key in GameData.BUILD_ORDER:
-		var def = GameData.BUILDINGS[key]
+		var def: Dictionary = GameData.BUILDINGS[key]
 		var btn := Button.new()
 		btn.text = "%d %s\n%s" % [idx, def.name, GameData.cost_str(def.cost)]
 		btn.tooltip_text = _build_tooltip(key)
@@ -434,7 +434,7 @@ func _wide_label(margin: int, fsize: int, from_bottom: bool) -> Label:
 	return l
 
 func _build_tooltip(key: String) -> String:
-	var def = GameData.BUILDINGS[key]
+	var def: Dictionary = GameData.BUILDINGS[key]
 	var t := "%s — HP %d\nВартість: %s" % [def.name, int(def.hp), GameData.cost_str(def.cost)]
 	if def.get("blocks", false):
 		t += "\nблокує прохід"
@@ -493,6 +493,14 @@ func _start_game(lat: float, lon: float, place_name: String) -> void:
 	session = SessionScript.new()
 	session.start(lat, lon, place_name)
 	sim = session.sim
+	# заморожена сцена не має research-UI (spec 0007 з'явився після freeze): відкриваємо всі
+	# data.gd-ворота, інакше турель/броня назавжди замкнені й демо-база лишається без турелей
+	for def in GameData.BUILDINGS.values():
+		if def.has("research"):
+			sim.research_unlocked[String(def.research)] = true
+	for it in GameData.ITEMS.values():
+		if it.has("research"):
+			sim.research_unlocked[String(it.research)] = true
 	social = session.social
 	home = session.home
 	view.sim = sim
@@ -585,7 +593,7 @@ func _save_shot(path: String) -> void:
 	print("UI_SHOT saved: ", path)
 
 func _update_hud() -> void:
-	var p = sim.player
+	var p: Dictionary = sim.player
 	info_label.text = _hud_info(p)
 	stock_label.text = _hud_stock()
 	region_label.text = "📍 %s · seed %08x · капсула %d" % [sim.region_display(), sim.region_seed(), int(sim.capsule.get("charges", 0))]
@@ -629,7 +637,7 @@ func _hud_log() -> String:
 	var lines := PackedStringArray()
 	var start: int = max(0, sim.messages.size() - 6)
 	for i in range(start, sim.messages.size()):
-		var msg = sim.messages[i]
+		var msg: Dictionary = sim.messages[i]
 		var col := C_DIM
 		match str(msg.get("cls", "")):
 			"good": col = C_GOOD
@@ -706,7 +714,7 @@ func _handle_click(t: Vector2i) -> void:
 	if view.selected_build != "":
 		sim.try_build(view.selected_build, t.x, t.y)
 		return
-	var best = null
+	var best: Variant = null
 	var bd := 0.7
 	var fx := get_global_mouse_position().x / TILE
 	var fy := get_global_mouse_position().y / TILE
@@ -724,7 +732,7 @@ func _handle_click(t: Vector2i) -> void:
 		sim.order_move(t.x, t.y)
 
 func _handle_demolish(t: Vector2i) -> void:
-	var res = sim.demolish(t.x, t.y)
+	var res: Dictionary = sim.demolish(t.x, t.y)
 	if not res.ok:
 		sim._flash(res.msg)
 
@@ -791,7 +799,7 @@ func _build_world_panel() -> void:
 	mw.custom_minimum_size = Vector2(348, 210)
 	var pts := [{"lat": sim.regions[0].lat, "lon": sim.regions[0].lon, "kind": "home", "color": Color.html(C_ACCENT), "label": str(sim.regions[0].name)}]
 	for i in range(1, sim.regions.size()):
-		var r = sim.regions[i]
+		var r: Dictionary = sim.regions[i]
 		pts.append({"lat": r.lat, "lon": r.lon, "kind": "hub", "color": Color.html(C_WARN), "label": "%s %dкм" % [r.name, int(r.d)]})
 	if not social.is_empty():
 		for fr in social.friends:
@@ -807,7 +815,7 @@ func _build_world_panel() -> void:
 	vb.add_child(legend)
 
 	for i in range(1, sim.regions.size()):
-		var r = sim.regions[i]
+		var r: Dictionary = sim.regions[i]
 		var btn := Button.new()
 		btn.text = "→ %s (%d км): %s → %s" % [r.name, int(r.d), GameData.RES[r.offer.buys].label, GameData.RES[r.offer.sells].label]
 		btn.pressed.connect(_send_convoy.bind(i))
@@ -825,8 +833,8 @@ func _build_world_panel() -> void:
 	_close_button(vb, world_panel)
 
 func _send_convoy(hub_index: int) -> void:
-	var r = sim.regions[hub_index]
-	var res = sim.dispatch_convoy(hub_index, r.offer.buys, 20)
+	var r: Dictionary = sim.regions[hub_index]
+	var res: Dictionary = sim.dispatch_convoy(hub_index, r.offer.buys, 20)
 	if not res.ok:
 		sim._flash(res.msg)
 	_build_world_panel()
@@ -841,8 +849,15 @@ func _build_items_panel() -> void:
 	sub.modulate = Color.html(C_DIM)
 	vb.add_child(sub)
 	for id in GameData.ITEM_ORDER:
-		var it = GameData.ITEMS[id]
-		var eff := ("×%.1f видобуток" % it.gather_mult) if it.slot == "tool" else ("+%d урон" % int(it.dmg_bonus))
+		var it: Dictionary = GameData.ITEMS[id]
+		# armor (vest/plate) не має dmg_bonus — крапковий доступ падав би "Invalid get index"
+		var eff: String
+		if it.slot == "tool":
+			eff = "×%.1f видобуток" % it.gather_mult
+		elif it.slot == "armor":
+			eff = "−%d%% урон" % int(round(float(it.get("dmg_cut", 0.0)) * 100.0))
+		else:
+			eff = "+%d урон" % int(it.get("dmg_bonus", 0))
 		var btn := Button.new()
 		if sim.player.items.has(id):
 			btn.text = "Екіпірувати: %s [%s] — %s" % [it.name, it.slot, eff]
@@ -861,7 +876,7 @@ func _eq_name(slot: String) -> String:
 	return GameData.ITEMS[id].name if (id != "" and GameData.ITEMS.has(id)) else "—"
 
 func _craft_item(id: String) -> void:
-	var res = sim.craft_item(id)
+	var res: Dictionary = sim.craft_item(id)
 	if not res.ok:
 		sim._flash(res.msg)
 	_build_items_panel()
@@ -906,7 +921,7 @@ func _build_capsule_panel() -> void:
 		none.modulate = Color.html(C_DIM)
 		vb.add_child(none)
 	for inv in sim.invites:
-		var chk = sim.capsule_can_reach(inv.lat, inv.lon)
+		var chk: Dictionary = sim.capsule_can_reach(inv.lat, inv.lon)
 		var mark := "🟢" if chk.ok else "🔴"
 		var btn := Button.new()
 		btn.text = "%s ✉ %s → %s (%d км)" % [mark, inv.inviter, inv.name, int(chk.km)]
@@ -950,7 +965,7 @@ func _copy_coords() -> void:
 	sim._flash("Скопійовано координати: %s (seed %08x)" % [s, sim.region_seed()])
 
 func _accept_invite(id: String) -> void:
-	var res = sim.accept_invite(id)
+	var res: Dictionary = sim.accept_invite(id)
 	if res.ok:
 		travel_to(res.lat, res.lon, res.name)
 	else:
@@ -962,7 +977,7 @@ func _launch_manual() -> void:
 	if not c.ok:
 		sim._flash(c.msg)
 		return
-	var res = sim.try_launch_capsule(c.lat, c.lon, "Ціль капсули")
+	var res: Dictionary = sim.try_launch_capsule(c.lat, c.lon, "Ціль капсули")
 	if res.ok:
 		travel_to(res.lat, res.lon, res.name)
 	else:
@@ -1002,7 +1017,7 @@ func _build_social_panel() -> void:
 
 	vb.add_child(_section("Друзі (джерела капсульних інвайтів)"))
 	for i in social.friends.size():
-		var fr = social.friends[i]
+		var fr: Dictionary = social.friends[i]
 		var btn := Button.new()
 		btn.text = "✉ Запросити інвайт від %s (%s)" % [fr.name, fr.place]
 		btn.pressed.connect(_gen_invite.bind(i))
@@ -1084,7 +1099,7 @@ func _auto_build_base() -> void:
 	sim.stock.stone = 240
 	sim.stock.scrap = 60
 	sim.stock.components = 12
-	var c = sim.base_center()
+	var c: Vector2i = sim.base_center()
 	for d in range(-3, 4):
 		_put("wall", c.x + d, c.y - 3)
 		_put("wall", c.x + d, c.y + 3)
@@ -1149,7 +1164,7 @@ func _on_osm_done(result: int, code: int, _headers: PackedStringArray, body: Pac
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
 		sim._log("🌐 OSM недоступний (код %d) — карта процедурна." % code, "warn")
 		return
-	var json = JSON.parse_string(body.get_string_from_utf8())
+	var json: Variant = JSON.parse_string(body.get_string_from_utf8())
 	if not (json is Dictionary) or not json.has("elements"):
 		sim._log("🌐 OSM: порожня відповідь — карта процедурна.", "warn")
 		return
@@ -1157,7 +1172,7 @@ func _on_osm_done(result: int, code: int, _headers: PackedStringArray, body: Pac
 	if elements.is_empty():
 		sim._log("🌐 OSM: тут нічого не знайдено — карта процедурна.", "warn")
 		return
-	var stats = WorldGen.overlay_osm(sim.map, elements, _osm_bbox)
+	var stats: Dictionary = WorldGen.overlay_osm(sim.map, elements, _osm_bbox)
 	sim.after_map_change()
 	if view != null:
 		view.queue_redraw()

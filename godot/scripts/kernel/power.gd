@@ -174,13 +174,13 @@ class PowerNetSystem extends Systems.SimSystem:
 		for t in things:
 			if t == null or t.destroyed:
 				continue
-			var src = t.get_comp(CompPowerSource)
+			var src: Variant = t.get_comp(CompPowerSource)
 			if src != null:
 				supply += src.output_w(ctx)
-			var bat = t.get_comp(CompBattery)
+			var bat: Variant = t.get_comp(CompBattery)
 			if bat != null:
 				batteries.append(bat)
-			var tr = t.get_comp(CompPowerTrader)
+			var tr: Variant = t.get_comp(CompPowerTrader)
 			if tr != null:
 				traders.append({"trader": tr, "thing": t})
 
@@ -188,7 +188,7 @@ class PowerNetSystem extends Systems.SimSystem:
 		# Consider only traders the player has switched on; battery/net decides which actually get power.
 		var live: Array = []          # traders currently in the running for power (on == true)
 		for e in traders:
-			var tr = e.trader
+			var tr: CompPowerTrader = e.trader
 			if tr.on:
 				live.append(e)
 			else:
@@ -271,18 +271,18 @@ class PowerNetSystem extends Systems.SimSystem:
 	#   thing.flags["emitter"] -> a dict already present in world.temp_emitters (set active in place)
 	#   thing.flags["light"]   -> a dict already present in world.lights
 	# This is the ONLY place the two batches touch: power decides `powered`, environment reads `active`.
-	static func apply_device_states(world, things: Array) -> void:
+	static func apply_device_states(_world, things: Array) -> void:
 		for t in things:
 			if t == null:
 				continue
-			var tr = t.get_comp(CompPowerTrader)
+			var tr: Variant = t.get_comp(CompPowerTrader)
 			if tr == null:
 				continue
 			var on: bool = tr.is_live()
-			var em = t.flags.get("emitter", null)
+			var em: Variant = t.flags.get("emitter", null)
 			if em != null and typeof(em) == TYPE_DICTIONARY:
 				em["active"] = on
-			var lt = t.flags.get("light", null)
+			var lt: Variant = t.flags.get("light", null)
 			if lt != null and typeof(lt) == TYPE_DICTIONARY:
 				lt["active"] = on
 
@@ -293,7 +293,7 @@ class PowerNetSystem extends Systems.SimSystem:
 # the environment registry, then add PowerNetSystem to it; this helper returns a standalone registry for
 # tests / a power-only host.
 static func build_power() -> Systems.SystemRegistry:
-	var reg = Systems.SystemRegistry.new()
+	var reg := Systems.SystemRegistry.new()
 	reg.add(PowerNetSystem.new())
 	return reg
 

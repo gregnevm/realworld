@@ -104,7 +104,7 @@ class EquipModel extends RefCounted:
 
 	# Fetch the CompApparel of the Thing in a slot (null if empty / no comp).
 	func _apparel_in(slot: StringName):
-		var t = slots.get(slot, null)
+		var t: Variant = slots.get(slot, null)
 		if t == null:
 			return null
 		return t.get_comp(CompApparel)
@@ -112,17 +112,17 @@ class EquipModel extends RefCounted:
 	# Wear an item; returns the item previously in that slot (or null). A Thing with no CompApparel is
 	# refused (returns the passed thing unchanged) — you can only equip apparel.
 	func equip(thing) -> Variant:
-		var ap = thing.get_comp(CompApparel) if thing != null else null
+		var ap: Variant = thing.get_comp(CompApparel) if thing != null else null
 		if ap == null:
 			return thing
 		var slot: StringName = ap.slot()
-		var prev = slots.get(slot, null)
+		var prev: Variant = slots.get(slot, null)
 		slots[slot] = thing
 		return prev
 
 	# Remove and return whatever occupies a slot (null if empty).
 	func unequip(slot: StringName) -> Variant:
-		var prev = slots.get(slot, null)
+		var prev: Variant = slots.get(slot, null)
 		slots.erase(slot)
 		return prev
 
@@ -133,7 +133,7 @@ class EquipModel extends RefCounted:
 	func total_insulation() -> float:
 		var w := 0.0
 		for t in slots.values():
-			var ap = t.get_comp(CompApparel)
+			var ap: Variant = t.get_comp(CompApparel)
 			if ap != null:
 				w += ap.insulation()
 		return w
@@ -144,7 +144,7 @@ class EquipModel extends RefCounted:
 	func armor_rating(dtype: StringName) -> float:
 		var pass_through := 1.0
 		for t in slots.values():
-			var ap = t.get_comp(CompApparel)
+			var ap: Variant = t.get_comp(CompApparel)
 			if ap != null:
 				pass_through *= (1.0 - ap.armor(dtype))
 		return clampf(1.0 - pass_through, 0.0, 1.0)
@@ -161,14 +161,14 @@ class StatPart_Armor extends Stats.StatPart:
 		dtype = p_dtype
 
 	func transform(val: float, ctx: Dictionary) -> float:
-		var eq = ctx.get("equip", null)
+		var eq: Variant = ctx.get("equip", null)
 		if eq == null:
 			return val
 		# Armor is additive over the base (base is typically 0); combined rating stacks in [0,1).
 		return clampf(val + eq.armor_rating(dtype), 0.0, 1.0)
 
 	func explain(ctx: Dictionary) -> String:
-		var eq = ctx.get("equip", null)
+		var eq: Variant = ctx.get("equip", null)
 		var r: float = eq.armor_rating(dtype) if eq != null else 0.0
 		return "+броня %s %.2f" % [str(dtype), r]
 
@@ -188,7 +188,7 @@ static func apply_armor(dmg: float, dtype: StringName, equip: EquipModel, rng: R
 	# Struck gear on this slot-line wears: sharper/bigger hits wear faster. Wear every worn layer a little.
 	var wear_amt: float = clampf(dmg * 0.01 * (1.0 + rating), 0.0, 0.5)
 	for t in equip.equipped():
-		var ap = t.get_comp(CompApparel)
+		var ap: Variant = t.get_comp(CompApparel)
 		if ap != null and ap.base_armor(dtype) > 0.0:
 			ap.take_wear(wear_amt)
 	if rng == null:
@@ -265,9 +265,9 @@ static func update_comfort(tracker, temp_c: float, insulation: float, dday: floa
 	if tracker == null:
 		return
 	var felt: float = temp_c + insulation
-	var torso = tracker.parts.get(&"torso", null) if tracker.parts != null else null
-	var hypo = _find_hediff(tracker, Hediff_Hypothermia)
-	var heat = _find_hediff(tracker, Hediff_Heatstroke)
+	var torso: Variant = tracker.parts.get(&"torso", null) if tracker.parts != null else null
+	var hypo: Variant = _find_hediff(tracker, Hediff_Hypothermia)
+	var heat: Variant = _find_hediff(tracker, Hediff_Heatstroke)
 
 	if felt < COMFORT_MIN_C:
 		var past: float = COMFORT_MIN_C - felt
@@ -311,7 +311,7 @@ class ComfortSystem extends Systems.SimSystem:
 	func system_tick(world, ctx: Dictionary) -> void:
 		if typeof(world) != TYPE_DICTIONARY:
 			return
-		var tracker = world.get("hero_health", null)
+		var tracker: Variant = world.get("hero_health", null)
 		if tracker == null:
 			return
 		var temp_c: float = float(ctx.get("temp_c", 20.0))
@@ -365,7 +365,7 @@ class TendService extends RefCounted:
 		for t in world.get("things", []):
 			if t == null or t.destroyed:
 				continue
-			var mb = t.get_comp(CompMedbed)
+			var mb: Variant = t.get_comp(CompMedbed)
 			if mb != null:
 				return mb
 		return null
@@ -374,7 +374,7 @@ class TendService extends RefCounted:
 	# Deterministic (no rng). Higher medic_level OR higher medicine quality => higher effectiveness.
 	static func effectiveness(medic_level: float, med_quality_mult: float) -> float:
 		var base: float = TEND_BASE + MEDIC_PER_LEVEL * maxf(0.0, medic_level)
-		var worker = Stats.StatWorker.new(&"tend_effectiveness", base, [StatPart_MedQuality.new()])
+		var worker := Stats.StatWorker.new(&"tend_effectiveness", base, [StatPart_MedQuality.new()])
 		return maxf(0.0, worker.value({"med_quality_mult": med_quality_mult}))
 
 	# Perform a tend. Requires a `medicine` resource in world.stock AND a medbed Thing present. Returns
@@ -391,7 +391,7 @@ class TendService extends RefCounted:
 		var stock: Dictionary = world.get("stock", {})
 		if int(stock.get(&"medicine", 0)) < 1:
 			return fail                              # no medicine -> no tend, nothing consumed
-		var medbed = _find_medbed(world)
+		var medbed: Variant = _find_medbed(world)
 		if medbed == null:
 			return fail                              # no medbed -> no tend, nothing consumed
 		# Nothing-to-tend guard: only spend a scarce medicine when this tend will actually DO something —
@@ -591,7 +591,7 @@ static func resolve_to_scar(tracker) -> int:
 static func install_prosthetic(tracker, part_key: StringName, implant) -> bool:
 	if tracker == null or implant == null or not tracker.parts.has(part_key):
 		return false
-	var prt = tracker.parts.get(part_key)
+	var prt: Variant = tracker.parts.get(part_key)
 	# Remove injuries and scars sitting on this part (surgery replaces the ruined part).
 	tracker.hediffs = tracker.hediffs.filter(func(h):
 		var on_part: bool = (h.part == prt)
@@ -606,7 +606,7 @@ static func install_prosthetic(tracker, part_key: StringName, implant) -> bool:
 # ComfortSystem registers at priority 25 — after environment (10/11/12) and production (20), so it reads a
 # settled ctx.temp_c. This helper returns a standalone registry for tests / a comfort-only host.
 static func build_comfort() -> Systems.SystemRegistry:
-	var reg = Systems.SystemRegistry.new()
+	var reg := Systems.SystemRegistry.new()
 	reg.add(ComfortSystem.new())
 	return reg
 

@@ -61,7 +61,7 @@ static func _query_cell(world, ctx: Dictionary) -> Vector2i:
 static func _cell_indoor(world, cell: Vector2i) -> bool:
 	if world == null or typeof(world) != TYPE_DICTIONARY:
 		return false
-	var roof = world.get("roof", null)
+	var roof: Variant = world.get("roof", null)
 	if roof == null:
 		return false
 	return roof.is_indoor(cell)
@@ -81,7 +81,7 @@ class TemperatureSystem extends Systems.SimSystem:
 		priority = 10
 
 	func system_tick(world, ctx: Dictionary) -> void:
-		var climate = _climate(world)
+		var climate: Variant = _climate(world)
 		var cell: Vector2i = Env._query_cell(world, ctx)
 		var indoor: bool = Env._cell_indoor(world, cell)
 		ctx["cell"] = cell
@@ -111,7 +111,7 @@ class TemperatureSystem extends Systems.SimSystem:
 		ctx["temp_c"] = t
 
 	func _climate(world):
-		var c = null
+		var c: Variant = null
 		if world != null and typeof(world) == TYPE_DICTIONARY:
 			c = world.get("climate", null)
 		if c == null:
@@ -132,8 +132,8 @@ class WeatherSystem extends Systems.SimSystem:
 		priority = 11
 
 	func system_tick(world, ctx: Dictionary) -> void:
-		var climate = _climate(world)
-		var rng = _rng(world)
+		var climate: Variant = _climate(world)
+		var rng := _rng(world)
 		var w: StringName = climate.weather(
 			float(world.get("lat", 0.0)), float(world.get("lon", 0.0)),
 			int(world.get("day", 1)), float(world.get("frac", 0.5)), rng)
@@ -152,7 +152,7 @@ class WeatherSystem extends Systems.SimSystem:
 			ctx["temp_c"] = float(ctx.get("temp_c", 20.0)) - dip
 
 	func _climate(world):
-		var c = null
+		var c: Variant = null
 		if world != null and typeof(world) == TYPE_DICTIONARY:
 			c = world.get("climate", null)
 		if c == null:
@@ -161,7 +161,7 @@ class WeatherSystem extends Systems.SimSystem:
 
 	func _rng(world) -> RandomNumberGenerator:
 		if world != null and typeof(world) == TYPE_DICTIONARY:
-			var r = world.get("rng", null)
+			var r: Variant = world.get("rng", null)
 			if r != null:
 				return r
 		# No world rng (standalone tick / test): fall back to a FIXED-seed generator so weather stays
@@ -182,7 +182,7 @@ class LightSystem extends Systems.SimSystem:
 		priority = 12
 
 	func system_tick(world, ctx: Dictionary) -> void:
-		var climate = _climate(world)
+		var climate: Variant = _climate(world)
 		var cell: Vector2i = Env._query_cell(world, ctx)
 		var light: float = climate.daylight(
 			float(world.get("lat", 0.0)), int(world.get("day", 1)), float(world.get("frac", 0.5)))
@@ -203,7 +203,7 @@ class LightSystem extends Systems.SimSystem:
 		ctx["light"] = clampf(light, 0.0, 1.0)
 
 	func _climate(world):
-		var c = null
+		var c: Variant = null
 		if world != null and typeof(world) == TYPE_DICTIONARY:
 			c = world.get("climate", null)
 		if c == null:
@@ -250,7 +250,7 @@ class CompDeteriorate extends Things.ThingComp:
 # ctx.wet / ctx.light / ctx.indoor are populated when those comps tick. Consumer systems register at
 # higher priorities (>=20).
 static func build_environment() -> Systems.SystemRegistry:
-	var reg = Systems.SystemRegistry.new()
+	var reg := Systems.SystemRegistry.new()
 	reg.add(TemperatureSystem.new())
 	reg.add(WeatherSystem.new())
 	reg.add(LightSystem.new())

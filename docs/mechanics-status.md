@@ -58,8 +58,43 @@ validated **content catalogue** — the "повне дерево крафтів,
   `ProductionSystem`. Full reference: [`docs/catalog.md`](catalog.md).
 
 The catalogue is **additive** — `data.gd` (Phase-0 playable slice) is untouched, so the shipped game and
-its suites are unchanged. Remaining work is *surfacing*: wiring the catalogue into the HUD build/craft
-menus so this depth becomes *felt in play*, not just *validated*.
+its suites are unchanged.
+
+**Surfacing — first increment (done):** the catalogue now flows into the HUD through a proper view-layer
+pipeline: `ui/catalog_view.gd` (a pure ViewModel — the `HudModel.snapshot()` analogue — that maps the
+DefDatabase + play-state `{unlocked, stock}` to value-data slices: research progress, buildable/craftable
+counts, next-available research) → `ui/catalog_panels.gd` `TechPanel` (build-once + value bind, styled
+only via Widgets/Tokens) → registered in `ui/mechanics.gd`, so surfacing it never edited `hud_root.gd`
+(R4). `HudModel.snapshot()` carries a `catalog` slice end to end. Headless-tested in `run_ui_tests.gd`
+(value-data / R8, build-once / R2, prereq-gate status enums) with the R3/R7/R9/R10 tripwires extended to
+the new files.
+
+**Write-side — done (the tree is now operable, not just visible):** `catalog_sim.gd` is a scene-free,
+deterministic **catalogue-backed play model** on the shipped kernel — it holds stock + research +
+placed buildings and exposes the three verbs that USE the tree: RESEARCH a project
+(`Production.ResearchState` gate + advance), BUILD a station (pays cost, attaches a `CompWorkbench`),
+CRAFT a recipe (`Production.ProductionSystem` + `Bill` turn inputs into stock at the placed station).
+`ui/catalog_verbs.gd` is the router (spec 0005 §2.10 / R9): it binds `cat_research` / `cat_build` /
+`cat_craft` **intents** a panel emits to those commands — the panel never touches the sim. Proven end to
+end in `run_catalog_tests.gd` (`_t_sim_playthrough`: research carpentry → build a workbench → craft
+planks → tech up to smelting → build a smelter → smelt iron from raw ore, with the research gate holding)
+and in `run_ui_tests.gd` (intent → router → sim; `TechPanel.act_next_research()` fires the full
+panel → router → sim path).
+
+**Interactive browser UI — done:** three LEFT-dock browsers (`BuildBrowser` / `CraftBrowser` /
+`ResearchBrowser`, hotkeys B/C/R) render the actionable slices (`build_actions` / `craft_actions` /
+`research_actions` — buildable/craftable/startable-now rows the ViewModel caps to a fixed pool) as
+clickable `CatalogSlot` widgets; a slot press emits the `cat_build` / `cat_craft` / `cat_research` intent
+(R9 — the panel never touches the sim). `newhud_main` now installs `catalog_verbs` on the router with a
+process-shared `CatalogSim.shared()`, wires every panel's intent bubble to the router, and ticks the
+shared model each frame — so the HUD reads and the router writes the SAME state: browse an action, click
+it, watch the counts move. `HudModel.snapshot()` sources the catalog slice from that shared model, and
+`parse_check.gd` now preloads `newhud_main` so the whole HUD wiring is compile-checked in CI. Proven in
+`run_ui_tests.gd` `_t_action_browsers` (build-once/R2, slot click → intent → router → `catalog_sim`
+places the building). Remaining: migrating the *live* data.gd sim onto `catalog_sim` (one world, not
+two) — a large data-model migration, so it is decided on paper first in
+[`specs/0007-catalogue-sim-unification.md`](../specs/0007-catalogue-sim-unification.md) (ADR + 5-stage,
+each-stage-CI-green plan), per the AGENTS.md "big migration ⇒ ADR before code" rule.
 
 **Update (2026-07-08, spec 0007):** the first walk of the tree now ships — a **research→unlock pipeline**
 (`kernel/progression.gd`) drives it end to end. `ResearchState` (spec 0003) got the missing layer above it:
@@ -71,8 +106,21 @@ and unlocks toast through the feed. Verified in Node (`tests/progression.test.js
 *build/craft menu gated by unlock* (bridging the slice's 6-resource table to the catalog's 78) — deferred
 so this pass stays additive; see spec 0007 §5. That next step is now designed in **spec 0008** (ADR,
 design-only) with its safe phase-1 companion already shipped: a pure **bill-of-materials planner** in
-`catalog.gd` (`production_chain` / `producer_of` / `missing_for`), Node + Godot mirrored, that the gated
-build/craft menu and "to make X you need …" tooltips will consume.
+`catalog.gd` (`production_chain` / `producer_of` / `missing_for` / `raw_requirements`), Node + Godot
+mirrored, that the gated build/craft menu and "to make X you need …" tooltips will consume.
+
+**Update (2026-07-10, spec 0008 phase 1 — BOM guidance wired):** the planner now has its first UI
+consumer. `ui/catalog_view.gd` folds it into the interactive browsers' actionable slices, so the
+`CatalogSim`-backed Build/Craft/Research browsers show, beside every affordable row, the **near-miss**
+rows too — unlocked-but-unaffordable buildings/recipes rendered dimmed (`enabled:false`) with a
+`Потрібно ще: …` shortfall tip (`missing_for`); affordable rows carry an `Уся сировина: …` deep raw
+budget (`raw_requirements`); crafts carry their production-chain tip (`production_chain`); and research
+rows advertise `Відкриє: 🏛N ⚒N 🔧N` (tree scan). This also fixes the dead/empty CraftBrowser — once a
+station is placed it lists that station's recipes with their input shortfall. Purely additive (the
+`CatalogSim` forward model, not the live `data.gd` sim), so the shipped slice and its suites are
+untouched; tips are computed only for the ≤12 rows that survive the cap (no per-frame graph walk for
+hidden rows). Verified in `run_ui_tests.gd` `_t_bom_tips`. Spec 0008 phases 2–4 (the flagged
+`use_catalog` migration of the **live** sim onto the catalogue) remain owner-gated per the ADR.
 
 ## How to read this
 

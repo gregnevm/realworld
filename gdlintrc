@@ -1,0 +1,28 @@
+# RealWorld — gdlint config (gdtoolkit 4.x). Codifies the repo's ACTUAL conventions instead of
+# fighting them; anything not listed keeps the gdlint default. Scope: godot/scripts + newhud_main.gd
+# (product code); scripts/main.gd is the FROZEN pre-refactor HUD reference and is excluded at the
+# invocation site (CI + pre-commit), not here — gdlintrc has no per-file excludes.
+
+# RimWorld-canon inner-class names (spec 0003): StatPart_Cover, Hediff_Injury, WorkGiver_Haul —
+# the underscore segment IS the domain convention, so the default PascalCase-only regex is widened.
+sub-class-name: '_?([A-Z][a-z0-9]*)+(_([A-Z][a-z0-9]*)+)*'
+
+# Data tables / UA strings legitimately run long; 200 keeps a real ceiling for code lines while the
+# handful of longer UI-string literals carry per-line `# gdlint: ignore=max-line-length` pragmas.
+max-line-length: 200
+
+# headroom for sim.gd (879) and the kernel suites; the 1174-line frozen main.gd is excluded at invocation.
+max-file-lines: 1300
+
+# sim.gd is the deliberate public facade of the live sim; progression.gd is the research API.
+max-public-methods: 64
+
+disable:
+  # the codebase co-locates consts with their domain section (e.g. PAWN_FIELDS beside extract_pawn)
+  # — a deliberate readability choice, so the canonical decl-order check stays off
+  - class-definitions-order
+
+excluded_directories:
+  - .git
+  - .godot
+  - build

@@ -20,7 +20,7 @@ class OverlayRegistry extends RefCounted:
 		return null
 
 	func toggle(id: StringName) -> void:
-		var o = _get(id)
+		var o: Variant = _get(id)
 		if o == null:
 			return
 		if o.radio:
@@ -29,7 +29,7 @@ class OverlayRegistry extends RefCounted:
 			_markers[id] = not _markers.get(id, false)
 
 	func is_on(id: StringName) -> bool:
-		var o = _get(id)
+		var o: Variant = _get(id)
 		if o == null:
 			return false
 		return (o.radio and active == id) or (not o.radio and bool(_markers.get(id, false)))
@@ -42,7 +42,7 @@ class OverlayRegistry extends RefCounted:
 		return out
 
 	func legend_for_active() -> Array:
-		var o = _get(active)
+		var o: Variant = _get(active)
 		return o.legend_rows if o != null else []
 
 	func count() -> int:

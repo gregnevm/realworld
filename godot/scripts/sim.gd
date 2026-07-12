@@ -3,8 +3,11 @@ extends RefCounted
 
 const GameData = preload("res://scripts/data.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
-const Social = preload("res://scripts/social.gd")
 const Climate = preload("res://scripts/kernel/climate.gd")
+const Threats = preload("res://scripts/sim/threats.gd")
+const SimEnv = preload("res://scripts/sim/environment.gd")
+const WorldMeta = preload("res://scripts/sim/world_meta.gd")
+const DataBridge = preload("res://scripts/data_bridge.gd")
 
 var map: Dictionary
 var n: int = 0
@@ -16,6 +19,12 @@ var enemies: Array = []
 var shots: Array = []
 var time := {"frac": 0.28, "day": 1, "day_len": 150.0}
 var raid := {"timer": 0.0, "next": 95.0, "active": false, "warned": false, "wave": 0}
+var patrol := {"timer": 0.0, "next": 110.0, "wave": 0}   # лор: патрульні роботи Старого світу
+var research_unlocked: Dictionary = {}   # catalog research id -> true; session мостить із kernel/progression
+var use_catalog := false   # spec 0008 phase 2: OFF = stock живе на 6 data.gd-ключах (шліфований зріз
+                           # байт-у-байт, його сьюти це доводять); ON = ключі stock — catalogue-ids через
+                           # data_bridge, тож каталожні рецепти можуть afford-итись проти живого складу.
+                           # Прапор ставиться ДО new_game і не фліпається посеред сейва (§5.2 spec 0008).
 var convoys: Array = []
 var regions: Array = []
 var convoy_seq := 0
@@ -32,29 +41,30 @@ var flash_t := 0.0
 # spec 0002: capsules / invites / social graph
 var capsule: Dictionary = {}
 var invites: Array = []
-var social = null                 # optional social graph (Social.new_graph); null in headless unit tests
+var social: Variant = null        # optional social graph (Social.new_graph); null in headless unit tests
 
 # Batch 8a: живе довкілля (spec 0004 A9/B3/B4/E6). The region's REAL latitude drives temperature,
 # season, daylight and weather through the SAME deterministic climate model the kernel proves out;
 # enclosure ("roofing" collapsed to 2D) buffers indoor cells; campfires/heaters emit heat; torches/
 # lamps emit light. Constants mirror kernel/environment.gd so both layers agree on the physics.
-var climate = Climate.ClimateModel_Deterministic.new()
+var climate := Climate.ClimateModel_Deterministic.new()
 var weather: StringName = &"clear"
 var weather_t := 0.0                # game-days until the next weather reroll
 var temp_offset := 0.0              # transient regional °C shift (cold snap / heat wave incidents)
 var temp_offset_days := 0.0         # remaining days of the shift; <=0 == none
 var env_rng := RandomNumberGenerator.new()   # seeded from the region seed -> deterministic weather
+var threat_rng := RandomNumberGenerator.new()  # seeded from the region seed -> deterministic raids/ambushes/loot;
+                                               # own stream so raids never consume from the weather sequence
 var indoor: Dictionary = {}         # cell index -> true : enclosed room cells (flood-fill)
 
 const INDOOR_SETPOINT_C := 21.0     # kernel environment.gd parity
 const INDOOR_INSULATION := 0.6
 const EMITTER_RADIUS := 6           # Manhattan reach of heat emitters (kernel parity)
-const MAX_ROOM_CELLS := 120         # bigger enclosed pockets are courtyards/caves, not rooms
 const LIGHT_RADIUS := {"campfire": 3.5, "torch": 3.0, "lamp": 5.0}
 const DARK_LIGHT_THRESHOLD := 0.35  # below this working slows (spec B3 «−темрява»)
 const DARK_WORK_PENALTY := 0.5      # up to +50% gather time in pitch black
 const COLD_SNAP_DIP_C := 6.0        # kernel WeatherSystem parity
-const WEATHER_LABEL := {&"clear": "ясно", &"rain": "дощ", &"snow": "сніг", &"fog": "туман", &"cold_snap": "мороз"}
+const WEATHER_LABEL := SimEnv.WEATHER_LABEL   # re-export: the frozen main.gd reads Sim.WEATHER_LABEL
 
 var astar: AStarGrid2D            # terrain + blocking buildings (player)
 var astar_terrain: AStarGrid2D    # terrain only (raiders smash walls)
@@ -78,7 +88,9 @@ func new_game(m: Dictionary) -> void:
 	n = m.n
 	var sp: Vector2i = m.spawn
 	player = _default_player(sp)
-	stock = {"wood": 50, "stone": 30, "food": 18, "scrap": 16, "planks": 0, "components": 2}
+	stock = {}
+	for pair in [["wood", 50], ["stone", 30], ["food", 18], ["scrap", 16], ["planks", 0], ["components", 2]]:
+		stock[res_key(pair[0])] = int(pair[1])
 	capsule = _default_capsule()
 	invites = []
 	_build_astar()
@@ -115,6 +127,7 @@ func _reset_local_threats() -> void:
 	convoys = []
 	shots = []
 	raid = {"timer": 0.0, "next": 95.0, "active": false, "warned": false, "wave": int(raid.get("wave", 0))}
+	patrol = {"timer": 0.0, "next": 110.0, "wave": int(patrol.get("wave", 0))}
 	banner = ""
 
 # The pawn's portable inventory + condition (what a capsule carries).
@@ -161,7 +174,7 @@ func load_region(data: Dictionary) -> void:
 			_log("⚠ OSM-регіон пошкоджено (немає збережених тайлів) — тимчасово процедурна карта.", "bad")
 	var nodes := {}
 	for k in data.nodes:
-		var nd = data.nodes[k]
+		var nd: Dictionary = data.nodes[k]
 		nodes[int(str(k))] = {"kind": str(nd.kind), "amount": int(nd.amount)}
 	m.nodes = nodes
 	map = m
@@ -173,6 +186,9 @@ func load_region(data: Dictionary) -> void:
 		player[f] = (pd[f].duplicate(true) if (pd[f] is Dictionary or pd[f] is Array) else pd[f])
 	player["action"] = null
 	player.carry_cap = int(player.carry_cap)
+	# spec 0008: сейв несе словник ключів складу — відновлюємо прапор ДО копії stock, інакше
+	# крос-прапорний load читає чужі ключі й ресурси «зникають». Старі сейви — поточний прапор.
+	use_catalog = bool(data.get("use_catalog", use_catalog))
 	stock = {}
 	for k in data.stock:
 		stock[k] = data.stock[k]
@@ -244,8 +260,8 @@ func _init_regions() -> void:
 			ranked.append({"name": hb.name, "lat": hb.lat, "lon": hb.lon, "d": d})
 	ranked.sort_custom(func(a, b): return a.d < b.d)
 	regions = [home]
-	for i in range(min(3, ranked.size())):
-		var hb = ranked[i]
+	for i in range(min(5, ranked.size())):
+		var hb: Dictionary = ranked[i]
 		regions.append({"name": hb.name, "lat": hb.lat, "lon": hb.lon, "d": hb.d, "offer": GameData.OFFERS[i % GameData.OFFERS.size()]})
 
 # ---------------- helpers ----------------
@@ -279,7 +295,7 @@ func stock_total() -> int:
 func storage_cap() -> int:
 	var c := 200
 	for b in buildings:
-		var def = GameData.BUILDINGS[b.kind]
+		var def: Dictionary = GameData.BUILDINGS[b.kind]
 		if def.has("capacity"):
 			c += int(def.capacity)
 	return c
@@ -287,10 +303,33 @@ func storage_cap() -> int:
 func deposit(res: String, amt: int) -> int:
 	var room: int = max(0, storage_cap() - stock_total())
 	var add: int = min(amt, room)
-	stock[res] = stock.get(res, 0) + add
+	var k := res_key(res)
+	stock[k] = stock.get(k, 0) + add
 	if add < amt:
 		_log("⚠ Склад переповнений — частину втрачено.", "warn")
 	return add
+
+# ---------------- open stock (spec 0008 phase 2) ----------------
+# The ONE seam every stock access goes through. Live data.gd id -> storage key: identity while
+# use_catalog is off, the catalogue id (data_bridge) when on. Callers (sim internals, sim/ modules,
+# hud_model slices) never touch stock keys directly, so flipping the flag never chases call sites.
+func res_key(res) -> String:
+	return String(DataBridge.to_catalog(res)) if use_catalog else str(res)
+
+func res_amount(res) -> int:
+	return int(stock.get(res_key(res), 0))
+
+# A data.gd cost dict re-keyed into the active stock vocabulary (identity while the flag is off).
+func cost_keys(cost: Dictionary) -> Dictionary:
+	if not use_catalog:
+		return cost
+	var out: Dictionary = {}
+	for k in cost:
+		out[res_key(k)] = cost[k]
+	return out
+
+func afford(cost: Dictionary) -> bool:
+	return GameData.can_afford(stock, cost_keys(cost))
 
 func base_center() -> Vector2i:
 	for b in buildings:
@@ -299,7 +338,7 @@ func base_center() -> Vector2i:
 	return Vector2i(int(player.px), int(player.py))
 
 func _nearest_enemy(x: float, y: float, maxr: float):
-	var best = null
+	var best: Variant = null
 	var bd := maxr
 	for e in enemies:
 		var d := _dist(x, y, e.px, e.py)
@@ -325,31 +364,13 @@ func _flash(text: String) -> void:
 	flash_t = 2.2
 
 # ---------------- environment (Batch 8a) ----------------
-# Seed the deterministic environment for THIS region: the weather stream reproduces from the region
-# seed (координати — це seed: погода теж адреса світу), and the indoor map is derived from geometry.
+# State transitions (region seeding, weather rerolls, indoor BFS) live in sim/environment.gd; the
+# cheap per-tile getters below stay here as the sim's public read API. Delegates preserve the seam.
 func _env_init() -> void:
-	env_rng = RandomNumberGenerator.new()
-	env_rng.seed = region_seed()
-	temp_offset = 0.0
-	temp_offset_days = 0.0
-	weather = climate.weather(float(map.lat), float(map.lon), int(time.day), float(time.frac), env_rng)
-	weather_t = 0.15 + env_rng.randf() * 0.2
-	_recompute_indoor()
+	SimEnv.env_init(self)
 
 func _update_environment(dday: float) -> void:
-	weather_t -= dday
-	if weather_t <= 0.0:
-		var prev := weather
-		weather = climate.weather(float(map.lat), float(map.lon), int(time.day), float(time.frac), env_rng)
-		weather_t = 0.15 + env_rng.randf() * 0.2
-		if weather != prev:
-			_log("⛅ Погода: %s." % WEATHER_LABEL.get(weather, str(weather)))
-	if temp_offset_days > 0.0:
-		temp_offset_days -= dday
-		if temp_offset_days <= 0.0:
-			temp_offset = 0.0
-			temp_offset_days = 0.0
-			_log("🌡 Температурна аномалія минула.", "good")
+	SimEnv.update_environment(self, dday)
 
 # Regional temperature anomaly (cold snap −, heat wave +) for `days` — Balance incidents (spec E6).
 func apply_temp_anomaly(delta_c: float, days: float) -> void:
@@ -418,71 +439,13 @@ func dark_work_mult() -> float:
 		return 1.0
 	return 1.0 + DARK_WORK_PENALTY * (DARK_LIGHT_THRESHOLD - light) / DARK_LIGHT_THRESHOLD
 
-# spec B4 ("roofing") collapsed to 2D: a cell is INDOOR when outside air can't reach it from the map
-# edge without crossing a wall/door/blocked terrain, and its enclosed pocket is room-sized. One BFS
-# floods the outdoor air in from the edges; enclosed leftovers are grouped into components.
+# Enclosure geometry → indoor map (spec B4): the BFS lives in sim/environment.gd.
 func _recompute_indoor() -> void:
-	indoor = {}
-	var open := PackedByteArray()
-	open.resize(n * n)
-	for i in n * n:
-		open[i] = 0 if WorldGen.is_terrain_blocked(map.tiles[i]) else 1
-	for b in buildings:
-		if GameData.BUILDINGS[b.kind].get("blocks", false) or String(b.kind).begins_with("door"):
-			open[b.y * n + b.x] = 0
-	var outdoor := PackedByteArray()
-	outdoor.resize(n * n)
-	var queue: Array = []
-	for i in n:
-		for cell in [Vector2i(i, 0), Vector2i(i, n - 1), Vector2i(0, i), Vector2i(n - 1, i)]:
-			var idx: int = cell.y * n + cell.x
-			if open[idx] == 1 and outdoor[idx] == 0:
-				outdoor[idx] = 1
-				queue.append(idx)
-	while not queue.is_empty():
-		var idx: int = queue.pop_back()
-		var cx := idx % n
-		var cy := idx / n
-		for d in [[1, 0], [-1, 0], [0, 1], [0, -1]]:
-			var nx: int = cx + d[0]
-			var ny: int = cy + d[1]
-			if nx < 0 or ny < 0 or nx >= n or ny >= n:
-				continue
-			var ni := ny * n + nx
-			if open[ni] == 1 and outdoor[ni] == 0:
-				outdoor[ni] = 1
-				queue.append(ni)
-	# every open cell the air didn't reach is enclosed; small pockets are rooms, big ones stay outdoor
-	for i in n * n:
-		if open[i] != 1 or outdoor[i] == 1 or indoor.has(i):
-			continue
-		var comp: Array = [i]
-		var seen := {i: true}
-		var head := 0
-		while head < comp.size():
-			var idx2: int = comp[head]
-			head += 1
-			var cx2 := idx2 % n
-			var cy2 := idx2 / n
-			for d2 in [[1, 0], [-1, 0], [0, 1], [0, -1]]:
-				var nx2: int = cx2 + d2[0]
-				var ny2: int = cy2 + d2[1]
-				if nx2 < 0 or ny2 < 0 or nx2 >= n or ny2 >= n:
-					continue
-				var ni2 := ny2 * n + nx2
-				if open[ni2] == 1 and outdoor[ni2] == 0 and not seen.has(ni2):
-					seen[ni2] = true
-					comp.append(ni2)
-		if comp.size() <= MAX_ROOM_CELLS:
-			for c in comp:
-				indoor[c] = true
-		else:
-			for c in comp:
-				outdoor[c] = 1
+	SimEnv.recompute_indoor(self)
 
 # ---------------- building ----------------
 func _place_building(kind: String, x: int, y: int, hp: float):
-	var def = GameData.BUILDINGS[kind]
+	var def: Dictionary = GameData.BUILDINGS[kind]
 	var b := {"kind": kind, "x": x, "y": y, "hp": (def.hp if hp < 0 else hp), "cool": 0.0, "aim": 0.0}
 	buildings.append(b)
 	bgrid[y * n + x] = b
@@ -502,7 +465,7 @@ func _remove_building(b) -> void:
 func build_valid(x: int, y: int) -> bool:
 	if not _in(x, y):
 		return false
-	var t = map.tiles[y * n + x]
+	var t: int = map.tiles[y * n + x]
 	if t == WorldGen.WATER or t == WorldGen.ROCK:
 		return false
 	if bgrid.has(y * n + x):
@@ -515,11 +478,14 @@ func try_build(kind: String, x: int, y: int) -> void:
 	if not build_valid(x, y):
 		_flash("Тут не можна будувати.")
 		return
-	var def = GameData.BUILDINGS[kind]
-	if not GameData.can_afford(stock, def.cost):
+	var def: Dictionary = GameData.BUILDINGS[kind]
+	if not research_ok(def):
+		_flash("🔒 Потребує дослідження: %s." % _research_label(def))
+		return
+	if not afford(def.cost):
 		_flash("Бракує: " + GameData.cost_str(def.cost))
 		return
-	GameData.pay_cost(stock, def.cost)
+	GameData.pay_cost(stock, cost_keys(def.cost))
 	_place_building(kind, x, y, -1)
 
 # Player-initiated teardown: recover half the build cost (rounded down). You can never
@@ -527,7 +493,7 @@ func try_build(kind: String, x: int, y: int) -> void:
 func demolish(x: int, y: int) -> Dictionary:
 	if not _in(x, y) or not bgrid.has(y * n + x):
 		return {"ok": false, "msg": "Тут немає будівлі."}
-	var b = bgrid[y * n + x]
+	var b: Dictionary = bgrid[y * n + x]
 	if b.kind == "storage":
 		var storages := 0
 		for o in buildings:
@@ -547,12 +513,29 @@ func demolish(x: int, y: int) -> Dictionary:
 
 # ---------------- items / equipment (spec 0001) ----------------
 func gather_time(node) -> float:
-	var info = GameData.NODEINFO[node.kind]
+	var info: Dictionary = GameData.NODEINFO[node.kind]
 	var mult: float = 1.0 + player.skills.gather * 0.04
 	var tool: String = player.equipped.get("tool", "")
 	if tool != "" and GameData.ITEMS.has(tool):
 		mult *= float(GameData.ITEMS[tool].get("gather_mult", 1.0))
 	return info.time / mult * dark_work_mult()
+
+# Ворота дерева досліджень: def без поля `research` відкритий завжди; інакше — лише коли session
+# домостив відповідний catalog-id у research_unlocked (ключі можуть бути String АБО StringName).
+func research_ok(def: Dictionary) -> bool:
+	var need := String(def.get("research", ""))
+	return need == "" or research_unlocked.has(need) or research_unlocked.has(StringName(need))
+
+func _research_label(def: Dictionary) -> String:
+	var need := String(def.get("research", ""))
+	return String(GameData.RESEARCH_LABEL.get(need, need))
+
+# Броня ріже вхідний урон: 1.0 без броні, 0.7 у жилеті, 0.5 у панцирі (data.gd dmg_cut).
+func armor_mult() -> float:
+	var arm: String = String(player.equipped.get("armor", ""))
+	if arm != "" and GameData.ITEMS.has(arm):
+		return 1.0 - float(GameData.ITEMS[arm].get("dmg_cut", 0.0))
+	return 1.0
 
 func melee_damage() -> float:
 	var dmg: float = 12.0 + player.skills.combat
@@ -576,10 +559,12 @@ func craft_item(item_id: String) -> Dictionary:
 		return {"ok": true}
 	if not has_workbench():
 		return {"ok": false, "msg": "Потрібен верстак."}
-	var recipe = GameData.ITEMS[item_id].recipe
-	if not GameData.can_afford(stock, recipe):
+	if not research_ok(GameData.ITEMS[item_id]):
+		return {"ok": false, "msg": "🔒 Потребує дослідження: %s." % _research_label(GameData.ITEMS[item_id])}
+	var recipe: Dictionary = GameData.ITEMS[item_id].recipe
+	if not afford(recipe):
 		return {"ok": false, "msg": "Бракує: " + GameData.cost_str(recipe)}
-	GameData.pay_cost(stock, recipe)
+	GameData.pay_cost(stock, cost_keys(recipe))
 	player.items.append(item_id)
 	equip(item_id)
 	_log("🛠 Скрафтив та екіпірував: %s." % GameData.ITEMS[item_id].name, "good")
@@ -620,7 +605,7 @@ func _path_on(grid: AStarGrid2D, fx: int, fy: int, tx: int, ty: int) -> Array:
 		grid.set_point_solid(from, false)
 	# allow_partial_path=true => best-effort partial path toward the closest
 	# reachable cell when the target is unreachable (matches JS findPath semantics).
-	var p = grid.get_id_path(from, tgt, true)
+	var p := grid.get_id_path(from, tgt, true)
 	if start_solid:
 		grid.set_point_solid(from, true)
 	var out := []
@@ -692,6 +677,7 @@ func update(dt: float) -> void:
 	_update_player(dt)
 	_update_crafting(dt)
 	_update_raids(dt)
+	_update_patrols(dt)
 	_update_enemies(dt)
 	_update_turrets(dt)
 	_update_convoys(dt)
@@ -701,7 +687,7 @@ func update(dt: float) -> void:
 			shots.remove_at(i)
 
 func _update_player(dt: float) -> void:
-	var p = player
+	var p: Dictionary = player
 	p.atk_cd = max(0.0, p.atk_cd - dt)
 	p.eat_cd = max(0.0, p.eat_cd - dt)
 	p.dep_cd = max(0.0, p.dep_cd - dt)
@@ -717,8 +703,8 @@ func _update_player(dt: float) -> void:
 	if p.hp <= 0 and not dead:
 		_on_death()
 		return
-	if p.hunger < 55 and p.eat_cd <= 0 and int(stock.get("food", 0)) >= 1 and _near_storage(2.2):
-		stock.food -= 1
+	if p.hunger < 55 and p.eat_cd <= 0 and res_amount("food") >= 1 and _near_storage(2.2):
+		stock[res_key("food")] -= 1
 		p.hunger = min(100.0, p.hunger + 38.0)
 		p.eat_cd = 2.5
 	if carry_total() > 0 and p.dep_cd <= 0 and _near_storage(1.8):
@@ -741,7 +727,7 @@ func _update_player(dt: float) -> void:
 		p.face = atan2(v.y, v.x)
 		return
 	if p.action == null:
-		var e = _nearest_enemy(p.px, p.py, 1.4)
+		var e: Variant = _nearest_enemy(p.px, p.py, 1.4)
 		if e != null:
 			p.action = {"type": "attack", "target": e, "path": [], "repath_cd": 0.0}
 	if p.action == null:
@@ -758,19 +744,19 @@ func _update_player(dt: float) -> void:
 			_do_attack(dt, step)
 
 func _do_gather(dt: float, step: float) -> void:
-	var p = player
-	var a = p.action
+	var p: Dictionary = player
+	var a: Dictionary = p.action
 	if not map.nodes.has(a.cell):
 		p.action = null
 		return
-	var node = map.nodes[a.cell]
+	var node: Dictionary = map.nodes[a.cell]
 	if _dist(p.px, p.py, a.nx + 0.5, a.ny + 0.5) >= 1.4:
 		var done := _follow_path(p, a.path, step)
 		p.face = atan2(a.ny + 0.5 - p.py, a.nx + 0.5 - p.px)
 		if done and not WorldGen.is_terrain_blocked(map.tiles[a.cell]):
 			_step_to(p, a.nx + 0.5, a.ny + 0.5, step)
 		return
-	var info = GameData.NODEINFO[node.kind]
+	var info: Dictionary = GameData.NODEINFO[node.kind]
 	a.dur = gather_time(node)
 	a.t += dt
 	if a.t >= a.dur:
@@ -787,11 +773,11 @@ func _do_gather(dt: float, step: float) -> void:
 			p.action = null
 
 func _do_attack(dt: float, step: float) -> void:
-	var p = player
-	var a = p.action
-	var e = a.target
+	var p: Dictionary = player
+	var a: Dictionary = p.action
+	var e: Variant = a.target
 	if e == null or e.dead or not enemies.has(e):
-		var nx = _nearest_enemy(p.px, p.py, 2.5)
+		var nx: Variant = _nearest_enemy(p.px, p.py, 2.5)
 		if nx != null:
 			a.target = nx
 			e = nx
@@ -814,11 +800,11 @@ func _do_attack(dt: float, step: float) -> void:
 			p.skills.combat = min(20.0, p.skills.combat + 0.15)
 
 func _maybe_sleep(_dt: float) -> void:
-	var p = player
+	var p: Dictionary = player
 	if p.rest >= 99:
 		p.sleeping = false
 		return
-	var bed = null
+	var bed: Variant = null
 	for b in buildings:
 		if b.kind == "bed" and _dist(p.px, p.py, b.x + 0.5, b.y + 0.5) < 1.6:
 			bed = b
@@ -835,230 +821,59 @@ func _update_crafting(dt: float) -> void:
 	craft_timer += dt * count
 	while craft_timer >= 3.5:
 		craft_timer -= 3.5
-		if int(stock.get("wood", 0)) >= 2 and stock_total() < storage_cap():
-			stock.wood -= 2
-			stock.planks = stock.get("planks", 0) + 1
+		if res_amount("wood") >= 2 and stock_total() < storage_cap():
+			stock[res_key("wood")] -= 2
+			stock[res_key("planks")] = res_amount("planks") + 1
 
-# ---------------- raids ----------------
+# ---------------- threats (raids / patrol robots / enemies / turrets) ----------------
+# The whole threat domain lives in sim/threats.gd; these one-line delegates preserve the sim API for
+# every caller (session, tests, frozen main.gd). Adding threat behaviour edits the module, not this file.
 func _update_raids(dt: float) -> void:
-	var r = raid
-	if r.active:
-		if enemies.is_empty():
-			r.active = false
-			r.warned = false
-			r.next = 78.0 + randf() * 46.0
-			r.timer = 0.0
-			banner = ""
-			_log("✅ Рейд відбито!", "good")
-		return
-	r.timer += dt
-	if not r.warned and r.timer > r.next - 12.0:
-		r.warned = true
-		banner = "⚠ НАБЛИЖАЄТЬСЯ РЕЙД"
-		_log("⚠ Рейдери на підході — укріплюй базу!", "warn")
-	if r.timer >= r.next:
-		_spawn_wave()
+	Threats.update_raids(self, dt)
 
 func _spawn_wave() -> void:
-	var r = raid
-	r.active = true
-	r.wave += 1
-	# diplomacy: hostile clans raid harder; allied/empire clans never do (spec 0002)
-	var pressure := 1.0
-	var faction := "невідомі мародери"
-	if social != null:
-		pressure = Social.raid_pressure(social)
-		faction = Social.raid_faction_name(social, r.wave)
-	var cnt: int = clampi(int(ceil(float(GameData.raid_wave_size(time.day)) * pressure)), 1, 20)
-	var edge := randi() % 4
-	var placed := 0
-	var guard := 0
-	while placed < cnt and guard < 500:
-		guard += 1
-		var x := 0
-		var y := 0
-		var o := 1 + randi() % 3
-		match edge:
-			0:
-				x = o
-				y = 2 + randi() % (n - 4)
-			1:
-				x = n - 1 - o
-				y = 2 + randi() % (n - 4)
-			2:
-				x = 2 + randi() % (n - 4)
-				y = o
-			_:
-				x = 2 + randi() % (n - 4)
-				y = n - 1 - o
-		if WorldGen.is_terrain_blocked(map.tiles[y * n + x]):
-			continue
-		enemies.append(GameData.make_raider(x + 0.5, y + 0.5, time.day))
-		placed += 1
-	banner = "⚔ РЕЙД! %d рейдерів — %s" % [cnt, faction]
-	_log("⚔ Рейд #%d: %d рейдерів (%s) атакують базу!" % [r.wave, cnt, faction], "bad")
+	Threats.spawn_wave(self)
+
+func _update_patrols(dt: float) -> void:
+	Threats.update_patrols(self, dt)
+
+func _spawn_patrol() -> void:
+	Threats.spawn_patrol(self)
 
 func _update_enemies(dt: float) -> void:
-	var p = player
-	var center := base_center()
-	for k in range(enemies.size() - 1, -1, -1):
-		var e = enemies[k]
-		e.atk_cd = max(0.0, e.atk_cd - dt)
-		e.hit_flash = max(0.0, e.hit_flash - dt)
-		var step: float = e.speed * dt
-		var dtp := _dist(e.px, e.py, p.px, p.py)
-		if dtp < 1.25:
-			e.face = atan2(p.py - e.py, p.px - e.px)
-			if e.atk_cd <= 0:
-				p.hp = clampf(p.hp - e.dmg, 0, 100)
-				e.atk_cd = 1.1
-				if p.hp <= 0 and not dead:
-					_on_death()
-			continue
-		var st = null
-		for b in buildings:
-			if b.kind == "storage" and _dist(e.px, e.py, b.x + 0.5, b.y + 0.5) < 1.35:
-				st = b
-				break
-		if st != null:
-			if e.atk_cd <= 0:
-				_damage_building(st, e.dmg, true)
-				e.atk_cd = 1.0
-			continue
-		var tx := int(p.px) if dtp < 6 else center.x
-		var ty := int(p.py) if dtp < 6 else center.y
-		e.path_cd -= dt
-		if e.path.is_empty() or e.path_cd <= 0 or e.tx != tx or e.ty != ty:
-			e.tx = tx
-			e.ty = ty
-			e.path_cd = 0.9 + randf() * 0.5
-			e.path = _terrain_path(int(e.px), int(e.py), tx, ty)
-		if not e.path.is_empty():
-			var nx: Vector2i = e.path[0]
-			var bi := nx.y * n + nx.x
-			if bgrid.has(bi) and GameData.BUILDINGS[bgrid[bi].kind].get("blocks", false):
-				e.face = atan2(nx.y + 0.5 - e.py, nx.x + 0.5 - e.px)
-				if e.atk_cd <= 0:
-					_damage_building(bgrid[bi], e.dmg, false)
-					e.atk_cd = 1.0
-			else:
-				if _step_to(e, nx.x + 0.5, nx.y + 0.5, step):
-					e.path.remove_at(0)
-		else:
-			_step_to(e, center.x + 0.5, center.y + 0.5, step)
+	Threats.update_enemies(self, dt)
 
 func _update_turrets(dt: float) -> void:
-	for b in buildings:
-		if b.kind != "turret":
-			continue
-		var def = GameData.BUILDINGS.turret
-		b.cool = max(0.0, b.cool - dt)
-		var e = _nearest_enemy(b.x + 0.5, b.y + 0.5, def.range)
-		if e == null:
-			continue
-		b.aim = atan2(e.py - (b.y + 0.5), e.px - (b.x + 0.5))
-		if b.cool <= 0:
-			b.cool = 0.5
-			_damage_enemy(e, def.dps * 0.5)
-			shots.append({"x1": b.x + 0.5, "y1": b.y + 0.5, "x2": e.px, "y2": e.py, "t": 0.12})
+	Threats.update_turrets(self, dt)
 
 func _damage_building(b, amt: float, steal: bool) -> void:
-	b.hp -= amt
-	if steal and b.kind == "storage":
-		var keys := []
-		for kk in GameData.RES_ORDER:
-			if int(stock.get(kk, 0)) > 0:
-				keys.append(kk)
-		if not keys.is_empty():
-			var kk = keys[randi() % keys.size()]
-			var lost: int = min(int(stock[kk]), 1 + randi() % 2)
-			stock[kk] -= lost
-	if b.hp <= 0:
-		_remove_building(b)
-		_log("💥 %s зруйновано рейдерами." % GameData.BUILDINGS[b.kind].name, "bad")
+	Threats.damage_building(self, b, amt, steal)
 
 func _damage_enemy(e, amt: float) -> void:
-	e.hp -= amt
-	e.hit_flash = 0.12
-	if e.hp <= 0 and not e.dead:
-		e.dead = true
-		enemies.erase(e)
-		deposit("scrap", 2 + randi() % 2)
-		if randf() < 0.25:
-			deposit("components", 1)
-		if randf() < 0.4:
-			deposit("food", 1)
+	Threats.damage_enemy(self, e, amt)
 
 func _on_death() -> void:
-	dead = true
-	banner = ""
-	_log("☠ Твій персонаж загинув. Все нажите втрачено.", "bad")
+	Threats.on_death(self)
 
-# Permadeath (spec 0002): the pawn is gone entirely — skills, carried loot and items reset.
-# You get a fresh un-leveled rookie at the clan base; the settlement (buildings + stock) persists.
 func respawn_new_pawn() -> void:
-	var sp := base_center()
-	var open := _nearest_free(astar, sp)
-	if open == Vector2i(-1, -1):
-		open = map.spawn
-	player = _default_player(open)
-	enemies = []
-	raid.active = false
-	raid.warned = false
-	raid.timer = 0.0
-	banner = ""
-	dead = false
-	_log("🧬 Нова пішка прибула в поселення — прокачка з нуля.", "warn")
+	Threats.respawn_new_pawn(self)
 
 # ---------------- capsules & invites (spec 0002) ----------------
+# Bodies live in sim/world_meta.gd (capsule travel + invite envelopes); delegates keep the sim API.
 func _grant_daily_capsule() -> void:
-	if capsule.is_empty():
-		capsule = _default_capsule()
-		return
-	if int(time.day) != int(capsule.last_day):
-		capsule.last_day = int(time.day)
-		if int(capsule.charges) < GameData.CAPSULE_DAILY_CHARGES:
-			capsule.charges = GameData.CAPSULE_DAILY_CHARGES
-			_log("🚀 Щоденна капсула готова (радіус %d км)." % int(capsule.radius_km), "good")
+	WorldMeta.grant_daily_capsule(self)
 
 func capsule_can_reach(lat: float, lon: float) -> Dictionary:
-	var km := WorldGen.haversine_km(float(map.lat), float(map.lon), lat, lon)
-	if int(capsule.get("charges", 0)) <= 0:
-		return {"ok": false, "km": km, "msg": "Капсула вже використана — чекай нового дня."}
-	if km > float(capsule.radius_km):
-		return {"ok": false, "km": km, "msg": "Задалеко: %d км > ліміт %d км." % [int(km), int(capsule.radius_km)]}
-	return {"ok": true, "km": km, "msg": "Готова до запуску (%d км)." % int(km)}
+	return WorldMeta.capsule_can_reach(self, lat, lon)
 
-# Validate + consume a charge. Returns a travel intent for the session (main.travel_to).
 func try_launch_capsule(lat: float, lon: float, place_name: String) -> Dictionary:
-	var chk := capsule_can_reach(lat, lon)
-	if not chk.ok:
-		return {"ok": false, "msg": chk.msg}
-	capsule.charges = int(capsule.charges) - 1
-	_log("🚀 Капсула запущена → %s (%d км)." % [place_name, int(chk.km)], "good")
-	return {"ok": true, "lat": lat, "lon": lon, "name": place_name, "km": chk.km}
+	return WorldMeta.try_launch_capsule(self, lat, lon, place_name)
 
 func add_invite(inv: Dictionary) -> void:
-	for e in invites:
-		if e.id == inv.id:
-			return
-	invites.append(inv)
-	_log("✉ Інвайт від %s (%s) → %s." % [inv.get("inviter", "?"), inv.get("clan", "—"), inv.get("name", "?")])
+	WorldMeta.add_invite(self, inv)
 
 func accept_invite(id: String) -> Dictionary:
-	var inv = null
-	for e in invites:
-		if e.id == id:
-			inv = e
-			break
-	if inv == null:
-		return {"ok": false, "msg": "Інвайт не знайдено."}
-	if not bool(inv.get("allow_receive", false)):
-		return {"ok": false, "msg": "Інвайт не дозволяє прийом капсули."}
-	var res := try_launch_capsule(float(inv.lat), float(inv.lon), str(inv.name))
-	if res.ok:
-		invites.erase(inv)
-	return res
+	return WorldMeta.accept_invite(self, id)
 
 func region_display() -> String:
 	# show coordinates at the SAME 4-dp precision that actually seeds the world, so what the player
@@ -1070,50 +885,12 @@ func region_seed() -> int:
 	return int(map.get("seed", WorldGen.hash_seed(float(map.lat), float(map.lon))))
 
 # ---------------- logistics ----------------
+# Convoy bodies live in sim/world_meta.gd; delegates keep the sim API (tests drive _update_convoys).
 func dispatch_convoy(hub_index: int, send_res: String, send_amt: int) -> Dictionary:
-	if hub_index <= 0 or hub_index >= regions.size():
-		return {"ok": false, "msg": "Невірний пункт."}
-	var hub = regions[hub_index]
-	if hub.get("home", false):
-		return {"ok": false, "msg": "Невірний пункт."}
-	send_amt = max(1, int(send_amt))
-	if int(stock.get(send_res, 0)) < send_amt:
-		return {"ok": false, "msg": "Недостатньо ресурсу на складі."}
-	if send_res != hub.offer.buys:
-		return {"ok": false, "msg": "%s приймає лише %s." % [hub.name, GameData.RES[hub.offer.buys].label]}
-	stock[send_res] -= send_amt
-	var recv_res = hub.offer.sells
-	var recv_amt: int = max(1, int(send_amt / int(hub.offer.rate)))
-	var dist := WorldGen.haversine_km(regions[0].lat, regions[0].lon, hub.lat, hub.lon)
-	var one_way := clampf(dist * 0.045, 7, 55)
-	convoy_seq += 1
-	convoys.append({
-		"id": convoy_seq, "hub_index": hub_index, "hub_name": hub.name,
-		"send_res": send_res, "send_amt": send_amt, "recv_res": recv_res, "recv_amt": recv_amt,
-		"phase": "out", "t": 0.0, "dur": one_way, "dist": int(dist), "ambushed": false,
-	})
-	_log("🚚 Конвой #%d вирушив до %s (%d км)." % [convoy_seq, hub.name, int(dist)], "good")
-	return {"ok": true}
+	return WorldMeta.dispatch_convoy(self, hub_index, send_res, send_amt)
 
 func _update_convoys(dt: float) -> void:
-	for k in range(convoys.size() - 1, -1, -1):
-		var c = convoys[k]
-		c.t += dt
-		if c.t < c.dur:
-			continue
-		if c.phase == "out":
-			c.phase = "back"
-			c.t = 0.0
-			_log("🔄 Конвой #%d обміняв вантаж у %s." % [c.id, c.hub_name])
-			if randf() < 0.25:
-				c.ambushed = true
-				var lost: int = max(1, int(round(c.recv_amt * (0.3 + randf() * 0.4))))
-				c.recv_amt = max(0, c.recv_amt - lost)
-				_log("⚔ Засідка на конвой #%d! −%d." % [c.id, lost], "bad")
-		else:
-			deposit(c.recv_res, c.recv_amt)
-			_log("📦 Конвой #%d повернувся: +%d %s." % [c.id, c.recv_amt, GameData.RES[c.recv_res].icon], "good")
-			convoys.remove_at(k)
+	WorldMeta.update_convoys(self, dt)
 
 # ---------------- presentation helpers ----------------
 func daylight() -> float:
@@ -1121,7 +898,7 @@ func daylight() -> float:
 	return clampf(0.46 * (1.0 - daylight_level()), 0.0, 0.46)
 
 func phase_name() -> String:
-	var f = time.frac
+	var f: float = time.frac
 	if f < 0.22 or f > 0.80:
 		return "🌙 ніч"
 	if f < 0.30:

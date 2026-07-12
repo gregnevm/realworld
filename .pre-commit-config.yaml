@@ -1,0 +1,11 @@
+# RealWorld — pre-commit hooks. Встанови: pip install pre-commit && pre-commit install
+# gdlint конфіг — gdlintrc у корені (кодифікує конвенції репо). gdformat поки НЕ увімкнено:
+# одноразовий масовий реформат — окремий узгоджений крок, не побічний ефект коміту.
+repos:
+  - repo: https://github.com/Scony/godot-gdscript-toolkit
+    rev: "4.5.0"
+    hooks:
+      - id: gdlint
+        files: '\.gd$'
+        # frozen pre-refactor HUD reference + test suites (окремий стиль: довгі імена кейсів)
+        exclude: 'godot/scripts/main\.gd|godot/tests/'

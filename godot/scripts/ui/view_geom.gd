@@ -5,6 +5,15 @@
 # Node-free: takes the numbers, returns the rect. Faithfully extracted from world_view._draw().
 extends RefCounted
 
+# THE tile size in pixels. Every view file mirrors it as `const TILE := ViewGeom.TILE` (single
+# source; the frozen main.gd keeps its historical literal). Change it here and only here.
+const TILE := 28
+
+# World position (pixels) -> tile coordinate. THE mouse->tile mapping (main.gd parity), so click
+# targets can never drift from what world_view/overlays draw.
+static func mouse_tile(world_pos: Vector2, tile: int = TILE) -> Vector2i:
+	return Vector2i(int(floor(world_pos.x / tile)), int(floor(world_pos.y / tile)))
+
 # cam_pos = camera screen-center world position (Camera2D.get_screen_center_position()).
 # zoom    = Camera2D.zoom. vp_size = get_viewport_rect().size. Returns {x0,y0,x1,y1} clamped to [0,n).
 static func cull_rect(cam_pos: Vector2, zoom: Vector2, vp_size: Vector2, n: int, tile: int) -> Dictionary:

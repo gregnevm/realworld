@@ -8,11 +8,11 @@ extends Control
 const HudModel = preload("res://scripts/ui/hud_model.gd")
 const WidgetBase = preload("res://scripts/ui/widget.gd")
 
-var registry                # PanelRegistry
-var overlays                # OverlayRegistry (optional in the minimal assembly)
-var bus                     # FeedbackBus
-var balance                 # Balance director (constructed once by the entry scene)
-var session                 # SessionScript (has .sim)
+var registry: Variant       # PanelRegistry
+var overlays: Variant       # OverlayRegistry (optional in the minimal assembly)
+var bus: Variant            # FeedbackBus
+var balance: Variant        # Balance director (constructed once by the entry scene)
+var session: Variant        # SessionScript (has .sim)
 
 var _docks: Dictionary = {}   # dock int -> container Control
 var last_snap: Dictionary = {}   # the most recent snapshot (OverlayHost reads env/clock from it)
@@ -28,8 +28,7 @@ func _ready() -> void:
 	_build_zones()
 
 func _fit_viewport() -> void:
-	position = Vector2.ZERO
-	size = get_viewport().get_visible_rect().size
+	WidgetBase.Widget.fit_viewport(self)
 
 func _build_zones() -> void:
 	var left := VBoxContainer.new()
@@ -77,7 +76,7 @@ func mount() -> void:
 		var d: int = int(p.dock)
 		if _docks.has(d):
 			_docks[d].add_child(p)
-			p.visible = true
+			p.visible = bool(p.default_open)   # hotkey'd panels start hidden; registry.toggle flips them
 
 func _process(dt: float) -> void:
 	refresh(dt)

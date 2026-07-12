@@ -121,8 +121,11 @@ static func hostiles(g: Dictionary) -> Array:
 	return out
 
 # More hostile clans => harder raids. 1.0 baseline, +0.12 per hostile clan.
-static func raid_pressure(g: Dictionary) -> float:
-	return 1.0 + 0.12 * hostiles(g).size()
+# `known_hostiles`: коли той, хто питає, вже пройшовся hostiles() — передай список, щоб не ходити
+# по всіх кланах двічі (hud_model рахує slice щокадру).
+static func raid_pressure(g: Dictionary, known_hostiles: Variant = null) -> float:
+	var hs: Array = known_hostiles if known_hostiles is Array else hostiles(g)
+	return 1.0 + 0.12 * hs.size()
 
 # Deterministic pick of which hostile clan is behind a given raid wave.
 static func raid_faction_name(g: Dictionary, wave: int) -> String:
@@ -134,7 +137,7 @@ static func raid_faction_name(g: Dictionary, wave: int) -> String:
 
 # Build a capsule invite from friend #i (inviter, clan, target location).
 static func friend_invite(g: Dictionary, i: int, radius_km: float) -> Dictionary:
-	var fr = g.friends[i % g.friends.size()]
+	var fr: Dictionary = g.friends[i % g.friends.size()]
 	return {
 		"id": "inv_%s" % fr.id,
 		"inviter": fr.name,

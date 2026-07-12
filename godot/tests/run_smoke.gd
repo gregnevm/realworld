@@ -95,7 +95,8 @@ func _smoke_raid() -> void:
 		sim.update(0.1)
 	var spawned: int = sim.enemies.size()
 	ok(spawned > 0, "raid wave spawned (%d raiders)" % spawned)
-	# place a turret at base centre
+	# place a turret at base centre (турель за ворітьми «Механіка» — smoke відкриває їх явно)
+	sim.research_unlocked = {"machining": true}
 	sim.stock.scrap = 60
 	sim.stock.components = 12
 	var c = sim.base_center()

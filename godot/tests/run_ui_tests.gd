@@ -11,6 +11,11 @@ const Fmt = preload("res://scripts/ui/format.gd")
 const ViewGeom = preload("res://scripts/ui/view_geom.gd")
 const LatLon = preload("res://scripts/ui/latlon.gd")
 const HudModel = preload("res://scripts/ui/hud_model.gd")
+const CatalogView = preload("res://scripts/ui/catalog_view.gd")
+const CatalogPanels = preload("res://scripts/ui/catalog_panels.gd")
+const CatalogVerbs = preload("res://scripts/ui/catalog_verbs.gd")
+const CatalogSim = preload("res://scripts/catalog_sim.gd")
+const InputCtl = preload("res://scripts/ui/input_controller.gd")
 const FeedbackBus = preload("res://scripts/ui/feedback_bus.gd")
 const Widgets = preload("res://scripts/ui/widgets.gd")
 const Panels = preload("res://scripts/ui/panels.gd")
@@ -21,6 +26,8 @@ const Balance = preload("res://scripts/kernel/balance.gd")
 const GameData = preload("res://scripts/data.gd")
 const Progression = preload("res://scripts/kernel/progression.gd")
 const Catalog = preload("res://scripts/kernel/catalog.gd")
+const WorldInput = preload("res://scripts/ui/world_input.gd")
+const Mechanics = preload("res://scripts/ui/mechanics.gd")
 
 var passed := 0
 var failed := 0
@@ -40,10 +47,21 @@ func _init() -> void:
 	_t_widgets()
 	_t_stock_spine()
 	_t_research_surface()
+	_t_catalog_view()
+	_t_tech_panel()
+	_t_catalog_verbs()
+	_t_tech_intent()
+	_t_action_browsers()
+	_t_bom_tips()
 	_t_panel_registry()
 	_t_overlay_registry()
+	_t_hotkey_contract()
 	_t_bus_no_dangling()
+	_t_world_input_grammar()
 	_t_rule_tripwires()
+	# release the process-shared forward-engine model: its placed Things carry comp back-references
+	# (RefCounted cycles) that would otherwise show up as ObjectDB leaks at exit
+	CatalogSim.dispose_shared()
 	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
 	quit(1 if failed > 0 else 0)
 
@@ -286,6 +304,148 @@ func _t_research_surface() -> void:
 		"row click -> enqueue_research intent with the project id")
 	panel.free()
 
+# ---------------- CatalogView: the content-tree pipeline (deep catalogue -> value-data slices) ----------------
+func _t_catalog_view() -> void:
+	var db = CatalogView.default_db()
+	ok(db != null and db.count() > 300, "CatalogView.default_db builds the full tree (%d defs)" % db.count())
+	# neolithic start: nothing unlocked, starter stock
+	var snap: Dictionary = CatalogView.snapshot(db, {"unlocked": {}, "stock": {"wood": 50, "stone": 30}})
+	ok(bool(snap.available), "catalog snapshot available")
+	var s: Dictionary = snap.summary
+	ok(int(s.research) == 41 and int(s.researched) == 0, "summary: 0/41 researched at the neolithic start")
+	ok(int(s.buildings) == 87 and int(s.buildable) > 0, "some no-research buildings buildable from starter stock (%d)" % int(s.buildable))
+	ok(is_equal_approx(float(s.progress), 0.0), "research progress is 0 at the start")
+	ok((snap.next as Array).size() >= 5, "tier-1 research is available next (%d options)" % (snap.next as Array).size())
+	ok(_all_value_data(snap), "catalog slice is all value data (R8 — no DefDatabase / Callable leaks)")
+	# advancing state: unlocking smelting makes its dependent (metallurgy) AVAILABLE
+	var snap2: Dictionary = CatalogView.snapshot(db, {"unlocked": {&"smelting": true, &"fire_mastery": true}, "stock": {}})
+	ok(int(snap2.summary.researched) == 2, "researched count reflects the unlocked set")
+	var metallurgy_available := false
+	for r in snap2.research:
+		if r.id == &"metallurgy":
+			metallurgy_available = (r.status == &"available")
+	ok(metallurgy_available, "metallurgy flips locked->available once smelting is unlocked (prereq gate)")
+	ok(not bool(CatalogView.snapshot(null).get("available", false)), "null db -> {available:false} (graceful)")
+	# per-tier progress climbs 1..9 (neolithic -> ship); values reflect the unlocked set
+	var tiers: Array = snap2.tiers
+	ok(tiers.size() == 9 and int(tiers[0].tier) == 1 and int(tiers[8].tier) == 9, "tiers slice spans 9 eras ascending")
+	ok(int(tiers[0].unlocked) == 1 and int(tiers[0].total) == 5, "tier-1 shows 1/5 unlocked (fire_mastery; smelting is tier-2)")
+
+# ---------------- TechPanel: build-once + value bind, same contract as StockPanel (R2/R8) ----------------
+func _t_tech_panel() -> void:
+	var cat: Dictionary = CatalogView.snapshot(CatalogView.default_db(), {"unlocked": {}, "stock": {"wood": 50, "stone": 30}})
+	var vm := {"catalog": cat}
+	var panel = CatalogPanels.TechPanel.new()
+	panel.bind(vm)
+	var n0: int = panel.get_child(0).get_child_count()   # header + gauge + 4 stat rows
+	panel.bind(vm)                                        # second bind must NOT rebuild
+	ok(panel.rebuild_count == 1, "TechPanel builds exactly once across two binds (R2)")
+	ok(panel.rebind_count == 2, "TechPanel rebinds each frame (bind != rebuild)")
+	ok(panel.get_child(0).get_child_count() == n0, "child count stable across rebind (R2)")
+	ok(panel.panel_id == &"tech" and panel.dock == 1, "TechPanel: id=tech, RIGHT dock (registered via mechanics.gd)")
+	# ResearchTiersPanel — 9 fixed era rows, build-once + bind (R2)
+	var tp = CatalogPanels.ResearchTiersPanel.new()
+	tp.bind(vm)
+	var t0: int = tp.get_child(0).get_child_count()   # header + 9 tier rows
+	tp.bind(vm)
+	ok(tp.rebuild_count == 1 and tp.rebind_count == 2, "ResearchTiersPanel builds once, binds each frame (R2)")
+	ok(tp.get_child(0).get_child_count() == t0 and tp._rows.size() == 9, "ResearchTiersPanel holds 9 fixed era rows")
+	ok(tp.panel_id == &"research_tiers" and tp.dock == 1, "ResearchTiersPanel: id, RIGHT dock")
+	tp.free()
+	# the HudModel snapshot now carries the catalog slice end to end (pipeline surfaced in the HUD)
+	var sess = _fake_session()
+	var full := HudModel.snapshot(sess, {"buildings": [], "stock": sess.sim.stock, "items": []}, {"day": 5}, Balance.Balance.new())
+	ok(full.has("catalog") and bool(full.catalog.available), "HudModel.snapshot surfaces the catalog slice (pipeline end to end)")
+	panel.free()
+
+# ---------------- CatalogVerbs: the write-side router (intent -> catalog_sim command, R9) ----------------
+func _t_catalog_verbs() -> void:
+	var sim = CatalogSim.new()
+	sim.grant("wood", 100); sim.grant("stone", 50)
+	var ic = InputCtl.InputController.new()
+	CatalogVerbs.install(ic, sim)
+	ok(ic.has(&"cat_build") and ic.has(&"cat_research") and ic.has(&"cat_craft"), "catalog verbs installed on the router")
+	ic.dispatch(&"cat_build", {"id": "workbench"}, null)
+	ok(sim.has_building("workbench"), "dispatch cat_build -> station placed (intent -> router -> sim, R9)")
+	ic.dispatch(&"cat_research", {"id": "carpentry"}, null)
+	ok(String(sim.research.active) == "carpentry", "dispatch cat_research -> project started")
+	for i in 4:
+		sim.tick(1.0)
+	ic.dispatch(&"cat_craft", {"id": "make_planks", "mode": "count", "target": 2}, null)
+	for i in 6:
+		sim.tick(1.0)
+	ok(sim.amount("planks") >= 4, "dispatch cat_craft -> the recipe runs and yields stock (%d planks)" % sim.amount("planks"))
+	sim.dispose()   # break the placed Thing<->Comp cycles so the suite exits leak-free
+
+# ---------------- TechPanel intent: panel action -> router -> sim (the full interactive path) ----------------
+func _t_tech_intent() -> void:
+	var sim = CatalogSim.new()
+	var ic = InputCtl.InputController.new()
+	CatalogVerbs.install(ic, sim)
+	var cat: Dictionary = CatalogView.snapshot(sim.db, sim.view_state())
+	var panel = CatalogPanels.TechPanel.new()
+	panel.bind({"catalog": cat})
+	panel.intent.connect(func(v, a): ic.dispatch(v, a, null))   # HudRoot/InputController wiring
+	panel.act_next_research()                                    # simulates the "research next" affordance
+	ok(String(sim.research.active) != "", "panel action -> intent -> router -> sim starts research (%s)" % String(sim.research.active))
+	panel.free()
+	sim.dispose()
+
+# ---------------- ActionBrowser: clickable build/craft/research slots -> intent -> router -> sim ----------------
+func _t_action_browsers() -> void:
+	var sim = CatalogSim.new()
+	sim.grant("wood", 100); sim.grant("stone", 50)
+	var ic = InputCtl.InputController.new()
+	CatalogVerbs.install(ic, sim)
+	var cat: Dictionary = CatalogView.snapshot(sim.db, sim.view_state())
+	ok((cat.build_actions as Array).size() > 0, "catalog build_actions non-empty (buildable-now rows, %d)" % (cat.build_actions as Array).size())
+	ok((cat.craft_actions as Array).size() == 0, "craft_actions empty until a station is placed")
+	ok((cat.research_actions as Array).size() >= 5, "research_actions lists the startable tier-1 projects (%d)" % (cat.research_actions as Array).size())
+	var bb = CatalogPanels.BuildBrowser.new()
+	bb.bind({"catalog": cat})
+	var n0: int = bb.get_child(0).get_child_count()   # header + 12 slot pool
+	bb.bind({"catalog": cat})
+	ok(bb.rebuild_count == 1 and bb.rebind_count == 2, "BuildBrowser builds once, binds each frame (R2)")
+	ok(bb._slots.size() == 12 and bb.panel_id == &"build_browser" and bb.dock == 0, "BuildBrowser: fixed 12-slot pool, LEFT dock")
+	ok(bb.get_child(0).get_child_count() == n0, "child count stable across rebind (R2)")
+	# full interactive loop: a slot press bubbles an intent through the router into the sim
+	bb.intent.connect(func(v, a): ic.dispatch(v, a, null))
+	var slot0 = bb._slots[0]
+	ok(slot0.item_id != &"", "first build slot bound to a real building id (%s)" % String(slot0.item_id))
+	slot0.chosen.emit(slot0.item_id)   # simulate the click
+	ok(sim.has_building(slot0.item_id), "click a build slot -> intent -> router -> catalog_sim places it")
+	# HudModel snapshot carries the actionable slices too (shared sim -> browsers -> router coherent)
+	var sess = _fake_session()
+	var full := HudModel.snapshot(sess, {"buildings": [], "stock": sess.sim.stock, "items": []}, {"day": 5}, Balance.Balance.new())
+	ok(full.catalog.has("build_actions") and full.catalog.has("research_actions"), "HudModel catalog slice carries the actionable rows")
+	bb.free()
+	sim.dispose()   # the clicked-in station is a Thing<->Comp cycle until detached
+
+# ---------------- BOM guidance: the planner wired into the browser slots (spec 0008 phase 1) ----------------
+func _t_bom_tips() -> void:
+	var db = CatalogView.default_db()
+	# a thin stock affords almost nothing, so unlocked buildings surface as dimmed near-miss rows
+	var snap: Dictionary = CatalogView.snapshot(db, {"unlocked": {}, "stock": {"wood": 3}})
+	var builds: Array = snap.build_actions
+	ok(builds.size() > 0, "build_actions surfaced with a thin stock (near-miss rows included, %d)" % builds.size())
+	var all_tipped := true
+	for r in builds:
+		if not (r.has("tip") and r.has("enabled")) or String(r.tip) == "":
+			all_tipped = false
+	ok(all_tipped, "every build row carries a non-empty BOM tip + enabled flag (R8 value-data)")
+	ok(_all_value_data(snap), "BOM-tipped slices are still pure value data (R8)")
+	var near_found := false
+	for r in builds:
+		if not bool(r.enabled) and String(r.tip).begins_with("Потрібно ще:"):
+			near_found = true
+	ok(near_found, "an unaffordable building shows as a disabled 'Потрібно ще: …' near-miss row")
+	# raw budget rolls a crafted input all the way down to raw resources (planner consumed)
+	var bill := CatalogView.raw_bill_str(db, {"components": 1})
+	ok(bill != "", "raw_bill_str expands a crafted input to a raw budget (%s)" % bill)
+	# research rows advertise what they unlock
+	var ra: Array = snap.research_actions
+	ok(ra.size() > 0 and String(ra[0].tip).begins_with("Відкриє:"), "research rows tip names what the project unlocks")
+
 # ---------------- PanelRegistry == SystemRegistry (sort/get/by_dock/bind_visible) ----------------
 func _t_panel_registry() -> void:
 	var reg = PanelReg.PanelRegistry.new()
@@ -319,6 +479,36 @@ func _t_overlay_registry() -> void:
 	ok(oreg.active_and_markers().size() == 0, "toggle temp again -> nothing active (radio off)")
 	ok(oreg.legend_for_active().size() == 0, "no legend rows when no overlay active")
 
+# ---------------- §3 hotkey contract: no panel may grab a LOCKED overlay key ----------------
+# design-system §3 fixes the overlay keys (R/T/L/P/G/Z/F/K — "do not reassign"); a panel that grabs one
+# steals a spatial toggle the player already learned (ResearchBrowser once sat on R). KEY_M is exempt:
+# the LogisticsPanel is the current surface of the §3 "logistics map (modal)" slot until the modal
+# exists. AGENTS.md states the rule; this tripwire enforces it (a rule without a tripwire is a wish).
+func _t_hotkey_contract() -> void:
+	var locked: Array = [KEY_R, KEY_T, KEY_L, KEY_P, KEY_G, KEY_Z, KEY_F, KEY_K]
+	var preg = PanelReg.PanelRegistry.new()
+	var oreg = OverlayReg.OverlayRegistry.new()
+	Mechanics.register_all(preg, oreg)
+	var no_locked := true
+	var no_dupes := true
+	var seen: Dictionary = {}
+	for o in oreg.overlays:
+		if o.hotkey != 0:
+			seen[o.hotkey] = String(o.overlay_id)
+	for p in preg.panels:
+		if p.hotkey in locked:
+			no_locked = false
+			print("      panel '%s' grabs LOCKED §3 overlay key" % p.panel_id)
+		if p.hotkey != 0:
+			if seen.has(p.hotkey):
+				no_dupes = false
+				print("      hotkey clash: panel '%s' vs '%s'" % [p.panel_id, seen[p.hotkey]])
+			seen[p.hotkey] = String(p.panel_id)
+	ok(no_locked, "no registered panel sits on a LOCKED §3 overlay key (R/T/L/P/G/Z/F/K)")
+	ok(no_dupes, "every registered hotkey is claimed exactly once across panels+overlays")
+	for p in preg.panels:
+		p.free()
+
 # ---------------- FeedbackBus subscribers disconnect on free (R8 / §2.7 cycle-leak guard) ----------------
 func _t_bus_no_dangling() -> void:
 	var bus = FeedbackBus.FeedbackBus.new()
@@ -329,11 +519,36 @@ func _t_bus_no_dangling() -> void:
 	fw.free(); bw.free(); flw.free()
 	ok(bus.feed.get_connections().size() == 0 and bus.banner.get_connections().size() == 0 and bus.flash.get_connections().size() == 0, "freeing subscribers leaves zero dangling connections (R8)")
 
+# ---------------- WorldInput: the click/key grammar as a PURE function (main.gd parity, R12) ----------------
+func _t_world_input_grammar() -> void:
+	var WI := WorldInput.WorldInput
+	# armed build wins over everything under the cursor
+	var d: Dictionary = WI.decide_click([{"px": 5.1, "py": 5.1}], {0: {}}, 8, "wall", Vector2i(5, 5), 5.1, 5.1)
+	ok(StringName(d.verb) == &"build" and String(d.args.kind) == "wall" and int(d.args.x) == 5, "armed build wins the click")
+	# a raider within 0.7 tiles of the cursor -> attack, and the target is the raider dict itself
+	var e := {"px": 3.2, "py": 3.2}
+	d = WI.decide_click([e], {}, 8, "", Vector2i(3, 3), 3.0, 3.0)
+	ok(StringName(d.verb) == &"order_attack" and d.args.target == e, "raider near the cursor -> attack")
+	# a resource node under the cursor -> gather (tile index i = y*n + x)
+	d = WI.decide_click([], {2 * 8 + 4: {"kind": "tree"}}, 8, "", Vector2i(4, 2), 4.5, 2.5)
+	ok(StringName(d.verb) == &"order_gather" and int(d.args.y) == 2, "node under the cursor -> gather")
+	# empty tile -> walk
+	d = WI.decide_click([], {}, 8, "", Vector2i(6, 6), 6.5, 6.5)
+	ok(StringName(d.verb) == &"order_move" and int(d.args.x) == 6, "empty tile -> move")
+	# a distant raider must NOT hijack the walk
+	d = WI.decide_click([{"px": 1.0, "py": 1.0}], {}, 8, "", Vector2i(6, 6), 6.5, 6.5)
+	ok(StringName(d.verb) == &"order_move", "distant raider does not intercept the walk")
+	# digit keys map to build-bar slots 1..9,0 (R12 keyboard-first)
+	ok(WI.build_slot_for_key(KEY_1) == 0 and WI.build_slot_for_key(KEY_9) == 8
+		and WI.build_slot_for_key(KEY_0) == 9 and WI.build_slot_for_key(KEY_SPACE) == -1,
+		"digit keys map to build-bar slots (1..9,0)")
+
 # ---------------- Rule tripwires: R1/R3/R4/R7/R9/R10 as literal grep tests (the spec's whole point) ----------------
 func _t_rule_tripwires() -> void:
 	# R1 — one-way flow: no sim/kernel/session/social/persistence file references res://scripts/ui
 	var sim_side := ["res://scripts/sim.gd", "res://scripts/session.gd", "res://scripts/social.gd",
-		"res://scripts/persistence.gd", "res://scripts/world_gen.gd", "res://scripts/kernel/balance.gd"]
+		"res://scripts/persistence.gd", "res://scripts/world_gen.gd", "res://scripts/kernel/balance.gd",
+		"res://scripts/catalog_sim.gd", "res://scripts/data_bridge.gd"]
 	var r1 := true
 	for f in sim_side:
 		if "res://scripts/ui" in _read_code(f):
@@ -341,7 +556,8 @@ func _t_rule_tripwires() -> void:
 	ok(r1, "R1: sim/kernel/session/social/persistence never reference res://scripts/ui")
 	# R3 — no raw color/stylebox under ui/ except tokens.gd + theme.gd
 	var ui_files := ["widgets.gd", "panels.gd", "overlays.gd", "hud_model.gd", "hud_root.gd",
-		"panel.gd", "widget.gd", "overlay.gd", "feedback_bus.gd", "format.gd", "view_geom.gd"]
+		"panel.gd", "widget.gd", "overlay.gd", "feedback_bus.gd", "format.gd", "view_geom.gd",
+		"catalog_view.gd", "catalog_panels.gd", "world_input.gd", "lifecycle.gd", "world_panels.gd"]
 	var r3 := true
 	for f in ui_files:
 		var body := _read_code("res://scripts/ui/" + f)   # comment-stripped: doc comments may mention them
@@ -359,7 +575,7 @@ func _t_rule_tripwires() -> void:
 	ok(r4, "R4: hud_root.gd contains no mechanic name (registered, not hand-wired)")
 	# R7 — resize-safe anchoring only via pin_* (no raw .position/PRESET_TOP_RIGHT in panels/widgets/overlays)
 	var r7 := true
-	for f in ["panels.gd", "widgets.gd", "overlays.gd"]:
+	for f in ["panels.gd", "widgets.gd", "overlays.gd", "catalog_panels.gd", "lifecycle.gd", "world_panels.gd"]:
 		var body := _read_code("res://scripts/ui/" + f)
 		if ".position =" in body or "PRESET_TOP_RIGHT" in body:
 			r7 = false
@@ -368,17 +584,23 @@ func _t_rule_tripwires() -> void:
 	var cmds := ["try_build", "demolish", "craft_item", "dispatch_convoy", "try_launch_capsule",
 		"order_move", "order_gather", "order_attack", "accept_invite"]
 	var r9 := true
-	for f in ["panels.gd", "widgets.gd"]:
+	for f in ["panels.gd", "widgets.gd", "catalog_panels.gd", "lifecycle.gd", "world_panels.gd"]:
 		var body := _read_code("res://scripts/ui/" + f)
 		for cmd in cmds:
 			if cmd in body:
 				r9 = false
 	ok(r9, "R9: panels/widgets call no sim mutator (only the InputController does)")
+	# R9-addendum — world_input.gd легітимно НАЗИВАЄ verb-и (order_move...), тож у списку вище його
+	# нема; але прямі сим-поля йому заборонені: єдиний санкціонований канал — sim.move_input.
+	# Ловимо ".player." (наказ пішки колись писався тут напряму) і сирі доступи до складу.
+	var wi := _read_code("res://scripts/ui/world_input.gd")
+	ok(not (".player." in wi) and not (".stock" in wi),
+		"R9: world_input touches no sim fields beyond the move_input channel")
 	# R10 — only feedback_bus.gd drains the sim push channels. Target sim-field reads precisely:
 	# .flash_msg/.flash_t/.messages are sim-only names; use "sim.banner" (not ".banner") since the
 	# FeedbackBus SIGNAL is also named `banner` and BannerWidget legitimately subscribes to bus.banner.
 	var r10 := true
-	for f in ["widgets.gd", "panels.gd", "hud_model.gd", "hud_root.gd", "overlays.gd"]:
+	for f in ["widgets.gd", "panels.gd", "hud_model.gd", "hud_root.gd", "overlays.gd", "catalog_view.gd", "catalog_panels.gd", "world_input.gd", "lifecycle.gd", "world_panels.gd"]:
 		var body := _read_code("res://scripts/ui/" + f)
 		if ".messages" in body or "sim.banner" in body or ".flash_msg" in body or ".flash_t" in body:
 			r10 = false

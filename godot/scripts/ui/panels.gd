@@ -8,13 +8,14 @@ extends RefCounted
 const PanelBase = preload("res://scripts/ui/panel.gd")
 const Widgets = preload("res://scripts/ui/widgets.gd")
 const GameData = preload("res://scripts/data.gd")
+const Tokens = preload("res://scripts/ui/tokens.gd")
 
 # ---- StockPanel (RIGHT dock) — THE PROOF SLICE: Snapshot -> Panel -> Widget -> Tokens end to end ----
 class StockPanel extends PanelBase.Base:
 	var _rows: Dictionary = {}     # res id -> StatRow
 	var _total: Widgets.StatRow
 	func _init() -> void:
-		panel_id = &"stock"; dock = PanelBase.DOCK_RIGHT; priority = 10
+		panel_id = &"stock"; dock = PanelBase.DOCK_RIGHT; priority = 10; default_open = true
 	func _build() -> void:
 		rebuild_count += 1
 		var vb := VBoxContainer.new()
@@ -44,7 +45,7 @@ class VitalsPanel extends PanelBase.Base:
 	var _bars: Array = []          # NeedBar instances, in bar order
 	var _carry: Widgets.StatRow
 	func _init() -> void:
-		panel_id = &"vitals"; dock = PanelBase.DOCK_LEFT; priority = 10
+		panel_id = &"vitals"; dock = PanelBase.DOCK_LEFT; priority = 10; default_open = true
 	func _build() -> void:
 		rebuild_count += 1
 		var vb := VBoxContainer.new()
@@ -77,7 +78,7 @@ class BalancePanel extends PanelBase.Base:
 	var _wealth: Widgets.StatRow
 	var _hint: Widgets.StatRow
 	func _init() -> void:
-		panel_id = &"balance"; dock = PanelBase.DOCK_RIGHT; priority = 20
+		panel_id = &"balance"; dock = PanelBase.DOCK_RIGHT; priority = 20; default_open = true
 	func _build() -> void:
 		rebuild_count += 1
 		var vb := VBoxContainer.new()
@@ -140,7 +141,7 @@ class ResearchPanel extends PanelBase.Base:
 	var _rows: Array = []      # ChoiceRow pool (researchable options), built ONCE (R2)
 	var _qrows: Array = []     # StatRow pool (the queue)
 	func _init() -> void:
-		panel_id = &"research"; dock = PanelBase.DOCK_LEFT; priority = 20
+		panel_id = &"research"; dock = PanelBase.DOCK_LEFT; priority = 20; default_open = true
 	func _build() -> void:
 		rebuild_count += 1
 		var vb := VBoxContainer.new()
@@ -219,3 +220,118 @@ class ResearchPanel extends PanelBase.Base:
 				_qrows[i].visible = true
 			else:
 				_qrows[i].visible = false
+
+# ---- BuildBarPanel (BAR dock) — the placement bar (main.gd parity): one toggle Button per buildable.
+# A FIXED pool sized from GameData.BUILD_ORDER at _build time (R2); bind() only re-texts/re-modulates. ----
+class BuildBarPanel extends PanelBase.Base:
+	var _btns: Array = []      # fixed Button pool, one per GameData.BUILD_ORDER entry (R2)
+	var _keys: Array = []      # current build kind per button, refreshed in bind()
+	func _init() -> void:
+		panel_id = &"build_bar"; dock = PanelBase.DOCK_BAR; priority = 10; default_open = true
+	func _build() -> void:
+		rebuild_count += 1
+		var hb := HBoxContainer.new()
+		hb.add_theme_constant_override("separation", 4)
+		add_child(hb)
+		for i in GameData.BUILD_ORDER.size():
+			var btn := Button.new()
+			btn.toggle_mode = true
+			btn.add_theme_font_size_override("font_size", 12)
+			btn.pressed.connect(_on_slot.bind(i))
+			hb.add_child(btn)
+			_btns.append(btn)
+			_keys.append("")
+	# LOCAL radio: arming slot i visually un-presses the rest; clicking the armed slot again disarms.
+	# Either way the SAME intent fires — the router toggles view.selected_build (the actual truth).
+	# NOTE: the pressed look is purely local, so digits 1..0 armed via the keyboard router won't sync
+	# the bar's visuals — acceptable for now.
+	func _on_slot(i: int) -> void:
+		if _btns[i].button_pressed:
+			for j in _btns.size():
+				if j != i:
+					_btns[j].button_pressed = false
+		emit_intent(&"select_build", {"kind": String(_keys[i])})
+	func bind(vm) -> void:
+		rebind_count += 1
+		build_once()
+		if not (vm is Dictionary) or not vm.has("build"):
+			return
+		var slots: Array = vm.build.slots
+		for i in _btns.size():
+			if i < slots.size():
+				var s: Dictionary = slots[i]
+				_keys[i] = String(s.get("key", ""))
+				var locked := bool(s.get("locked", false))
+				var name := ("🔒 " + String(s.get("name", ""))) if locked else String(s.get("name", ""))
+				_btns[i].text = "%s %s\n%s" % [String(s.get("hotkey", "")), name, String(s.get("cost", ""))]
+				_btns[i].disabled = locked   # замок дерева досліджень: слот видно (ціль!), тиснути — ні
+				_btns[i].modulate = Tokens.WHITE if (bool(s.get("afford", false)) and not locked) else Tokens.DIMMED
+				_btns[i].visible = true
+			else:
+				_btns[i].visible = false
+
+# ---- GearPanel (LEFT dock) — craft + equip loadout (spec 0001 parity): one FIXED row per
+# GameData.ITEM_ORDER entry (R2), each row = status Label + "⚒" craft + "✋" equip buttons.
+# Buttons emit intents only (R9); afford/owned state is icon+disable, never color alone (R11). ----
+class GearPanel extends PanelBase.Base:
+	var _rowboxes: Array = []  # fixed HBoxContainer pool, one per GameData.ITEM_ORDER entry (R2)
+	var _labels: Array = []
+	var _crafts: Array = []
+	var _equips: Array = []
+	var _ids: Array = []       # current item id per row, refreshed in bind()
+	func _init() -> void:
+		panel_id = &"gear"; dock = PanelBase.DOCK_LEFT; priority = 80; hotkey = KEY_I; default_open = false
+	func _build() -> void:
+		rebuild_count += 1
+		var vb := VBoxContainer.new()
+		vb.add_theme_constant_override("separation", 5)
+		add_child(vb)
+		var head := Widgets.H2Header.new()
+		vb.add_child(head); head.set_header("Спорядження", "gear")
+		for i in GameData.ITEM_ORDER.size():
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 4)
+			vb.add_child(row)
+			var lbl := Label.new()
+			lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			lbl.add_theme_font_size_override("font_size", 12)
+			lbl.clip_text = true
+			row.add_child(lbl)
+			var cb := Button.new()
+			cb.text = "⚒"
+			cb.pressed.connect(_on_craft.bind(i))
+			row.add_child(cb)
+			var eb := Button.new()
+			eb.text = "✋"
+			eb.pressed.connect(_on_equip.bind(i))
+			row.add_child(eb)
+			_rowboxes.append(row); _labels.append(lbl); _crafts.append(cb); _equips.append(eb)
+			_ids.append("")
+	func _on_craft(i: int) -> void:
+		emit_intent(&"craft", {"id": String(_ids[i])})   # panel emits intent; router calls sim (R9)
+	func _on_equip(i: int) -> void:
+		emit_intent(&"equip", {"id": String(_ids[i])})
+	func bind(vm) -> void:
+		rebind_count += 1
+		build_once()
+		if not (vm is Dictionary) or not vm.has("gear"):
+			return
+		var rows: Array = vm.gear.rows
+		for i in _rowboxes.size():
+			if i >= rows.size():
+				_rowboxes[i].visible = false
+				continue
+			_rowboxes[i].visible = true
+			var rw: Dictionary = rows[i]
+			_ids[i] = String(rw.get("id", ""))
+			var locked := bool(rw.get("locked", false))
+			var txt := "%s%s  %s" % ["🔒 " if locked else "", String(rw.get("name", "")), String(rw.get("cost", ""))]
+			if bool(rw.get("equipped", false)):
+				txt += " · ✔ вдягнуто"
+			elif bool(rw.get("owned", false)):
+				txt += " · є"
+			_labels[i].text = txt
+			var afford := bool(rw.get("affordable", false)) and not locked
+			_crafts[i].disabled = not afford
+			_crafts[i].modulate = Tokens.WHITE if afford else Tokens.DIMMED
+			_equips[i].disabled = not bool(rw.get("owned", false))
