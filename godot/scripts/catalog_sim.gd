@@ -18,7 +18,7 @@ const CatalogSim = preload("res://scripts/catalog_sim.gd")   # self-alias for th
 # A process-shared instance so the HUD (read: catalog_view slice) and the router (write: catalog_verbs)
 # operate the SAME forward-engine model — browse an action, click it, watch the state move. Built once
 # with a neolithic starter stock. The live data.gd sim is untouched; this is a parallel catalogue model.
-static var _shared = null
+static var _shared: Variant = null
 static func shared(p_db = null):
 	if _shared == null:
 		_shared = CatalogSim.new(p_db)
@@ -30,13 +30,13 @@ func _grant_starter() -> void:
 			["iron_ore", 40], ["copper_ore", 30], ["plant_fiber", 30], ["herbal", 20]]:
 		grant(pair[0], int(pair[1]))
 
-var db                              # Defs.DefDatabase (the catalogue)
+var db: Defs.DefDatabase            # the catalogue
 var stock: Dictionary = {}          # res id (String) -> amount
-var research                        # Production.ResearchState
+var research: Production.ResearchState
 var things: Array = []              # placed building Things (stations carry a CompWorkbench)
 var spawn: Array = []               # crafted Things (meals) drained by a host; bulk output goes to stock
 var maker_level: float = 4.0        # competence stamped on crafted output quality
-var _prod                           # Production.ProductionSystem
+var _prod: Production.ProductionSystem
 var _rng: RandomNumberGenerator
 
 func _init(p_db = null, p_seed: int = 0) -> void:
@@ -78,12 +78,12 @@ func researched(id) -> bool:
 
 # ---- build ---------------------------------------------------------------------------------------
 func _building(id):
-	var b = db.get_def(StringName(str(id)))
+	var b: Variant = db.get_def(StringName(str(id)))
 	return b if b is Catalog.BuildingDef else null
 
 # Can the player place this building right now (research unlocked + cost affordable)?
 func can_build(id) -> bool:
-	var b = _building(id)
+	var b: Variant = _building(id)
 	if b == null:
 		return false
 	return _gate(b.research()) and _afford(b.cost())
@@ -91,7 +91,7 @@ func can_build(id) -> bool:
 # Place a building. Pays its cost; a station building gains a CompWorkbench so recipes can queue on it.
 # Returns {ok, reason?, id?}.
 func build(id) -> Dictionary:
-	var b = _building(id)
+	var b: Variant = _building(id)
 	if b == null:
 		return {"ok": false, "reason": "unknown"}
 	if not _gate(b.research()):
@@ -99,8 +99,8 @@ func build(id) -> Dictionary:
 	if not _afford(b.cost()):
 		return {"ok": false, "reason": "cost"}
 	_pay(b.cost())
-	var def = Defs.Def.new(&"building", b.id, {"max_hp": b.hp()})
-	var t = Things.Thing.new(def)
+	var def := Defs.Def.new(&"building", b.id, {"max_hp": b.hp()})
+	var t := Things.Thing.new(def)
 	t.flags["building"] = b.id
 	if b.is_station():
 		t.add_comp(Production.CompWorkbench.new({"maker_level": maker_level}))
@@ -116,7 +116,7 @@ func has_building(id) -> bool:
 # ---- craft ---------------------------------------------------------------------------------------
 # The placed station Thing a recipe runs at (matches recipe.station + carries a workbench), or null.
 func _station_for(recipe_id):
-	var rc = db.get_def(StringName(str(recipe_id)))
+	var rc: Variant = db.get_def(StringName(str(recipe_id)))
 	if rc == null:
 		return null
 	var st := StringName(str(rc.data.get("station", "")))
@@ -128,10 +128,10 @@ func _station_for(recipe_id):
 # Queue a production order for a recipe on its station. mode &"count" makes `target`, &"until" holds
 # `target` in stock. Fails if no matching station is placed. tick() then works the bill.
 func queue_craft(recipe_id, mode: StringName = &"count", target: int = 1) -> Dictionary:
-	var t = _station_for(recipe_id)
+	var t: Variant = _station_for(recipe_id)
 	if t == null:
 		return {"ok": false, "reason": "no station"}
-	var wb = t.get_comp(Production.CompWorkbench)
+	var wb: Production.CompWorkbench = t.get_comp(Production.CompWorkbench)
 	wb.add_bill(Production.Bill.new(StringName(str(recipe_id)), mode, target))
 	return {"ok": true}
 
@@ -145,6 +145,35 @@ func tick(dday: float) -> void:
 	if research.active != &"":
 		research.advance(dday)
 	_prod.system_tick(world(), {"dday": dday})
+	_sweep_destroyed()
+
+# Destroyed Things (rotten meals, wrecked stations) must LEAVE the arrays: every comp holds a strong
+# back-reference to its Thing and RefCounted cannot collect the cycle (AGENTS.md gotcha), so pruning
+# goes through Thing.detach(). Without this the arrays only ever grow for the life of the process.
+func _sweep_destroyed() -> void:
+	for k in range(things.size() - 1, -1, -1):
+		if things[k].destroyed:
+			things[k].detach()
+			things.remove_at(k)
+	for k in range(spawn.size() - 1, -1, -1):
+		if spawn[k].destroyed:
+			spawn[k].detach()
+			spawn.remove_at(k)
+
+# Break every Thing<->Comp cycle this model owns. Call when a host drops the model; the process-shared
+# instance is released via dispose_shared() (test suites call it so the exit leak check stays clean).
+func dispose() -> void:
+	for t in things:
+		t.detach()
+	things.clear()
+	for t in spawn:
+		t.detach()
+	spawn.clear()
+
+static func dispose_shared() -> void:
+	if _shared != null:
+		_shared.dispose()
+		_shared = null
 
 # The set of placed station building ids (a recipe is craftable only where its station stands).
 func placed_stations() -> Dictionary:

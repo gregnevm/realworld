@@ -7,9 +7,9 @@
 extends Node2D
 
 const ViewGeom = preload("res://scripts/ui/view_geom.gd")
-const TILE := 28
+const TILE := ViewGeom.TILE
 
-var oreg                          # OverlayRegistry
+var oreg: Variant                 # OverlayRegistry
 var snap: Dictionary = {}         # latest HudModel snapshot (env/clock the overlays read; R12)
 var map_n: int = 56               # live region size — set from sim.n so overlay cull matches the tilemap
                                   # (world_view.gd culls from sim.n; a hardcoded 56 would drift when n != 56)

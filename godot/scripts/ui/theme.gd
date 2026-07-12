@@ -17,7 +17,13 @@ const V_BAR     := &"RwBar"        # need-bar track / raised chip
 const V_MONO    := &"MonoValue"    # right-aligned numeric Label
 
 static func build() -> Theme:
+	install_emoji_fallback()
 	var t := Theme.new()
+
+	# The emoji-chained variation must sit on the THEME's default_font: ThemeDB.fallback_font alone is
+	# only the engine's last resort, and the built-in default theme already carries a font, so Label
+	# lookups never reach it (desktop hid this by pulling system emoji fonts; web has none -> hex boxes).
+	t.default_font = ThemeDB.fallback_font
 
 	# Dock panel surface (replaces _sb_bar).
 	t.set_type_variation(V_PANEL, &"PanelContainer")
@@ -46,6 +52,38 @@ static func build() -> Theme:
 	t.set_stylebox("pressed", "Button", _sb(Tokens.PANEL, Tokens.AMBER, 6, 6))
 	t.set_stylebox("focus", "Button", _sb_outline(Tokens.AMBER, 6))
 	return t
+
+# Web builds have no system emoji font (desktop silently falls back to Segoe/Apple emoji; the web
+# canvas cannot), so every icon glyph used to render as a box. Bundle monochrome NotoEmoji (OFL,
+# assets/fonts/) and chain it behind the built-in default via ThemeDB.fallback_font — lives HERE
+# because fonts are theme concern (R3). load_dynamic_font() reads the .ttf bytes directly, so
+# headless test runs never touch the importer; the raw .ttf ships in the PCK via include_filter.
+# Exported builds ship the ttf as an IMPORTED resource behind a path remap (FileAccess can't see it,
+# ResourceLoader can); fresh checkouts / headless test runs have only the raw file (no import cache,
+# so ResourceLoader can't see it but FileAccess can). Try both — each environment satisfies one.
+static func _load_emoji_font() -> Font:
+	var path := "res://assets/fonts/NotoEmoji-Regular.ttf"
+	if ResourceLoader.exists(path):
+		var res: Variant = load(path)
+		if res is Font:
+			return res
+	if FileAccess.file_exists(path):
+		var ff := FontFile.new()
+		if ff.load_dynamic_font(path) == OK:
+			return ff
+	return null
+
+static func install_emoji_fallback() -> void:
+	var base: Font = ThemeDB.fallback_font
+	if base is FontVariation:
+		return   # already installed (scene reload / respawn re-enters _ready)
+	var emoji: Font = _load_emoji_font()
+	if emoji == null:
+		return
+	var f := FontVariation.new()
+	f.base_font = base
+	f.fallbacks = [emoji]
+	ThemeDB.fallback_font = f
 
 # StyleBoxFlat factory (allowed in this file per R3).
 static func _sb(bg: Color, border: Color, radius: int, pad: int) -> StyleBoxFlat:

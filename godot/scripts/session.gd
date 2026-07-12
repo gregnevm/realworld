@@ -16,7 +16,7 @@ const GameData = preload("res://scripts/data.gd")
 const MAP_N := 56
 const STORE_PATH := "user://world.json"
 
-var sim
+var sim: Variant = null   # Sim (scripts/sim.gd); Variant, бо тести підставляють легкі фейки
 var store: Dictionary = {}
 var social: Dictionary = {}
 var home := {"lat": 0.0, "lon": 0.0, "name": ""}
@@ -25,7 +25,7 @@ var autosave := true   # tests disable disk writes
 
 # The tech pipeline (kernel/progression.gd). Account-global: it survives region travel + respawn
 # (never reset in travel_to/respawn), like the day clock. Research-points accrue from research benches.
-var progression
+var progression: Variant = null   # kernel/progression.gd; створюється лише в start()
 var auto_research := true   # idle research benches auto-pick the cheapest available project (queue wins)
 
 func start(lat: float, lon: float, place_name: String) -> void:
@@ -99,6 +99,8 @@ func research_rate() -> float:
 func tick_research(dt: float) -> void:
 	if sim == null or progression == null or sim.dead:
 		return
+	# міст ворітних станів: сим бачить відкриті дослідження як value-мапу (гейти try_build/craft_item)
+	sim.research_unlocked = progression.research.unlocked
 	var rate := research_rate()
 	if rate <= 0.0:
 		return

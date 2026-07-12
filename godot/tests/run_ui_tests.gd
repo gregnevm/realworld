@@ -26,6 +26,8 @@ const Balance = preload("res://scripts/kernel/balance.gd")
 const GameData = preload("res://scripts/data.gd")
 const Progression = preload("res://scripts/kernel/progression.gd")
 const Catalog = preload("res://scripts/kernel/catalog.gd")
+const WorldInput = preload("res://scripts/ui/world_input.gd")
+const Mechanics = preload("res://scripts/ui/mechanics.gd")
 
 var passed := 0
 var failed := 0
@@ -53,8 +55,13 @@ func _init() -> void:
 	_t_bom_tips()
 	_t_panel_registry()
 	_t_overlay_registry()
+	_t_hotkey_contract()
 	_t_bus_no_dangling()
+	_t_world_input_grammar()
 	_t_rule_tripwires()
+	# release the process-shared forward-engine model: its placed Things carry comp back-references
+	# (RefCounted cycles) that would otherwise show up as ObjectDB leaks at exit
+	CatalogSim.dispose_shared()
 	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
 	quit(1 if failed > 0 else 0)
 
@@ -368,6 +375,7 @@ func _t_catalog_verbs() -> void:
 	for i in 6:
 		sim.tick(1.0)
 	ok(sim.amount("planks") >= 4, "dispatch cat_craft -> the recipe runs and yields stock (%d planks)" % sim.amount("planks"))
+	sim.dispose()   # break the placed Thing<->Comp cycles so the suite exits leak-free
 
 # ---------------- TechPanel intent: panel action -> router -> sim (the full interactive path) ----------------
 func _t_tech_intent() -> void:
@@ -381,6 +389,7 @@ func _t_tech_intent() -> void:
 	panel.act_next_research()                                    # simulates the "research next" affordance
 	ok(String(sim.research.active) != "", "panel action -> intent -> router -> sim starts research (%s)" % String(sim.research.active))
 	panel.free()
+	sim.dispose()
 
 # ---------------- ActionBrowser: clickable build/craft/research slots -> intent -> router -> sim ----------------
 func _t_action_browsers() -> void:
@@ -410,6 +419,7 @@ func _t_action_browsers() -> void:
 	var full := HudModel.snapshot(sess, {"buildings": [], "stock": sess.sim.stock, "items": []}, {"day": 5}, Balance.Balance.new())
 	ok(full.catalog.has("build_actions") and full.catalog.has("research_actions"), "HudModel catalog slice carries the actionable rows")
 	bb.free()
+	sim.dispose()   # the clicked-in station is a Thing<->Comp cycle until detached
 
 # ---------------- BOM guidance: the planner wired into the browser slots (spec 0008 phase 1) ----------------
 func _t_bom_tips() -> void:
@@ -469,6 +479,36 @@ func _t_overlay_registry() -> void:
 	ok(oreg.active_and_markers().size() == 0, "toggle temp again -> nothing active (radio off)")
 	ok(oreg.legend_for_active().size() == 0, "no legend rows when no overlay active")
 
+# ---------------- §3 hotkey contract: no panel may grab a LOCKED overlay key ----------------
+# design-system §3 fixes the overlay keys (R/T/L/P/G/Z/F/K — "do not reassign"); a panel that grabs one
+# steals a spatial toggle the player already learned (ResearchBrowser once sat on R). KEY_M is exempt:
+# the LogisticsPanel is the current surface of the §3 "logistics map (modal)" slot until the modal
+# exists. AGENTS.md states the rule; this tripwire enforces it (a rule without a tripwire is a wish).
+func _t_hotkey_contract() -> void:
+	var locked: Array = [KEY_R, KEY_T, KEY_L, KEY_P, KEY_G, KEY_Z, KEY_F, KEY_K]
+	var preg = PanelReg.PanelRegistry.new()
+	var oreg = OverlayReg.OverlayRegistry.new()
+	Mechanics.register_all(preg, oreg)
+	var no_locked := true
+	var no_dupes := true
+	var seen: Dictionary = {}
+	for o in oreg.overlays:
+		if o.hotkey != 0:
+			seen[o.hotkey] = String(o.overlay_id)
+	for p in preg.panels:
+		if p.hotkey in locked:
+			no_locked = false
+			print("      panel '%s' grabs LOCKED §3 overlay key" % p.panel_id)
+		if p.hotkey != 0:
+			if seen.has(p.hotkey):
+				no_dupes = false
+				print("      hotkey clash: panel '%s' vs '%s'" % [p.panel_id, seen[p.hotkey]])
+			seen[p.hotkey] = String(p.panel_id)
+	ok(no_locked, "no registered panel sits on a LOCKED §3 overlay key (R/T/L/P/G/Z/F/K)")
+	ok(no_dupes, "every registered hotkey is claimed exactly once across panels+overlays")
+	for p in preg.panels:
+		p.free()
+
 # ---------------- FeedbackBus subscribers disconnect on free (R8 / §2.7 cycle-leak guard) ----------------
 func _t_bus_no_dangling() -> void:
 	var bus = FeedbackBus.FeedbackBus.new()
@@ -478,6 +518,30 @@ func _t_bus_no_dangling() -> void:
 	ok(bus.feed.get_connections().size() == 1 and bus.banner.get_connections().size() == 1, "subscribers connect once")
 	fw.free(); bw.free(); flw.free()
 	ok(bus.feed.get_connections().size() == 0 and bus.banner.get_connections().size() == 0 and bus.flash.get_connections().size() == 0, "freeing subscribers leaves zero dangling connections (R8)")
+
+# ---------------- WorldInput: the click/key grammar as a PURE function (main.gd parity, R12) ----------------
+func _t_world_input_grammar() -> void:
+	var WI := WorldInput.WorldInput
+	# armed build wins over everything under the cursor
+	var d: Dictionary = WI.decide_click([{"px": 5.1, "py": 5.1}], {0: {}}, 8, "wall", Vector2i(5, 5), 5.1, 5.1)
+	ok(StringName(d.verb) == &"build" and String(d.args.kind) == "wall" and int(d.args.x) == 5, "armed build wins the click")
+	# a raider within 0.7 tiles of the cursor -> attack, and the target is the raider dict itself
+	var e := {"px": 3.2, "py": 3.2}
+	d = WI.decide_click([e], {}, 8, "", Vector2i(3, 3), 3.0, 3.0)
+	ok(StringName(d.verb) == &"order_attack" and d.args.target == e, "raider near the cursor -> attack")
+	# a resource node under the cursor -> gather (tile index i = y*n + x)
+	d = WI.decide_click([], {2 * 8 + 4: {"kind": "tree"}}, 8, "", Vector2i(4, 2), 4.5, 2.5)
+	ok(StringName(d.verb) == &"order_gather" and int(d.args.y) == 2, "node under the cursor -> gather")
+	# empty tile -> walk
+	d = WI.decide_click([], {}, 8, "", Vector2i(6, 6), 6.5, 6.5)
+	ok(StringName(d.verb) == &"order_move" and int(d.args.x) == 6, "empty tile -> move")
+	# a distant raider must NOT hijack the walk
+	d = WI.decide_click([{"px": 1.0, "py": 1.0}], {}, 8, "", Vector2i(6, 6), 6.5, 6.5)
+	ok(StringName(d.verb) == &"order_move", "distant raider does not intercept the walk")
+	# digit keys map to build-bar slots 1..9,0 (R12 keyboard-first)
+	ok(WI.build_slot_for_key(KEY_1) == 0 and WI.build_slot_for_key(KEY_9) == 8
+		and WI.build_slot_for_key(KEY_0) == 9 and WI.build_slot_for_key(KEY_SPACE) == -1,
+		"digit keys map to build-bar slots (1..9,0)")
 
 # ---------------- Rule tripwires: R1/R3/R4/R7/R9/R10 as literal grep tests (the spec's whole point) ----------------
 func _t_rule_tripwires() -> void:
@@ -493,7 +557,7 @@ func _t_rule_tripwires() -> void:
 	# R3 — no raw color/stylebox under ui/ except tokens.gd + theme.gd
 	var ui_files := ["widgets.gd", "panels.gd", "overlays.gd", "hud_model.gd", "hud_root.gd",
 		"panel.gd", "widget.gd", "overlay.gd", "feedback_bus.gd", "format.gd", "view_geom.gd",
-		"catalog_view.gd", "catalog_panels.gd"]
+		"catalog_view.gd", "catalog_panels.gd", "world_input.gd", "lifecycle.gd", "world_panels.gd"]
 	var r3 := true
 	for f in ui_files:
 		var body := _read_code("res://scripts/ui/" + f)   # comment-stripped: doc comments may mention them
@@ -511,7 +575,7 @@ func _t_rule_tripwires() -> void:
 	ok(r4, "R4: hud_root.gd contains no mechanic name (registered, not hand-wired)")
 	# R7 — resize-safe anchoring only via pin_* (no raw .position/PRESET_TOP_RIGHT in panels/widgets/overlays)
 	var r7 := true
-	for f in ["panels.gd", "widgets.gd", "overlays.gd", "catalog_panels.gd"]:
+	for f in ["panels.gd", "widgets.gd", "overlays.gd", "catalog_panels.gd", "lifecycle.gd", "world_panels.gd"]:
 		var body := _read_code("res://scripts/ui/" + f)
 		if ".position =" in body or "PRESET_TOP_RIGHT" in body:
 			r7 = false
@@ -520,17 +584,23 @@ func _t_rule_tripwires() -> void:
 	var cmds := ["try_build", "demolish", "craft_item", "dispatch_convoy", "try_launch_capsule",
 		"order_move", "order_gather", "order_attack", "accept_invite"]
 	var r9 := true
-	for f in ["panels.gd", "widgets.gd", "catalog_panels.gd"]:
+	for f in ["panels.gd", "widgets.gd", "catalog_panels.gd", "lifecycle.gd", "world_panels.gd"]:
 		var body := _read_code("res://scripts/ui/" + f)
 		for cmd in cmds:
 			if cmd in body:
 				r9 = false
 	ok(r9, "R9: panels/widgets call no sim mutator (only the InputController does)")
+	# R9-addendum — world_input.gd легітимно НАЗИВАЄ verb-и (order_move...), тож у списку вище його
+	# нема; але прямі сим-поля йому заборонені: єдиний санкціонований канал — sim.move_input.
+	# Ловимо ".player." (наказ пішки колись писався тут напряму) і сирі доступи до складу.
+	var wi := _read_code("res://scripts/ui/world_input.gd")
+	ok(not (".player." in wi) and not (".stock" in wi),
+		"R9: world_input touches no sim fields beyond the move_input channel")
 	# R10 — only feedback_bus.gd drains the sim push channels. Target sim-field reads precisely:
 	# .flash_msg/.flash_t/.messages are sim-only names; use "sim.banner" (not ".banner") since the
 	# FeedbackBus SIGNAL is also named `banner` and BannerWidget legitimately subscribes to bus.banner.
 	var r10 := true
-	for f in ["widgets.gd", "panels.gd", "hud_model.gd", "hud_root.gd", "overlays.gd", "catalog_view.gd", "catalog_panels.gd"]:
+	for f in ["widgets.gd", "panels.gd", "hud_model.gd", "hud_root.gd", "overlays.gd", "catalog_view.gd", "catalog_panels.gd", "world_input.gd", "lifecycle.gd", "world_panels.gd"]:
 		var body := _read_code("res://scripts/ui/" + f)
 		if ".messages" in body or "sim.banner" in body or ".flash_msg" in body or ".flash_t" in body:
 			r10 = false

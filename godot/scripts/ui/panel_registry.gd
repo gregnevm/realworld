@@ -29,7 +29,7 @@ class PanelRegistry extends RefCounted:
 				p.bind(snap)
 
 	func toggle(id: StringName) -> void:              # show/hide ONLY — never rebuild (R2)
-		var p = get_panel(id)
+		var p: Variant = get_panel(id)
 		if p != null:
 			p.visible = not p.visible
 

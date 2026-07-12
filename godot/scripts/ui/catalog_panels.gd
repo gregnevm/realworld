@@ -24,7 +24,7 @@ class TechPanel extends PanelBase.Base:
 		panel_id = &"tech"
 		dock = PanelBase.DOCK_RIGHT
 		priority = 30
-		hotkey = KEY_T
+		hotkey = KEY_U   # was T — the TemperatureOverlay owns the LOCKED §3 key T now that hotkeys are live
 		default_open = false
 
 	func _build() -> void:
@@ -122,6 +122,9 @@ class ResearchTiersPanel extends PanelBase.Base:
 # ---- ActionBrowser (LEFT dock) — a fixed pool of clickable CatalogSlots bound to an actions slice ----
 # Base for the three interactive browsers. Each slot's press emits an INTENT (the browser's verb) with
 # the row id (R9 — the panel never touches the sim; the router turns the intent into a catalog_sim call).
+# These verbs drive catalog_sim — the FORWARD-ENGINE sandbox, not the live world — so every browser is
+# honestly badged «демо» with a notice row, and none of them is default-open next to the live panels
+# (one truth per action: a visible button either acts on the live game or says it doesn't).
 class ActionBrowser extends PanelBase.Base:
 	const POOL := 12               # fixed slot pool (R2); the slice is capped to match
 	var _slots: Array = []
@@ -136,7 +139,10 @@ class ActionBrowser extends PanelBase.Base:
 		add_child(vb)
 		var head := Widgets.H2Header.new()
 		vb.add_child(head)
-		head.set_header(_title, "act")
+		head.set_header(_title, "демо")
+		var note := Widgets.StatRow.new()
+		vb.add_child(note)
+		note.set_row("ℹ", "пісочниця, не жива гра", "")
 		for i in POOL:
 			var slot := Widgets.CatalogSlot.new()
 			vb.add_child(slot)
@@ -164,15 +170,16 @@ class ActionBrowser extends PanelBase.Base:
 
 class BuildBrowser extends ActionBrowser:
 	func _init() -> void:
-		panel_id = &"build_browser"; dock = PanelBase.DOCK_LEFT; priority = 50; hotkey = KEY_B
-		_verb = &"cat_build"; _slice = "build_actions"; _title = "Будувати"
+		panel_id = &"build_browser"; dock = PanelBase.DOCK_LEFT; priority = 50; hotkey = KEY_B; default_open = false
+		_verb = &"cat_build"; _slice = "build_actions"; _title = "Каталог · Будувати"
 
 class CraftBrowser extends ActionBrowser:
 	func _init() -> void:
-		panel_id = &"craft_browser"; dock = PanelBase.DOCK_LEFT; priority = 60; hotkey = KEY_C
-		_verb = &"cat_craft"; _slice = "craft_actions"; _title = "Крафт"
+		panel_id = &"craft_browser"; dock = PanelBase.DOCK_LEFT; priority = 60; hotkey = KEY_C; default_open = false
+		_verb = &"cat_craft"; _slice = "craft_actions"; _title = "Каталог · Крафт"
 
 class ResearchBrowser extends ActionBrowser:
 	func _init() -> void:
-		panel_id = &"research_browser"; dock = PanelBase.DOCK_LEFT; priority = 70; hotkey = KEY_R
-		_verb = &"cat_research"; _slice = "research_actions"; _title = "Дослідити"
+		# N («наука») — R is the LOCKED §3 Roof-overlay key (design-system: fixed, do not reassign)
+		panel_id = &"research_browser"; dock = PanelBase.DOCK_LEFT; priority = 70; hotkey = KEY_N; default_open = false
+		_verb = &"cat_research"; _slice = "research_actions"; _title = "Каталог · Дослідити"

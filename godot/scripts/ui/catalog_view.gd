@@ -16,7 +16,7 @@ const Catalog = preload("res://scripts/kernel/catalog.gd")
 # Lazily-built, process-cached DefDatabase of the on-disk catalogue. The HUD reads the tree every frame
 # through snapshot(); building the DB once and reusing it keeps that hot path allocation-free (the same
 # reason HudRoot constructs the Balance director ONCE, never per frame).
-static var _db = null
+static var _db: Variant = null
 static func default_db():
 	if _db == null:
 		_db = Catalog.build_db()
@@ -24,7 +24,7 @@ static func default_db():
 
 # Lazily-built, process-cached raw catalogue JSON — the BOM planner in catalog.gd walks this dict (not the
 # DefDatabase). Same on-disk source as default_db(), so ids align; cached once like the db (cheap hot path).
-static var _cat = null
+static var _cat: Variant = null
 static func default_cat() -> Dictionary:
 	if _cat == null:
 		_cat = Catalog.load_json()
@@ -61,7 +61,7 @@ static func _afford(cost: Dictionary, stock: Dictionary) -> bool:
 static func cost_str(db, cost: Dictionary) -> String:
 	var parts: Array = []
 	for k in cost:
-		var d = db.get_def(StringName(str(k)))
+		var d: Variant = db.get_def(StringName(str(k)))
 		var icon: String = (d.icon() if d != null and d.has_method("icon") else "")
 		parts.append("%s%d" % [icon if icon != "" else str(k) + " ", int(cost[k])])
 	return " ".join(parts)
@@ -143,7 +143,7 @@ static func _craft_actions(db, unlocked: Dictionary, stock: Dictionary, stations
 	var out: Array = []
 	for rc in _cap_merge(ready, near):
 		var oid := StringName(str(rc.output().get("id", "")))
-		var od = db.get_def(oid)
+		var od: Variant = db.get_def(oid)
 		var olabel: String = String(od.label()) if od != null and od.has_method("label") else str(oid)
 		var afford := _afford(rc.inputs(), stock)
 		var tip: String
@@ -243,7 +243,7 @@ static func _research_rows(db, unlocked: Dictionary) -> Array:
 	for r in defs:
 		var preqs: Array = []
 		for p in r.prereqs():
-			var pd = db.get_def(StringName(str(p)))
+			var pd: Variant = db.get_def(StringName(str(p)))
 			preqs.append(String(pd.label()) if pd != null and pd.has_method("label") else str(p))
 		rows.append({
 			"id": r.id,

@@ -33,7 +33,7 @@ class WorkGiver_Haul extends WorkGiver:
 		var piles: Array = world.get("piles", [])
 		if piles.is_empty():
 			return null
-		var best = null
+		var best: Variant = null
 		var best_d: float = 1e20
 		for p in piles:
 			var d: float = Vector2(p.pos).distance_to(Vector2(agent.pos))
@@ -51,7 +51,7 @@ class Agent extends RefCounted:
 	var faction: StringName = &"neutral"
 	var pos: Vector2i = Vector2i.ZERO
 	var hp: float = 30.0
-	var job                       # current Job or null
+	var job: Variant              # current Job or null
 
 	# Decide what to do this tick (sets self.job). Override per kind.
 	func think(_world, _ctx: Dictionary) -> void:

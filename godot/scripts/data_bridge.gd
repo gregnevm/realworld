@@ -38,7 +38,7 @@ static func validate(db) -> Array:
 	if db == null:
 		return ["no catalogue db"]
 	for k in TO_CATALOG:
-		var d = db.get_def(to_catalog(k))
+		var d: Variant = db.get_def(to_catalog(k))
 		if d == null or not (d is Catalog.ResourceDef):
 			errs.append("data id '%s' -> '%s' is not a catalogue resource" % [k, TO_CATALOG[k]])
 	return errs

@@ -19,6 +19,7 @@ const Combat = preload("res://scripts/kernel/combat.gd")
 
 var passed := 0
 var failed := 0
+var _fresh_eq_things: Array = []   # Things built by _fresh_eq(), detached at the end of _t_gear (cleanup only)
 
 func _init() -> void:
 	print("== RealWorld kernel tests (spec 0003) ==")
@@ -53,6 +54,13 @@ func _rng(seed_val: int) -> RandomNumberGenerator:
 	var r := RandomNumberGenerator.new()
 	r.seed = seed_val
 	return r
+
+# Cleanup only: break the Thing<->ThingComp RefCounted cycle (Thing.comps[] <-> comp.parent) for every
+# Thing a test created, so nothing leaks at exit. See Things.Thing.detach().
+func _detach_all(things: Array) -> void:
+	for t in things:
+		if t != null:
+			t.detach()
 
 # ---------------- Def / DefDatabase ----------------
 func _t_defs() -> void:
@@ -108,6 +116,7 @@ func _t_thing_comps() -> void:
 	ok(lo.get_comp(Things.CompQuality).level() == lo2.get_comp(Things.CompQuality).level(), "quality roll is deterministic per seed")
 	ok(hi.get_comp(Things.CompQuality).level() >= lo.get_comp(Things.CompQuality).level(), "higher maker level trends to higher quality")
 	ok(hi.get_comp(Things.CompQuality).mult() >= 0.6 and hi.get_comp(Things.CompQuality).mult() <= 1.5, "quality multiplier in [0.6,1.5]")
+	_detach_all([food, frozen_food, crop, crop2, lo, hi, lo2])
 
 # ---------------- Stat pipeline ----------------
 func _t_stats() -> void:
@@ -463,6 +472,7 @@ func _t_environment() -> void:
 		food_cold.tick(cctx)
 	ok(not food_cold.destroyed and food_cold.get_comp(Things.CompRottable).progress() == 0.0,
 		"frozen-cell temp_c from TemperatureSystem halts rot (ctx handoff works)")
+	_detach_all([thing_out, thing_in, thing_dry, thing_wet, food_hot, food_cold])
 
 # ---------------- Power grid (Batch 2: composed on the Batch-1 environment) ----------------
 func _t_power() -> void:
@@ -591,6 +601,7 @@ func _t_power() -> void:
 	var reg = Power.build_power()
 	ok(reg.count() == 1 and reg.systems[0].system_id == &"power" and reg.systems[0].priority == 15,
 		"build_power registers PowerNetSystem at priority 15")
+	_detach_all([gen_a, gen_b, solar, gen_c, load_c, batt, only_gen, hi, lo, burner, off_gen, off_load, heater, hgen, lamp, lgen])
 
 # ---------------- Production & technology (Batch 3) ----------------
 func _t_production() -> void:
@@ -767,6 +778,11 @@ func _t_production() -> void:
 	var reg = Production.build_production()
 	ok(reg.count() == 1 and reg.systems[0].system_id == &"production" and reg.systems[0].priority == 20,
 		"build_production registers ProductionSystem at priority 20")
+	_detach_all([bench, bench_c, bench_s, bench_r, bench_m, lo_bench, hi_bench, again, bench_u, bench_sp])
+	_detach_all(world_m.spawn)
+	_detach_all(world_lo.spawn)
+	_detach_all(world_hi.spawn)
+	_detach_all(world_u.spawn)
 
 # ---------------- Gear (apparel/armor, comfort, medbed tend, water, scars/prosthetics) ----------------
 func _t_gear() -> void:
@@ -915,6 +931,11 @@ func _t_gear() -> void:
 	var reg = Gear.build_comfort()
 	ok(reg.count() == 1 and reg.systems[0].system_id == &"comfort" and reg.systems[0].priority == 25,
 		"build_comfort registers ComfortSystem at priority 25")
+	_detach_all(eq.slots.values())
+	_detach_all(eq2.slots.values())
+	_detach_all([medbed, mb_lo, mb_hi])
+	_detach_all(_fresh_eq_things)
+	_fresh_eq_things.clear()
 
 # gear test helpers
 func _find_h(tracker, cls):
@@ -928,6 +949,7 @@ func _fresh_eq(rating: float):
 	var t = Things.Thing.new(null)
 	t.add_comp(Gear.CompApparel.new({"slot": &"torso", "insulation_c": 0.0, "armor": {Gear.DMG_SHARP: rating}}))
 	eq.equip(t)
+	_fresh_eq_things.append(t)   # cleanup bookkeeping: the returned EquipModel may be discarded by the caller
 	return eq
 
 # ---------------- Combat (Batch 5: threats & combat objects) ----------------
@@ -1147,6 +1169,12 @@ func _t_combat() -> void:
 	var reg = Combat.build_combat()
 	ok(reg.count() == 1 and reg.systems[0].system_id == &"fire" and reg.systems[0].priority == 30,
 		"build_combat registers FireSystem at priority 30")
+	_detach_all([turret, turret_off, turret_dry, turret_r, turret_h, turret_cd, turret_ht, turret_rl])
+	_detach_all([mortar, wall, trap, trap_h, burn, neighbor, far, burn2, neigh2])
+	_detach_all([proj1, proj2, proj, siege_shell, shell_a, shell_b])
+	_detach_all(siege)
+	_detach_all(pair_a)
+	_detach_all(pair_b)
 
 # =====================================================================================================
 # CAPSTONE — end-to-end integration: all five kernel layers composed in ONE SystemRegistry tick spine.
@@ -1235,7 +1263,7 @@ func _run_spine_signature(seed_val: int, n: int) -> Dictionary:
 	for i in n:
 		last_ctx = {"dday": 1.0}
 		reg.tick_all(world, last_ctx)
-	return {
+	var sig := {
 		"temp_c": snappedf(float(last_ctx.get("temp_c", 999.0)), 0.001),
 		"weather": String(last_ctx.get("weather", &"?")),
 		"wet": bool(last_ctx.get("wet", false)),
@@ -1247,6 +1275,8 @@ func _run_spine_signature(seed_val: int, n: int) -> Dictionary:
 		"hediffs": world.hero_health.hediffs.size(),
 		"neighbor_on_fire": world._neighbor.get_comp(Combat.CompFlammable).on_fire(),
 	}
+	_detach_all(world.things)   # cleanup only: this world is dropped here
+	return sig
 
 func _t_integration() -> void:
 	print("  -- capstone: five layers in one tick spine --")
@@ -1338,6 +1368,10 @@ func _t_integration() -> void:
 	var sig_c := _run_spine_signature(12345, 4)   # seed 12345 rolls SNOW (wet) -> different weather + wet + fire out
 	ok(sig_c.weather != sig_a.weather or sig_c.wet != sig_a.wet,
 		"детермінізм-контраст: інший seed дає інший погодний підпис хребта (%s wet=%s vs %s wet=%s)" % [sig_c.weather, sig_c.wet, sig_a.weather, sig_a.wet])
+	_detach_all(world.things)
+	_detach_all(world.spawn)
+	_detach_all(wet_world.things)
+	_detach_all(wet_world.spawn)
 
 # A minimal ClimateProvider stub that returns a fixed weather (for the wet-flag tests).
 class _StubClimate extends Climate.ClimateProvider:

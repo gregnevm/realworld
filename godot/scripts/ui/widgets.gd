@@ -314,7 +314,7 @@ class LegendBox extends WidgetBase.Widget:
 
 # ---- Feedback subscribers: connect ONCE, disconnect in _exit_tree (R8 / §2.7 cycle-leak guard) ----
 class BannerWidget extends WidgetBase.Widget:
-	var _bus
+	var _bus: Variant
 	var _label: Label
 	func _build() -> void:
 		_label = Label.new()
@@ -334,7 +334,7 @@ class BannerWidget extends WidgetBase.Widget:
 			_bus.banner.disconnect(_on_banner)
 
 class FlashWidget extends WidgetBase.Widget:
-	var _bus
+	var _bus: Variant
 	var _label: Label
 	var _t := 0.0
 	func _build() -> void:
@@ -361,7 +361,7 @@ class FlashWidget extends WidgetBase.Widget:
 			_bus.flash.disconnect(_on_flash)
 
 class FeedWidget extends WidgetBase.Widget:
-	var _bus
+	var _bus: Variant
 	var _list: VBoxContainer
 	var _max := 8
 	func _build() -> void:

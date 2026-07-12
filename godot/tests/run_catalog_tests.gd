@@ -33,6 +33,7 @@ func _init() -> void:
 	_t_research_gate()
 	_t_bom_planner()
 	_t_sim_playthrough()
+	_t_thing_lifecycle()
 	_t_data_bridge()
 	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
 	quit(1 if failed > 0 else 0)
@@ -174,6 +175,7 @@ func _t_production_integration() -> void:
 	var stock: Dictionary = world["stock"]
 	ok(int(stock.get("components", 0)) == 1, "crafted 1 component from the catalog recipe on a live kernel")
 	ok(int(stock.get("iron_bar", 0)) == 3 and int(stock.get("copper_bar", 0)) == 4, "inputs consumed exactly (2 iron_bar, 1 copper_bar)")
+	bench.detach()   # break the Thing<->Comp cycle (RefCounted seam) so the suite exits leak-free
 
 # --- 8. research gate: a gated recipe stalls until its project is unlocked --------------------
 func _t_research_gate() -> void:
@@ -196,6 +198,7 @@ func _t_research_gate() -> void:
 	research.unlock(&"steelmaking")
 	prod.system_tick(world, {"dday": 1.0})
 	ok(int(world["stock"].get("steel", 0)) == 1, "same recipe crafts once steelmaking is unlocked")
+	bench.detach()   # break the Thing<->Comp cycle (RefCounted seam) so the suite exits leak-free
 
 # --- 9. WRITE-SIDE playthrough: research -> build -> craft up the real chain on catalog_sim -------
 func _t_sim_playthrough() -> void:
@@ -234,6 +237,26 @@ func _t_sim_playthrough() -> void:
 	# 4) the research gate holds end to end — a deeper station stays locked
 	ok(not sim.can_build("smithy"), "smithy stays locked until smithing is researched")
 	ok(not bool(sim.build("smithy").ok), "build(smithy) is refused while its research is locked")
+	sim.dispose()
+
+# --- 9b. lifecycle: a destroyed Thing leaves the model on the next tick (sweep + detach) ----------
+# Without the sweep the arrays only grow for the life of the process AND the Thing<->Comp
+# back-reference cycle can never be collected (RefCounted gotcha in AGENTS.md).
+func _t_thing_lifecycle() -> void:
+	var sim = CatalogSim.new()
+	sim.grant("wood", 100)
+	sim.grant("stone", 50)
+	ok(bool(sim.build("workbench").ok), "lifecycle: placed a workbench")
+	ok(sim.things.size() == 1, "lifecycle: the model holds one placed Thing")
+	var t = sim.things[0]
+	var wb = t.get_comp(Production.CompWorkbench)
+	ok(wb != null and wb.parent == t, "lifecycle: the comp back-references its Thing")
+	t.take_damage(t.hp)
+	ok(t.destroyed, "lifecycle: lethal damage marks the station destroyed")
+	sim.tick(0.01)
+	ok(sim.things.is_empty(), "lifecycle: tick() sweeps the destroyed Thing out of the model")
+	ok(wb.parent == null and t.comps.is_empty(), "lifecycle: the sweep detached the comp cycle")
+	sim.dispose()
 
 # --- 10. Spec 0007 Stage 1: the live<->catalogue resource bridge is TOTAL (no behaviour change) ------
 func _t_data_bridge() -> void:
