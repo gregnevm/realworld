@@ -54,6 +54,7 @@
   </div>
   <div class="clock"><span id="clockDay">День 1</span> · <span id="clockTime">06:00</span> <span id="clockPhase"></span></div>
   <div class="carry">Несе: <span id="carryTxt">0 / 30</span></div>
+  <div class="carry">🔬 <span id="resTxt">0/41</span></div>
 </div>
 
 <!-- top-right stockpile -->
@@ -68,6 +69,7 @@
 <!-- bottom-right buttons -->
 <div id="sidebtns" class="sidebtns hidden">
   <button id="worldBtn" title="Світова карта / логістика">🗺</button>
+  <button id="researchBtn" title="Дослідження (R)">🔬</button>
   <button id="helpBtn" title="Як грати">❔</button>
   <button id="speedBtn" title="Швидкість">▸ 1×</button>
 </div>
@@ -89,6 +91,17 @@
   </div>
 </div>
 
+<!-- ============ RESEARCH MODAL ============ -->
+<div id="researchModal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head"><h2>🔬 Дослідження</h2><button id="researchClose" class="x">✕</button></div>
+    <p class="modal-sub">Справжнє дерево технологій гри (спільний <code>catalog.json</code> з Godot-ядром): 41 проєкт від неоліту до космічного корабля. Постав <b>🔬 дослідний стіл</b> — він генерує прогрес. Клік по проєкту — в чергу; заблоковані будівлі в нижній панелі самі планують свій шлях досліджень.</p>
+    <div id="researchActive"></div>
+    <div id="researchQueue"></div>
+    <div id="researchAvail"></div>
+  </div>
+</div>
+
 <!-- ============ HELP MODAL ============ -->
 <div id="helpModal" class="modal hidden">
   <div class="modal-card">
@@ -97,7 +110,8 @@
       <p><b>Рух:</b> клік по землі — персонаж піде туди (обходить воду/стіни). Або <b>WASD</b>.</p>
       <p><b>Добування:</b> клікни по дереву 🌲, каменю 🪨, кущу 🫐 чи руїні — персонаж підійде і збере ресурс. Несе обмежено — віднеси на <b>склад</b> (склад поповнюється сам, коли стоїш поруч).</p>
       <p><b>Будівництво:</b> вибери об'єкт у нижній панелі → клікни по клітинці. Ресурси беруться зі складу. <b>Стіни</b> й <b>турелі</b> захищають від рейдів.</p>
-      <p><b>Автоматизація:</b> постав <b>верстак</b> — він безперервно (tick-time) переробляє дерево → дошки, навіть поки ти зайнятий іншим.</p>
+      <p><b>Автоматизація:</b> постав <b>верстак</b> — він безперервно (tick-time) переробляє дерево → дошки, навіть поки ти зайнятий іншим (рецепт відкривається дослідженням «Столярство»).</p>
+      <p><b>Дослідження 🔬 (R):</b> постав <b>дослідний стіл</b> — він генерує прогрес по дереву технологій (41 проєкт, спільний з Godot-версією). Нові будівлі (полиця, грядка, турель, пастка…) відкриваються дослідженнями; клік по заблокованій кнопці внизу сам планує весь шлях до неї.</p>
       <p><b>Їжа/сон:</b> голод і відпочинок падають з часом. Стань біля складу з їжею — поїси. Поспи в <b>ліжку</b>, щоб відновити відпочинок.</p>
       <p><b>Рейди:</b> періодично з краю карти приходять рейдери (у повноцінній MMO — інші гравці). Вони ламають базу й б'ють тебе. Тримай оборону: стіни, турелі, бій (клік по ворогу).</p>
       <p><b>Логістика 🗺:</b> відправляй конвої між реальними локаціями — везеш ресурс, повертаєш торговий товар. Реальна відстань = час у дорозі. Бувають засідки.</p>
@@ -108,6 +122,8 @@
 <script src="js/util.js"></script>
 <script src="js/worldgen.js"></script>
 <script src="js/entities.js"></script>
+<script src="js/catalog_data.js"></script>
+<script src="js/progression.js"></script>
 <script src="js/render.js"></script>
 <script src="js/logistics.js"></script>
 <script src="js/ui.js"></script>

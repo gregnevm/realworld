@@ -160,9 +160,7 @@ class PowerNetSystem extends Systems.SimSystem:
 		priority = 15
 
 	func _things(world) -> Array:
-		if world != null and typeof(world) == TYPE_DICTIONARY:
-			return world.get("things", [])
-		return []
+		return Things.world_things(world)
 
 	func system_tick(world, ctx: Dictionary) -> void:
 		var things: Array = _things(world)

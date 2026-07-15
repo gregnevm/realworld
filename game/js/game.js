@@ -3,6 +3,12 @@
   "use strict";
   const idx = (G, x, y) => y * G.map.N + x;
   const inB = (G, x, y) => x >= 0 && y >= 0 && x < G.map.N && y < G.map.N;
+  // where the landing crate sits: one tile east of spawn, or south if that neighbour is blocked
+  function landingSpot(G, sp) {
+    let lx = sp.x + 1, ly = sp.y;
+    if (!RW.buildValid(G, lx, ly)) { lx = sp.x; ly = sp.y + 1; }
+    return { x: lx, y: ly };
+  }
 
   // ---------- small state helpers ----------
   RW.carryTotal = (p) => { let s = 0; for (const k in p.carry) s += p.carry[k]; return s; };
@@ -47,6 +53,12 @@
   };
   RW.tryBuild = function (G, x, y) {
     const def = RW.BUILDINGS[G.selectedBuild];
+    if (def.research && G.research && !G.research.gateOk(def.research)) {
+      const planned = RW.planResearchPath(G.research, def.research);
+      RW.flash(G, `🔒 ${def.name}: потрібне дослідження «${G.research.labelOf(def.research)}»` + (planned.length ? " — шлях заплановано" : ""));
+      if (planned.length) RW.log(G, "🔬 У чергу досліджень: " + planned.map(id => G.research.labelOf(id)).join(" → "), "");
+      return;
+    }
     if (!RW.buildValid(G, x, y)) { RW.flash(G, "Тут не можна будувати."); return; }
     if (!RW.canAfford(G.base.stock, def.cost)) { RW.flash(G, "Бракує ресурсів: " + RW.costStr(def.cost)); return; }
     RW.payCost(G.base.stock, def.cost);
@@ -96,13 +108,14 @@
       raid: { timer: 0, next: 95, active: false, warned: false, wave: 0 },
       convoys: [], regions: [], convoySeq: 0,
       selectedBuild: null, hover: null, speed: 1, speedIdx: 0,
-      craftTimer: 0, saveTimer: 0, depCd: 0, log: []
+      craftTimer: 0, growTimer: 0, saveTimer: 0, log: []
     };
+    // research pipeline over the shared content catalog (same tree the Godot kernel walks)
+    G.research = RW.newProgression ? RW.newProgression() : null;
     if (!bare) {
       // landing crate beside the player, plus the player starts with a clearing
-      let lx = sp.x + 1, ly = sp.y;
-      if (!RW.buildValid(G, lx, ly)) { lx = sp.x; ly = sp.y + 1; }
-      placeBuilding(G, "storage", lx, ly);
+      const ls = landingSpot(G, sp);
+      placeBuilding(G, "storage", ls.x, ls.y);
     }
     return G;
   };
@@ -133,9 +146,8 @@
     const crate = G.buildings.find(b => b.kind === "storage");
     if (crate) {
       G.bgrid.delete(idx(G, crate.x, crate.y));
-      let lx = sp.x + 1, ly = sp.y;
-      if (!RW.buildValid(G, lx, ly)) { lx = sp.x; ly = sp.y + 1; }
-      crate.x = lx; crate.y = ly; G.bgrid.set(idx(G, lx, ly), crate);
+      const ls = landingSpot(G, sp);
+      crate.x = ls.x; crate.y = ls.y; G.bgrid.set(idx(G, ls.x, ls.y), crate);
     }
   };
 
@@ -183,6 +195,7 @@
       if (G.ctx) RW.render(G.ctx, G);
       RW.refreshHUD(G);
       if (G.worldOpen) { RW.drawWorldMap(G); RW.renderConvoyList(G); }
+      if (G.researchOpen) RW.renderResearch(G);
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
@@ -196,6 +209,8 @@
 
     updatePlayer(G, dt);
     updateCrafting(G, dt);
+    updateResearch(G, dt);
+    updateGrowZones(G, dt);
     updateRaids(G, dt);
     updateEnemies(G, dt);
     updateTurrets(G, dt);
@@ -337,12 +352,45 @@
   function updateCrafting(G, dt) {
     const benches = G.buildings.filter(b => b.kind === "workbench");
     if (!benches.length) return;
+    // the planks recipe is carpentry-gated in the content catalog (make_planks → research: carpentry)
+    if (G.research && !G.research.gateOk("carpentry")) {
+      if (!G._plankHint) { G._plankHint = true; RW.log(G, "🛠 Верстак простоює: дошки потребують дослідження «Столярство» (🔬).", "warn"); }
+      return;
+    }
     G.craftTimer += dt * benches.length;
     while (G.craftTimer >= 3.5) {
       G.craftTimer -= 3.5;
       if ((G.base.stock.wood || 0) >= 2 && RW.stockTotal(G) < RW.storageCap(G)) {
         G.base.stock.wood -= 2; G.base.stock.planks = (G.base.stock.planks || 0) + 1;
       }
+    }
+  }
+
+  // ---------- research (spec 0007 pipeline, web slice) ----------
+  const RESEARCH_RATE = 8;   // research-days one bench produces per game-day
+  function updateResearch(G, dt) {
+    if (!G.research) return;
+    let benches = 0;
+    G.buildings.forEach(b => { if (b.kind === "research_bench") benches++; });
+    if (!benches) return;
+    const done = G.research.addPoints(benches * RESEARCH_RATE * (dt / G.time.dayLen));
+    for (const id of done) {
+      const un = G.research.unlocksOf(id);
+      const opens = un.buildings.length + un.recipes.length + un.items.length;
+      RW.log(G, `🔬 Досліджено: ${G.research.labelOf(id)}` + (opens ? ` — відкрито нового: ${opens}` : ""), "good");
+    }
+    if (done.length && RW.buildBuildBar) RW.buildBuildBar(G);
+  }
+
+  // grow zones slowly farm food into the stockpile (agriculture unlock)
+  function updateGrowZones(G, dt) {
+    let zones = 0;
+    G.buildings.forEach(b => { if (b.kind === "grow_zone") zones++; });
+    if (!zones) return;
+    G.growTimer = (G.growTimer || 0) + dt * zones;
+    while (G.growTimer >= 25) {
+      G.growTimer -= 25;
+      if (RW.stockTotal(G) < RW.storageCap(G)) G.base.stock.food = (G.base.stock.food || 0) + 1;
     }
   }
 
@@ -397,6 +445,15 @@
       const step = e.speed * dt;
       const dToP = RW.dist(e.px, e.py, p.px, p.py);
 
+      // spike traps bite whoever stands on them (and wear out doing it)
+      const tb = G.bgrid.get(idx(G, Math.floor(e.px), Math.floor(e.py)));
+      if (tb && RW.BUILDINGS[tb.kind].trapDps) {
+        damageEnemy(G, e, RW.BUILDINGS[tb.kind].trapDps * dt);
+        tb.hp -= 6 * dt;
+        if (tb.hp <= 0) { removeBuilding(G, tb); RW.log(G, "🪤 Пастка зносилась ущент.", ""); }
+        if (e.dead) continue;
+      }
+
       // 1. attack player if adjacent
       if (dToP < 1.25) {
         e.face = Math.atan2(p.py - e.py, p.px - e.px);
@@ -424,7 +481,7 @@
           e.face = Math.atan2(nx.y + 0.5 - e.py, nx.x + 0.5 - e.px);
           if (e.atkCd <= 0) { damageBuilding(G, b, e.dmg); e.atkCd = 1.0; }
         } else {
-          if (stepTo(e, nx.x + 0.5, nx.y + 0.5, step)) e.path.shift();
+          followPath(e, e.path, step);   // same step-then-shift rule the player uses
         }
       } else {
         stepTo(e, center.x + 0.5, center.y + 0.5, step);
@@ -492,7 +549,8 @@
         buildings: G.buildings.map(b => ({ kind: b.kind, x: b.x, y: b.y, hp: b.hp })),
         player: { px: G.player.px, py: G.player.py, hp: G.player.hp, hunger: G.player.hunger, rest: G.player.rest, carry: G.player.carry, skills: G.player.skills, carryCap: G.player.carryCap, face: G.player.face },
         stock: G.base.stock, time: G.time, raid: G.raid,
-        convoys: G.convoys, convoySeq: G.convoySeq, regions: G.regions
+        convoys: G.convoys, convoySeq: G.convoySeq, regions: G.regions,
+        research: G.research ? G.research.toDict() : null
       };
       localStorage.setItem("realworld_save", JSON.stringify(s));
     } catch (e) { /* quota or serialization issue — ignore */ }
@@ -511,6 +569,7 @@
     G.time = s.time; G.raid = s.raid || G.raid;
     G.convoys = s.convoys || []; G.convoySeq = s.convoySeq || 0;
     G.regions = s.regions || [];
+    if (s.research && G.research) G.research.fromDict(s.research);
     RW.beginGame(G, true);
   };
 

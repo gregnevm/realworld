@@ -305,6 +305,21 @@ func _t_agents() -> void:
 	var guard = Agents.Agent_Animal.new(true, &"guard")
 	guard.think(world, {})
 	ok(guard.job.verb == &"attack" and guard.job.target == Vector2i(1, 1), "tamed guard animal attacks the nearest raider")
+
+	# hostile-list unification: the guard reads the SAME agents→raiders fallback combat.gd uses,
+	# filtered by faction — a mixed world.agents list must never make it attack a friendly.
+	var foe = Agents.Agent_Raider.new()
+	foe.pos = Vector2i(7, 7)
+	var friend = Agents.Agent_Bot.new()
+	friend.pos = Vector2i(2, 2)
+	guard.think({"hero": Vector2i(3, 3), "agents": [friend, foe]}, {})
+	ok(guard.job.verb == &"attack" and guard.job.target == Vector2i(7, 7), "guard targets only hostiles in a mixed world.agents list")
+	guard.think({"hero": Vector2i(3, 3), "agents": [friend]}, {})
+	ok(guard.job.verb == &"follow", "guard ignores friendly agents (no hostiles -> follows the hero)")
+	foe.hp = 0.0
+	guard.think({"hero": Vector2i(3, 3), "agents": [friend, foe]}, {})
+	ok(guard.job.verb == &"follow", "a dead hostile is not a target")
+
 	var wild = Agents.Agent_Animal.new(false, &"none")
 	wild.think(world, {})
 	ok(wild.job.verb == &"graze", "wild animal grazes")

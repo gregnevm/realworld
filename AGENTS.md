@@ -1,7 +1,7 @@
 # AGENTS.md — RealWorld
 
 > Машиночитний контекст проєкту для AI-агентів (Claude Code, Cursor, Codex, Copilot, Gemini CLI, Windsurf). Тримай актуальним: застарілий AGENTS.md гірший за відсутній.
-> last_reviewed: 2026-06
+> last_reviewed: 2026-07
 
 ## Огляд
 - **Що це:** RealWorld — survival-MMORPG із симуляційною глибиною RimWorld на **картах зі справжньої географії (OSM/GPS)**; один глибоко симульований персонаж, persistent-світ, логістика конвоями. Репозиторій містить дизайн-документ і граний прототип.
@@ -18,7 +18,8 @@
 - **Зовнішні залежності/API:** OpenStreetMap **Overpass API** (генерація карти з реальних координат) з детермінованим процедурним fallback. Жодних npm-залежностей у рантаймі.
 
 ## Архітектура
-- Гра — єдиний глобальний неймспейс **`RW`**, розкладений по файлах у `game/js/`, які підключаються **у фіксованому порядку** в `game/index.html`: `util → worldgen → entities → render → logistics → ui → input → game`. `game.js` стартує на `DOMContentLoaded`.
+- Гра — єдиний глобальний неймспейс **`RW`**, розкладений по файлах у `game/js/`, які підключаються **у фіксованому порядку** в `game/index.html`: `util → worldgen → entities → catalog_data → progression → render → logistics → ui → input → game`. `game.js` стартує на `DOMContentLoaded`.
+- **Прогресія у веб-зрізі:** `G.research = RW.Progression(RW.CATALOG)` — той самий tech-DAG, що і в Godot (`catalog.json`); дослідні столи генерують прогрес у `RW.update`; будівлі з `research:`-гейтом заблоковані до розблокування (клік по локу планує весь шлях). Після зміни `catalog.json` — `node tools/sync-catalog.mjs` (CI-тест ловить розсинхрон).
 - Цикл: `requestAnimationFrame` → `RW.update(G, dt)` (симуляція) + `RW.render(ctx, G)`. Уся ігрова модель — в об'єкті `G` (`RW.G`).
 - World-gen: `lat/lon` → детермінований seed (`mulberry32`) → процедурна карта; за потреби зверху накладається реальна геометрія OSM (`RW.overlayOSM`).
 - GDD: фронтенд читає `gdd.json` через `fetch` (потрібен HTTP-origin, не `file://`).
@@ -33,17 +34,27 @@ realworld/
     js/
       util.js          RNG, A*-pathfinding, математика, неймспейс RW
       worldgen.js      lat/lon → тайлмапа; Overpass + fallback
-      entities.js      дані: ресурси, будівлі, ноди, рейдери
+      entities.js      дані: ресурси, будівлі (з research-гейтами), ноди, рейдери
+      catalog_data.js  ЗГЕНЕРОВАНИЙ зріз godot/content/catalog.json (node tools/sync-catalog.mjs)
+      progression.js   RW.Progression — JS-дзеркало kernel/progression.gd (дерево досліджень)
       render.js        малювання канвасу, камера, день/ніч
       logistics.js     конвої між реальними регіонами
       ui.js            DOM-HUD, меню, спавн-екран, світова карта
       input.js         миша/клавіатура/тач
       game.js          стан, симуляція, бій, рейди, цикл, save/load
+  godot/               порт у Godot 4.7 — форвардний рушій (деталі в розділі «Godot-порт»)
+    scripts/kernel/       механічний кернел (spec 0003) + дерево контенту (catalog.gd)
+    content/catalog.json  335 def; валідовано catalog.gd ↔ tests/catalog.test.js
+    tests/                headless-сьюти Godot (run_*.gd)
   GDD_BOOK/            інтерактивний GDD; правда — gdd.json
+  tests/               Node-тести (node --test): sim-ядро, catalog, progression
+  specs/               специфікації фіч (0001…0008)
+  docs/                довідники: catalog.md, mechanics-status.md, ux/
+  .github/workflows/   CI: ci.yml (Node) + godot.yml (Godot headless)
   .claude/launch.json  dev-сервер прев'ю
 ```
 
-## Godot-порт (форвардний рушій — нові фічі сюди; JS-версія заморожена як референс)
+## Godot-порт (форвардний рушій — нові фічі сюди; JS-версія — граний браузерний зріз, який несе пайплайн прогресії поверх спільного catalog.json)
 - **Де:** `godot/` — повний порт на **Godot 4.7 (GDScript)**. Симуляція scene-free, детермінована (PCG32 із FNV-хешу координат), тестовна headless. Пиляр: «координати — це seed» (світ = чиста функція `lat/lon`). UI — **українською**.
 - **Шари:**
   - `godot/scripts/` — `sim.gd` (детермінований сим: **фасад + стан + core loop**; публічний API незмінний — делегати), `session.gd` (оркестрація регіонів/подорожей/респавну), `social.gd`, `persistence.gd`, `world_gen.gd`, `world_view.gd` (custom-draw тайлмапи; роботи малюються окремо від рейдерів), `main.gd` (СТАРИЙ HUD-моноліт — заморожений референс, більше НЕ дефолтна сцена; виключений із gdlint).
@@ -71,7 +82,7 @@ realworld/
 ## Команди
 - **Запуск гри (dev):** `cd game && python -m http.server 8765` → http://localhost:8765
 - **Запуск GDD:** `python "C:\Users\gregn\.claude\skills\gdd_build\scripts\serve.py" "O:\realworld\GDD_BOOK"`
-- **Тести:** _поки немає_ (план: `node --test` на чистій логіці симуляції).
+- **Тести:** `npm test` (Node `node --test` — детерміноване sim-ядро + валідація `catalog.json`/пайплайну прогресії); headless-сьюти Godot — `test.cmd` у корені (перелік — у розділі «Godot-порт» вище). Обидва набори ганяються в CI (`.github/workflows/ci.yml` + `godot.yml`).
 - **Білд/деплой:** білду немає; статичний хостинг (GitHub Pages / Railway / itch.io).
 
 ## Ключові рішення (ADR-лайт)

@@ -8,6 +8,7 @@ const WorldViewScript = preload("res://scripts/world_view.gd")
 const Social = preload("res://scripts/social.gd")
 const SessionScript = preload("res://scripts/session.gd")
 const MapWidget = preload("res://scripts/map_widget.gd")
+const Latlon = preload("res://scripts/ui/latlon.gd")
 const TILE := 28
 const MAP_N := 56
 const NEIGHBOR_STEP_DEG := 0.01   # ~1.1 km — "around" regions you scout on foot
@@ -273,20 +274,9 @@ func _use_real_gps() -> void:
 # Parse a lat/lon pair — accepts two fields, OR a single "lat, lon" pasted into the first field
 # (that's the shareable address form). Validates legal ranges so we never seed a phantom world.
 func _parse_latlon(a: String, b: String) -> Dictionary:
-	var la := a.strip_edges()
-	var lo := b.strip_edges()
-	if "," in la and (lo == "" or not ("," in lo)):
-		var parts := la.split(",")
-		la = parts[0].strip_edges()
-		if lo == "" and parts.size() > 1:
-			lo = parts[1].strip_edges()
-	if la == "" or lo == "":
-		return {"ok": false, "msg": "Введи координати (напр. 50.4501, 30.5234)."}
-	var lat := la.to_float()
-	var lon := lo.to_float()
-	if absf(lat) > 90.0 or absf(lon) > 180.0:
-		return {"ok": false, "msg": "Поза межами: широта ±90°, довгота ±180°."}
-	return {"ok": true, "lat": lat, "lon": lon}
+	# Delegates to the pure, headless-testable ui/latlon.gd (which was lifted from this body) so the
+	# spawn/capsule GPS parsing rule lives in exactly one place.
+	return Latlon.parse(a, b)
 
 func _start_from_coords() -> void:
 	var c := _parse_latlon(gps_lat_edit.text, gps_lon_edit.text)

@@ -522,13 +522,11 @@ class Hediff_Implant extends Health.Hediff:
 	func hediff_tick(_ctx: Dictionary) -> void:
 		pass
 
-	# Restores the capacity: a hard 1.0 for a cap this implant covers (so it CANCELS other hediffs' loss —
-	# capacity() multiplies factors, and 1.0 leaves the product to whatever else is on the part; the surgery
-	# in install_prosthetic removes the competing injury/scar so the net capacity returns to full).
-	func cap_factor(cap: StringName) -> float:
-		var covers: bool = restores.is_empty() or restores.has(cap)
-		if covers and part != null and part.caps.has(cap):
-			return 1.0
+	# Neutral by design: a fitted prosthetic contributes a 1.0 factor for EVERY capacity (capacity()
+	# multiplies factors, so 1.0 leaves the product untouched) — the actual restoration happens in
+	# install_prosthetic(), which removes the competing injury/scar. `restores` stays as data for that
+	# surgery; it does not modulate the factor.
+	func cap_factor(_cap: StringName) -> float:
 		return 1.0
 
 	func gone() -> bool:
