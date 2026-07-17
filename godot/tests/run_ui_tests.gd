@@ -1,10 +1,10 @@
 # RealWorld — headless tests for the UX/UI view layer (spec 0005).
 # Run: Godot_console.exe --headless --path godot -s res://tests/run_ui_tests.gd
 #
-# Same idiom as run_kernel_tests.gd: extends SceneTree, ok(cond,name), quit(1 if failed>0).
+# Same idiom as run_kernel_tests.gd: extends tests/harness.gd (shared ok(cond,name) + finish()).
 # Proves the pure spine (Tokens/Format/ViewGeom/LatLon/HudModel/FeedbackBus) with NO window, and the
 # Control layer (Widget/Panel/registries/overlays) through the REAL headless lifecycle (get_root()+await).
-extends SceneTree
+extends "res://tests/harness.gd"
 
 const Tokens = preload("res://scripts/ui/tokens.gd")
 const Fmt = preload("res://scripts/ui/format.gd")
@@ -29,8 +29,6 @@ const Catalog = preload("res://scripts/kernel/catalog.gd")
 const WorldInput = preload("res://scripts/ui/world_input.gd")
 const Mechanics = preload("res://scripts/ui/mechanics.gd")
 
-var passed := 0
-var failed := 0
 
 func _init() -> void:
 	print("== RealWorld UI view-layer tests (spec 0005) ==")
@@ -62,17 +60,8 @@ func _init() -> void:
 	# release the process-shared forward-engine model: its placed Things carry comp back-references
 	# (RefCounted cycles) that would otherwise show up as ObjectDB leaks at exit
 	CatalogSim.dispose_shared()
-	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
-	quit(1 if failed > 0 else 0)
+	finish()
 
-func ok(cond: bool, name: String) -> void:
-	if cond:
-		passed += 1
-		print("  [pass] ", name)
-	else:
-		failed += 1
-		printerr("  [FAIL] ", name)
-		print("  [FAIL] ", name)
 
 # ---------------- Tokens (R3 / drift reconciliation) ----------------
 func _t_tokens() -> void:

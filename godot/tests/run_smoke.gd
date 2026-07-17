@@ -1,13 +1,11 @@
 # RealWorld — headless playthrough smoke test (drives the integrated update loop).
 # Run: Godot_console.exe --headless --path godot -s res://tests/run_smoke.gd
-extends SceneTree
+extends "res://tests/harness.gd"
 
 const Sim = preload("res://scripts/sim.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
 const GameData = preload("res://scripts/data.gd")
 
-var passed := 0
-var failed := 0
 var sim
 
 func _init() -> void:
@@ -18,17 +16,8 @@ func _init() -> void:
 	_smoke_build_and_craft()
 	_smoke_raid()
 	_smoke_convoy()
-	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
-	quit(1 if failed > 0 else 0)
+	finish()
 
-func ok(cond: bool, name: String) -> void:
-	if cond:
-		passed += 1
-		print("  [pass] ", name)
-	else:
-		failed += 1
-		printerr("  [FAIL] ", name)
-		print("  [FAIL] ", name)
 
 func _topup() -> void:
 	sim.player.hp = 100.0

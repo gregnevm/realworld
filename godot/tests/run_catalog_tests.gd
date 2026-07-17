@@ -8,7 +8,7 @@
 #      so the Node validator and the Godot loader can never disagree about the same file;
 #   3. it actually RUNS through the shipped kernel — real catalog recipes crafted on a live
 #      ProductionSystem, honouring the research gate.
-extends SceneTree
+extends "res://tests/harness.gd"
 
 const Defs = preload("res://scripts/kernel/defs.gd")
 const Things = preload("res://scripts/kernel/things.gd")
@@ -18,8 +18,6 @@ const CatalogSim = preload("res://scripts/catalog_sim.gd")
 const DataBridge = preload("res://scripts/data_bridge.gd")
 const GameData = preload("res://scripts/data.gd")
 
-var passed := 0
-var failed := 0
 
 func _init() -> void:
 	print("== RealWorld content-catalogue tests ==")
@@ -35,8 +33,7 @@ func _init() -> void:
 	_t_sim_playthrough()
 	_t_thing_lifecycle()
 	_t_data_bridge()
-	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
-	quit(1 if failed > 0 else 0)
+	finish()
 
 # --- BOM planner parity (spec 0008 phase 1) — mirrors tests/catalog.test.js -----------------
 func _t_bom_planner() -> void:
@@ -76,14 +73,6 @@ func _t_bom_planner() -> void:
 	var passthru: Dictionary = Catalog.raw_requirements(cat, {"wood": 30, "stone": 8})
 	ok(int(passthru.get("wood", 0)) == 30 and int(passthru.get("stone", 0)) == 8, "a pure-raw cost passes through unchanged")
 
-func ok(cond: bool, name: String) -> void:
-	if cond:
-		passed += 1
-		print("  [pass] ", name)
-	else:
-		failed += 1
-		printerr("  [FAIL] ", name)
-		print("  [FAIL] ", name)
 
 # --- 1. load ---------------------------------------------------------------------------------
 func _t_load() -> void:

@@ -1,6 +1,6 @@
 # RealWorld — headless test runner for the Godot sim core.
 # Run: Godot_console.exe --headless --path godot -s res://tests/run_tests.gd
-extends SceneTree
+extends "res://tests/harness.gd"
 
 const Sim = preload("res://scripts/sim.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
@@ -10,8 +10,6 @@ const Persistence = preload("res://scripts/persistence.gd")
 const SessionScript = preload("res://scripts/session.gd")
 const Catalog = preload("res://scripts/kernel/catalog.gd")
 
-var passed := 0
-var failed := 0
 
 func _init() -> void:
 	print("== RealWorld Godot sim tests ==")
@@ -50,17 +48,8 @@ func _init() -> void:
 	_t_no_global_rng()
 	_t_static_typing()
 	_t_stock_seam()
-	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
-	quit(1 if failed > 0 else 0)
+	finish()
 
-func ok(cond: bool, name: String) -> void:
-	if cond:
-		passed += 1
-		print("  [pass] ", name)
-	else:
-		failed += 1
-		printerr("  [FAIL] ", name)
-		print("  [FAIL] ", name)
 
 func _t_rng_determinism() -> void:
 	ok(WorldGen.hash_seed(50.4501, 30.5234) == WorldGen.hash_seed(50.4501, 30.5234), "hash_seed deterministic")
