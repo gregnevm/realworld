@@ -75,14 +75,16 @@ static func snapshot(db, state: Dictionary = {}) -> Dictionary:
 		return {"available": false}
 	var unlocked: Dictionary = state.get("unlocked", {})
 	var stock: Dictionary = state.get("stock", {})
+	var live: bool = bool(state.get("live", false))
 	return {
 		"available": true,
+		"live": live,
 		"summary": _summary(db, unlocked, stock),
 		"research": _research_rows(db, unlocked),
 		"tiers": _tiers(db, unlocked),
 		"next": _next_research(db, unlocked),
 		"build_actions": _build_actions(db, unlocked, stock),
-		"craft_actions": _craft_actions(db, unlocked, stock, state.get("stations", {})),
+		"craft_actions": _craft_actions(db, unlocked, stock, state.get("stations", {}), live),
 		"research_actions": _research_actions(db, unlocked),
 	}
 
@@ -131,13 +133,17 @@ static func _build_actions(db, unlocked: Dictionary, stock: Dictionary) -> Array
 	return out
 
 # Recipes whose station is PLACED and research unlocked: craftable-now first, then input-short (dimmed).
-static func _craft_actions(db, unlocked: Dictionary, stock: Dictionary, stations: Dictionary) -> Array:
+# live=true (каталожний світ): thing-рецепти (страви) відфільтровано — живий світ їх ще не крафтить,
+# і мертва кнопка гірша за відсутню (одна правда на дію).
+static func _craft_actions(db, unlocked: Dictionary, stock: Dictionary, stations: Dictionary, live: bool = false) -> Array:
 	var ready: Array = []
 	var near: Array = []
 	for rc in Catalog.recipes(db):
 		if not stations.has(StringName(str(rc.data.get("station", "")))):
 			continue
 		if not _gate_ok(rc.requires_research(), unlocked):
+			continue
+		if live and bool(rc.output().get("thing", false)):
 			continue
 		(ready if _afford(rc.inputs(), stock) else near).append(rc)
 	var out: Array = []

@@ -8,6 +8,7 @@ const Threats = preload("res://scripts/sim/threats.gd")
 const SimEnv = preload("res://scripts/sim/environment.gd")
 const WorldMeta = preload("res://scripts/sim/world_meta.gd")
 const DataBridge = preload("res://scripts/data_bridge.gd")
+const CatalogLive = preload("res://scripts/sim/catalog_live.gd")
 
 var map: Dictionary
 var n: int = 0
@@ -223,7 +224,7 @@ func _build_astar() -> void:
 func _refresh_solid(x: int, y: int) -> void:
 	var i := y * n + x
 	var solid := WorldGen.is_terrain_blocked(map.tiles[i])
-	if bgrid.has(i) and GameData.BUILDINGS[bgrid[i].kind].get("blocks", false):
+	if bgrid.has(i) and building_def(bgrid[i].kind).get("blocks", false):
 		solid = true
 	astar.set_point_solid(Vector2i(x, y), solid)
 
@@ -231,7 +232,7 @@ func after_map_change() -> void:
 	# OSM overlay rewrote terrain: rebuild pathing grids + relocate to the new clearing
 	_build_astar()
 	for b in buildings:
-		if GameData.BUILDINGS[b.kind].get("blocks", false):
+		if building_def(b.kind).get("blocks", false):
 			_refresh_solid(b.x, b.y)
 	var sp: Vector2i = map.spawn
 	player.px = sp.x + 0.5
@@ -277,7 +278,7 @@ func is_blocked(x: int, y: int) -> bool:
 	if WorldGen.is_terrain_blocked(map.tiles[y * n + x]):
 		return true
 	if bgrid.has(y * n + x):
-		return GameData.BUILDINGS[bgrid[y * n + x].kind].get("blocks", false)
+		return building_def(bgrid[y * n + x].kind).get("blocks", false)
 	return false
 
 func carry_total() -> int:
@@ -295,7 +296,7 @@ func stock_total() -> int:
 func storage_cap() -> int:
 	var c := 200
 	for b in buildings:
-		var def: Dictionary = GameData.BUILDINGS[b.kind]
+		var def: Dictionary = building_def(b.kind)
 		if def.has("capacity"):
 			c += int(def.capacity)
 	return c
@@ -393,7 +394,7 @@ func temp_at(x: int, y: int) -> float:
 	if is_indoor(x, y):
 		t += (INDOOR_SETPOINT_C - t) * INDOOR_INSULATION
 	for b in buildings:
-		var heat := float(GameData.BUILDINGS[b.kind].get("extra", {}).get("heat", 0.0))
+		var heat := float(building_def(b.kind).get("extra", {}).get("heat", 0.0))
 		if heat <= 0.0 or not device_active(b):
 			continue
 		if absi(b.x - x) + absi(b.y - y) <= EMITTER_RADIUS:
@@ -411,7 +412,7 @@ func daylight_level() -> float:
 func light_at(x: int, y: int) -> float:
 	var light := daylight_level()
 	for b in buildings:
-		if not bool(GameData.BUILDINGS[b.kind].get("extra", {}).get("light", false)):
+		if not bool(building_def(b.kind).get("extra", {}).get("light", false)):
 			continue
 		if not device_active(b):
 			continue
@@ -444,9 +445,15 @@ func _recompute_indoor() -> void:
 	SimEnv.recompute_indoor(self)
 
 # ---------------- building ----------------
+# The ONE def seam for buildings (spec 0008 phase 3): data.gd palette first, else the catalogue def in
+# the same shape. Every def read (sim internals, sim/ modules, world_view, hud_model, session) goes
+# through it — enforced by the _t_building_def_seam tripwire, like the stock seam.
+func building_def(kind: String) -> Dictionary:
+	return CatalogLive.building_def(kind)
+
 func _place_building(kind: String, x: int, y: int, hp: float):
-	var def: Dictionary = GameData.BUILDINGS[kind]
-	var b := {"kind": kind, "x": x, "y": y, "hp": (def.hp if hp < 0 else hp), "cool": 0.0, "aim": 0.0}
+	var def: Dictionary = building_def(kind)
+	var b := {"kind": kind, "x": x, "y": y, "hp": (float(def.get("hp", 50.0)) if hp < 0 else hp), "cool": 0.0, "aim": 0.0}
 	buildings.append(b)
 	bgrid[y * n + x] = b
 	if def.get("blocks", false):
@@ -459,7 +466,7 @@ func _remove_building(b) -> void:
 	buildings.erase(b)
 	bgrid.erase(b.y * n + b.x)
 	_refresh_solid(b.x, b.y)
-	if GameData.BUILDINGS[b.kind].get("blocks", false) or String(b.kind).begins_with("door"):
+	if building_def(b.kind).get("blocks", false) or String(b.kind).begins_with("door"):
 		_recompute_indoor()
 
 func build_valid(x: int, y: int) -> bool:
@@ -478,12 +485,20 @@ func try_build(kind: String, x: int, y: int) -> void:
 	if not build_valid(x, y):
 		_flash("Тут не можна будувати.")
 		return
-	var def: Dictionary = GameData.BUILDINGS[kind]
+	# NEW catalogue placements are gated on the flag (resolution of already-placed ones is not):
+	# the OFF slice builds only the data.gd palette, byte-identical to the shipped game.
+	if not GameData.BUILDINGS.has(kind) and not use_catalog:
+		_flash("Невідома будівля.")
+		return
+	var def: Dictionary = building_def(kind)
+	if def.is_empty():
+		_flash("Невідома будівля.")
+		return
 	if not research_ok(def):
 		_flash("🔒 Потребує дослідження: %s." % _research_label(def))
 		return
 	if not afford(def.cost):
-		_flash("Бракує: " + GameData.cost_str(def.cost))
+		_flash("Бракує: " + CatalogLive.cost_line(def.cost))
 		return
 	GameData.pay_cost(stock, cost_keys(def.cost))
 	_place_building(kind, x, y, -1)
@@ -502,13 +517,14 @@ func demolish(x: int, y: int) -> Dictionary:
 		if storages <= 1:
 			return {"ok": false, "msg": "Не можна знести єдиний склад."}
 	var refund := {}
-	for res in GameData.BUILDINGS[b.kind].cost:
-		var back: int = int(GameData.BUILDINGS[b.kind].cost[res]) / 2
+	var def: Dictionary = building_def(b.kind)
+	for res in def.cost:
+		var back: int = int(def.cost[res]) / 2
 		if back > 0:
 			deposit(res, back)
 			refund[res] = back
 	_remove_building(b)
-	_log("♻ %s розібрано%s." % [GameData.BUILDINGS[b.kind].name, (" (+" + GameData.cost_str(refund) + ")") if not refund.is_empty() else ""], "good")
+	_log("♻ %s розібрано%s." % [def.get("name", b.kind), (" (+" + CatalogLive.cost_line(refund) + ")") if not refund.is_empty() else ""], "good")
 	return {"ok": true}
 
 # ---------------- items / equipment (spec 0001) ----------------
@@ -527,8 +543,12 @@ func research_ok(def: Dictionary) -> bool:
 	return need == "" or research_unlocked.has(need) or research_unlocked.has(StringName(need))
 
 func _research_label(def: Dictionary) -> String:
-	var need := String(def.get("research", ""))
-	return String(GameData.RESEARCH_LABEL.get(need, need))
+	return CatalogLive.research_label(String(def.get("research", "")))
+
+# Live catalogue craft (spec 0008 phase 3): run any unlocked recipe at its placed station — the body
+# lives in sim/catalog_live.gd; the delegate keeps the sim API like every other module.
+func catalog_craft(recipe_id: String) -> Dictionary:
+	return CatalogLive.craft(self, recipe_id)
 
 # Броня ріже вхідний урон: 1.0 без броні, 0.7 у жилеті, 0.5 у панцирі (data.gd dmg_cut).
 func armor_mult() -> float:
@@ -806,7 +826,8 @@ func _maybe_sleep(_dt: float) -> void:
 		return
 	var bed: Variant = null
 	for b in buildings:
-		if b.kind == "bed" and _dist(p.px, p.py, b.x + 0.5, b.y + 0.5) < 1.6:
+		# def-based (not kind == "bed"): catalogue bedrolls/beds count as sleep spots too
+		if bool(building_def(b.kind).get("bed", false)) and _dist(p.px, p.py, b.x + 0.5, b.y + 0.5) < 1.6:
 			bed = b
 			break
 	p.sleeping = (bed != null and _nearest_enemy(p.px, p.py, 9) == null)

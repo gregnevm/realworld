@@ -121,13 +121,15 @@ class ResearchTiersPanel extends PanelBase.Base:
 
 # ---- ActionBrowser (LEFT dock) — a fixed pool of clickable CatalogSlots bound to an actions slice ----
 # Base for the three interactive browsers. Each slot's press emits an INTENT (the browser's verb) with
-# the row id (R9 — the panel never touches the sim; the router turns the intent into a catalog_sim call).
-# These verbs drive catalog_sim — the FORWARD-ENGINE sandbox, not the live world — so every browser is
-# honestly badged «демо» with a notice row, and none of them is default-open next to the live panels
-# (one truth per action: a visible button either acts on the live game or says it doesn't).
+# the row id (R9 — the panel never touches the sim; the router turns the intent into the command).
+# ONE truth per action, TWO honest modes (spec 0008 phase 3): in a catalogue world (slice live:true)
+# the verbs act on the REAL game (build arms the ghost, craft pays the live stock) and the header tag
+# says «у грі»; otherwise they drive the catalog_sim sandbox, badged «демо» with a notice row.
 class ActionBrowser extends PanelBase.Base:
 	const POOL := 12               # fixed slot pool (R2); the slice is capped to match
 	var _slots: Array = []
+	var _head: Widgets.H2Header
+	var _note: Widgets.StatRow
 	var _verb: StringName = &""    # intent verb this browser emits (cat_build / cat_craft / cat_research)
 	var _slice: String = ""        # catalog slice key it binds (build_actions / craft_actions / …)
 	var _title: String = ""
@@ -137,12 +139,12 @@ class ActionBrowser extends PanelBase.Base:
 		var vb := VBoxContainer.new()
 		vb.add_theme_constant_override("separation", 3)
 		add_child(vb)
-		var head := Widgets.H2Header.new()
-		vb.add_child(head)
-		head.set_header(_title, "демо")
-		var note := Widgets.StatRow.new()
-		vb.add_child(note)
-		note.set_row("ℹ", "пісочниця, не жива гра", "")
+		_head = Widgets.H2Header.new()
+		vb.add_child(_head)
+		_head.set_header(_title, "демо")
+		_note = Widgets.StatRow.new()
+		vb.add_child(_note)
+		_note.set_row("ℹ", "пісочниця, не жива гра", "")
 		for i in POOL:
 			var slot := Widgets.CatalogSlot.new()
 			vb.add_child(slot)
@@ -161,6 +163,9 @@ class ActionBrowser extends PanelBase.Base:
 		var cat: Dictionary = vm.catalog
 		if not bool(cat.get("available", false)):
 			return
+		var live := bool(cat.get("live", false))
+		_head.set_header(_title, "у грі" if live else "демо")
+		_note.visible = not live
 		var rows: Array = cat.get(_slice, [])
 		for i in _slots.size():
 			if i < rows.size():

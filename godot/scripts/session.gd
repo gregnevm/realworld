@@ -28,10 +28,16 @@ var autosave := true   # tests disable disk writes
 var progression: Variant = null   # kernel/progression.gd; створюється лише в start()
 var auto_research := true   # idle research benches auto-pick the cheapest available project (queue wins)
 
+# spec 0008 phases 3–4: нові ігри цього session-а говорять каталожними ключами складу (open stock) і
+# отримують мапи з родовищами (руди/глина/пісок). Ставиться ДО start(); движковий дефолт лишається OFF,
+# тож заморожений main.gd і всі наявні сьюти не змінюються ні на байт. newhud вмикає його явно.
+var use_catalog := false
+
 func start(lat: float, lon: float, place_name: String) -> void:
-	var m := WorldGen.generate_map(lat, lon, MAP_N)
+	var m := WorldGen.generate_map(lat, lon, MAP_N, use_catalog)
 	m["place_name"] = place_name
 	sim = Sim.new()
+	sim.use_catalog = use_catalog   # ДО new_game: стартовий склад сідиться вже в активному словнику
 	sim.new_game(m)
 	progression = Progression.new(Catalog.load_json())
 	store = Persistence.store_new()
@@ -65,7 +71,8 @@ func travel_to(lat: float, lon: float, place_name: String) -> void:
 		sim.apply_pawn(pawn)
 		sim._log("↩ Повернення в %s." % str(sim.map.get("place_name", place_name)), "good")
 	else:
-		var m := WorldGen.generate_map(lat, lon, MAP_N)
+		# нові регіони успадковують словник активного сима: ON-світ отримує родовища скрізь
+		var m := WorldGen.generate_map(lat, lon, MAP_N, bool(sim.use_catalog))
 		m["place_name"] = place_name
 		sim.arrive_region(m, pawn)
 		sim._log("🛬 Нова місцевість: %s · біом %s." % [place_name, m.biome], "good")
@@ -84,13 +91,14 @@ func respawn() -> void:
 
 # ---------------- research pipeline (kernel/progression.gd driven from research benches) ----------------
 
-# Research-points per game-day produced by all standing research benches (data.gd `research_rate`).
+# Research-points per game-day produced by all standing research benches (`research_rate` through the
+# building-def seam — catalogue research stations fund the pipeline exactly like the data.gd bench).
 func research_rate() -> float:
 	if sim == null:
 		return 0.0
 	var rate := 0.0
 	for b in sim.buildings:
-		rate += float((GameData.BUILDINGS.get(b.kind, {}) as Dictionary).get("research_rate", 0.0))
+		rate += float(sim.building_def(b.kind).get("research_rate", 0.0))
 	return rate
 
 # Advance research by this frame's worth of bench work. `dt` is real seconds; cost is measured in

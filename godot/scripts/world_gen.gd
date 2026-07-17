@@ -75,7 +75,12 @@ static func _noise_at(grid: PackedFloat32Array, size: int, x: float, y: float) -
 	var v := yf * yf * (3.0 - 2.0 * yf)
 	return a * (1 - u) * (1 - v) + b * u * (1 - v) + c * (1 - u) * v + d * u * v
 
-static func generate_map(lat: float, lon: float, n: int = 56) -> Dictionary:
+# deposits (spec 0008 phase 4, перший тир): додаткові рудні/сировинні ноди для каталожного світу.
+# Пас іде ОКРЕМИМ rng-стрімом ПІСЛЯ базової генерації й лише займає вільні клітини, тож мапа без
+# прапора байт-у-байт та сама, а з прапором — строгий superset (базові ноди незмінні).
+const DEPOSIT_KINDS := ["clay_pit", "sand_patch", "coal_seam", "iron_vein", "copper_vein", "fiber_bush"]
+
+static func generate_map(lat: float, lon: float, n: int = 56, deposits: bool = false) -> Dictionary:
 	var seed_val := hash_seed(lat, lon)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_val
@@ -143,6 +148,9 @@ static func generate_map(lat: float, lon: float, n: int = 56) -> Dictionary:
 			elif t == RUIN and rng.randf() < 0.5:
 				nodes[i] = {"kind": "scrap", "amount": 8 + int(rng.randf() * 10)}
 
+	if deposits:
+		_deposit_pass(tiles, nodes, n, seed_val)
+
 	var spawn := _pick_spawn(tiles, nodes, n)
 	return {
 		"n": n, "tiles": tiles, "nodes": nodes, "spawn": spawn, "lat": lat, "lon": lon,
@@ -150,6 +158,62 @@ static func generate_map(lat: float, lon: float, n: int = 56) -> Dictionary:
 		"biome": "бореальний / сніжний" if snowy else ("посушливий" if arid else "помірний"),
 		"urban": urban,
 	}
+
+# Родовища першого тиру (глина/пісок/вугілля/залізо/мідь/волокно) — сировинні корені каталожних
+# ланцюгів (kiln→цегла, smelter→залізо...). Власний стрім (seed ^ константа) не зсуває базові draw-и.
+static func _deposit_pass(tiles: PackedByteArray, nodes: Dictionary, n: int, seed_val: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_val ^ 0x0DE9051
+	var placed := {"clay_pit": 0, "sand_patch": 0, "coal_seam": 0, "iron_vein": 0, "copper_vein": 0, "fiber_bush": 0}
+	for y in n:
+		for x in n:
+			var i := y * n + x
+			if nodes.has(i):
+				continue
+			var t := tiles[i]
+			var kind := ""
+			# скелі несуть жили; ґрунт/пісок — кар'єрні ями; трава — волокно. Ймовірності низькі:
+			# родовище — знахідка, не килим.
+			if t == ROCK:
+				var r := rng.randf()
+				if r < 0.10:
+					kind = "iron_vein"
+				elif r < 0.17:
+					kind = "coal_seam"
+				elif r < 0.22:
+					kind = "copper_vein"
+			elif t == SOIL:
+				var r2 := rng.randf()
+				if r2 < 0.10:
+					kind = "clay_pit"
+				elif r2 < 0.16:
+					kind = "sand_patch"
+			elif t == SAND:
+				if rng.randf() < 0.12:
+					kind = "sand_patch"
+			elif t == GRASS:
+				if rng.randf() < 0.012:
+					kind = "fiber_bush"
+			if kind != "":
+				nodes[i] = {"kind": kind, "amount": 8 + int(rng.randf() * 8)}
+				placed[kind] = int(placed[kind]) + 1
+	# Гарантований мінімум: біом міг не дати потрібного тайла (сніг без ґрунту тощо) — досіваємо по 2
+	# ноди кожного відсутнього виду на детермінованих вільних клітинах суходолу, щоб ланцюги
+	# неоліт→залізо були граними в БУДЬ-ЯКІЙ точці планети (принцип reachability з валідатора каталогу).
+	for kind in DEPOSIT_KINDS:
+		if int(placed[kind]) > 0:
+			continue
+		var need := 2
+		var tries := 0
+		while need > 0 and tries < n * n:
+			tries += 1
+			var x := 1 + int(rng.randf() * (n - 2))
+			var y := 1 + int(rng.randf() * (n - 2))
+			var i := y * n + x
+			if nodes.has(i) or tiles[i] == WATER:
+				continue
+			nodes[i] = {"kind": kind, "amount": 8 + int(rng.randf() * 8)}
+			need -= 1
 
 static func _pick_spawn(tiles: PackedByteArray, nodes: Dictionary, n: int) -> Vector2i:
 	var c := n >> 1

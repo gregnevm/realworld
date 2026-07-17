@@ -1,14 +1,30 @@
 # Spec 0008 — Catalog build/craft integration (resource-system bridge) — ADR, design-only
 
-> Status: **phases 1–2 shipped · phases 3–4 wait on §5 sign-off** (drafted 2026-07-08; updated
-> 2026-07-11). Phase 1 (BOM planner) landed in the catalog browsers; phase 2 (open catalogue-keyed
-> stock) landed behind `sim.use_catalog` — **default OFF**, so the shipped slice stays byte-identical
-> (its suites prove it) and no §5 decision is pre-empted. The seam is `sim.res_key/res_amount/`
-> `cost_keys/afford` — every stock access (sim internals, sim/ modules, hud_model slices) goes through
-> it, covered by `_t_open_stock` in `run_tests.gd` (both flag states). Depends on **spec 0007** (the
-> research→unlock pipeline, now live — it is the gate this step consumes) and **spec 0004 +
-> `docs/catalog.md`** (the 335-def tree). Design intent for the player side: `GDD_BOOK/gdd.json`
-> (`section:mechanics_overview`, `section:scope`).
+> Status: **phases 1–4 shipped (first tier)** (drafted 2026-07-08; updated 2026-07-17). Phase 1 (BOM
+> planner) landed in the catalog browsers; phase 2 (open catalogue-keyed stock) landed behind
+> `sim.use_catalog`; **phases 3–4 (first slice) landed 2026-07-17** per the owner's «продовжуй за
+> роадмепом» go-ahead, taking the §2 recommendation as the decision (Option A phased via C):
+> • **building-def seam** — `sim.building_def()` (`sim/catalog_live.gd`): data.gd palette first, else
+>   the catalogue BuildingDef in the same shape; every def consumer (sim, sim/ modules, world_view,
+>   hud_model, session) reads through it (tripwire `_t_building_def_seam`), so `try_build` places any
+>   unlocked, affordable catalogue building on the LIVE map (gated on the flag for new placements);
+> • **live catalogue craft** — `sim.catalog_craft(recipe)`: station standing on the map + research
+>   gate + open-stock afford → inputs paid, bulk output deposited (thing-output recipes deferred);
+> • **map deposits (phase 4, tier 1)** — `world_gen.generate_map(..., deposits)`: clay/sand/coal/
+>   iron/copper/fiber nodes from an independent seeded stream (base map byte-identical, ON = strict
+>   superset, guaranteed minimum per kind), so the neolithic→iron chains are playable anywhere;
+> • **live browsers** — the B/C/N catalog browsers act on the REAL game when the world is catalogue-
+>   backed (`cat_build` arms the placement ghost, `cat_craft` hits the live sim, `cat_research` feeds
+>   the live queue), badge flips «демо»→«у грі»; sandbox mode unchanged otherwise;
+> • **the flip** — `newhud` new games boot with `session.use_catalog = true`; the engine default stays
+>   OFF, so the frozen slice and every pre-existing suite are byte-identical (per-region flag persists
+>   in saves — §5.2 answered as "coexist behind the flag", no migration).
+> Phase-4 remainder (ores beyond the first tier, thing-output crafting, timed bills) tracks the
+> unification plan (spec 0007-catalogue-sim-unification Stage 4+). The stock seam is
+> `sim.res_key/res_amount/cost_keys/afford`, covered by `_t_open_stock`/`_t_catalog_live` (both flag
+> states). Depends on **spec 0007** (the research→unlock pipeline — the gate this step consumes) and
+> **spec 0004 + `docs/catalog.md`** (the 335-def tree). Design intent for the player side:
+> `GDD_BOOK/gdd.json` (`section:mechanics_overview`, `section:scope`).
 
 ---
 

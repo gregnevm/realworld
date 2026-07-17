@@ -45,9 +45,12 @@ func _init() -> void:
 	_t_content_pack()
 	_t_research_gates()
 	_t_use_catalog_persist()
+	_t_catalog_live()
+	_t_deposits()
 	_t_no_global_rng()
 	_t_static_typing()
 	_t_stock_seam()
+	_t_building_def_seam()
 	finish()
 
 
@@ -141,15 +144,21 @@ func _t_raid_scaling() -> void:
 	ok(GameData.raid_wave_size(50) == 12, "raid clamps at 12")
 
 func _t_data_integrity() -> void:
+	# вузли: класика -> data.gd RES; родовища (spec 0008 phase 4) -> реальний ресурс каталогу.
+	# Одруківка в каталожному id = назавжди мертва жила, тому перевіряємо проти catalog.json.
+	var cat_res := {}
+	for r in Catalog.load_json().get("resources", []):
+		cat_res[str(r.get("id", ""))] = true
 	var good := true
 	for k in GameData.NODEINFO:
-		if not GameData.RES.has(GameData.NODEINFO[k].res):
+		var res: String = str(GameData.NODEINFO[k].res)
+		if not (GameData.RES.has(res) or cat_res.has(res)):
 			good = false
 	for b in GameData.BUILDINGS:
 		for c in GameData.BUILDINGS[b].cost:
 			if not GameData.RES.has(c):
 				good = false
-	ok(good, "node/building tables reference valid resources")
+	ok(good, "node/building tables reference valid resources (RES або каталог)")
 	ok(GameData.BUILD_ORDER.size() == GameData.BUILDINGS.size(), "BUILD_ORDER covers BUILDINGS")
 	ok(GameData.RES_ORDER.size() == GameData.RES.size(), "RES_ORDER covers RES")
 	ok(GameData.HUBS.size() == 7, "7 trade hubs (parity with JS)")
@@ -886,6 +895,23 @@ func _t_stock_seam() -> void:
 	ok(offenders.is_empty(), "no direct stock access outside the res_key seam (spec 0008)%s"
 		% ("" if offenders.is_empty() else " — " + ", ".join(PackedStringArray(offenders))))
 
+# Шов дефів будівель (spec 0008 phase 3): прямі читання таблиці BUILDINGS поза швом заборонені —
+# інакше перший же каталожний kind крешить consumer-а. Поза корпусом: data.gd (власник таблиці),
+# заморожений main.gd, сам шов (sim/catalog_live.gd) і hud_model.gd (fake-фолбек палітри, як у
+# stock-шва). `.has(` не ловимо: перевірка членства в палітрі — не читання дефа.
+func _t_building_def_seam() -> void:
+	var offenders := []
+	for path in _product_scripts():
+		var p := str(path)
+		if p.ends_with("/data.gd") or p.ends_with("scripts/main.gd") \
+				or p.ends_with("/catalog_live.gd") or p.ends_with("/hud_model.gd"):
+			continue
+		var body := _read_code(p)
+		if "GameData.BUILDINGS[" in body or "GameData.BUILDINGS.get(" in body or "BUILDINGS.turret" in body:
+			offenders.append(p)
+	ok(offenders.is_empty(), "no direct BUILDINGS def reads outside the building_def seam (spec 0008)%s"
+		% ("" if offenders.is_empty() else " — " + ", ".join(PackedStringArray(offenders))))
+
 # Ворота живого контенту (spec 0007): кожен research-id з data.gd існує в catalog.json, а
 # RESEARCH_LABEL — точне дзеркало його label. Інакше неіснуючий id = контент замкнено назавжди
 # (session не має що мостити), а 🔒-повідомлення деградує до сирого id — і жоден тест цього не бачив.
@@ -927,6 +953,121 @@ func _t_use_catalog_persist() -> void:
 	s2.load_region(rec)
 	ok(s2.use_catalog, "load_region restores the stock vocabulary flag")
 	ok(int(s2.res_amount("food")) == 18, "restored save reads food through the bridge (catalogue keys)")
+
+# ---------------- spec 0008 phases 3–4: живі каталожні build/craft на playable-симі ----------------
+# Каталожна будівля ставиться на ЖИВУ карту через звичайний try_build (шов building_def), рецепт
+# крафтиться на поставленій станції з воротами досліджень і оплатою з відкритого складу, а сейв
+# круговертить каталожні kind-и. OFF-світ каталожних будівель не приймає (зріз незмінний).
+func _t_catalog_live() -> void:
+	var s = Sim.new()
+	s.use_catalog = true
+	s.new_game(WorldGen.generate_map(50.4501, 30.5234, 24, true))
+	s.research_unlocked = {"carpentry": true, "fire_mastery": true}   # session-міст, тут напряму
+	s.stock[s.res_key("wood")] = 100
+	s.stock["clay"] = 40
+	var spot := Vector2i(-1, -1)
+	var c: Vector2i = s.base_center()
+	for dy in range(-3, 4):
+		for dx in range(-3, 4):
+			if spot.x < 0 and s.build_valid(c.x + dx, c.y + dy):
+				spot = Vector2i(c.x + dx, c.y + dy)
+	s.try_build("kiln", spot.x, spot.y)
+	ok(s.bgrid.has(spot.y * s.n + spot.x) and String(s.bgrid[spot.y * s.n + spot.x].kind) == "kiln",
+		"каталожна піч поставлена на живу карту через try_build")
+	ok(int(s.stock["clay"]) == 28, "будівництво сплатило каталожну ціну (12 глини)")
+	var kdef: Dictionary = s.building_def("kiln")
+	ok(String(kdef.name) == "Піч для випалу" and float(kdef.hp) == 140.0, "шов дефів: каталожні name/hp")
+	# живий крафт на поставленій станції
+	var wood_before: int = s.res_amount("wood")
+	ok(bool(s.catalog_craft("make_charcoal").ok), "make_charcoal на печі пройшов")
+	ok(int(s.stock.get("charcoal", 0)) == 2, "вихід рецепта ліг у відкритий склад (+2 вугілля)")
+	ok(s.res_amount("wood") == wood_before - 4, "входи сплачені з живого складу")
+	# ворота: станція стоїть, дослідження нема (make_brick теж fire_mastery -> беремо cut_block-шлях)
+	ok(not bool(s.catalog_craft("smelt_iron").ok), "smelt_iron без плавильні відхилено (немає станції)")
+	s.research_unlocked.erase("fire_mastery")
+	ok(not bool(s.catalog_craft("make_brick").ok), "make_brick без fire_mastery відхилено (ворота)")
+	s.research_unlocked["fire_mastery"] = true
+	# thing-рецепти в живому світі чесно відмовляють
+	var cf := Vector2i(-1, -1)
+	for dy in range(-3, 4):
+		for dx in range(-3, 4):
+			if cf.x < 0 and s.build_valid(c.x + dx, c.y + dy):
+				cf = Vector2i(c.x + dx, c.y + dy)
+	s.stock[s.res_key("wood")] = 100
+	s.try_build("campfire", cf.x, cf.y)
+	ok(not bool(s.catalog_craft("cook_simple_meal").ok), "thing-рецепт (страва) у живому світі відхилено")
+	# знесення каталожної будівлі повертає половину каталожної ціни
+	var clay_before: int = int(s.stock["clay"])
+	ok(bool(s.demolish(spot.x, spot.y).ok), "каталожну будівлю можна знести")
+	ok(int(s.stock["clay"]) == clay_before + 6, "знесення повернуло половину глини")
+	# персистенс: каталожний kind і hp переживають serialize/load
+	s.try_build("kiln", spot.x, spot.y)
+	var rec := Persistence.serialize_region(s)
+	var s2 = Sim.new()
+	s2.load_region(rec)
+	var found := false
+	for b in s2.buildings:
+		if String(b.kind) == "kiln":
+			found = true
+			ok(absf(float(b.hp) - 140.0) < 0.5, "hp каталожної будівлі відновлено з шва")
+	ok(found, "каталожний kind пережив serialize/load_region")
+	# OFF-світ: каталожні будівлі не ставляться, крафт не працює
+	var off = Sim.new()
+	off.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
+	off.stock["clay"] = 40
+	var bcount: int = off.buildings.size()
+	off.try_build("kiln", spot.x, spot.y)
+	ok(off.buildings.size() == bcount, "OFF: каталожна будівля відхилена (зріз незмінний)")
+	ok(not bool(off.catalog_craft("make_charcoal").ok), "OFF: живий каталожний крафт вимкнено")
+
+# ---------------- spec 0008 phase 4 (тир 1): родовища каталожного світу ----------------
+func _t_deposits() -> void:
+	var base := WorldGen.generate_map(50.4501, 30.5234, 32)
+	var dep := WorldGen.generate_map(50.4501, 30.5234, 32, true)
+	ok(dep.tiles == base.tiles, "deposit-пас не чіпає рельєф")
+	var same := true
+	for i in base.nodes:
+		var bn: Dictionary = base.nodes[i]
+		var dn: Variant = dep.nodes.get(i)
+		if dn == null or String(dn.kind) != String(bn.kind) or int(dn.amount) != int(bn.amount):
+			same = false
+	ok(same, "базові вузли незмінні (deposit-мапа — строгий superset)")
+	ok(dep.nodes.size() > base.nodes.size(), "родовища додано поверх бази")
+	var kinds := {}
+	for i in dep.nodes:
+		kinds[String(dep.nodes[i].kind)] = true
+	var all_kinds := true
+	for k in WorldGen.DEPOSIT_KINDS:
+		if not kinds.has(str(k)):
+			all_kinds = false
+	ok(all_kinds, "усі 6 видів родовищ присутні (гарантований мінімум)")
+	var dep2 := WorldGen.generate_map(50.4501, 30.5234, 32, true)
+	ok(JSON.stringify(dep2.nodes) == JSON.stringify(dep.nodes), "deposit-пас детермінований від координат")
+	# кожен deposit-kind відомий NODEINFO (інакше клік по ноду крешить gather)
+	var info_ok := true
+	for k in WorldGen.DEPOSIT_KINDS:
+		if not GameData.NODEINFO.has(str(k)):
+			info_ok = false
+	ok(info_ok, "кожен deposit-kind має NODEINFO (res/time/color)")
+	# збір руди: синтетичний вузол біля пішки -> руда падає в кишеню каталожним id
+	var s = Sim.new()
+	s.use_catalog = true
+	s.new_game(dep)
+	var px := int(s.player.px)
+	var py := int(s.player.py)
+	var vein := Vector2i(-1, -1)
+	for dy in range(-2, 3):
+		for dx in range(-2, 3):
+			if vein.x < 0 and (dx != 0 or dy != 0) and s.build_valid(px + dx, py + dy):
+				vein = Vector2i(px + dx, py + dy)
+	ok(vein.x >= 0, "біля спавну є вільна клітина під тестову жилу")
+	s.map.nodes[vein.y * int(s.n) + vein.x] = {"kind": "iron_vein", "amount": 3}
+	s.order_gather(vein.x, vein.y)
+	for i in 400:
+		s.update(0.1)
+		if int((s.player.carry as Dictionary).get("iron_ore", 0)) > 0:
+			break
+	ok(int((s.player.carry as Dictionary).get("iron_ore", 0)) > 0, "збір жили кладе iron_ore у кишеню")
 
 # every product .gd (the scripts tree + the scene entry) — the corpus for source-scan tripwires
 func _product_scripts() -> Array:

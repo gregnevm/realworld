@@ -54,7 +54,7 @@ static func recompute_indoor(s) -> void:
 	for i in n * n:
 		open[i] = 0 if WorldGen.is_terrain_blocked(s.map.tiles[i]) else 1
 	for b in s.buildings:
-		if GameData.BUILDINGS[b.kind].get("blocks", false) or String(b.kind).begins_with("door"):
+		if s.building_def(b.kind).get("blocks", false) or String(b.kind).begins_with("door"):
 			open[b.y * n + b.x] = 0
 	var outdoor := PackedByteArray()
 	outdoor.resize(n * n)

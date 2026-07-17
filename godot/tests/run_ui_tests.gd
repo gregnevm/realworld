@@ -51,6 +51,8 @@ func _init() -> void:
 	_t_tech_intent()
 	_t_action_browsers()
 	_t_bom_tips()
+	_t_live_catalog_slice()
+	_t_live_catalog_verbs()
 	_t_panel_registry()
 	_t_overlay_registry()
 	_t_hotkey_contract()
@@ -435,6 +437,61 @@ func _t_bom_tips() -> void:
 	var ra: Array = snap.research_actions
 	ok(ra.size() > 0 and String(ra[0].tip).begins_with("Відкриє:"), "research rows tip names what the project unlocks")
 
+# ---------------- spec 0008 phase 3: живий каталожний світ у HUD (slice live:true + чесні бейджі) ----------------
+func _t_live_catalog_slice() -> void:
+	var sim := _LiveFakeSim.new()
+	var cat: Dictionary = HudModel._catalog_slice(sim)
+	ok(bool(cat.get("live", false)), "use_catalog ON -> catalog slice live:true (читає живий сим)")
+	var has_planks := false
+	var has_thing := false
+	for r in cat.craft_actions:
+		if r.id == &"make_planks":
+			has_planks = true
+		if r.id == &"cook_simple_meal":
+			has_thing = true
+	ok(has_planks, "live craft_actions: рецепт станції, що стоїть на мапі (make_planks @ workbench)")
+	ok(not has_thing, "live craft_actions: thing-рецепти (страви) відфільтровано — жодних мертвих кнопок")
+	ok((cat.build_actions as Array).size() > 0, "live build_actions: відкриті будівлі рахуються від живого складу")
+	# склад: каталожні ресурси поза 6 класичними рядками виходять у extra (глина видима)
+	var st: Dictionary = HudModel._stock_slice(sim)
+	var clay_row := false
+	for x in (st.get("extra", []) as Array):
+		if String(x.id) == "clay" and int(x.amt) == 7:
+			clay_row = true
+	ok(clay_row, "stock slice: каталожна глина видима у extra-рядку (id+icon+label+amt)")
+	# бейдж чесності: live -> «у грі», notice прихований; sandbox -> «демо», notice видимий
+	var bb = CatalogPanels.BuildBrowser.new()
+	bb.bind({"catalog": cat})
+	ok(not bb._note.visible, "live: рядок «пісочниця, не жива гра» прихований")
+	var sandbox_cat: Dictionary = CatalogView.snapshot(CatalogView.default_db(), {"unlocked": {}, "stock": {}})
+	bb.bind({"catalog": sandbox_cat})
+	ok(bb._note.visible, "sandbox: рядок «пісочниця» повернувся (одна правда на дію)")
+	bb.free()
+	# OFF-сим -> slice веде в пісочницю (live:false)
+	var off: Dictionary = HudModel._catalog_slice(_FakeSim.new())
+	ok(not bool(off.get("live", true)), "сим без use_catalog -> sandbox slice (live:false)")
+
+# ---------------- spec 0008 phase 3: live-диспетчеризація cat_* verbs (одні інтенти, дві чесні цілі) ----------------
+func _t_live_catalog_verbs() -> void:
+	var sandbox = CatalogSim.new()
+	var ic = InputCtl.InputController.new()
+	var armed: Array = []
+	CatalogVerbs.install(ic, sandbox, func(kind: String) -> void: armed.append(kind))
+	var sess := _LiveSession.new()
+	sess.sim = _LiveVerbSim.new()
+	ic.dispatch(&"cat_build", {"id": "kiln"}, sess)
+	ok(armed == ["kiln"], "live cat_build армує ghost розміщення (view-callable), не пісочницю")
+	ok(not sandbox.has_building("kiln"), "пісочниця незаймана live-браузером")
+	ic.dispatch(&"cat_craft", {"id": "make_brick"}, sess)
+	ok((sess.sim.crafted as Array) == ["make_brick"], "live cat_craft -> sim.catalog_craft (жива гра)")
+	ok((sess.sim.flashes as Array).size() == 1, "відмова живого крафту флешиться (R10-канал сима)")
+	ic.dispatch(&"cat_research", {"id": "smelting"}, sess)
+	ok((sess.enqueued as Array) == ["smelting"], "live cat_research -> жива черга досліджень (session)")
+	# без live-сесії verbs ідуть у пісочницю — старий контракт браузерів-демо незмінний
+	ic.dispatch(&"cat_research", {"id": "carpentry"}, null)
+	ok(String(sandbox.research.active) == "carpentry", "null-сесія -> sandbox-шлях (сумісність)")
+	sandbox.dispose()
+
 # ---------------- PanelRegistry == SystemRegistry (sort/get/by_dock/bind_visible) ----------------
 func _t_panel_registry() -> void:
 	var reg = PanelReg.PanelRegistry.new()
@@ -570,8 +627,8 @@ func _t_rule_tripwires() -> void:
 			r7 = false
 	ok(r7, "R7: no raw .position/PRESET_TOP_RIGHT in panels/widgets/overlays (pin_* only)")
 	# R9 — sim commands appear only in the router, never in panels/widgets
-	var cmds := ["try_build", "demolish", "craft_item", "dispatch_convoy", "try_launch_capsule",
-		"order_move", "order_gather", "order_attack", "accept_invite"]
+	var cmds := ["try_build", "demolish", "craft_item", "catalog_craft", "dispatch_convoy",
+		"try_launch_capsule", "order_move", "order_gather", "order_attack", "accept_invite"]
 	var r9 := true
 	for f in ["panels.gd", "widgets.gd", "catalog_panels.gd", "lifecycle.gd", "world_panels.gd"]:
 		var body := _read_code("res://scripts/ui/" + f)
@@ -622,6 +679,36 @@ class _FakeSession extends RefCounted:
 	var progression = null
 	func chain_head() -> String: return "abcdef1234567890"
 	func stored_region_count() -> int: return 1
+
+# --- fakes каталожного live-режиму (spec 0008 phase 3) ---
+class _LiveFakeSim extends RefCounted:
+	var use_catalog := true
+	var research_unlocked: Dictionary = {"carpentry": true}
+	var stock: Dictionary = {"wood": 50, "stone": 30, "clay": 7}
+	var buildings: Array = [
+		{"kind": "workbench", "x": 1, "y": 1, "hp": 100.0},
+		{"kind": "campfire", "x": 2, "y": 1, "hp": 30.0},
+	]
+	func res_key(res) -> String:
+		return "raw_food" if str(res) == "food" else str(res)
+	func storage_cap() -> int: return 250
+
+class _LiveSession extends RefCounted:
+	var sim
+	var enqueued: Array = []
+	func enqueue_research(id: String) -> bool:
+		enqueued.append(id)
+		return true
+
+class _LiveVerbSim extends RefCounted:
+	var use_catalog := true
+	var crafted: Array = []
+	var flashes: Array = []
+	func catalog_craft(id: String) -> Dictionary:
+		crafted.append(id)
+		return {"ok": false, "msg": "тест"}
+	func _flash(t: String) -> void:
+		flashes.append(t)
 
 class _FakeSim extends RefCounted:
 	var player: Dictionary = {"hp": 100.0, "hunger": 82.0, "rest": 92.0, "carry_cap": 30, "sleeping": false, "equipped": {"tool": "", "weapon": ""}, "items": [], "carry": {}}

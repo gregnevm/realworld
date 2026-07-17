@@ -119,8 +119,19 @@ rows advertise `Відкриє: 🏛N ⚒N 🔧N` (tree scan). This also fixes t
 station is placed it lists that station's recipes with their input shortfall. Purely additive (the
 `CatalogSim` forward model, not the live `data.gd` sim), so the shipped slice and its suites are
 untouched; tips are computed only for the ≤12 rows that survive the cap (no per-frame graph walk for
-hidden rows). Verified in `run_ui_tests.gd` `_t_bom_tips`. Spec 0008 phases 2–4 (the flagged
-`use_catalog` migration of the **live** sim onto the catalogue) remain owner-gated per the ADR.
+hidden rows). Verified in `run_ui_tests.gd` `_t_bom_tips`.
+
+**Update (2026-07-17, spec 0008 phases 3–4 — the catalogue went LIVE, first tier):** the flagged
+migration shipped its playable slice. `sim/catalog_live.gd` adds the **building-def seam**
+(`sim.building_def` — data.gd palette first, catalogue `BuildingDef` otherwise; every consumer reads
+through it, tripwire-enforced) and **live catalogue craft** (`sim.catalog_craft` — station on the map
++ research gate + open stock). `world_gen` grows **first-tier deposits** (clay/sand/coal/iron/copper/
+fiber) behind the flag from an independent seeded stream (base maps byte-identical). The B/C/N
+browsers now act on the **real game** in a catalogue world («у грі» badge; ghost-arm → `try_build`,
+live craft, live research queue) and stay an honest «демо» sandbox otherwise. `newhud` new games boot
+with `use_catalog = true`; the engine default stays OFF so the frozen slice and its suites are
+untouched. Remaining for full Option A: ores beyond tier 1, thing-output (meal) crafting, timed
+production bills — tracked as unification Stage 4+ (spec 0007-catalogue-sim-unification).
 
 ## How to read this
 

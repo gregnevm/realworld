@@ -129,7 +129,7 @@ static func update_enemies(s, dt: float) -> void:
 		# будь-яка майбутня будівля з trap_dps ранить воїв без правки цього мозку (як blocks/extra.heat)
 		var ti: int = int(e.py) * s.n + int(e.px)
 		if s.bgrid.has(ti):
-			var trap_dps := float(GameData.BUILDINGS[s.bgrid[ti].kind].get("trap_dps", 0.0))
+			var trap_dps := float(s.building_def(s.bgrid[ti].kind).get("trap_dps", 0.0))
 			if trap_dps > 0.0:
 				damage_enemy(s, e, trap_dps * dt)
 				damage_building(s, s.bgrid[ti], 4.0 * dt, false, "")
@@ -166,7 +166,7 @@ static func update_enemies(s, dt: float) -> void:
 		if not e.path.is_empty():
 			var nx: Vector2i = e.path[0]
 			var bi: int = nx.y * s.n + nx.x
-			if s.bgrid.has(bi) and GameData.BUILDINGS[s.bgrid[bi].kind].get("blocks", false):
+			if s.bgrid.has(bi) and s.building_def(s.bgrid[bi].kind).get("blocks", false):
 				e.face = atan2(nx.y + 0.5 - e.py, nx.x + 0.5 - e.px)
 				if e.atk_cd <= 0:
 					damage_building(s, s.bgrid[bi], e.dmg, false, destroyer)
@@ -181,7 +181,7 @@ static func update_turrets(s, dt: float) -> void:
 	for b in s.buildings:
 		if b.kind != "turret":
 			continue
-		var def: Dictionary = GameData.BUILDINGS.turret
+		var def: Dictionary = s.building_def("turret")
 		b.cool = max(0.0, b.cool - dt)
 		var e: Variant = s._nearest_enemy(b.x + 0.5, b.y + 0.5, def.range)
 		if e == null:
@@ -207,10 +207,11 @@ static func damage_building(s, b, amt: float, steal: bool, destroyer: String = "
 			s.stock[s.res_key(kk)] -= lost
 	if b.hp <= 0:
 		s._remove_building(b)
+		var bname: String = String(s.building_def(b.kind).get("name", b.kind))
 		if destroyer == "":
-			s._log("💥 %s зносилися від спрацьовувань." % GameData.BUILDINGS[b.kind].name, "bad")
+			s._log("💥 %s зносилися від спрацьовувань." % bname, "bad")
 		else:
-			s._log("💥 %s зруйновано %s." % [GameData.BUILDINGS[b.kind].name, destroyer], "bad")
+			s._log("💥 %s зруйновано %s." % [bname, destroyer], "bad")
 
 static func damage_enemy(s, e, amt: float) -> void:
 	e.hp -= amt

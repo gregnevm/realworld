@@ -71,7 +71,11 @@ func _ready() -> void:
 	balance = Balance.Balance.new()
 	router = InputController.InputController.new()
 	InputVerbs.install(router)
-	CatalogVerbs.install(router, CatalogSim.shared())   # forward-engine build/craft/research commands
+	# cat_* verbs: live catalogue world → real game (build arms the ghost below, craft/research hit the
+	# live sim/session); no live world → the catalog_sim sandbox («демо»). The arm callable is the SAME
+	# toggle semantics as select_build — the ghost is view state, owned at this tier.
+	CatalogVerbs.install(router, CatalogSim.shared(), func(kind: String) -> void:
+		view.selected_build = "" if String(view.selected_build) == kind else kind)
 	# view-state verb: arming the build ghost is VIEW state, not a sim command — bound here where the
 	# view lives (entry-scene wiring, the same tier that installs the session verbs)
 	router.bind(&"select_build", func(_s, a: Dictionary) -> void:
@@ -127,6 +131,9 @@ func _start_game(lat: float, lon: float, place_name: String) -> void:
 	if session != null:
 		return   # уже в грі (пізній GPS-callback чи повторний сигнал): другий бут ремонтував би панелі
 	session = SessionScript.new()
+	# spec 0008 phases 3–4: нові ігри playable-зрізу живуть у каталожному світі — open stock,
+	# родовища на мапі, живі каталожні build/craft. Движковий дефолт лишається OFF (сьюти незмінні).
+	session.use_catalog = true
 	session.start(lat, lon, place_name)
 	view.sim = session.sim
 	winput.session = session
@@ -178,7 +185,8 @@ func _process(dt: float) -> void:
 	if sdt > 0.0 and not session.sim.dead:
 		session.sim.update(sdt)
 		session.tick_research(sdt)    # research benches fund the tech pipeline each frame
-	CatalogSim.shared().tick(sdt)     # advance the forward-engine catalogue model
+	if session.sim.get("use_catalog") != true:
+		CatalogSim.shared().tick(sdt)   # sandbox model ticks only when it IS the browsers' target
 	cam.global_position = Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE)
 	view.queue_redraw()
 	overlay_host.map_n = int(session.sim.n)   # keep in lockstep with the live region (survives travel)
@@ -254,5 +262,5 @@ func _build_demo_base() -> void:
 	session.progression.add_points(0.8)   # ~half of carpentry so the active bar is visibly filled
 
 func _put(kind: String, x: int, y: int) -> void:
-	if session.sim.build_valid(x, y) and session.sim.afford(GameData.BUILDINGS[kind].cost):
+	if session.sim.build_valid(x, y) and session.sim.afford(session.sim.building_def(kind).cost):
 		router.dispatch(&"build", {"kind": kind, "x": x, "y": y}, session)

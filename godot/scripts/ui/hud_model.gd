@@ -9,6 +9,7 @@ const Fmt = preload("res://scripts/ui/format.gd")
 const GameData = preload("res://scripts/data.gd")
 const CatalogView = preload("res://scripts/ui/catalog_view.gd")
 const CatalogSim = preload("res://scripts/catalog_sim.gd")
+const CatalogLive = preload("res://scripts/sim/catalog_live.gd")
 const Social = preload("res://scripts/social.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
 
@@ -161,11 +162,21 @@ static func _cost_line(id: String, cost: Dictionary) -> String:
 	return String(_cost_cache[id])
 
 # --- content tree (the deep catalogue surfaced in the HUD via the CatalogView pipeline) ---
-# Value-data only (R8). Reads the process-shared forward-engine model (catalog_sim) so the browsers'
-# actionable rows and the router's build/craft/research commands operate the SAME state — browse an
-# action, click it, watch the counts move. The live data.gd sim (`sim`) is untouched; this is a
-# parallel catalogue model whose db is the cached default catalogue.
-static func _catalog_slice(_sim) -> Dictionary:
+# Value-data only (R8). TWO sources, one truth per mode (spec 0008 phase 3):
+#   • use_catalog ON — the slice reads the LIVE sim (research мостом із progression, open stock,
+#     станції = будівлі на мапі), і браузери діють на реальну гру (live: true);
+#   • OFF — the process-shared forward-engine sandbox (catalog_sim), чесно бейджована «демо».
+static func _catalog_slice(sim) -> Dictionary:
+	# Object.get("use_catalog") -> null на test-fake-ах; bool(null) — невалідний конструктор, тому == true
+	if sim != null and sim.get("use_catalog") == true:
+		var unlocked: Variant = sim.get("research_unlocked")
+		var state := {
+			"unlocked": unlocked if unlocked is Dictionary else {},
+			"stock": sim.stock,
+			"stations": CatalogLive.stations_placed(sim),
+			"live": true,
+		}
+		return CatalogView.snapshot(CatalogView.default_db(), state)
 	var cs: Variant = CatalogSim.shared(CatalogView.default_db())
 	return CatalogView.snapshot(cs.db, cs.view_state())
 
@@ -176,7 +187,7 @@ static func world_of(sim) -> Dictionary:
 		return {"buildings": [], "stock": {}, "items": []}
 	var bs := []
 	for b in sim.buildings:
-		var def: Dictionary = GameData.BUILDINGS.get(b.kind, {})
+		var def: Dictionary = sim.building_def(b.kind) if sim.has_method("building_def") else {}
 		bs.append({"value": float(def.get("hp", 50.0)) * 0.5})
 	return {"buildings": bs, "stock": sim.stock, "items": (sim.player.get("items", []) as Array)}
 
@@ -254,6 +265,9 @@ static func _afford(sim, cost: Dictionary) -> bool:
 	return bool(sim.afford(cost)) if sim.has_method("afford") else GameData.can_afford(sim.stock, cost)
 
 # --- stock (rows in RES_ORDER; total computed purely; cap from the sim) ---
+# У каталожному світі склад несе більше за 6 класичних рядків: extra — ненульові каталожні ресурси
+# (глина/руди/бруски...), value-data {id, icon, label, amt}, кап 8 під фіксований пул панелі (R2).
+const STOCK_EXTRA_CAP := 8
 static func _stock_slice(sim) -> Dictionary:
 	var rows := {}
 	var total := 0
@@ -261,7 +275,28 @@ static func _stock_slice(sim) -> Dictionary:
 		var amt: int = _amount(sim, res)
 		rows[res] = amt
 		total += amt
-	return {"rows": rows, "total": total, "cap": int(sim.storage_cap())}
+	var extra: Array = []
+	if sim != null and sim.get("use_catalog") == true:
+		var shown := {}
+		for res in GameData.RES_ORDER:
+			shown[String(sim.res_key(res))] = true
+		var keys: Array = []
+		for k in sim.stock:
+			if not shown.has(String(k)) and int(sim.stock[k]) > 0:
+				keys.append(String(k))
+		keys.sort()
+		var db: Variant = CatalogView.default_db()
+		for k in keys.slice(0, STOCK_EXTRA_CAP):
+			var d: Variant = db.get_def(StringName(String(k)))
+			var amt2: int = int(sim.stock[k])
+			total += amt2
+			extra.append({
+				"id": String(k),
+				"icon": String(d.icon()) if d != null and d.has_method("icon") else "▪",
+				"label": String(d.label()) if d != null and d.has_method("label") else String(k),
+				"amt": amt2,
+			})
+	return {"rows": rows, "total": total, "cap": int(sim.storage_cap()), "extra": extra}
 
 # --- build palette (afford flag per building; locked = research-ворота ще не відкриті, spec 0007) ---
 static func _build_slice(sim) -> Dictionary:
@@ -269,7 +304,8 @@ static func _build_slice(sim) -> Dictionary:
 	var unlocked: Variant = sim.get("research_unlocked")
 	for i in GameData.BUILD_ORDER.size():
 		var key: String = GameData.BUILD_ORDER[i]
-		var def: Dictionary = GameData.BUILDINGS[key]
+		# палітра — curated data.gd view; читаємо через шов, коли сим справжній (fake-и без нього)
+		var def: Dictionary = sim.building_def(key) if sim.has_method("building_def") else GameData.BUILDINGS[key]
 		slots.append({
 			"key": key,
 			"name": String(def.name),

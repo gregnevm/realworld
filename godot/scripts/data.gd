@@ -16,6 +16,14 @@ const NODEINFO := {
 	"rock": {"res": "stone", "time": 1.8, "color": "8b9099"},
 	"bush": {"res": "food", "time": 1.0, "color": "6fae54"},
 	"scrap": {"res": "scrap", "time": 1.5, "color": "86d0d6"},
+	# Родовища каталожного світу (spec 0008 phase 4, тир 1): res — КАТАЛОЖНІ id (пишуться в open stock
+	# напряму; у OFF-світі ці ноди не генеруються, тож 6-ключовий словник вони не забруднюють).
+	"clay_pit": {"res": "clay", "time": 1.6, "color": "a06a48"},
+	"sand_patch": {"res": "sand", "time": 1.2, "color": "d9c58a"},
+	"coal_seam": {"res": "coal", "time": 2.0, "color": "3a3d42"},
+	"iron_vein": {"res": "iron_ore", "time": 2.2, "color": "b06f52"},
+	"copper_vein": {"res": "copper_ore", "time": 2.2, "color": "3f8f7a"},
+	"fiber_bush": {"res": "plant_fiber", "time": 1.1, "color": "7fae3f"},
 }
 
 const BUILDINGS := {

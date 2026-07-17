@@ -58,12 +58,13 @@ func _draw() -> void:
 		var cell: int = sim.player.action.cell
 		draw_rect(Rect2((cell % n) * TILE + 2, int(cell / n) * TILE + 2, TILE - 4, TILE - 4), Color(1, 0.81, 0.36, 0.9), false, 2.0)
 	if selected_build != "" and sim._in(hover.x, hover.y):
-		var okb: bool = sim.build_valid(hover.x, hover.y) and sim.afford(GameData.BUILDINGS[selected_build].cost)
+		var bdef: Dictionary = sim.building_def(selected_build)
+		var okb: bool = sim.build_valid(hover.x, hover.y) and not bdef.is_empty() and sim.afford(bdef.get("cost", {}))
 		var col := Color(0.35, 0.82, 0.55, 0.5) if okb else Color(1, 0.35, 0.35, 0.45)
 		var gr := Rect2(hover.x * TILE + 1, hover.y * TILE + 1, TILE - 2, TILE - 2)
 		draw_rect(gr, col)
 		draw_rect(gr, Color.html("5fd38a") if okb else Color.html("ff6b6b"), false, 2.0)
-		var gl: String = BUILD_GLYPH.get(selected_build, "?")
+		var gl := _glyph(selected_build, bdef)
 		draw_string(_font, Vector2(hover.x * TILE + TILE * 0.3, hover.y * TILE + TILE * 0.7), gl, HORIZONTAL_ALIGNMENT_LEFT, -1, int(TILE * 0.5), Color(1, 1, 1, 0.85))
 	for s in sim.shots:
 		draw_line(Vector2(s.x1 * TILE, s.y1 * TILE), Vector2(s.x2 * TILE, s.y2 * TILE), Color(1, 0.9, 0.47, clampf(s.t / 0.12, 0, 1)), 2.0)
@@ -87,9 +88,28 @@ func _draw_node(node, x: int, y: int) -> void:
 				draw_circle(c + Vector2((k - 1) * r * 0.4, (k % 2) * r * 0.2), r * 0.14, Color.html("d3506a"))
 		"scrap":
 			draw_rect(Rect2(c.x - r * 0.5, c.y - r * 0.2, r, r * 0.4), Color.html("86d0d6"))
+		"fiber_bush":
+			draw_circle(c, r * 0.65, Color.html("7fae3f"))
+			draw_arc(c, r * 0.45, 0, TAU, 10, Color.html("bcd77a"), 2.0)
+		_:
+			# родовище (глина/пісок/вугілля/руди): ромб у кольорі NODEINFO + світла крапка-«блиск»
+			var info: Variant = GameData.NODEINFO.get(node.kind)
+			if info != null:
+				var col := Color.html(String(info.color))
+				var pts := PackedVector2Array([c + Vector2(0, -r * 0.8), c + Vector2(r * 0.8, 0), c + Vector2(0, r * 0.8), c + Vector2(-r * 0.8, 0)])
+				draw_colored_polygon(pts, col)
+				draw_circle(c + Vector2(-r * 0.25, -r * 0.25), r * 0.16, Color(1, 1, 1, 0.55))
+
+# Glyph for a building kind: the classic table first, else the first letter of the def's name —
+# catalogue buildings (kiln/smelter/...) get a readable Cyrillic initial without a hand-drawn table.
+func _glyph(kind: String, def: Dictionary) -> String:
+	if BUILD_GLYPH.has(kind):
+		return BUILD_GLYPH[kind]
+	var label := String(def.get("name", "?"))
+	return label.substr(0, 1).to_upper() if label != "" else "?"
 
 func _draw_building(b) -> void:
-	var def: Dictionary = GameData.BUILDINGS[b.kind]
+	var def: Dictionary = sim.building_def(b.kind)
 	var p := Vector2(b.x * TILE, b.y * TILE)
 	var c := p + Vector2(TILE, TILE) * 0.5
 	match b.kind:
@@ -99,12 +119,13 @@ func _draw_building(b) -> void:
 			draw_rect(Rect2(p.x + 1, p.y + 1, TILE - 2, TILE - 2), Color.html("7d756a"))
 		_:
 			draw_rect(Rect2(p.x + 2, p.y + 2, TILE - 4, TILE - 4), Color(0.08, 0.10, 0.13, 0.7))
-			var letter: String = BUILD_GLYPH.get(b.kind, "?")
+			var letter := _glyph(String(b.kind), def)
 			draw_string(_font, c + Vector2(-TILE * 0.22, TILE * 0.22), letter, HORIZONTAL_ALIGNMENT_LEFT, -1, int(TILE * 0.6), Color.html("e7edf3"))
 			if b.kind == "turret":
 				draw_line(c, c + Vector2(cos(b.aim), sin(b.aim)) * TILE * 0.45, Color.html("2a2f36"), maxf(2.0, TILE * 0.12))
-	if b.hp < def.hp:
-		var fr: float = b.hp / def.hp
+	var maxhp := float(def.get("hp", 50.0))
+	if b.hp < maxhp:
+		var fr: float = b.hp / maxhp
 		draw_rect(Rect2(p.x + 2, p.y - 2, TILE - 4, 3), Color(0, 0, 0, 0.5))
 		var bc := Color.html("5fd38a") if fr > 0.5 else (Color.html("ffcf5c") if fr > 0.25 else Color.html("ff6b6b"))
 		draw_rect(Rect2(p.x + 2, p.y - 2, (TILE - 4) * fr, 3), bc)
