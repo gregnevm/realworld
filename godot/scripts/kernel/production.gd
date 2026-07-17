@@ -149,24 +149,22 @@ class ProductionSystem extends Systems.SimSystem:
 		priority = 20
 
 	func _things(world) -> Array:
-		if world != null and typeof(world) == TYPE_DICTIONARY:
-			return world.get("things", [])
-		return []
+		return Things.world_things(world)
 
 	func system_tick(world, ctx: Dictionary) -> void:
 		if typeof(world) != TYPE_DICTIONARY:
 			return
-		var db = world.get("db", null)
+		var db: Variant = world.get("db", null)
 		var stock: Dictionary = world.get("stock", {})
 		if not world.has("stock"):
 			world["stock"] = stock
-		var research = world.get("research", null)
+		var research: Variant = world.get("research", null)
 		var dday: float = float(ctx.get("dday", 0.0))
 
 		for t in _things(world):
 			if t == null or t.destroyed:
 				continue
-			var wb = t.get_comp(CompWorkbench)
+			var wb: Variant = t.get_comp(CompWorkbench)
 			if wb == null:
 				continue
 			var maker_level: float = wb.maker_level()
@@ -179,7 +177,7 @@ class ProductionSystem extends Systems.SimSystem:
 
 	# Advance a single bill one tick. Mutates stock/world on completion.
 	func _tick_bill(b: Bill, db, research, stock: Dictionary, world, dday: float, maker_level: float, ctx: Dictionary) -> void:
-		var recipe = db.get_def(b.recipe_id) if db != null else null
+		var recipe: Variant = db.get_def(b.recipe_id) if db != null else null
 		if recipe == null:
 			b.stalled = true
 			return
@@ -226,9 +224,9 @@ class ProductionSystem extends Systems.SimSystem:
 			var spawn: Array = world.get("spawn", [])
 			if not world.has("spawn"):
 				world["spawn"] = spawn
-			var rng = _world_rng(world)
+			var rng := _world_rng(world)
 			for i in count:
-				var thing = _make_output_thing(recipe, out, out_id, maker_level)
+				var thing: Things.Thing = _make_output_thing(recipe, out, out_id, maker_level)
 				thing.post_make(rng)   # roll quality deterministically at creation (documented contract)
 				spawn.append(thing)
 			# Also tally spawned things into world.stock as a logical count so 'until'-mode bills whose
@@ -243,7 +241,7 @@ class ProductionSystem extends Systems.SimSystem:
 	# quality is ALWAYS rolled here, never left at CompQuality's default tier — even for a host that omits
 	# world.rng. Determinism preserved: no time seed, no global randf().
 	func _world_rng(world) -> RandomNumberGenerator:
-		var rng = world.get("rng", null)
+		var rng: Variant = world.get("rng", null)
 		if rng is RandomNumberGenerator:
 			return rng
 		var fallback := RandomNumberGenerator.new()
@@ -255,13 +253,13 @@ class ProductionSystem extends Systems.SimSystem:
 	# names (e.g. a meal wants CompRottable), always stamped with CompQuality(maker_level). The caller
 	# (_yield) then post_makes it with the world rng so its quality tier is rolled deterministically at
 	# creation — see _world_rng.
-	func _make_output_thing(recipe, out: Dictionary, out_id: StringName, maker_level: float):
-		var def = Defs.Def.new(&"item", out_id, {"max_hp": float(out.get("max_hp", 60.0))})
-		var thing = Things.Thing.new(def)
+	func _make_output_thing(_recipe, out: Dictionary, out_id: StringName, maker_level: float):
+		var def := Defs.Def.new(&"item", out_id, {"max_hp": float(out.get("max_hp", 60.0))})
+		var thing := Things.Thing.new(def)
 		thing.flags["res"] = out_id
 		# recipe-declared comps: a list of {cls, props} the maker attaches (rottable meals etc.).
 		for spec in out.get("comps", []):
-			var cls = spec.get("cls", null)
+			var cls: Variant = spec.get("cls", null)
 			if cls != null:
 				thing.add_comp(cls.new(spec.get("props", {})))
 		# always quality-stamped from the bench operator's competence.
@@ -294,7 +292,7 @@ class ResearchDef extends Defs.Def:
 		return "research cost must be > 0" if cost() <= 0.0 else ""
 
 class ResearchState extends RefCounted:
-	var db                              # Defs.DefDatabase (for prereq/cost lookup)
+	var db: Variant                     # Defs.DefDatabase or null (for prereq/cost lookup)
 	var unlocked: Dictionary = {}       # StringName -> true (set semantics)
 	var active: StringName = &""
 	var progress: float = 0.0           # points into the active project
@@ -307,7 +305,7 @@ class ResearchState extends RefCounted:
 
 	# Every prereq of `id` already unlocked?
 	func prereqs_met(id: StringName) -> bool:
-		var d = db.get_def(id) if db != null else null
+		var d: Variant = db.get_def(id) if db != null else null
 		if d == null:
 			return false
 		for p in d.prereqs():
@@ -334,7 +332,7 @@ class ResearchState extends RefCounted:
 	func advance(dday: float) -> bool:
 		if active == &"":
 			return false
-		var d = db.get_def(active) if db != null else null
+		var d: Variant = db.get_def(active) if db != null else null
 		if d == null:
 			return false
 		progress += maxf(0.0, dday)
@@ -352,7 +350,7 @@ class ResearchState extends RefCounted:
 	func inspect() -> String:
 		if active == &"":
 			return "дослідження: —"
-		var d = db.get_def(active) if db != null else null
+		var d: Variant = db.get_def(active) if db != null else null
 		var cost: float = d.cost() if d != null else 1.0
 		return "дослідження: %s %d%%" % [str(active), int(100.0 * clampf(progress / maxf(0.01, cost), 0.0, 1.0))]
 
@@ -405,7 +403,7 @@ class CookWorker extends RefCounted:
 			base *= RAW_POISON_MULT
 		if rotten:
 			base *= RAW_POISON_MULT
-		var worker = Stats.StatWorker.new(&"food_poison_chance", base, [StatPart_CookSkill.new()])
+		var worker := Stats.StatWorker.new(&"food_poison_chance", base, [StatPart_CookSkill.new()])
 		return clampf(worker.value({"cook_level": cook_level}), 0.0, 1.0)
 
 	# Roll the poisoning outcome with a seeded rng. True == the eater is poisoned.
@@ -428,7 +426,7 @@ class CookWorker extends RefCounted:
 class QualityWiring extends RefCounted:
 	# The multiplier a crafted Thing contributes to its stats (1.0 if it has no quality comp).
 	static func quality_mult(thing) -> float:
-		var q = thing.get_comp(Things.CompQuality)
+		var q: Variant = thing.get_comp(Things.CompQuality)
 		return q.mult() if q != null else 1.0
 
 	# Build the stat-eval ctx for an item (folds its quality into ctx.quality_mult).
@@ -495,7 +493,7 @@ class WorkGiver_HaulZone extends RefCounted:
 		var zones: Array = world.get("zones", [])
 		if piles.is_empty():
 			return null
-		var best_pile = null
+		var best_pile: Variant = null
 		var best_zone: StockZone = null
 		var best_d: float = 1e20
 		for p in piles:
@@ -522,7 +520,7 @@ class WorkGiver_HaulZone extends RefCounted:
 # reads a settled ctx + power verdict. Callers typically add it onto the environment+power registry;
 # this helper returns a standalone registry for tests / a production-only host.
 static func build_production() -> Systems.SystemRegistry:
-	var reg = Systems.SystemRegistry.new()
+	var reg := Systems.SystemRegistry.new()
 	reg.add(ProductionSystem.new())
 	return reg
 

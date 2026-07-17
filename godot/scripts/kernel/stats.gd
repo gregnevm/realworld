@@ -51,6 +51,9 @@ class StatPart_Factor extends StatPart:
 	func transform(val: float, ctx: Dictionary) -> float:
 		return val * float(ctx.get(ctx_key, dflt))
 
+	func explain(ctx: Dictionary) -> String:
+		return "×%s %.2f" % [ctx_key, float(ctx.get(ctx_key, dflt))]
+
 # Computes one stat from a base + its parts. Cheap to build per-query; deterministic.
 class StatWorker extends RefCounted:
 	var stat_id: StringName

@@ -50,3 +50,10 @@ class Widget extends Control:
 		c.set_anchors_preset(Control.PRESET_CENTER, false)
 		c.grow_horizontal = Control.GROW_DIRECTION_BOTH
 		c.grow_vertical = Control.GROW_DIRECTION_BOTH   # deletes magic offsets like (-190,-160)
+
+	# The CanvasLayer gotcha, in ONE place: a Control under a CanvasLayer does not inherit the viewport
+	# size, so FULL_RECT collapses to width 0. Pin TOP_LEFT + size explicitly; the caller re-connects
+	# its own bound method to size_changed (bound methods auto-disconnect when the owner is freed).
+	static func fit_viewport(c: Control) -> void:
+		c.position = Vector2.ZERO
+		c.size = c.get_viewport().get_visible_rect().size

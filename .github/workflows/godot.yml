@@ -15,18 +15,17 @@ jobs:
           unzip -q Godot_v4.7-stable_linux.x86_64.zip
           mv Godot_v4.7-stable_linux.x86_64 godot-bin
           chmod +x godot-bin
-      - name: Sim unit tests
-        run: ./godot-bin --headless --path godot -s res://tests/run_tests.gd
-      - name: Kernel tests (spec 0003)
-        run: ./godot-bin --headless --path godot -s res://tests/run_kernel_tests.gd
-      - name: Content catalogue tests
-        run: ./godot-bin --headless --path godot -s res://tests/run_catalog_tests.gd
-      - name: Progression pipeline tests (spec 0007)
-        run: ./godot-bin --headless --path godot -s res://tests/run_progression_tests.gd
-      - name: UI view-layer tests (spec 0005)
-        run: ./godot-bin --headless --path godot -s res://tests/run_ui_tests.gd
-      - name: Playthrough smoke test
-        run: ./godot-bin --headless --path godot -s res://tests/run_smoke.gd
+      # every suite is leak-gated: RefCounted cycles (Thing<->Comp etc.) print an ObjectDB warning at
+      # exit instead of failing the run, so the gate greps for it — leaks must not return silently.
+      # ONE loop, one gate: adding a suite = adding a name to the list (no copy-pasted gate to forget)
+      - name: Headless suites (leak-gated)
+        run: |
+          set -o pipefail
+          for suite in run_tests run_kernel_tests run_catalog_tests run_progression_tests run_ui_tests run_smoke; do
+            echo "=== $suite ==="
+            ./godot-bin --headless --path godot -s "res://tests/$suite.gd" 2>&1 | tee suite.log
+            ! grep -q "ObjectDB instances were leaked" suite.log
+          done
       - name: Scene parse check
         run: ./godot-bin --headless --path godot -s res://tests/parse_check.gd
 
@@ -76,3 +75,17 @@ jobs:
             godot/newhud_shot.png
             godot/newhud_thumb.png
           if-no-files-found: error
+
+  gdlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install gdtoolkit
+        run: pip install "gdtoolkit==4.*"
+      # config lives in gdlintrc at the repo root; scripts/main.gd is the FROZEN pre-refactor HUD
+      # reference (excluded here, not in the config — gdlintrc has no per-file excludes)
+      - name: Lint product scripts
+        run: gdlint $(find godot/scripts -name "*.gd" ! -name "main.gd") godot/newhud_main.gd

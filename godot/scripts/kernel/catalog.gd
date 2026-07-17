@@ -141,7 +141,7 @@ static func load_json(path: String = CATALOG_PATH) -> Dictionary:
 		push_error("cannot open catalog: %s" % path)
 		return {}
 	var text := f.get_as_text()
-	var parsed = JSON.parse_string(text)
+	var parsed: Variant = JSON.parse_string(text)
 	if typeof(parsed) != TYPE_DICTIONARY:
 		push_error("catalog root is not a JSON object")
 		return {}
@@ -399,7 +399,7 @@ static func _tech_is_acyclic(cat: Dictionary) -> bool:
 			queue.append(k)
 	var removed := 0
 	while not queue.is_empty():
-		var id = queue.pop_front()
+		var id: StringName = queue.pop_front()
 		removed += 1
 		for d in dependents.get(id, []):
 			indeg[d] = int(indeg[d]) - 1
@@ -471,6 +471,10 @@ static func validate_catalog(cat: Dictionary) -> Array:
 		var out: Dictionary = rc.get("output", {})
 		if not bool(out.get("thing", false)) and not res_ids.has(StringName(str(out.get("id", "")))):
 			errs.append("recipe %s: bulk output %s is not a resource" % [rc.get("id", ""), out.get("id", "")])
+		if int(out.get("count", 1)) <= 0:
+			errs.append("recipe %s: output count must be > 0" % rc.get("id", ""))
+		if float(rc.get("work", 0.0)) <= 0.0:
+			errs.append("recipe %s: work must be > 0" % rc.get("id", ""))
 	for it in cat.get("items", []):
 		var ig: String = str(it.get("research", ""))
 		if ig != "" and not research_ids.has(StringName(ig)):
@@ -480,6 +484,54 @@ static func validate_catalog(cat: Dictionary) -> Array:
 		for c in it.get("recipe", {}):
 			if not res_ids.has(StringName(str(c))):
 				errs.append("item %s: unknown ingredient %s" % [it.get("id", ""), c])
+
+	# power buildings declare a valid role (+ role-specific shape). Mirrors catalog.test.js.
+	var power_roles := ["source", "trader", "battery"]
+	var power_kinds := ["fuel", "solar", "wind"]
+	for b in cat.get("buildings", []):
+		var pw: Dictionary = b.get("power", {})
+		if pw.is_empty():
+			continue
+		var role: String = str(pw.get("role", ""))
+		if not power_roles.has(role):
+			errs.append("building %s: bad power role %s" % [b.get("id", ""), role])
+			continue
+		if role == "source":
+			if not power_kinds.has(str(pw.get("kind", ""))):
+				errs.append("power source %s: bad kind %s" % [b.get("id", ""), pw.get("kind", "")])
+			if float(pw.get("rated", 0.0)) <= 0.0:
+				errs.append("power source %s: rated must be > 0" % b.get("id", ""))
+		elif role == "trader":
+			if float(pw.get("draw", 0.0)) <= 0.0:
+				errs.append("power trader %s: draw must be > 0" % b.get("id", ""))
+		elif role == "battery":
+			if float(pw.get("capacity", 0.0)) <= 0.0:
+				errs.append("battery %s: capacity must be > 0" % b.get("id", ""))
+
+	# no dead-end intermediates: every resource must feed a recipe/building/item, unless it is a
+	# legitimate runtime sink (drunk / eaten / fired / worn as end-game stock). Mirrors the
+	# catalog.test.js allowedSinks list one-for-one so the two validators agree.
+	var used: Dictionary = {}
+	for rc in cat.get("recipes", []):
+		for c in rc.get("inputs", {}):
+			used[StringName(str(c))] = true
+	for b in cat.get("buildings", []):
+		for c in b.get("cost", {}):
+			used[StringName(str(c))] = true
+	for it in cat.get("items", []):
+		for c in it.get("recipe", {}):
+			used[StringName(str(c))] = true
+	var allowed_sinks := [
+		"reinforced_plate",                                             # end-game armour stock
+		"ammo", "he_shell", "incendiary_shell", "emp_shell", "antigrain_shell", # fired by guns/turrets/mortars
+		"beer", "kibble",                                               # drunk / eaten
+		"smokeleaf_joint", "psychite_tea", "flake", "wake_up",          # recreational/combat drugs
+		"go_juice", "penoxycyline", "luciferium",                       # combat/medical drugs
+	]
+	for r in cat.get("resources", []):
+		var rid := StringName(str(r.get("id", "")))
+		if not used.has(rid) and not allowed_sinks.has(str(rid)):
+			errs.append("resource feeds nothing (dead-end intermediate): %s" % r.get("id", ""))
 
 	# reachability closure — nothing stranded
 	var reach: Dictionary = reachability(cat)

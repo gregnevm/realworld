@@ -8,11 +8,18 @@
 # rot, growth, quality, power, fuel, fire and deterioration are all just Comps.
 extends RefCounted
 
+# The world's Thing list (world.things), [] when the world is absent or not a dict. The power and
+# production systems both scan this list every tick — the guard lives here once, not per-system.
+static func world_things(world) -> Array:
+	if world != null and typeof(world) == TYPE_DICTIONARY:
+		return world.get("things", [])
+	return []
+
 # --- base interface -----------------------------------------------------------
 
 # One orthogonal behaviour bolted onto a Thing. Override the hooks you need; ignore the rest.
 class ThingComp extends RefCounted:
-	var parent                          # back-reference to the owning Thing
+	var parent: Variant                 # back-reference to the owning Thing (null until attached)
 	var props: Dictionary = {}          # per-comp tuning, pulled from the Def
 
 	func _init(p_props: Dictionary = {}) -> void:
@@ -33,7 +40,7 @@ class ThingComp extends RefCounted:
 # --- the Thing ----------------------------------------------------------------
 
 class Thing extends RefCounted:
-	var def                              # Defs.Def or null
+	var def: Variant                     # Defs.Def or null
 	var pos: Vector2i = Vector2i.ZERO
 	var hp: float = 100.0
 	var max_hp: float = 100.0

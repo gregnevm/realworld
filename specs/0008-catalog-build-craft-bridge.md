@@ -1,10 +1,14 @@
 # Spec 0008 — Catalog build/craft integration (resource-system bridge) — ADR, design-only
 
-> Status: **design-only · no code this pass** (drafted 2026-07-08). Decides the *shape* of the next
-> surfacing step **before** code lands — the same discipline as spec 0006 (Phase-1 ADR) and spec 0005
-> Batch 0 (architecture before migration). Depends on **spec 0007** (the research→unlock pipeline, now
-> live — it is the gate this step consumes) and **spec 0004 + `docs/catalog.md`** (the 335-def tree).
-> Design intent for the player side: `GDD_BOOK/gdd.json` (`section:mechanics_overview`, `section:scope`).
+> Status: **phases 1–2 shipped · phases 3–4 wait on §5 sign-off** (drafted 2026-07-08; updated
+> 2026-07-11). Phase 1 (BOM planner) landed in the catalog browsers; phase 2 (open catalogue-keyed
+> stock) landed behind `sim.use_catalog` — **default OFF**, so the shipped slice stays byte-identical
+> (its suites prove it) and no §5 decision is pre-empted. The seam is `sim.res_key/res_amount/`
+> `cost_keys/afford` — every stock access (sim internals, sim/ modules, hud_model slices) goes through
+> it, covered by `_t_open_stock` in `run_tests.gd` (both flag states). Depends on **spec 0007** (the
+> research→unlock pipeline, now live — it is the gate this step consumes) and **spec 0004 +
+> `docs/catalog.md`** (the 335-def tree). Design intent for the player side: `GDD_BOOK/gdd.json`
+> (`section:mechanics_overview`, `section:scope`).
 
 ---
 

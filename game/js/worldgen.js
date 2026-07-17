@@ -146,6 +146,8 @@
   // rasterise OSM ways onto an existing procedural map (mutates in place)
   RW.overlayOSM = function (map, osm) {
     const { N, tiles, nodes } = map;
+    // node seeding over fixed OSM geometry is reproducible: same coords + same osm -> same nodes
+    const orng = RW.mulberry32(RW.hashSeed(map.lat || 0, map.lon || 0) ^ 0x05A1);
     const { s, n, w, e } = osm.bbox;
     const toCell = (la, lo) => ({
       x: RW.clamp(Math.round((lo - w) / (e - w) * (N - 1)), 0, N - 1),
@@ -205,12 +207,12 @@
         else for (let k = 0; k < pts.length - 1; k++) line(toCell(pts[k].lat, pts[k].lon), toCell(pts[k + 1].lat, pts[k + 1].lon), T.WATER);
         stats.water++;
       } else if (kind === "forest") {
-        fillPoly(pts, T.FOREST, (i) => { if (!nodes.has(i) && Math.random() < 0.5) nodes.set(i, { kind: "tree", amount: 16 + ((Math.random() * 12) | 0) }); });
+        fillPoly(pts, T.FOREST, (i) => { if (!nodes.has(i) && orng() < 0.5) nodes.set(i, { kind: "tree", amount: 16 + ((orng() * 12) | 0) }); });
         stats.forest++;
       } else if (kind === "grass") {
         fillPoly(pts, T.GRASS);
       } else if (kind === "building") {
-        fillPoly(pts, T.RUIN, (i) => { if (!nodes.has(i) && Math.random() < 0.4) nodes.set(i, { kind: "scrap", amount: 8 + ((Math.random() * 10) | 0) }); });
+        fillPoly(pts, T.RUIN, (i) => { if (!nodes.has(i) && orng() < 0.4) nodes.set(i, { kind: "scrap", amount: 8 + ((orng() * 10) | 0) }); });
         stats.building++;
       }
     }

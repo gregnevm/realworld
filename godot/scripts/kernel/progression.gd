@@ -31,9 +31,9 @@ const Catalog = preload("res://scripts/kernel/catalog.gd")
 const Production = preload("res://scripts/kernel/production.gd")
 const Defs = preload("res://scripts/kernel/defs.gd")
 
-var db                            # Defs.DefDatabase built from the catalog (id + type lookups)
+var db: Defs.DefDatabase          # Defs.DefDatabase built from the catalog (id + type lookups)
 var cat: Dictionary               # raw catalog dict (tier/label read from here — never JSON-int-bitten)
-var research                      # Production.ResearchState (the single-active-project primitive)
+var research: Production.ResearchState   # the single-active-project primitive
 var queue: Array = []             # [StringName] projects waiting after the active one (valid topo order)
 var _research_rec: Dictionary = {}   # StringName -> raw research record (for tier/label without a db round-trip)
 
@@ -62,7 +62,7 @@ func active_progress() -> float:
 func active_cost() -> float:
 	if research.active == &"":
 		return 0.0
-	var d = db.get_def(research.active)
+	var d: Variant = db.get_def(research.active)
 	return d.cost() if d != null else 0.0
 
 # Completion fraction of the active project in [0,1] (0 when nothing is active).
@@ -144,7 +144,7 @@ func enqueue(id) -> bool:
 		return false
 	if sid == research.active or queue.has(sid):
 		return false
-	var d = db.get_def(sid)
+	var d: Variant = db.get_def(sid)
 	for p in d.prereqs():
 		var pid := StringName(str(p))
 		if not (research.is_unlocked(pid) or queue.has(pid) or pid == research.active):
@@ -175,7 +175,7 @@ func add_points(points: float, auto: bool = false) -> Array:
 	_ensure_active(auto)
 	while remaining > 1e-9 and research.active != &"":
 		var cur: StringName = research.active
-		var d = db.get_def(cur)
+		var d: Variant = db.get_def(cur)
 		if d == null:
 			break
 		var need: float = maxf(0.0, d.cost() - research.progress)
@@ -215,7 +215,7 @@ func _ensure_active(auto: bool) -> void:
 # prereqs precede it), deduped. This is the tech PATH the UI shows for a locked target. [] if id unknown.
 func research_path(id) -> Array:
 	var target := StringName(id)
-	var d = db.get_def(target)
+	var d: Variant = db.get_def(target)
 	if d == null or not (d is Production.ResearchDef):
 		return []
 	var out: Array = []
@@ -227,7 +227,7 @@ func _visit_path(id: StringName, out: Array, seen: Dictionary, stack: Dictionary
 	if seen.has(id) or stack.has(id):        # dedupe + cycle guard (the tree is a DAG, but stay total)
 		return
 	stack[id] = true
-	var d = db.get_def(id)
+	var d: Variant = db.get_def(id)
 	if d != null:
 		for p in d.prereqs():
 			_visit_path(StringName(str(p)), out, seen, stack)
@@ -252,7 +252,7 @@ func steps_to_unlock(gate) -> Array:
 func remaining_cost(target) -> float:
 	var total := 0.0
 	for id in steps_to_unlock(target):
-		var d = db.get_def(id)
+		var d: Variant = db.get_def(id)
 		if d != null:
 			total += d.cost()
 	return total
@@ -323,15 +323,15 @@ func catalog_counts() -> Dictionary:
 
 # The research id gating a building/recipe/item ("" when ungated) — the label the UI shows on a locked row.
 func building_gate(id) -> StringName:
-	var b = db.get_def(StringName(id))
+	var b: Variant = db.get_def(StringName(id))
 	return b.research() if b != null and b is Catalog.BuildingDef else &""
 
 func recipe_gate(id) -> StringName:
-	var r = db.get_def(StringName(id))
+	var r: Variant = db.get_def(StringName(id))
 	return r.requires_research() if r != null and r is Production.RecipeDef else &""
 
 func item_gate(id) -> StringName:
-	var it = db.get_def(StringName(id))
+	var it: Variant = db.get_def(StringName(id))
 	return it.research() if it != null and it is Catalog.ItemDef else &""
 
 # ============================================================================================

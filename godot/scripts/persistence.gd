@@ -79,6 +79,9 @@ static func serialize_region(sim) -> Dictionary:
 		"place_name": str(m.get("place_name", "Регіон")),
 		"day": int(sim.time.day), "frac": float(sim.time.frac),
 		"player": _pick(sim.player, PLAYER_FIELDS),
+		# stock keys follow the sim's vocabulary (spec 0008: live ids vs catalogue ids) — persist the
+		# flag with them, else a cross-flag load reads the wrong keys and resources silently vanish.
+		"use_catalog": bool(sim.use_catalog),
 		"stock": (sim.stock as Dictionary).duplicate(true),
 		"buildings": [],
 		"nodes": {},
@@ -86,7 +89,7 @@ static func serialize_region(sim) -> Dictionary:
 	for b in sim.buildings:
 		rec.buildings.append({"kind": b.kind, "x": int(b.x), "y": int(b.y), "hp": float(b.hp)})
 	for cell in m.nodes:
-		var nd = m.nodes[cell]
+		var nd: Dictionary = m.nodes[cell]
 		rec.nodes[str(cell)] = {"kind": nd.kind, "amount": int(nd.amount)}
 	# OSM regions: terrain was externally overlaid and is not reproducible from seed -> save it.
 	if rec.source == "osm":
@@ -97,7 +100,7 @@ static func _pick(src: Dictionary, fields: Array) -> Dictionary:
 	var out := {}
 	for f in fields:
 		if src.has(f):
-			var val = src[f]
+			var val: Variant = src[f]
 			out[f] = (val.duplicate(true) if (val is Dictionary or val is Array) else val)
 	return out
 
@@ -152,7 +155,7 @@ static func load_from_file(path: String) -> Dictionary:
 		return store_new()
 	var txt := f.get_as_text()
 	f.close()
-	var parsed = JSON.parse_string(txt)
+	var parsed: Variant = JSON.parse_string(txt)
 	if parsed is Dictionary and parsed.has("regions"):
 		return parsed
 	return store_new()

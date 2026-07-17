@@ -17,173 +17,21 @@ const test = require("node:test");
 const assert = require("node:assert");
 const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
+// Shared with catalog.test.js: the memoized loader and the one reachability closure (the end-state a
+// fully-researched pipeline must match). Keeps the ground-truth algorithm in a single place.
+const { loadCatalog, reachability } = require("./_catalog");
 
-const CATALOG_PATH = path.join(__dirname, "..", "godot", "content", "catalog.json");
-const loadCatalog = () => JSON.parse(fs.readFileSync(CATALOG_PATH, "utf8"));
+// The pipeline under test is the GAME's own module (game/js/progression.js) — the JS mirror of
+// progression.gd now lives in the playable web slice, and this suite drives it directly.
+global.window = global.window || {};
+vm.runInThisContext(
+  fs.readFileSync(path.join(__dirname, "..", "game", "js", "progression.js"), "utf8"),
+  { filename: "progression.js" });
+const Progression = global.window.RW.Progression;
 
-// ---- The JS mirror of progression.gd (+ the ResearchState primitive it wraps) --------------------
-class Progression {
-  constructor(cat) {
-    this.cat = cat;
-    this.byId = new Map();
-    for (const section of ["resources", "research", "buildings", "recipes", "items"])
-      for (const rec of cat[section] || []) this.byId.set(rec.id, { section, rec });
-    this.researchById = new Map(cat.research.map((r) => [r.id, r]));
-    this.unlocked = new Set();
-    this.active = "";
-    this.progress = 0;
-    this.queue = [];
-  }
-  // --- ResearchState primitive (production.gd) ---
-  isUnlocked(id) { return this.unlocked.has(id); }
-  prereqsMet(id) {
-    const d = this.researchById.get(id);
-    if (!d) return false;
-    return (d.prereqs || []).every((p) => this.unlocked.has(p));
-  }
-  canStart(id) {
-    if (this.unlocked.has(id) || !this.researchById.has(id)) return false;
-    return this.prereqsMet(id);
-  }
-  tryStart(id) { if (!this.canStart(id)) return false; this.active = id; this.progress = 0; return true; }
-  advance(dday) {
-    if (this.active === "") return false;
-    const d = this.researchById.get(this.active);
-    if (!d) return false;
-    this.progress += Math.max(0, dday);
-    if (this.progress + 1e-9 >= d.cost) { this.unlocked.add(this.active); this.active = ""; this.progress = 0; return true; }
-    return false;
-  }
-  // --- readout ---
-  activeCost() { return this.active === "" ? 0 : this.researchById.get(this.active).cost; }
-  activePct() { const c = this.activeCost(); return c <= 0 ? 0 : Math.min(1, this.progress / c); }
-  unlockedCount() { return this.unlocked.size; }
-  totalProjects() { return this.cat.research.length; }
-  tierOf(id) { const r = this.researchById.get(id); return r ? (r.tier || 0) : 0; }
-  labelOf(id) { const r = this.researchById.get(id); return r ? (r.label || id) : ""; }
-  techLevel() { let lvl = 0; for (const id of this.unlocked) lvl = Math.max(lvl, this.tierOf(id)); return lvl; }
-  // --- availability & queue ---
-  available() {
-    return this.cat.research.filter(
-      (r) => !this.unlocked.has(r.id) && r.id !== this.active && !this.queue.includes(r.id) && this.prereqsMet(r.id));
-  }
-  isAvailable(id) {
-    if (this.unlocked.has(id) || id === this.active || this.queue.includes(id)) return false;
-    return this.researchById.has(id) && this.prereqsMet(id);
-  }
-  autoNext() {
-    const a = this.available();
-    if (!a.length) return "";
-    a.sort((x, y) => (this.tierOf(x.id) - this.tierOf(y.id)) || (x.cost - y.cost) || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
-    return a[0].id;
-  }
-  enqueue(id) {
-    if (this.unlocked.has(id) || !this.researchById.has(id)) return false;
-    if (id === this.active || this.queue.includes(id)) return false;
-    const d = this.researchById.get(id);
-    for (const p of d.prereqs || [])
-      if (!(this.unlocked.has(p) || this.queue.includes(p) || p === this.active)) return false;
-    this.queue.push(id);
-    this._ensureActive(false);
-    return true;
-  }
-  dequeue(id) { const i = this.queue.indexOf(id); if (i >= 0) this.queue.splice(i, 1); }
-  start(id) { if (this.active !== "") return false; return this.tryStart(id); }
-  addPoints(points, auto = false) {
-    const newly = [];
-    let remaining = Math.max(0, points);
-    this._ensureActive(auto);
-    while (remaining > 1e-9 && this.active !== "") {
-      const cur = this.active;
-      const d = this.researchById.get(cur);
-      if (!d) break;
-      const need = Math.max(0, d.cost - this.progress);
-      if (remaining + 1e-9 >= need) { this.advance(need); newly.push(cur); remaining -= need; this._ensureActive(auto); }
-      else { this.advance(remaining); remaining = 0; }
-    }
-    return newly;
-  }
-  _ensureActive(auto) {
-    while (this.active === "" && this.queue.length) {
-      const id = this.queue[0];
-      if (this.unlocked.has(id)) { this.queue.shift(); continue; }
-      if (this.canStart(id)) { this.queue.shift(); this.tryStart(id); }
-      else break;
-    }
-    if (this.active === "" && auto) { const n = this.autoNext(); if (n !== "") this.tryStart(n); }
-  }
-  // --- tech-path planner ---
-  researchPath(id) {
-    if (!this.researchById.has(id)) return [];
-    const out = [], seen = new Set(), stack = new Set();
-    const visit = (rid) => {
-      if (seen.has(rid) || stack.has(rid)) return;
-      stack.add(rid);
-      const d = this.researchById.get(rid);
-      if (d) for (const p of d.prereqs || []) visit(p);
-      stack.delete(rid);
-      seen.add(rid);
-      out.push(rid);
-    };
-    visit(id);
-    return out;
-  }
-  stepsToUnlock(gate) { return !gate ? [] : this.researchPath(gate).filter((x) => !this.unlocked.has(x)); }
-  remainingCost(target) { return this.stepsToUnlock(target).reduce((s, id) => s + this.researchById.get(id).cost, 0); }
-  // --- unlock gates over catalog content ---
-  gateOk(ref) { return ref === undefined || ref === null || ref === "" || this.unlocked.has(ref); }
-  unlockedBuildings() { return this.cat.buildings.filter((b) => this.gateOk(b.research)); }
-  unlockedRecipes() { return this.cat.recipes.filter((r) => this.gateOk(r.research)); }
-  unlockedItems() { return this.cat.items.filter((i) => this.gateOk(i.research)); }
-  unlocksOf(rid) {
-    if (!rid) return { buildings: [], recipes: [], items: [] };
-    return {
-      buildings: this.cat.buildings.filter((b) => b.research === rid).map((b) => b.id),
-      recipes: this.cat.recipes.filter((r) => r.research === rid).map((r) => r.id),
-      items: this.cat.items.filter((i) => i.research === rid).map((i) => i.id),
-    };
-  }
-  catalogCounts() {
-    return {
-      buildings: { unlocked: this.unlockedBuildings().length, total: this.cat.buildings.length },
-      recipes: { unlocked: this.unlockedRecipes().length, total: this.cat.recipes.length },
-      items: { unlocked: this.unlockedItems().length, total: this.cat.items.length },
-    };
-  }
-  // --- viewmodel + serialization ---
-  summary() {
-    return { active: this.active, active_label: this.labelOf(this.active), active_pct: this.activePct(),
-      active_cost: this.activeCost(), active_progress: this.progress, queue: this.queue.slice(),
-      unlocked: this.unlockedCount(), total: this.totalProjects(), level: this.techLevel() };
-  }
-  toDict() { return { unlocked: [...this.unlocked], active: this.active, progress: this.progress, queue: this.queue.slice() }; }
-  fromDict(d) {
-    this.unlocked = new Set(d.unlocked || []);
-    this.active = d.active || "";
-    this.progress = d.progress || 0;
-    this.queue = (d.queue || []).slice();
-  }
-}
-
-// The catalog-reachability closure (copied minimal, same as catalog.test.js) — the ground truth the
-// pipeline's end-state must match: everything is reachable, so a fully-researched tree opens everything.
-function fullReachability(cat) {
-  const RAW = new Set(["mine", "chop", "gather", "hunt", "farm"]);
-  const isRaw = (r) => (r.sources || []).some((s) => RAW.has(s));
-  const obtainable = new Set(cat.resources.filter(isRaw).map((r) => r.id));
-  const unlocked = new Set(), built = new Set(), recs = new Set(), items = new Set();
-  const gate = (g) => !g || unlocked.has(g);
-  const cost = (c) => Object.keys(c || {}).every((k) => obtainable.has(k));
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const r of cat.research) if (!unlocked.has(r.id) && (r.prereqs || []).every((p) => unlocked.has(p))) { unlocked.add(r.id); changed = true; }
-    for (const b of cat.buildings) if (!built.has(b.id) && gate(b.research) && cost(b.cost)) { built.add(b.id); changed = true; }
-    for (const r of cat.recipes) if (!recs.has(r.id) && built.has(r.station) && gate(r.research) && cost(r.inputs)) { recs.add(r.id); obtainable.add(r.output.id); changed = true; }
-    for (const i of cat.items) if (!items.has(i.id) && built.has(i.station) && gate(i.research) && cost(i.recipe)) { items.add(i.id); changed = true; }
-  }
-  return { unlocked, built, recs, items };
-}
+// The catalog-reachability closure that the pipeline's end-state must match (a fully-researched tree
+// opens everything) is imported from ./_catalog.js — the same closure catalog.test.js uses.
 
 test("progression: builds over the whole research tree", () => {
   const p = new Progression(loadCatalog());
@@ -274,11 +122,11 @@ test("progression: unlocked catalogue grows monotonically and ends at full reach
     assert.ok(b >= lastB && r >= lastR && i >= lastI, "unlocked catalogue never shrinks as tech advances");
     lastB = b; lastR = r; lastI = i;
   }
-  const reach = fullReachability(cat);
+  const reach = reachability(cat);
   assert.strictEqual(p.unlockedBuildings().length, cat.buildings.length, "all buildings open once fully researched");
   assert.strictEqual(p.unlockedRecipes().length, cat.recipes.length, "all recipes open once fully researched");
   assert.strictEqual(p.unlockedItems().length, cat.items.length, "all items open once fully researched");
-  assert.strictEqual(reach.built.size, cat.buildings.length, "catalog reachability agrees: nothing is stranded");
+  assert.strictEqual(reach.builtBuildings.size, cat.buildings.length, "catalog reachability agrees: nothing is stranded");
 });
 
 test("progression: refuses illegal starts", () => {

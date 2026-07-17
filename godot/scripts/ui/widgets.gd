@@ -248,6 +248,32 @@ class ChoiceRow extends WidgetBase.Widget:
 		_btn.modulate = Tokens.DIMMED if bool(vm.get("dim", false)) else Tokens.WHITE
 		visible = bool(vm.get("shown", true))
 
+# ---- CatalogSlot: a clickable content-tree row (build/craft/research action); emits chosen(id) ----
+# bind({id, label, sub, enabled}). An empty id hides the slot so a fixed-size pool (R2) shows a page.
+class CatalogSlot extends WidgetBase.Widget:
+	var item_id: StringName = &""
+	var _btn: Button
+	signal chosen(id: StringName)
+	func _build() -> void:
+		custom_minimum_size = Vector2(0, 22)
+		_btn = Button.new()
+		_btn.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_btn.pressed.connect(func(): chosen.emit(item_id))
+		add_child(_btn)
+	func bind(vm) -> void:
+		build_once()
+		if not (vm is Dictionary):
+			return
+		item_id = StringName(vm.get("id", &""))
+		var lbl := String(vm.get("label", ""))
+		var sub := String(vm.get("sub", ""))
+		_btn.text = ("%s   %s" % [lbl, sub]) if sub != "" else lbl
+		_btn.disabled = not bool(vm.get("enabled", true))
+		_btn.tooltip_text = String(vm.get("tip", ""))
+		_btn.modulate = Tokens.DIMMED if _btn.disabled else Tokens.WHITE
+		visible = item_id != &""
+
 # ---- OverlayChip (.ov-chip .on): label · hotkey · on-state (toolbar toggle for a map overlay) ----
 class OverlayChip extends WidgetBase.Widget:
 	var overlay_id: StringName = &""
@@ -288,7 +314,7 @@ class LegendBox extends WidgetBase.Widget:
 
 # ---- Feedback subscribers: connect ONCE, disconnect in _exit_tree (R8 / §2.7 cycle-leak guard) ----
 class BannerWidget extends WidgetBase.Widget:
-	var _bus
+	var _bus: Variant
 	var _label: Label
 	func _build() -> void:
 		_label = Label.new()
@@ -308,7 +334,7 @@ class BannerWidget extends WidgetBase.Widget:
 			_bus.banner.disconnect(_on_banner)
 
 class FlashWidget extends WidgetBase.Widget:
-	var _bus
+	var _bus: Variant
 	var _label: Label
 	var _t := 0.0
 	func _build() -> void:
@@ -335,7 +361,7 @@ class FlashWidget extends WidgetBase.Widget:
 			_bus.flash.disconnect(_on_flash)
 
 class FeedWidget extends WidgetBase.Widget:
-	var _bus
+	var _bus: Variant
 	var _list: VBoxContainer
 	var _max := 8
 	func _build() -> void:

@@ -85,7 +85,7 @@ class CompTurret extends Things.ThingComp:
 	func is_powered() -> bool:
 		if parent == null:
 			return false
-		var tr = parent.get_comp(Power.CompPowerTrader)
+		var tr: Variant = parent.get_comp(Power.CompPowerTrader)
 		return tr != null and tr.is_live()
 
 	# Can it fire THIS tick? powered AND has ammo AND not overheated AND off cooldown.
@@ -94,7 +94,7 @@ class CompTurret extends Things.ThingComp:
 
 	# Pick the nearest hostile Agent within range; deterministic (nearest, tie by list index).
 	func _pick_target(agents: Array):
-		var best = null
+		var best: Variant = null
 		var best_d: int = 1 << 30
 		var here: Vector2i = parent.pos
 		var reach: int = int(ceil(range_r()))
@@ -119,11 +119,11 @@ class CompTurret extends Things.ThingComp:
 			heat = maxf(0.0, heat - float(props.get("cool_rate", 2.0)) * dday)
 		if not can_fire():
 			return
-		var world = ctx.get("world", null)
+		var world: Variant = ctx.get("world", null)
 		var agents: Array = []
 		if world != null and typeof(world) == TYPE_DICTIONARY:
 			agents = world.get("agents", world.get("raiders", []))
-		var target = _pick_target(agents)
+		var target: Variant = _pick_target(agents)
 		if target == null:
 			return
 		# FIRE.
@@ -290,7 +290,7 @@ class CompTrap extends Things.ThingComp:
 		sprung_last = false
 		if not armed or uses <= 0:
 			return
-		var world = ctx.get("world", null)
+		var world: Variant = ctx.get("world", null)
 		if world == null or typeof(world) != TYPE_DICTIONARY:
 			return
 		var here: Vector2i = parent.pos
@@ -375,7 +375,7 @@ class FireSystem extends Systems.SimSystem:
 		if burning.is_empty():
 			return
 
-		var rng = world.get("rng", null)
+		var rng: Variant = world.get("rng", null)
 		# --- spread: each unburnt flammable adjacent to a burning one rolls to ignite ---------------
 		for t in flam:
 			if bool(t.flags.get("on_fire", false)):
@@ -387,7 +387,7 @@ class FireSystem extends Systems.SimSystem:
 					break
 			if not adj:
 				continue
-			var fc = t.get_comp(CompFlammable)
+			var fc: CompFlammable = t.get_comp(CompFlammable)
 			var p: float = clampf(fc.flammability() * dday, 0.0, 1.0)
 			var roll: float = rng.randf() if rng != null else 1.0   # no rng => never ignites (safe/deterministic)
 			if roll < p:
@@ -395,7 +395,7 @@ class FireSystem extends Systems.SimSystem:
 
 		# --- burn: every Thing burning at tick start takes damage over dday ------------------------
 		for b in burning:
-			var fc = b.get_comp(CompFlammable)
+			var fc: CompFlammable = b.get_comp(CompFlammable)
 			b.take_damage(fc.burn_damage() * dday)
 			if b.destroyed:
 				b.flags["on_fire"] = false
@@ -419,7 +419,7 @@ class StatPart_Cover extends Stats.StatPart:
 static func in_cover(pos: Vector2i, world) -> bool:
 	if world == null or typeof(world) != TYPE_DICTIONARY:
 		return false
-	var cover = world.get("cover", [])
+	var cover: Variant = world.get("cover", [])
 	for c in cover:
 		if _manhattan(pos, c) <= 1:
 			return true
@@ -438,7 +438,7 @@ static func apply_cover(dmg: float, defender_pos: Vector2i, world) -> float:
 # are comp-driven (they tick via their parent Thing's comp_tick / Projectile.tick), so the only SimSystem
 # here is FireSystem; a host that wants trap/turret ticking drives Things.tick(ctx) with ctx.world set.
 static func build_combat() -> Systems.SystemRegistry:
-	var reg = Systems.SystemRegistry.new()
+	var reg := Systems.SystemRegistry.new()
 	reg.add(FireSystem.new())
 	return reg
 

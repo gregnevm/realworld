@@ -33,7 +33,7 @@ class WorkGiver_Haul extends WorkGiver:
 		var piles: Array = world.get("piles", [])
 		if piles.is_empty():
 			return null
-		var best = null
+		var best: Variant = null
 		var best_d: float = 1e20
 		for p in piles:
 			var d: float = Vector2(p.pos).distance_to(Vector2(agent.pos))
@@ -44,6 +44,27 @@ class WorkGiver_Haul extends WorkGiver:
 			return null
 		return Job.new(&"haul", world.get("storage", Vector2i.ZERO), {"from": best.pos, "res": best.res, "amt": best.amt})
 
+# --- shared world queries -------------------------------------------------------------------
+
+# THE hostile list: world.agents (preferred — a mixed-faction list) filtered to live hostiles, with
+# legacy world.raiders as the fallback pool. Raider dicts carry no faction — that list's membership
+# IS the faction, so dict entries pass unless they claim otherwise. This mirrors combat.gd's
+# turret/trap targeting idiom (world.agents → world.raiders + _is_hostile) so every kernel consumer
+# reads ONE definition of "the enemies" and a guard animal can never disagree with a turret.
+static func hostiles(world) -> Array:
+	if world == null or typeof(world) != TYPE_DICTIONARY:
+		return []
+	var pool: Array = world.get("agents", world.get("raiders", []))
+	var out: Array = []
+	for a in pool:
+		if a is Agent:
+			if a.alive() and a.faction == &"hostile":
+				out.append(a)
+		elif typeof(a) == TYPE_DICTIONARY:
+			if StringName(str(a.get("faction", "hostile"))) == &"hostile":
+				out.append(a)
+	return out
+
 # --- agents -------------------------------------------------------------------
 
 class Agent extends RefCounted:
@@ -51,7 +72,7 @@ class Agent extends RefCounted:
 	var faction: StringName = &"neutral"
 	var pos: Vector2i = Vector2i.ZERO
 	var hp: float = 30.0
-	var job                       # current Job or null
+	var job: Variant              # current Job or null
 
 	# Decide what to do this tick (sets self.job). Override per kind.
 	func think(_world, _ctx: Dictionary) -> void:
@@ -96,12 +117,15 @@ class Agent_Animal extends Agent:
 		if manhunter:
 			job = Job.new(&"attack", world.get("hero", Vector2i.ZERO))
 		elif tame and role == &"guard":
-			var raiders: Array = world.get("raiders", [])
-			if not raiders.is_empty():
-				job = Job.new(&"attack", raiders[0].pos)
+			var foes: Array = Agents.hostiles(world)
+			if not foes.is_empty():
+				job = Job.new(&"attack", foes[0].pos)
 			else:
 				job = Job.new(&"follow", world.get("hero", Vector2i.ZERO))
 		elif tame and role == &"pack":
 			job = Job.new(&"follow", world.get("convoy", Vector2i.ZERO))
 		else:
 			job = Job.new(&"graze", pos)
+
+# Self-reference alias so inner classes can reach module-level statics by name (kernel idiom).
+const Agents = preload("res://scripts/kernel/agents.gd")

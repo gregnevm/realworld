@@ -15,12 +15,17 @@ window.RW = window.RW || {};
     return h >>> 0;
   };
   RW.mulberry32 = function (a) {
-    return function () {
+    const f = function () {
       a |= 0; a = (a + 0x6D2B79F5) | 0;
       let t = Math.imul(a ^ (a >>> 15), 1 | a);
       t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
+    // the whole PRNG state is the single 32-bit accumulator — expose it so the game
+    // rng can round-trip through save/load and a run stays reproducible after restore
+    f.getState = () => a;
+    f.setState = (s) => { a = s | 0; };
+    return f;
   };
 
   // value-noise from a seeded rng grid (smooth-ish), used for biome blobs

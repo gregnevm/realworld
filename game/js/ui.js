@@ -66,14 +66,26 @@
   };
 
   // ---- build bar ----
+  const isLocked = (G, def) => !!(def.research && G.research && !G.research.gateOk(def.research));
   RW.buildBuildBar = function (G) {
     const bar = $("buildbar"); bar.innerHTML = "";
     RW.BUILD_ORDER.forEach(key => {
       const def = RW.BUILDINGS[key];
       const el = document.createElement("button");
       el.className = "bld";
-      el.innerHTML = `<div class="ic">${def.icon}</div><div class="nm">${def.name}</div><div class="cost">${RW.costStr(def.cost)}</div>`;
+      const locked = isLocked(G, def);
+      el.innerHTML = `<div class="ic">${def.icon}</div><div class="nm">${def.name}</div>` +
+        (locked ? `<div class="lk">🔒 ${G.research.labelOf(def.research)}</div>`
+                : `<div class="cost">${RW.costStr(def.cost)}</div>`);
       el.onclick = () => {
+        if (isLocked(G, def)) {
+          // a locked button is a research shortcut: plan the full prereq path to its gate
+          const planned = RW.planResearchPath(G.research, def.research);
+          RW.flash(G, planned.length
+            ? `🔬 Заплановано: ${planned.map(id => G.research.labelOf(id)).join(" → ")}`
+            : `🔬 «${G.research.labelOf(def.research)}» вже в черзі досліджень`);
+          return;
+        }
         G.selectedBuild = (G.selectedBuild === key) ? null : key;
         RW.syncBuildBar(G);
         RW.setTicker(G, G.selectedBuild ? "Режим будівництва: " + def.name + " — клікни по клітинці. ПКМ/Esc — вийти." : "");
@@ -87,7 +99,9 @@
     document.querySelectorAll("#buildbar .bld").forEach(el => {
       el.classList.toggle("sel", el._key === G.selectedBuild);
       const def = RW.BUILDINGS[el._key];
-      el.style.opacity = RW.canAfford(G.base.stock, def.cost) ? "1" : "0.45";
+      const locked = isLocked(G, def);
+      el.classList.toggle("locked", locked);
+      el.style.opacity = (!locked && RW.canAfford(G.base.stock, def.cost)) ? "1" : "0.45";
     });
   };
 
@@ -101,6 +115,14 @@
     $("clockTime").textContent = RW.fmtTime(G.time.frac);
     $("clockPhase").textContent = RW.phaseName(G.time.frac);
     $("carryTxt").textContent = RW.carryTotal(p) + " / " + p.carryCap;
+
+    // research chip: active project + % (or the unlocked count when idle)
+    if (G.research) {
+      const s = G.research.summary();
+      $("resTxt").textContent = s.active
+        ? `${s.active_label} · ${Math.floor(s.active_pct * 100)}%`
+        : `${s.unlocked}/${s.total} · рівень ${s.level}`;
+    }
 
     // stockpile
     const cap = RW.storageCap(G);
@@ -139,6 +161,17 @@
   // ---- side buttons & modals ----
   RW.initButtons = function (G) {
     $("worldBtn").onclick = () => RW.openWorld(G);
+    $("researchBtn").onclick = () => RW.toggleResearch(G);
+    $("researchClose").onclick = () => { $("researchModal").classList.add("hidden"); G.researchOpen = false; };
+    // delegated handlers (plain onclick so re-init after load never stacks listeners)
+    $("researchAvail").onclick = (e) => {
+      const b = e.target.closest(".ravail");
+      if (b && G.research) { G.research.enqueue(b.dataset.id); RW.renderResearch(G); }
+    };
+    $("researchQueue").onclick = (e) => {
+      const b = e.target.closest(".rq");
+      if (b && G.research) { G.research.dequeue(b.dataset.id); RW.renderResearch(G); }
+    };
     $("helpBtn").onclick = () => $("helpModal").classList.remove("hidden");
     $("helpClose").onclick = () => $("helpModal").classList.add("hidden");
     $("worldClose").onclick = () => { $("worldModal").classList.add("hidden"); G.worldOpen = false; };
@@ -155,6 +188,38 @@
     $("worldModal").classList.remove("hidden");
     buildConvoyPanel(G);
     RW.drawWorldMap(G);
+  };
+
+  // ---- research modal ----
+  RW.toggleResearch = function (G) {
+    G.researchOpen = !G.researchOpen;
+    $("researchModal").classList.toggle("hidden", !G.researchOpen);
+    if (G.researchOpen) RW.renderResearch(G);
+  };
+  RW.renderResearch = function (G) {
+    const r = G.research; if (!r) return;
+    const s = r.summary();
+    const hasBench = G.buildings.some(b => b.kind === "research_bench");
+
+    $("researchActive").innerHTML = s.active
+      ? `<div class="convoy">Досліджується: <b>${r.labelOf(s.active)}</b> · тір ${r.tierOf(s.active)} · ${s.active_progress.toFixed(1)}/${s.active_cost} дн
+         <div class="cbar"><i style="width:${Math.floor(s.active_pct * 100)}%"></i></div></div>`
+      : `<div class="convoy" style="color:var(--mut)">${hasBench
+          ? "Нічого не досліджується — вибери проєкт нижче."
+          : "Спершу постав 🔬 дослідний стіл — він генерує прогрес досліджень."}</div>`;
+
+    $("researchQueue").innerHTML = s.queue.length
+      ? `<h3>Черга (клік — прибрати)</h3>` + s.queue.map(id => `<span class="rq" data-id="${id}">${r.labelOf(id)} ✕</span>`).join("")
+      : "";
+
+    const avail = r.available().slice().sort((a, b) => ((a.tier || 0) - (b.tier || 0)) || (a.cost - b.cost));
+    $("researchAvail").innerHTML =
+      `<h3>Доступно зараз · досліджено ${s.unlocked}/${s.total} · тех-рівень ${s.level}</h3>` +
+      (avail.length ? avail.map(p => {
+        const un = r.unlocksOf(p.id);
+        const opens = un.buildings.length + un.recipes.length + un.items.length;
+        return `<button class="ravail" data-id="${p.id}">T${p.tier || 0} · ${p.label || p.id}<small> · ${p.cost} дн${opens ? ` · відкриє ${opens}` : ""}</small></button>`;
+      }).join("") : `<div style="color:var(--mut);font-size:13px">Усе доступне вже досліджено або в черзі.</div>`);
   };
 
   function buildConvoyPanel(G) {

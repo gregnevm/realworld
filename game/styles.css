@@ -131,3 +131,15 @@ button.ghost:hover{border-color:var(--acc)}
 @media(max-width:560px){
   .stock{min-width:120px} .log{width:62vw} .need>span{width:74px}
 }
+
+/* ---- research (spec 0007 web slice) ---- */
+.bld.locked{filter:grayscale(.75)}
+.bld .lk{font-size:9px;color:#ffcf5c;margin-top:2px;line-height:1.25}
+#researchModal h3{font-size:12px;color:var(--mut);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.4px}
+.ravail{display:inline-block;margin:3px 5px 0 0;padding:6px 10px;background:var(--panel2);
+  border:1px solid var(--line);border-radius:8px;color:#d6e0ea;font-size:12.5px;cursor:pointer}
+.ravail:hover{border-color:var(--acc)}
+.ravail small{color:var(--mut)}
+.rq{display:inline-block;margin:3px 5px 0 0;padding:5px 9px;background:#22344a;
+  border:1px solid var(--acc);border-radius:8px;font-size:12px;cursor:pointer}
+.rq:hover{border-color:#ff6b6b}

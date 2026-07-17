@@ -8,7 +8,8 @@ extends RefCounted
 
 const OverlayBase = preload("res://scripts/ui/overlay.gd")
 const Tokens = preload("res://scripts/ui/tokens.gd")
-const TILE := 28
+const ViewGeom = preload("res://scripts/ui/view_geom.gd")
+const TILE := ViewGeom.TILE
 
 # ---- L · Light / night (design-system §3 hotkey L) ----
 class LightOverlay extends OverlayBase.Overlay:

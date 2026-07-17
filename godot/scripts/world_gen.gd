@@ -187,7 +187,7 @@ static func overlay_osm(map: Dictionary, elements: Array, bbox: Dictionary) -> D
 	for el in elements:
 		if el.get("type", "") != "way":
 			continue
-		var geom = el.get("geometry", [])
+		var geom: Array = el.get("geometry", [])
 		if geom.size() < 2:
 			continue
 		var kind := _classify(el.get("tags", {}))
