@@ -24,3 +24,4 @@ godot/.godot/
 godot/*_shot*.png
 godot/*.import
 godot/android/build/
+godot/*_thumb*.png
