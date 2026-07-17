@@ -112,6 +112,9 @@
     };
     // research pipeline over the shared content catalog (same tree the Godot kernel walks)
     G.research = RW.newProgression ? RW.newProgression() : null;
+    // seeded gameplay rng: raids/loot/ambushes are a pure function of the coordinates too
+    // (XOR keeps this stream distinct from the worldgen stream that uses the raw hash)
+    G.rng = RW.mulberry32(RW.hashSeed(map.lat || 0, map.lon || 0) ^ 0x5EED);
     if (!bare) {
       // landing crate beside the player, plus the player starts with a clearing
       const ls = landingSpot(G, sp);
@@ -400,7 +403,7 @@
     if (r.active) {
       if (G.enemies.length === 0) {
         r.active = false; r.warned = false;
-        r.next = 78 + Math.random() * 46;
+        r.next = 78 + G.rng() * 46;
         r.timer = 0;
         RW.raidBanner("");
         RW.log(G, "✅ Рейд відбито! Готуйся до наступного.", "good");
@@ -420,14 +423,14 @@
   function spawnWave(G) {
     const r = G.raid; r.active = true; r.wave++;
     const n = RW.raidWaveSize(G.time.day);
-    const N = G.map.N, edge = Math.floor(Math.random() * 4);
+    const N = G.map.N, edge = Math.floor(G.rng() * 4);
     for (let i = 0; i < n; i++) {
       let x, y;
-      const o = 1 + Math.floor(Math.random() * 3);
-      if (edge === 0) { x = o; y = 2 + Math.floor(Math.random() * (N - 4)); }
-      else if (edge === 1) { x = N - 1 - o; y = 2 + Math.floor(Math.random() * (N - 4)); }
-      else if (edge === 2) { x = 2 + Math.floor(Math.random() * (N - 4)); y = o; }
-      else { x = 2 + Math.floor(Math.random() * (N - 4)); y = N - 1 - o; }
+      const o = 1 + Math.floor(G.rng() * 3);
+      if (edge === 0) { x = o; y = 2 + Math.floor(G.rng() * (N - 4)); }
+      else if (edge === 1) { x = N - 1 - o; y = 2 + Math.floor(G.rng() * (N - 4)); }
+      else if (edge === 2) { x = 2 + Math.floor(G.rng() * (N - 4)); y = o; }
+      else { x = 2 + Math.floor(G.rng() * (N - 4)); y = N - 1 - o; }
       if (RW.isTerrainBlocked(G.map.tiles[idx(G, x, y)])) { i--; continue; }
       G.enemies.push(RW.makeRaider(x + 0.5, y + 0.5, G.time.day));
     }
@@ -471,7 +474,7 @@
       const ty = dToP < 6 ? Math.floor(p.py) : center.y;
       e.pathCd -= dt;
       if (!e.path || e.pathCd <= 0 || e._tx !== tx || e._ty !== ty) {
-        e._tx = tx; e._ty = ty; e.pathCd = 0.9 + Math.random() * 0.5;
+        e._tx = tx; e._ty = ty; e.pathCd = 0.9 + G.rng() * 0.5;
         e.path = RW.findPath(N, Math.floor(e.px), Math.floor(e.py), tx, ty, i => RW.isTerrainBlocked(G.map.tiles[i])) || [];
       }
       if (e.path && e.path.length) {
@@ -510,7 +513,7 @@
     if (steal && b.kind === "storage") {
       // raiders skim resources as they smash the crate
       const keys = RW.RES_ORDER.filter(k => (G.base.stock[k] || 0) > 0);
-      if (keys.length) { const k = keys[Math.floor(Math.random() * keys.length)]; const lost = Math.min(G.base.stock[k], 1 + Math.floor(Math.random() * 2)); G.base.stock[k] -= lost; }
+      if (keys.length) { const k = keys[Math.floor(G.rng() * keys.length)]; const lost = Math.min(G.base.stock[k], 1 + Math.floor(G.rng() * 2)); G.base.stock[k] -= lost; }
     }
     if (b.hp <= 0) {
       removeBuilding(G, b);
@@ -522,9 +525,9 @@
     if (e.hp <= 0 && !e.dead) {
       e.dead = true;
       const i = G.enemies.indexOf(e); if (i >= 0) G.enemies.splice(i, 1);
-      RW.deposit(G, "scrap", 2 + Math.floor(Math.random() * 2));
-      if (Math.random() < 0.25) RW.deposit(G, "components", 1);
-      if (Math.random() < 0.4) RW.deposit(G, "food", 1);
+      RW.deposit(G, "scrap", 2 + Math.floor(G.rng() * 2));
+      if (G.rng() < 0.25) RW.deposit(G, "components", 1);
+      if (G.rng() < 0.4) RW.deposit(G, "food", 1);
     }
   }
 
@@ -550,7 +553,8 @@
         player: { px: G.player.px, py: G.player.py, hp: G.player.hp, hunger: G.player.hunger, rest: G.player.rest, carry: G.player.carry, skills: G.player.skills, carryCap: G.player.carryCap, face: G.player.face },
         stock: G.base.stock, time: G.time, raid: G.raid,
         convoys: G.convoys, convoySeq: G.convoySeq, regions: G.regions,
-        research: G.research ? G.research.toDict() : null
+        research: G.research ? G.research.toDict() : null,
+        rngState: G.rng && G.rng.getState ? G.rng.getState() : null
       };
       localStorage.setItem("realworld_save", JSON.stringify(s));
     } catch (e) { /* quota or serialization issue — ignore */ }
@@ -570,6 +574,8 @@
     G.convoys = s.convoys || []; G.convoySeq = s.convoySeq || 0;
     G.regions = s.regions || [];
     if (s.research && G.research) G.research.fromDict(s.research);
+    // resume the gameplay rng exactly where the save left it (old saves: fresh seed from coords)
+    if (s.rngState != null && G.rng && G.rng.setState) G.rng.setState(s.rngState);
     RW.beginGame(G, true);
   };
 

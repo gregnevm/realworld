@@ -12,13 +12,11 @@
 #   6. the unlocked catalogue grows monotonically and ends at full reachability;
 #   7. illegal starts are refused;
 #   8. the whole pipeline round-trips through to_dict()/from_dict().
-extends SceneTree
+extends "res://tests/harness.gd"
 
 const Catalog = preload("res://scripts/kernel/catalog.gd")
 const Progression = preload("res://scripts/kernel/progression.gd")
 
-var passed := 0
-var failed := 0
 
 func _init() -> void:
 	print("== RealWorld progression-pipeline tests ==")
@@ -32,17 +30,8 @@ func _init() -> void:
 	_t_planner()
 	_t_unlocks_and_counts()
 	_t_serialization()
-	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
-	quit(1 if failed > 0 else 0)
+	finish()
 
-func ok(cond: bool, name: String) -> void:
-	if cond:
-		passed += 1
-		print("  [pass] ", name)
-	else:
-		failed += 1
-		printerr("  [FAIL] ", name)
-		print("  [FAIL] ", name)
 
 func _new() -> Progression:
 	return Progression.new(Catalog.load_json())

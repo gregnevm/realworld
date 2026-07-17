@@ -114,14 +114,12 @@ test("convoy round-trip deducts cargo, then deposits the traded goods", () => {
   // wrong resource is rejected
   assert.strictEqual(RW.dispatchConvoy(G, 1, "stone", 5).ok, false);
 
-  // drive the convoy home with no ambush (stub Math.random high)
-  const realRandom = Math.random;
-  Math.random = () => 0.99;
-  try {
-    RW.updateConvoys(G, 9999); // out -> back
-    assert.strictEqual(G.convoys[0].phase, "back");
-    RW.updateConvoys(G, 9999); // back -> arrived
-  } finally { Math.random = realRandom; }
+  // drive the convoy home with no ambush (the ambush roll now reads the game's seeded rng,
+  // so the test just injects a high-roll stub — no more global Math.random monkeypatching)
+  G.rng = () => 0.99;
+  RW.updateConvoys(G, 9999); // out -> back
+  assert.strictEqual(G.convoys[0].phase, "back");
+  RW.updateConvoys(G, 9999); // back -> arrived
   assert.strictEqual(G.convoys.length, 0, "convoy completed");
   assert.strictEqual(stock.components, 2, "traded components delivered to stock");
 });
@@ -287,28 +285,47 @@ test("defense: a spike trap wears down enemies standing on it", () => {
   const e = RW.makeRaider(spot.x + 0.5, spot.y + 0.5, 1);
   G.enemies.push(e);
   const hp0 = e.hp, trapHp0 = trap.hp;
-  const realRandom = Math.random;
-  Math.random = () => 0.5;
-  try { for (let k = 0; k < 10; k++) RW.update(G, 0.1); } finally { Math.random = realRandom; }
+  for (let k = 0; k < 10; k++) RW.update(G, 0.1);   // jitter comes from the seeded G.rng now
   assert.ok(e.hp < hp0 || e.dead || G.enemies.indexOf(e) < 0, "the trap damaged the raider");
   assert.ok(trap.hp < trapHp0 || !G.buildings.includes(trap), "the trap wears out as it bites");
 });
 
 test("update: enemies advance toward the base (followPath movement)", () => {
-  const realRandom = Math.random;
-  Math.random = () => 0.5;   // freeze raid/repath jitter for a deterministic assertion
-  try {
-    const G = makeGame();
-    const center = RW.baseCenter(G);
-    let ex = Math.min(center.x + 10, G.map.N - 3), ey = center.y;
-    while (ex > center.x + 2 && RW.isTerrainBlocked(G.map.tiles[ey * G.map.N + ex])) ex--;
-    const e = RW.makeRaider(ex + 0.5, ey + 0.5, 1);
-    G.enemies.push(e);
-    const d0 = RW.dist(e.px, e.py, center.x + 0.5, center.y + 0.5);
-    for (let k = 0; k < 30; k++) RW.update(G, 0.1);
-    const d1 = RW.dist(e.px, e.py, center.x + 0.5, center.y + 0.5);
-    assert.ok(d1 < d0, `raider closed on the base (${d0.toFixed(2)} -> ${d1.toFixed(2)})`);
-  } finally {
-    Math.random = realRandom;
-  }
+  // no Math.random stubbing needed anymore: the sim's jitter reads the seeded G.rng
+  const G = makeGame();
+  const center = RW.baseCenter(G);
+  let ex = Math.min(center.x + 10, G.map.N - 3), ey = center.y;
+  while (ex > center.x + 2 && RW.isTerrainBlocked(G.map.tiles[ey * G.map.N + ex])) ex--;
+  const e = RW.makeRaider(ex + 0.5, ey + 0.5, 1);
+  G.enemies.push(e);
+  const d0 = RW.dist(e.px, e.py, center.x + 0.5, center.y + 0.5);
+  for (let k = 0; k < 30; k++) RW.update(G, 0.1);
+  const d1 = RW.dist(e.px, e.py, center.x + 0.5, center.y + 0.5);
+  assert.ok(d1 < d0, `raider closed on the base (${d0.toFixed(2)} -> ${d1.toFixed(2)})`);
+});
+
+// ---------------------------------------------------------------------------
+// Seeded gameplay rng: raids, loot, ambushes are reproducible from coordinates.
+// ---------------------------------------------------------------------------
+
+test("determinism: two games from the same coordinates spawn identical raid waves", () => {
+  const spawnAt = (G) => {
+    G.raid.timer = G.raid.next;   // due now
+    RW.update(G, 0.01);           // updateRaids fires spawnWave
+    return G.enemies.map(en => [Math.round(en.px * 10), Math.round(en.py * 10)]);
+  };
+  const a = spawnAt(makeGame());
+  const b = spawnAt(makeGame());
+  assert.ok(a.length > 0, "a wave actually spawned");
+  assert.deepStrictEqual(a, b, "same seed -> same wave size, edge and positions");
+});
+
+test("determinism: the gameplay rng state round-trips through save format", () => {
+  const G = makeGame();
+  for (let i = 0; i < 7; i++) G.rng();          // advance the stream
+  const state = G.rng.getState();
+  const seq = [G.rng(), G.rng(), G.rng()];      // consume 3 values
+  const restored = RW.mulberry32(0);
+  restored.setState(state);                     // resume from the saved state
+  assert.deepStrictEqual([restored(), restored(), restored()], seq, "restored stream continues identically");
 });

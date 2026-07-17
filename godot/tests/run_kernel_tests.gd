@@ -1,6 +1,6 @@
 # RealWorld — headless tests for the mechanics kernel (spec 0003).
 # Run: Godot_console.exe --headless --path godot -s res://tests/run_kernel_tests.gd
-extends SceneTree
+extends "res://tests/harness.gd"
 
 const Defs = preload("res://scripts/kernel/defs.gd")
 const Things = preload("res://scripts/kernel/things.gd")
@@ -17,8 +17,6 @@ const Production = preload("res://scripts/kernel/production.gd")
 const Gear = preload("res://scripts/kernel/gear.gd")
 const Combat = preload("res://scripts/kernel/combat.gd")
 
-var passed := 0
-var failed := 0
 var _fresh_eq_things: Array = []   # Things built by _fresh_eq(), detached at the end of _t_gear (cleanup only)
 
 func _init() -> void:
@@ -38,17 +36,8 @@ func _init() -> void:
 	_t_gear()
 	_t_combat()
 	_t_integration()
-	print("\n== RESULT: %d passed, %d failed ==" % [passed, failed])
-	quit(1 if failed > 0 else 0)
+	finish()
 
-func ok(cond: bool, name: String) -> void:
-	if cond:
-		passed += 1
-		print("  [pass] ", name)
-	else:
-		failed += 1
-		printerr("  [FAIL] ", name)
-		print("  [FAIL] ", name)
 
 func _rng(seed_val: int) -> RandomNumberGenerator:
 	var r := RandomNumberGenerator.new()
