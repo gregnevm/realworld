@@ -20,6 +20,7 @@
 ## Архітектура
 - Гра — єдиний глобальний неймспейс **`RW`**, розкладений по файлах у `game/js/`, які підключаються **у фіксованому порядку** в `game/index.html`: `util → worldgen → entities → catalog_data → progression → render → logistics → ui → input → game`. `game.js` стартує на `DOMContentLoaded`.
 - **Прогресія у веб-зрізі:** `G.research = RW.Progression(RW.CATALOG)` — той самий tech-DAG, що і в Godot (`catalog.json`); дослідні столи генерують прогрес у `RW.update`; будівлі з `research:`-гейтом заблоковані до розблокування (клік по локу планує весь шлях). Після зміни `catalog.json` — `node tools/sync-catalog.mjs` (CI-тест ловить розсинхрон).
+- **Сідований геймплей-RNG (веб):** `G.rng = RW.mulberry32(hashSeed(lat,lon) ^ 0x5EED)` — рейди/лут/засідки/OSM-ноди детерміновані від координат; жодного `Math.random` у sim-шляхах; стан RNG персистується в сейві (`rngState`, `getState/setState`).
 - Цикл: `requestAnimationFrame` → `RW.update(G, dt)` (симуляція) + `RW.render(ctx, G)`. Уся ігрова модель — в об'єкті `G` (`RW.G`).
 - World-gen: `lat/lon` → детермінований seed (`mulberry32`) → процедурна карта; за потреби зверху накладається реальна геометрія OSM (`RW.overlayOSM`).
 - GDD: фронтенд читає `gdd.json` через `fetch` (потрібен HTTP-origin, не `file://`).

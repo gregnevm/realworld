@@ -65,9 +65,9 @@
         c.phase = "back"; c.t = 0;
         RW.log(G, `🔄 Конвой #${c.id} обміняв вантаж у ${c.hubName}, везе ${c.recvAmt} ${RW.RES[c.recvRes].icon} назад.`);
         // ambush roll on the return leg
-        if (Math.random() < 0.25) {
+        if (G.rng() < 0.25) {
           c.ambushed = true;
-          const lost = Math.max(1, Math.round(c.recvAmt * (0.3 + Math.random() * 0.4)));
+          const lost = Math.max(1, Math.round(c.recvAmt * (0.3 + G.rng() * 0.4)));
           c.recvAmt = Math.max(0, c.recvAmt - lost);
           RW.log(G, `⚔ Засідка на конвой #${c.id}! Відбито ${lost} ${RW.RES[c.recvRes].icon}.`, "bad");
         }
