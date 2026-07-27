@@ -77,6 +77,9 @@ func _init() -> void:
 						if not cmd.is_empty():
 							ws.send_text(JSON.stringify(cmd))
 							verdict.cmds_sent = int(verdict.cmds_sent) + 1
+				# ack AFTER any commands from this batch: TCP ordering then guarantees the server
+				# sees those commands before it opens the next batch (Plan §4 flow control)
+				ws.send_text(JSON.stringify({"t": "ack", "tick": tick}))
 			"hash":
 				if sim == null or tick != int(m.tick):
 					verdict.mismatches = int(verdict.mismatches) + 1

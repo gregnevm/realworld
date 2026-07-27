@@ -78,12 +78,19 @@ func _init() -> void:
 			var h := {"t": "hash", "tick": tick, "h": Persistence.world_hash(sim)}
 			for p in _peers:
 				_send(p, h)
+		# ack-gated lockstep (Plan §4 flow control): a headless server outruns real clients by
+		# orders of magnitude — without this gate a client command can arrive after the run is
+		# over. TCP ordering guarantees a command sent before the ack is received before it, so
+		# every command lands in the very next batch, deterministically.
+		if not _wait_acks(tick):
+			verdict.err = "ack timeout at tick %d" % tick
+			break
 	var final_hash := Persistence.world_hash(sim)
 	for p in _peers:
 		_send(p, {"t": "bye", "tick": tick, "final": final_hash})
 	_flush_and_close()
 
-	verdict.ok = true
+	verdict.ok = str(verdict.err) == "" and tick == total_ticks
 	verdict.cmd_echoes = echoes
 	verdict.final = final_hash
 	_finish(out_path, verdict)
@@ -112,8 +119,31 @@ func _poll_incoming() -> void:
 		p.poll()
 		while p.get_available_packet_count() > 0:
 			var d: Variant = JSON.parse_string(p.get_packet().get_string_from_utf8())
-			if d is Dictionary and str(d.get("t")) == "cmd":
-				_pending.append({"verb": str(d.get("verb")), "args": d.get("args", {}), "from": i})
+			if not (d is Dictionary):
+				continue
+			match str(d.get("t")):
+				"cmd":
+					_pending.append({"verb": str(d.get("verb")), "args": d.get("args", {}), "from": i})
+				"ack":
+					_acked[i] = int(d.get("tick", -1))
+
+
+var _acked: Dictionary = {}     # peer index -> last acked tick
+
+
+func _wait_acks(tick: int) -> bool:
+	var waited := 0
+	while waited < ACCEPT_TIMEOUT_MSEC:
+		_poll_incoming()
+		var got := 0
+		for i in _peers.size():
+			if int(_acked.get(i, -1)) >= tick:
+				got += 1
+		if got == _peers.size():
+			return true
+		OS.delay_msec(1)
+		waited += 1
+	return false
 
 
 # ---- plumbing ----

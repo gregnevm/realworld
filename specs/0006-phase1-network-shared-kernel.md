@@ -178,9 +178,13 @@ Full single-shard world of the whole Earth · large-scale player economy & facti
 - **Command grammar over the wire works (Plan §4 seed):** clients send allowlisted verbs
   (`order_gather`/`try_build`/`order_move`); the server QUEUES them, schedules into the next
   advance batch and echoes the schedule to everyone — all three instances apply identically.
-  Note: the *scheduled tick* of a command depends on network arrival (races between runs are
-  expected and correct — the server's echo is canon); *within* a run all instances agree, which
-  is exactly the authority model of §2.
+  The lockstep is **ack-gated** (flow control): the server opens the next batch only after every
+  client acked the previous one, and a client sends its commands *before* its ack, so TCP
+  ordering guarantees each command lands in the very next batch. Consequence: the command
+  schedule — and therefore the final world_hash — is deterministic **across runs**, not just
+  across instances (verified: 5 consecutive runs, identical final hash). Without the gate a
+  headless server outruns clients by orders of magnitude and late commands fall off the end —
+  the first CI run caught exactly that.
 - **Remaining for Phase 1 proper:** snapshot delta-encoder over `HudModel.snapshot()` (Plan §3),
   formalized command envelope + idempotency (Plan §4), authoritative persistence + rejoin
   (Plan §5). The transport and determinism risks are retired.
