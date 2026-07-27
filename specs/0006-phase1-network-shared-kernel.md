@@ -123,8 +123,9 @@ Full single-shard world of the whole Earth · large-scale player economy & facti
 - [x] Wire protocol expressed as the 5 existing seams (§3), with **no new** parallel state model.
 - [x] Fate of `game/` decided (§5) — stays a frozen reference render prototype, never a 2nd sim.
 - [x] Determinism test strategy defined: same seed → identical world-state hash on 2 instances (§4).
-- [ ] AGENTS.md roadmap line reconciled (Node = fallback, not default) — **pending owner** (AGENTS.md
-      is in the parallel dev's working tree). `GDD_BOOK` already reconciled.
+- [x] AGENTS.md roadmap line reconciled (Node = fallback, not default) — **done 2026-07-27**:
+      AGENTS.md «Ключові рішення» entry + README Roadmap line now name Godot headless as the
+      Phase-1 server with Node as measured-fallback. `GDD_BOOK` already reconciled.
 
 ## 8. Plan (next pass, once this is approved)
 
@@ -141,8 +142,29 @@ Full single-shard world of the whole Earth · large-scale player economy & facti
 
 - [x] Frame the decision + option matrix (this doc).
 - [x] Owner: approve/adjust the A-first recommendation. **→ approved 2026-07-05 (option A).**
-- [ ] Spike the 2-client / 1-server determinism test (Plan §2). **← next action.**
-- [ ] Fold the chosen boundary + protocol back into AGENTS.md (owner) and `GDD_BOOK` (✅ done: `section:risks`/`section:scope`).
+- [x] Spike the 2-client / 1-server determinism test (Plan §2) — **determinism backbone landed
+      2026-07-27, see §9.1**; the socket-transport half is the remaining piece and is now
+      de-risked to plumbing. **← next action: transport spike (ENet/WebSocket) over the proven
+      hash.**
+- [x] Fold the chosen boundary + protocol back into AGENTS.md and `GDD_BOOK` (✅ `section:risks`/`section:scope`; AGENTS.md + README 2026-07-27).
+
+### 9.1 Spike results (2026-07-27, determinism half)
+
+- **Plan §1 inventory: clean.** Grep-audit of the whole authoritative path (`sim.gd`, `sim/`,
+  `session.gd`, `kernel/`, `world_gen.gd`, `social.gd`, `persistence.gd`) found **zero**
+  wall-clock/scene coupling — no `Time.`/`OS.`/`Engine.`/`get_tree`/`await`. Nothing blocks
+  `--headless` server use.
+- **§4 core test: green.** `Persistence.world_hash(sim)` extends the spec 0002 canonical-JSON +
+  FNV content-hash to the full authoritative state (save fields **plus** enemies/shots, raid &
+  patrol cycles, weather state, `env_rng`/`threat_rng` cursors; view channels and derived caches
+  deliberately excluded). `tests/run_determinism_tests.gd` drives two independent instances —
+  600 ambient ticks and 500 ticks with a scripted gather/build/move command stream — hash-equal
+  at every probe; different seed ⇒ different hash; region payload survives
+  serialize→`load_region`→serialize bit-stable.
+- **Two OS processes, not two objects:** the suite prints `WORLD_HASH_FINAL=`; CI runs it twice
+  and `diff`s the lines (godot.yml «Cross-process determinism hash»), so per-process
+  nondeterminism has nowhere to hide. The suite is leak-gated like every other and runs in
+  `test.cmd`.
 
 ## 10. Risks & rollback
 

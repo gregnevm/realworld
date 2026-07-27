@@ -21,6 +21,9 @@ echo.
 echo === UI view-layer tests (spec 0005) ===
 "%GODOT%" --headless --path "%~dp0godot" -s res://tests/run_ui_tests.gd
 echo.
+echo === Determinism suite (spec 0006 - twin-instance world hash) ===
+"%GODOT%" --headless --path "%~dp0godot" -s res://tests/run_determinism_tests.gd
+echo.
 echo === Playthrough smoke ===
 "%GODOT%" --headless --path "%~dp0godot" -s res://tests/run_smoke.gd
 echo.

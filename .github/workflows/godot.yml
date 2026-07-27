@@ -24,11 +24,19 @@ jobs:
       - name: Headless suites (leak-gated)
         run: |
           set -o pipefail
-          for suite in run_tests run_kernel_tests run_catalog_tests run_progression_tests run_ui_tests run_smoke; do
+          for suite in run_tests run_kernel_tests run_catalog_tests run_progression_tests run_ui_tests run_determinism_tests run_smoke; do
             echo "=== $suite ==="
             ./godot-bin --headless --path godot -s "res://tests/$suite.gd" 2>&1 | tee suite.log
             ! grep -q "ObjectDB instances were leaked" suite.log
           done
+      # spec 0006 §4: "same seed fed to two independent server instances -> identical world state
+      # hash" — two separate OS processes, not two objects in one process, so per-process
+      # nondeterminism (hash seeds, pointer order) has nowhere to hide.
+      - name: Cross-process determinism hash
+        run: |
+          ./godot-bin --headless --path godot -s res://tests/run_determinism_tests.gd 2>&1 | grep "^WORLD_HASH_FINAL=" > h1.txt
+          ./godot-bin --headless --path godot -s res://tests/run_determinism_tests.gd 2>&1 | grep "^WORLD_HASH_FINAL=" > h2.txt
+          diff h1.txt h2.txt && cat h1.txt
       - name: Scene parse check
         run: ./godot-bin --headless --path godot -s res://tests/parse_check.gd
 
