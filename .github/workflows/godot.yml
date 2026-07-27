@@ -107,7 +107,9 @@ jobs:
           rm Godot_v4.7-stable_export_templates.tpz
       - name: Export Web build
         run: |
-          # import first: exporting from a fresh checkout without the .godot cache misses resources
+          # import first: exporting from a fresh checkout without the .godot cache misses resources;
+          # mkdir because the headless exporter refuses to create the target folder itself
+          mkdir -p godot/build/web
           ./godot-bin --headless --path godot --import
           ./godot-bin --headless --path godot --export-release "Web" build/web/index.html
       # the exporter can leave a broken build behind a zero exit code — gate on the artifacts themselves
