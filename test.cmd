@@ -24,6 +24,9 @@ echo.
 echo === Determinism suite (spec 0006 - twin-instance world hash) ===
 "%GODOT%" --headless --path "%~dp0godot" -s res://tests/run_determinism_tests.gd
 echo.
+echo === Net transport spike (spec 0006 - 1 server + 2 clients over WebSocket) ===
+"%GODOT%" --headless --path "%~dp0godot" -s res://tests/run_net_spike.gd
+echo.
 echo === Playthrough smoke ===
 "%GODOT%" --headless --path "%~dp0godot" -s res://tests/run_smoke.gd
 echo.

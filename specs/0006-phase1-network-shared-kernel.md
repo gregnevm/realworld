@@ -142,10 +142,10 @@ Full single-shard world of the whole Earth · large-scale player economy & facti
 
 - [x] Frame the decision + option matrix (this doc).
 - [x] Owner: approve/adjust the A-first recommendation. **→ approved 2026-07-05 (option A).**
-- [x] Spike the 2-client / 1-server determinism test (Plan §2) — **determinism backbone landed
-      2026-07-27, see §9.1**; the socket-transport half is the remaining piece and is now
-      de-risked to plumbing. **← next action: transport spike (ENet/WebSocket) over the proven
-      hash.**
+- [x] Spike the 2-client / 1-server determinism test (Plan §2) — **complete 2026-07-27**: the
+      determinism backbone (§9.1) AND the transport half (§9.2) are both green. Option A is
+      proven end-to-end. **← next action: snapshot delta-encoder over `HudModel.snapshot()`
+      (Plan §3) + formalize the command envelope (Plan §4) from the spike's lockstep grammar.**
 - [x] Fold the chosen boundary + protocol back into AGENTS.md and `GDD_BOOK` (✅ `section:risks`/`section:scope`; AGENTS.md + README 2026-07-27).
 
 ### 9.1 Spike results (2026-07-27, determinism half)
@@ -165,6 +165,25 @@ Full single-shard world of the whole Earth · large-scale player economy & facti
   and `diff`s the lines (godot.yml «Cross-process determinism hash»), so per-process
   nondeterminism has nowhere to hide. The suite is leak-gated like every other and runs in
   `test.cmd`.
+
+### 9.2 Spike results (2026-07-27, transport half — Plan §2 complete)
+
+- **Literally the §2 Plan sentence:** `tests/run_net_spike.gd` spawns **one authoritative
+  `--headless` server + two client processes** (`tests/net/net_server.gd` / `net_client.gd`,
+  same Godot binary) over a real localhost **WebSocket**; 600 lockstep ticks finish in ~2 s;
+  `world_hash` matches on the server and both clients at every 100-tick probe and at the end.
+- **Transport decision: WebSocket, not ENet.** The web export (threads OFF) has no UDP, so a
+  §5-style thin browser client stays possible; TCP ordering makes the lockstep command envelope
+  trivial; 10 ticks/s survival pacing does not need UDP latency. Recorded as the Phase-1 default.
+- **Command grammar over the wire works (Plan §4 seed):** clients send allowlisted verbs
+  (`order_gather`/`try_build`/`order_move`); the server QUEUES them, schedules into the next
+  advance batch and echoes the schedule to everyone — all three instances apply identically.
+  Note: the *scheduled tick* of a command depends on network arrival (races between runs are
+  expected and correct — the server's echo is canon); *within* a run all instances agree, which
+  is exactly the authority model of §2.
+- **Remaining for Phase 1 proper:** snapshot delta-encoder over `HudModel.snapshot()` (Plan §3),
+  formalized command envelope + idempotency (Plan §4), authoritative persistence + rejoin
+  (Plan §5). The transport and determinism risks are retired.
 
 ## 10. Risks & rollback
 

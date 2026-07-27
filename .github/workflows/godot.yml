@@ -37,6 +37,11 @@ jobs:
           ./godot-bin --headless --path godot -s res://tests/run_determinism_tests.gd 2>&1 | grep "^WORLD_HASH_FINAL=" > h1.txt
           ./godot-bin --headless --path godot -s res://tests/run_determinism_tests.gd 2>&1 | grep "^WORLD_HASH_FINAL=" > h2.txt
           diff h1.txt h2.txt && cat h1.txt
+      # spec 0006 plan §2 end-to-end: 1 authoritative --headless server + 2 client processes over
+      # a real localhost WebSocket, lockstep command echo — world_hash must match on all three.
+      # Integration suite (spawns OS processes), so it runs outside the single-process loop above.
+      - name: Net transport spike (1 server + 2 clients, WebSocket)
+        run: ./godot-bin --headless --path godot -s res://tests/run_net_spike.gd
       - name: Scene parse check
         run: ./godot-bin --headless --path godot -s res://tests/parse_check.gd
 
