@@ -76,6 +76,61 @@ jobs:
             godot/newhud_thumb.png
           if-no-files-found: error
 
+  # Click-and-play deliverable: export the Web build (preset "Web", threads OFF — runs on any static
+  # hosting, no COOP/COEP) and publish it as an artifact, so every push yields a playable build
+  # without a local engine. Export templates come from the official 1.25 GB .tpz: GitHub's CDN does
+  # not serve HTTP range requests reliably, so it is downloaded whole (transient) and only the
+  # templates/web_* members are kept — cached between runs, so the big download happens once.
+  godot-web-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Godot 4.7
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
+          unzip -q Godot_v4.7-stable_linux.x86_64.zip
+          mv Godot_v4.7-stable_linux.x86_64 godot-bin
+          chmod +x godot-bin
+      - name: Cache web export templates
+        id: templates-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/godot/export_templates/4.7.stable
+          key: godot-export-templates-4.7-stable-web
+      - name: Fetch web export templates (cache miss)
+        if: steps.templates-cache.outputs.cache-hit != 'true'
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_export_templates.tpz
+          mkdir -p ~/.local/share/godot/export_templates/4.7.stable
+          unzip -j -q Godot_v4.7-stable_export_templates.tpz "templates/web_*" "templates/version.txt" \
+            -d ~/.local/share/godot/export_templates/4.7.stable
+          rm Godot_v4.7-stable_export_templates.tpz
+      - name: Export Web build
+        run: |
+          # import first: exporting from a fresh checkout without the .godot cache misses resources
+          ./godot-bin --headless --path godot --import
+          ./godot-bin --headless --path godot --export-release "Web" build/web/index.html
+      # the exporter can leave a broken build behind a zero exit code — gate on the artifacts themselves
+      - name: Verify build artifacts
+        run: |
+          for f in index.html index.wasm index.pck index.js; do
+            test -s "godot/build/web/$f" || { echo "missing or empty: $f"; exit 1; }
+          done
+          printf '%s\n' \
+            "RealWorld — Godot Web build (клік-і-грай)" \
+            "" \
+            "1. Розпакуй архів у теку." \
+            "2. У теці:  python3 -m http.server 8792" \
+            "3. Відкрий  http://localhost:8792  (з file:// не працює)." \
+            > godot/build/web/README.txt
+          ls -la godot/build/web
+      - name: Upload web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: godot/build/web
+          if-no-files-found: error
+
   gdlint:
     runs-on: ubuntu-latest
     steps:
