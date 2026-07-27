@@ -1,7 +1,10 @@
 name: CI
 
+# push is limited to main so PR-branch pushes run every job once (via pull_request),
+# not twice — the bare push trigger duplicated the whole matrix on every PR push
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
