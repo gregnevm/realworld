@@ -9,9 +9,11 @@
 # desync and fails the spike. Args (after --): port=<int> out=<abs path>
 extends SceneTree
 
-const Sim = preload("res://scripts/sim.gd")
-const WorldGen = preload("res://scripts/world_gen.gd")
+const Session = preload("res://scripts/session.gd")
 const Persistence = preload("res://scripts/persistence.gd")
+const HudModel = preload("res://scripts/ui/hud_model.gd")
+const Balance = preload("res://scripts/kernel/balance.gd")
+const Snapshot = preload("res://scripts/net/snapshot.gd")
 
 const DT := 0.1
 const CONNECT_TIMEOUT_MSEC := 30000
@@ -23,7 +25,7 @@ func _init() -> void:
 	var port: int = args.get("port", 8901)
 	var out_path: String = args.get("out", "user://net_spike_client.json")
 
-	var verdict := {"role": "client", "idx": -1, "ok": false, "hash_checks": 0, "mismatches": 0, "cmds_sent": 0, "final": "", "err": ""}
+	var verdict := {"role": "client", "idx": -1, "ok": false, "hash_checks": 0, "mismatches": 0, "cmds_sent": 0, "snap_checks": 0, "snap_mismatches": 0, "final": "", "err": ""}
 	var ws := WebSocketPeer.new()
 	if ws.connect_to_url("ws://127.0.0.1:%d" % port) != OK:
 		verdict.err = "connect_to_url failed"
@@ -34,8 +36,11 @@ func _init() -> void:
 		_finish(out_path, verdict)
 		return
 
-	ws.send_text(JSON.stringify({"t": "hello"}))
+	ws.send_text(Snapshot.to_wire({"t": "hello"}))
+	var session: Variant = null
 	var sim: Variant = null
+	var bal: Variant = Balance.Balance.new()
+	var recon: Variant = null            # reconstruction of the server's snapshot stream (§8.3)
 	var idx := -1
 	var tick := 0
 	var total := 0
@@ -59,8 +64,9 @@ func _init() -> void:
 				idx = int(m.idx)
 				total = int(m.ticks)
 				verdict.idx = idx
-				sim = Sim.new()
-				sim.new_game(WorldGen.generate_map(float(m.lat), float(m.lon), int(m.n)))
+				session = Session.new()
+				session.start(float(m.lat), float(m.lon), "Спайк")
+				sim = session.sim
 			"advance":
 				if sim == null:
 					continue
@@ -71,15 +77,16 @@ func _init() -> void:
 						if int(c.tick) == tick:
 							_apply(sim, c)
 					sim.update(DT)
+					session.tick_research(DT)
 					# client #0 originates the scripted commands from its own (identical) map
 					if idx == 0:
 						var cmd := _scripted(sim, tick)
 						if not cmd.is_empty():
-							ws.send_text(JSON.stringify(cmd))
+							ws.send_text(Snapshot.to_wire(cmd))
 							verdict.cmds_sent = int(verdict.cmds_sent) + 1
 				# ack AFTER any commands from this batch: TCP ordering then guarantees the server
 				# sees those commands before it opens the next batch (Plan §4 flow control)
-				ws.send_text(JSON.stringify({"t": "ack", "tick": tick}))
+				ws.send_text(Snapshot.to_wire({"t": "ack", "tick": tick}))
 			"hash":
 				if sim == null or tick != int(m.tick):
 					verdict.mismatches = int(verdict.mismatches) + 1
@@ -87,6 +94,18 @@ func _init() -> void:
 				verdict.hash_checks = int(verdict.hash_checks) + 1
 				if Persistence.world_hash(sim) != str(m.h):
 					verdict.mismatches = int(verdict.mismatches) + 1
+			"snap":
+				# §8.3: rebuild the server's snapshot from the delta stream and hold it against a
+				# locally computed one — content_hash canonicalizes the wire's type coercions
+				if session == null or tick != int(m.tick):
+					verdict.snap_mismatches = int(verdict.snap_mismatches) + 1
+					continue
+				recon = Snapshot.apply(recon, m.get("delta"))
+				var world := {"buildings": [], "stock": sim.stock, "items": []}
+				var local: Variant = Snapshot.wire_normalize(HudModel.snapshot(session, world, {"day": int(sim.time.day)}, bal))
+				verdict.snap_checks = int(verdict.snap_checks) + 1
+				if Persistence.content_hash(recon) != Persistence.content_hash(local):
+					verdict.snap_mismatches = int(verdict.snap_mismatches) + 1
 			"bye":
 				verdict.final = Persistence.world_hash(sim) if sim != null else ""
 				verdict.ok = tick == int(m.tick) and verdict.final == str(m.final) \

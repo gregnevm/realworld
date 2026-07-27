@@ -10,16 +10,18 @@
 # Args (after --): port=<int> clients=<int> ticks=<int> out=<abs path of the verdict json>
 extends SceneTree
 
-const Sim = preload("res://scripts/sim.gd")
-const WorldGen = preload("res://scripts/world_gen.gd")
+const Session = preload("res://scripts/session.gd")
 const Persistence = preload("res://scripts/persistence.gd")
+const HudModel = preload("res://scripts/ui/hud_model.gd")
+const Balance = preload("res://scripts/kernel/balance.gd")
+const Snapshot = preload("res://scripts/net/snapshot.gd")
 
 const LAT := 50.4501
 const LON := 30.5234
-const N := 56
 const DT := 0.1
 const BATCH := 10
 const HASH_EVERY := 100
+const SNAP_EVERY := 50
 const ALLOWED_VERBS := ["order_gather", "order_move", "try_build"]
 const ACCEPT_TIMEOUT_MSEC := 30000
 
@@ -35,10 +37,15 @@ func _init() -> void:
 	var total_ticks: int = args.get("ticks", 600)
 	var out_path: String = args.get("out", "user://net_spike_server.json")
 
-	var sim: Variant = Sim.new()
-	sim.new_game(WorldGen.generate_map(LAT, LON, N))
+	# a real Session (not a bare Sim): the snapshot channel reads the research slice through it,
+	# and tick_research is part of the authoritative tick on both ends of the wire
+	var session: Variant = Session.new()
+	session.start(LAT, LON, "Спайк")
+	var sim: Variant = session.sim
+	var bal: Variant = Balance.Balance.new()
+	var last_snap: Variant = null
 
-	var verdict := {"role": "server", "ok": false, "clients_seen": 0, "cmd_echoes": 0, "final": "", "err": ""}
+	var verdict := {"role": "server", "ok": false, "clients_seen": 0, "cmd_echoes": 0, "snaps_sent": 0, "final": "", "err": ""}
 	if _tcp.listen(port, "127.0.0.1") != OK:
 		verdict.err = "listen failed on %d" % port
 		_finish(out_path, verdict)
@@ -52,7 +59,7 @@ func _init() -> void:
 
 	# handshake: each client learns its index and the world recipe (seed inputs, not state)
 	for i in _peers.size():
-		_send(_peers[i], {"t": "welcome", "idx": i, "lat": LAT, "lon": LON, "n": N, "ticks": total_ticks})
+		_send(_peers[i], {"t": "welcome", "idx": i, "lat": LAT, "lon": LON, "ticks": total_ticks})
 
 	var tick := 0
 	var echoes := 0
@@ -74,10 +81,21 @@ func _init() -> void:
 				if int(c.tick) == tick:
 					_apply(sim, c)
 			sim.update(DT)
+			session.tick_research(DT)
 		if tick % HASH_EVERY == 0:
 			var h := {"t": "hash", "tick": tick, "h": Persistence.world_hash(sim)}
 			for p in _peers:
 				_send(p, h)
+		# §8.3 snapshot channel: delta over the last WIRE-normalized snapshot (see snapshot.gd —
+		# the sender must diff wire-domain values or decimal-JSON float drift desyncs receivers)
+		if tick % SNAP_EVERY == 0:
+			var world := {"buildings": [], "stock": sim.stock, "items": []}
+			var snap: Variant = Snapshot.wire_normalize(HudModel.snapshot(session, world, {"day": int(sim.time.day)}, bal))
+			var sd := {"t": "snap", "tick": tick, "delta": Snapshot.encode(last_snap, snap)}
+			last_snap = snap
+			verdict.snaps_sent = int(verdict.snaps_sent) + 1
+			for p in _peers:
+				_send(p, sd)
 		# ack-gated lockstep (Plan §4 flow control): a headless server outruns real clients by
 		# orders of magnitude — without this gate a client command can arrive after the run is
 		# over. TCP ordering guarantees a command sent before the ack is received before it, so
@@ -177,7 +195,7 @@ func _accept_clients(want: int) -> bool:
 func _send(p: WebSocketPeer, msg: Dictionary) -> void:
 	p.poll()
 	if p.get_ready_state() == WebSocketPeer.STATE_OPEN:
-		p.send_text(JSON.stringify(msg))
+		p.send_text(Snapshot.to_wire(msg))   # full-precision floats — bare stringify rounds them
 		p.poll()
 
 

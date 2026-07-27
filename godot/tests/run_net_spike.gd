@@ -74,6 +74,12 @@ func _init() -> void:
 				int(v.get("idx", -1)), int(v.get("hash_checks", 0)),
 				"" if bool(v.get("ok", false)) else " — err: %s" % str(v.get("err", "?")),
 			])
+		# §8.3 snapshot channel: every 50-tick delta reconstructed into a snapshot that matches
+		# the client's locally computed one
+		ok(int(v.get("snap_checks", 0)) == TOTAL_TICKS / 50 and int(v.get("snap_mismatches", 1)) == 0,
+			"client %d snapshot stream: %d deltas reconstructed, 0 mismatches" % [
+				int(v.get("idx", -1)), int(v.get("snap_checks", 0)),
+			])
 	var hs := str(server.get("final", "s"))
 	ok(hs != "" and hs == str(c1.get("final", "1")) and hs == str(c2.get("final", "2")),
 		"final world_hash identical across server and both clients (%s)" % str(hs).left(8))

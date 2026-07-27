@@ -144,8 +144,12 @@ Full single-shard world of the whole Earth · large-scale player economy & facti
 - [x] Owner: approve/adjust the A-first recommendation. **→ approved 2026-07-05 (option A).**
 - [x] Spike the 2-client / 1-server determinism test (Plan §2) — **complete 2026-07-27**: the
       determinism backbone (§9.1) AND the transport half (§9.2) are both green. Option A is
-      proven end-to-end. **← next action: snapshot delta-encoder over `HudModel.snapshot()`
-      (Plan §3) + formalize the command envelope (Plan §4) from the spike's lockstep grammar.**
+      proven end-to-end.
+- [x] Snapshot delta-encoder over `HudModel.snapshot()` (Plan §3) — **landed 2026-07-27, see
+      §9.3**: `scripts/net/snapshot.gd` codec + `run_snapshot_tests.gd` + a live delta channel
+      in the transport spike. **← next action: formalize the command envelope (Plan §4 —
+      idempotency/validation over the proven ack-gated grammar), then authoritative
+      persistence + rejoin (Plan §5).**
 - [x] Fold the chosen boundary + protocol back into AGENTS.md and `GDD_BOOK` (✅ `section:risks`/`section:scope`; AGENTS.md + README 2026-07-27).
 
 ### 9.1 Spike results (2026-07-27, determinism half)
@@ -185,9 +189,34 @@ Full single-shard world of the whole Earth · large-scale player economy & facti
   across instances (verified: 5 consecutive runs, identical final hash). Without the gate a
   headless server outruns clients by orders of magnitude and late commands fall off the end —
   the first CI run caught exactly that.
-- **Remaining for Phase 1 proper:** snapshot delta-encoder over `HudModel.snapshot()` (Plan §3),
-  formalized command envelope + idempotency (Plan §4), authoritative persistence + rejoin
-  (Plan §5). The transport and determinism risks are retired.
+- **Remaining for Phase 1 proper:** snapshot delta-encoder over `HudModel.snapshot()` (Plan §3 —
+  ✅ done, §9.3), formalized command envelope + idempotency (Plan §4), authoritative persistence
+  + rejoin (Plan §5). The transport and determinism risks are retired.
+
+### 9.3 Delta-encoder results (2026-07-27, Plan §3)
+
+- **Codec:** `scripts/net/snapshot.gd` — `encode(prev, next)` → minimal patch (`["r", v]`
+  replace / `["p", {key: node}, [del]]` recursive dictionary patch; arrays replace wholesale —
+  measured small), `apply(base, delta)` reconstructs; `null` = nothing changed. Keyframe =
+  `encode(null, snap)`. Malformed deltas keep the base (the server is authoritative; the next
+  keyframe heals).
+- **Payload measured** (`run_snapshot_tests.gd`, live session, 600 ticks): full snapshot
+  ≈ 12.9 KB; delta avg ≈ 105 B (peak = keyframe); at 1-in-5 cadence ≈ 190 B. A 10 tick/s delta
+  stream ≈ **1.0 KB/s vs 126 KB/s** full-snapshot — the encoder pays for itself two orders of
+  magnitude over; no index-diff for arrays needed at this scale.
+- **Three wire landmines found by the fidelity harness, all now codec discipline:**
+  1. Godot's default `JSON.stringify` **rounds floats** (a 1.358e-14 daylight factor mutated in
+     transit) → every net message goes through `Snapshot.to_wire()` (full_precision).
+  2. Even full precision does **not** guarantee a bit round-trip of an arbitrary double
+     (observed `…6282704` → wire → `…6282703`) → the sender diffs **wire-normalized** snapshots
+     (`wire_normalize`), i.e. deltas are computed over what actually shipped — after one
+     round-trip the wire domain is idempotent, so drift can never accumulate.
+  3. GDScript Variant `==` promotes bool to int (`true == 1`) while the canonical hash keeps
+     them distinct → the codec's `_eq` is canonical (bool-strict, numeric int/float, recursive).
+- **Live over the socket:** the transport spike now streams a `snap` delta every 50 ticks;
+  each client reconstructs and hash-compares against its locally computed snapshot — 12/12
+  deltas, 0 mismatches on both clients, run-to-run deterministic. `content_hash` doubles as the
+  canonical equalizer for JSON's type coercions (int→float, StringName→String, int-keys→string).
 
 ## 10. Risks & rollback
 
