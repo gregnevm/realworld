@@ -123,8 +123,9 @@ Full single-shard world of the whole Earth · large-scale player economy & facti
 - [x] Wire protocol expressed as the 5 existing seams (§3), with **no new** parallel state model.
 - [x] Fate of `game/` decided (§5) — stays a frozen reference render prototype, never a 2nd sim.
 - [x] Determinism test strategy defined: same seed → identical world-state hash on 2 instances (§4).
-- [ ] AGENTS.md roadmap line reconciled (Node = fallback, not default) — **pending owner** (AGENTS.md
-      is in the parallel dev's working tree). `GDD_BOOK` already reconciled.
+- [x] AGENTS.md roadmap line reconciled (Node = fallback, not default) — **done 2026-07-27**:
+      AGENTS.md «Ключові рішення» entry + README Roadmap line now name Godot headless as the
+      Phase-1 server with Node as measured-fallback. `GDD_BOOK` already reconciled.
 
 ## 8. Plan (next pass, once this is approved)
 
@@ -141,8 +142,81 @@ Full single-shard world of the whole Earth · large-scale player economy & facti
 
 - [x] Frame the decision + option matrix (this doc).
 - [x] Owner: approve/adjust the A-first recommendation. **→ approved 2026-07-05 (option A).**
-- [ ] Spike the 2-client / 1-server determinism test (Plan §2). **← next action.**
-- [ ] Fold the chosen boundary + protocol back into AGENTS.md (owner) and `GDD_BOOK` (✅ done: `section:risks`/`section:scope`).
+- [x] Spike the 2-client / 1-server determinism test (Plan §2) — **complete 2026-07-27**: the
+      determinism backbone (§9.1) AND the transport half (§9.2) are both green. Option A is
+      proven end-to-end.
+- [x] Snapshot delta-encoder over `HudModel.snapshot()` (Plan §3) — **landed 2026-07-27, see
+      §9.3**: `scripts/net/snapshot.gd` codec + `run_snapshot_tests.gd` + a live delta channel
+      in the transport spike. **← next action: formalize the command envelope (Plan §4 —
+      idempotency/validation over the proven ack-gated grammar), then authoritative
+      persistence + rejoin (Plan §5).**
+- [x] Fold the chosen boundary + protocol back into AGENTS.md and `GDD_BOOK` (✅ `section:risks`/`section:scope`; AGENTS.md + README 2026-07-27).
+
+### 9.1 Spike results (2026-07-27, determinism half)
+
+- **Plan §1 inventory: clean.** Grep-audit of the whole authoritative path (`sim.gd`, `sim/`,
+  `session.gd`, `kernel/`, `world_gen.gd`, `social.gd`, `persistence.gd`) found **zero**
+  wall-clock/scene coupling — no `Time.`/`OS.`/`Engine.`/`get_tree`/`await`. Nothing blocks
+  `--headless` server use.
+- **§4 core test: green.** `Persistence.world_hash(sim)` extends the spec 0002 canonical-JSON +
+  FNV content-hash to the full authoritative state (save fields **plus** enemies/shots, raid &
+  patrol cycles, weather state, `env_rng`/`threat_rng` cursors; view channels and derived caches
+  deliberately excluded). `tests/run_determinism_tests.gd` drives two independent instances —
+  600 ambient ticks and 500 ticks with a scripted gather/build/move command stream — hash-equal
+  at every probe; different seed ⇒ different hash; region payload survives
+  serialize→`load_region`→serialize bit-stable.
+- **Two OS processes, not two objects:** the suite prints `WORLD_HASH_FINAL=`; CI runs it twice
+  and `diff`s the lines (godot.yml «Cross-process determinism hash»), so per-process
+  nondeterminism has nowhere to hide. The suite is leak-gated like every other and runs in
+  `test.cmd`.
+
+### 9.2 Spike results (2026-07-27, transport half — Plan §2 complete)
+
+- **Literally the §2 Plan sentence:** `tests/run_net_spike.gd` spawns **one authoritative
+  `--headless` server + two client processes** (`tests/net/net_server.gd` / `net_client.gd`,
+  same Godot binary) over a real localhost **WebSocket**; 600 lockstep ticks finish in ~2 s;
+  `world_hash` matches on the server and both clients at every 100-tick probe and at the end.
+- **Transport decision: WebSocket, not ENet.** The web export (threads OFF) has no UDP, so a
+  §5-style thin browser client stays possible; TCP ordering makes the lockstep command envelope
+  trivial; 10 ticks/s survival pacing does not need UDP latency. Recorded as the Phase-1 default.
+- **Command grammar over the wire works (Plan §4 seed):** clients send allowlisted verbs
+  (`order_gather`/`try_build`/`order_move`); the server QUEUES them, schedules into the next
+  advance batch and echoes the schedule to everyone — all three instances apply identically.
+  The lockstep is **ack-gated** (flow control): the server opens the next batch only after every
+  client acked the previous one, and a client sends its commands *before* its ack, so TCP
+  ordering guarantees each command lands in the very next batch. Consequence: the command
+  schedule — and therefore the final world_hash — is deterministic **across runs**, not just
+  across instances (verified: 5 consecutive runs, identical final hash). Without the gate a
+  headless server outruns clients by orders of magnitude and late commands fall off the end —
+  the first CI run caught exactly that.
+- **Remaining for Phase 1 proper:** snapshot delta-encoder over `HudModel.snapshot()` (Plan §3 —
+  ✅ done, §9.3), formalized command envelope + idempotency (Plan §4), authoritative persistence
+  + rejoin (Plan §5). The transport and determinism risks are retired.
+
+### 9.3 Delta-encoder results (2026-07-27, Plan §3)
+
+- **Codec:** `scripts/net/snapshot.gd` — `encode(prev, next)` → minimal patch (`["r", v]`
+  replace / `["p", {key: node}, [del]]` recursive dictionary patch; arrays replace wholesale —
+  measured small), `apply(base, delta)` reconstructs; `null` = nothing changed. Keyframe =
+  `encode(null, snap)`. Malformed deltas keep the base (the server is authoritative; the next
+  keyframe heals).
+- **Payload measured** (`run_snapshot_tests.gd`, live session, 600 ticks): full snapshot
+  ≈ 12.9 KB; delta avg ≈ 105 B (peak = keyframe); at 1-in-5 cadence ≈ 190 B. A 10 tick/s delta
+  stream ≈ **1.0 KB/s vs 126 KB/s** full-snapshot — the encoder pays for itself two orders of
+  magnitude over; no index-diff for arrays needed at this scale.
+- **Three wire landmines found by the fidelity harness, all now codec discipline:**
+  1. Godot's default `JSON.stringify` **rounds floats** (a 1.358e-14 daylight factor mutated in
+     transit) → every net message goes through `Snapshot.to_wire()` (full_precision).
+  2. Even full precision does **not** guarantee a bit round-trip of an arbitrary double
+     (observed `…6282704` → wire → `…6282703`) → the sender diffs **wire-normalized** snapshots
+     (`wire_normalize`), i.e. deltas are computed over what actually shipped — after one
+     round-trip the wire domain is idempotent, so drift can never accumulate.
+  3. GDScript Variant `==` promotes bool to int (`true == 1`) while the canonical hash keeps
+     them distinct → the codec's `_eq` is canonical (bool-strict, numeric int/float, recursive).
+- **Live over the socket:** the transport spike now streams a `snap` delta every 50 ticks;
+  each client reconstructs and hash-compares against its locally computed snapshot — 12/12
+  deltas, 0 mismatches on both clients, run-to-run deterministic. `content_hash` doubles as the
+  canonical equalizer for JSON's type coercions (int→float, StringName→String, int-keys→string).
 
 ## 10. Risks & rollback
 

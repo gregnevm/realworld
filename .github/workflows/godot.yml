@@ -1,7 +1,10 @@
 name: Godot Tests
 
+# push is limited to main so PR-branch pushes run every job once (via pull_request),
+# not twice — the bare push trigger duplicated the whole matrix on every PR push
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
@@ -21,11 +24,24 @@ jobs:
       - name: Headless suites (leak-gated)
         run: |
           set -o pipefail
-          for suite in run_tests run_kernel_tests run_catalog_tests run_progression_tests run_ui_tests run_smoke; do
+          for suite in run_tests run_kernel_tests run_catalog_tests run_progression_tests run_ui_tests run_determinism_tests run_snapshot_tests run_smoke; do
             echo "=== $suite ==="
             ./godot-bin --headless --path godot -s "res://tests/$suite.gd" 2>&1 | tee suite.log
             ! grep -q "ObjectDB instances were leaked" suite.log
           done
+      # spec 0006 §4: "same seed fed to two independent server instances -> identical world state
+      # hash" — two separate OS processes, not two objects in one process, so per-process
+      # nondeterminism (hash seeds, pointer order) has nowhere to hide.
+      - name: Cross-process determinism hash
+        run: |
+          ./godot-bin --headless --path godot -s res://tests/run_determinism_tests.gd 2>&1 | grep "^WORLD_HASH_FINAL=" > h1.txt
+          ./godot-bin --headless --path godot -s res://tests/run_determinism_tests.gd 2>&1 | grep "^WORLD_HASH_FINAL=" > h2.txt
+          diff h1.txt h2.txt && cat h1.txt
+      # spec 0006 plan §2 end-to-end: 1 authoritative --headless server + 2 client processes over
+      # a real localhost WebSocket, lockstep command echo — world_hash must match on all three.
+      # Integration suite (spawns OS processes), so it runs outside the single-process loop above.
+      - name: Net transport spike (1 server + 2 clients, WebSocket)
+        run: ./godot-bin --headless --path godot -s res://tests/run_net_spike.gd
       - name: Scene parse check
         run: ./godot-bin --headless --path godot -s res://tests/parse_check.gd
 
@@ -74,6 +90,63 @@ jobs:
           path: |
             godot/newhud_shot.png
             godot/newhud_thumb.png
+          if-no-files-found: error
+
+  # Click-and-play deliverable: export the Web build (preset "Web", threads OFF — runs on any static
+  # hosting, no COOP/COEP) and publish it as an artifact, so every push yields a playable build
+  # without a local engine. Export templates come from the official 1.25 GB .tpz: GitHub's CDN does
+  # not serve HTTP range requests reliably, so it is downloaded whole (transient) and only the
+  # templates/web_* members are kept — cached between runs, so the big download happens once.
+  godot-web-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Godot 4.7
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
+          unzip -q Godot_v4.7-stable_linux.x86_64.zip
+          mv Godot_v4.7-stable_linux.x86_64 godot-bin
+          chmod +x godot-bin
+      - name: Cache web export templates
+        id: templates-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/godot/export_templates/4.7.stable
+          key: godot-export-templates-4.7-stable-web
+      - name: Fetch web export templates (cache miss)
+        if: steps.templates-cache.outputs.cache-hit != 'true'
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_export_templates.tpz
+          mkdir -p ~/.local/share/godot/export_templates/4.7.stable
+          unzip -j -q Godot_v4.7-stable_export_templates.tpz "templates/web_*" "templates/version.txt" \
+            -d ~/.local/share/godot/export_templates/4.7.stable
+          rm Godot_v4.7-stable_export_templates.tpz
+      - name: Export Web build
+        run: |
+          # import first: exporting from a fresh checkout without the .godot cache misses resources;
+          # mkdir because the headless exporter refuses to create the target folder itself
+          mkdir -p godot/build/web
+          ./godot-bin --headless --path godot --import
+          ./godot-bin --headless --path godot --export-release "Web" build/web/index.html
+      # the exporter can leave a broken build behind a zero exit code — gate on the artifacts themselves
+      - name: Verify build artifacts
+        run: |
+          for f in index.html index.wasm index.pck index.js; do
+            test -s "godot/build/web/$f" || { echo "missing or empty: $f"; exit 1; }
+          done
+          printf '%s\n' \
+            "RealWorld — Godot Web build (клік-і-грай)" \
+            "" \
+            "1. Розпакуй архів у теку." \
+            "2. У теці:  python3 -m http.server 8792" \
+            "3. Відкрий  http://localhost:8792  (з file:// не працює)." \
+            > godot/build/web/README.txt
+          ls -la godot/build/web
+      - name: Upload web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: godot/build/web
           if-no-files-found: error
 
   gdlint:

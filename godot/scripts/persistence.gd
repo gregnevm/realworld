@@ -104,6 +104,48 @@ static func _pick(src: Dictionary, fields: Array) -> Dictionary:
 			out[f] = (val.duplicate(true) if (val is Dictionary or val is Array) else val)
 	return out
 
+# ---------------- authoritative world-state hash (spec 0006 §4) ----------------
+# The full-world extension of content_hash: serialize_region (the save fields) PLUS the live
+# dynamics a save never carries — combat actors, raid/patrol cycle timers, weather state and the
+# rng cursors. Two independent instances fed the same seed and the same command stream MUST agree
+# on this hash after every tick; run_determinism_tests.gd enforces it as the Phase-1 acceptance
+# backbone and permanent anti-desync tripwire (spec 0006 §10). Deliberately excluded: feedback
+# channels (messages/banner/flash — view, not sim), the enemies' hit_flash (render juice), the
+# move_input channel (an input, not state) and derived caches (bgrid/astar/indoor — recomputed).
+const ENEMY_HASH_FIELDS := ["px", "py", "face", "hp", "maxhp", "dmg", "speed", "atk_cd", "path_cd", "tx", "ty", "dead", "kind"]
+const SHOT_HASH_FIELDS := ["x1", "y1", "x2", "y2", "t"]
+
+
+static func world_hash(sim) -> String:
+	var enemies: Array = []
+	for e in sim.enemies:
+		var slice := _pick(e, ENEMY_HASH_FIELDS)
+		# A* waypoints are Vector2i, which _canonical cannot address — flatten to [x, y] pairs.
+		var path: Array = []
+		for p in e.path:
+			path.append([int(p.x), int(p.y)])
+		slice["path"] = path
+		enemies.append(slice)
+	var shots: Array = []
+	for sh in sim.shots:
+		shots.append(_pick(sh, SHOT_HASH_FIELDS))
+	var dyn := {
+		"dead": bool(sim.dead),
+		"craft_timer": float(sim.craft_timer),
+		"weather": String(sim.weather),
+		"weather_t": float(sim.weather_t),
+		"temp_offset": float(sim.temp_offset),
+		"temp_offset_days": float(sim.temp_offset_days),
+		"raid": (sim.raid as Dictionary).duplicate(true),
+		"patrol": (sim.patrol as Dictionary).duplicate(true),
+		"research_unlocked": (sim.research_unlocked as Dictionary).duplicate(true),
+		"env_rng_state": int(sim.env_rng.state),
+		"threat_rng_state": int(sim.threat_rng.state),
+		"enemies": enemies,
+		"shots": shots,
+	}
+	return content_hash({"region": serialize_region(sim), "dyn": dyn})
+
 static func decode_tiles(b64: String) -> PackedByteArray:
 	return Marshalls.base64_to_raw(b64)
 
