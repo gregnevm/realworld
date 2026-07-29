@@ -147,9 +147,15 @@ Full single-shard world of the whole Earth · large-scale player economy & facti
       proven end-to-end.
 - [x] Snapshot delta-encoder over `HudModel.snapshot()` (Plan §3) — **landed 2026-07-27, see
       §9.3**: `scripts/net/snapshot.gd` codec + `run_snapshot_tests.gd` + a live delta channel
-      in the transport spike. **← next action: formalize the command envelope (Plan §4 —
-      idempotency/validation over the proven ack-gated grammar), then authoritative
-      persistence + rejoin (Plan §5).**
+      in the transport spike.
+- [x] Command envelope (Plan §4) — **landed 2026-07-28, see §9.4**: `scripts/net/command.gd`
+      (validation with reasons, canonical ordering, idempotency ledger) + `run_command_tests.gd`,
+      wired into the spike's server and clients.
+- [x] Authoritative persistence + rejoin (Plan §5) — **landed 2026-07-29, see §9.5**: the runtime
+      half of the state (`Persistence.serialize_runtime`/`apply_runtime`/`resume_payload`), the
+      server's append-only chain, and a THIRD client that joins the live spike mid-run and matches
+      hashes to the end. **← Plan §1–§5 are now all closed; Phase 1 proper (a real server binary,
+      auth/identity, hosting) is the next scope decision, not a spike.**
 - [x] Fold the chosen boundary + protocol back into AGENTS.md and `GDD_BOOK` (✅ `section:risks`/`section:scope`; AGENTS.md + README 2026-07-27).
 
 ### 9.1 Spike results (2026-07-27, determinism half)
@@ -213,6 +219,87 @@ Full single-shard world of the whole Earth · large-scale player economy & facti
      round-trip the wire domain is idempotent, so drift can never accumulate.
   3. GDScript Variant `==` promotes bool to int (`true == 1`) while the canonical hash keeps
      them distinct → the codec's `_eq` is canonical (bool-strict, numeric int/float, recursive).
+### 9.5 Authoritative persistence + rejoin (2026-07-29, Plan §5)
+
+**The gap this closes.** `serialize_region` is the SAVE format and `load_region` is right to reset
+threats, re-seed the environment and null the pawn's order — that is what loading a save should do.
+It is exactly wrong for a rejoining client, who must land *byte-identical* to the authoritative
+server. So §5 adds the missing **runtime half** rather than bending the save format (which keeps its
+shape and its migration story): `serialize_runtime`/`apply_runtime` carry enemies, shots, raid and
+patrol cycles, weather, rng cursors, research gates, convoys and the pawn's live order;
+`resume_payload`/`restore` are the pair a joiner uses. `world_hash` is now defined *as* region +
+runtime, so the anti-desync tripwire and the resume payload can never drift apart — one definition,
+two uses. (Consequence: the hash constants quoted in §9.2–§9.4 predate this coverage change.)
+
+**Three landmines the live spike found that unit tests had missed.** Each is now a test:
+
+1. **The pawn's live order is authoritative state.** `load_region` nulls `action`; an *idle* pawn
+   resumes fine either way, which is why in-process tests passed while the socket spike diverged
+   immediately — the server's pawn was mid-walk from a `gather` command and the joiner's stood
+   still. The runtime half now carries `action` (path flattened) plus the `eat/atk/dep` cooldowns.
+2. **An attack order holds a live enemy reference** — the same class of problem as `order_attack`
+   on the wire (§9.4). It is packed as an **index into the replicated enemies array**, which is a
+   stable id precisely because that array travels in the same record, in the same order; if the
+   target died while the client was away, the order resolves to `null` (void), not to a wrong enemy.
+3. **An rng cursor is a 64-bit integer and JSON numbers are doubles.** `2564435455463813531`
+   arrived as `…632`, silently resuming every stochastic stream at the wrong cursor. Cursors now
+   travel as **strings**; both sides hash the same string. (Sibling of the §9.3 float landmines:
+   the wire is a type system, not a pipe.)
+
+**Proven live, not only in unit tests.** The transport spike now runs **one server + three
+clients**: two present from tick 0, and a third that the server leaves queued in the TCP backlog
+and admits at **tick 200** (gated on a tick, not wall-clock, so CI is deterministic). The joiner
+receives the resume payload *and* the current snapshot as its delta keyframe — both channels must
+resume together — then matches the server's `world_hash` at every subsequent probe (4/4) and at the
+end, with its snapshot stream reconstructing cleanly (8/8). Which client is the late one is left to
+the connect race, as in the wild.
+
+**The server's record is the append-only chain.** The spike server commits a region record every
+100 ticks onto the spec 0002 hash chain and verifies the store at the end (6 commits, verified,
+head reported in the verdict) — so "authoritative store" means a history whose rewriting is
+*detectable*, not just a file. `run_rejoin_tests.gd` additionally tampers with a committed record
+and asserts the chain notices.
+
+**A test-hygiene note worth keeping.** The spike's failure message hard-coded "0 mismatches" in its
+format string, so a genuinely diverging client still *read* as clean for one debugging round. Assertion
+messages must print the measured value, never the expected one; the per-probe `tick:local/remote`
+trail is now dumped on failure, which is what located landmine 1.
+
+### 9.4 Command envelope (2026-07-28, Plan §4)
+
+`scripts/net/command.gd` turns the spike's ad-hoc verb messages into the Phase-1 command channel.
+Envelope: `{t:"cmd", c: client_id, n: seq, v: verb, a: args}`; the server stamps the tick it lands
+on. Three properties, each with a test that fails loudly if it regresses:
+
+- **Validation with a reason.** `WIRE_VERBS` declares each client-sendable verb *and its arg
+  contract*; `validate()` checks shape, exact arg set (extra args are as wrong as missing ones),
+  types, bounds (`[0, n)` for coordinates) and returns **coerced** args — the JSON wire makes every
+  int a float, and applying the raw payload would feed the sim `15.0`. Refusals are a closed set
+  (`bad_shape`/`unknown_verb`/`bad_args`/`duplicate`/`stale_seq`) and are counted, because a
+  silently-dropped command is a desync the client cannot see. Deliberately **structural only**:
+  the sim stays the single authority on content (does this building exist, is it affordable) —
+  duplicating those rules here would create a second, drifting truth.
+- **The wire vocabulary is a SUBSET of the router grammar** (R9: one mutation vocabulary), enforced
+  by a tripwire that greps `ui/input_verbs.gd`. Two verbs are **deliberately off the wire**:
+  `order_attack`, whose router arg is a *live enemy Dictionary* — a reference cannot cross a socket
+  and R8 forbids it in value data, so putting it on the wire needs stable server-side enemy ids
+  first (a named Phase-1 task, not a silent gap); and the region-migration verbs
+  (`launch_capsule`/`accept_invite`), which are a session-level protocol for §5, not in-region tick
+  commands. A client sending either is refused with `unknown_verb`, never crashed on.
+- **Canonical ordering.** `Inbox.drain()` sorts by `(client_id, seq)` — socket arrival order,
+  `Dictionary` iteration order and peer index all drop out. Two clients acting in the same tick
+  would otherwise schedule differently per instance and split the world hash (§4). Tested by
+  feeding the same four intents in two different arrival orders and asserting identical batches.
+- **Idempotency.** `(client_id, seq)` is the identity of an intent: a resend is applied exactly
+  once (within the batch and after it), a seq below the applied high-water mark is `stale_seq`, and
+  counters are per client. `last_seq(client_id)` is the resume hook a rejoining client needs — the
+  first concrete piece of Plan §5.
+- **Proven over the real socket, not just in unit tests:** the spike's client now deliberately
+  **resends** its build intent; the server refuses the copy as `duplicate`, the echoed schedule
+  stays at 3 commands, and the final `world_hash` is **`9d29a9c8` — byte-identical to the pre-§4
+  run**. That equality is the point: the envelope changed the channel's guarantees without changing
+  the world it produces.
+
 - **Live over the socket:** the transport spike now streams a `snap` delta every 50 ticks;
   each client reconstructs and hash-compares against its locally computed snapshot — 12/12
   deltas, 0 mismatches on both clients, run-to-run deterministic. `content_hash` doubles as the

@@ -1,7 +1,8 @@
 # RealWorld — tests/net/net_client.gd : a client half of the spec 0006 transport spike.
 #
-# Connects to the spike server, builds its OWN sim from the seed recipe in the welcome (the
-# client never receives state — determinism IS the replication in this lockstep spike), then
+# Connects to the spike server and starts one of two ways: `welcome` (present at tick 0 — build the
+# world from the seed recipe, because determinism IS the replication in this lockstep spike) or
+# `resume` (joined mid-run — the server hands over authoritative state, plan §5). Either way it then
 # advances exactly as instructed by `advance` batches, applying the echoed command schedule.
 # Client #0 injects the scripted gather/build commands from ITS OWN sim's map (both maps are the
 # same pure function of lat/lon), which round-trips through the server queue back to everyone.
@@ -14,6 +15,7 @@ const Persistence = preload("res://scripts/persistence.gd")
 const HudModel = preload("res://scripts/ui/hud_model.gd")
 const Balance = preload("res://scripts/kernel/balance.gd")
 const Snapshot = preload("res://scripts/net/snapshot.gd")
+const Command = preload("res://scripts/net/command.gd")
 
 const DT := 0.1
 const CONNECT_TIMEOUT_MSEC := 30000
@@ -25,7 +27,7 @@ func _init() -> void:
 	var port: int = args.get("port", 8901)
 	var out_path: String = args.get("out", "user://net_spike_client.json")
 
-	var verdict := {"role": "client", "idx": -1, "ok": false, "hash_checks": 0, "mismatches": 0, "cmds_sent": 0, "snap_checks": 0, "snap_mismatches": 0, "final": "", "err": ""}
+	var verdict := {"role": "client", "idx": -1, "ok": false, "resumed": false, "hash_checks": 0, "mismatches": 0, "cmds_sent": 0, "resends": 0, "snap_checks": 0, "snap_mismatches": 0, "probes": [], "final": "", "err": ""}
 	var ws := WebSocketPeer.new()
 	if ws.connect_to_url("ws://127.0.0.1:%d" % port) != OK:
 		verdict.err = "connect_to_url failed"
@@ -41,6 +43,8 @@ func _init() -> void:
 	var sim: Variant = null
 	var bal: Variant = Balance.Balance.new()
 	var recon: Variant = null            # reconstruction of the server's snapshot stream (§8.3)
+	var _seq := 0                        # this client's monotonic intent counter (plan §4 identity)
+	var router: Variant = Command.new_router()   # §2: the same executor the server runs
 	var idx := -1
 	var tick := 0
 	var total := 0
@@ -67,6 +71,21 @@ func _init() -> void:
 				session = Session.new()
 				session.start(float(m.lat), float(m.lon), "Спайк")
 				sim = session.sim
+			"resume":
+				# plan §5: joined mid-run. The seed recipe alone would put us at tick 0, so the
+				# server hands over the authoritative state (save half + runtime half) and the
+				# current snapshot as our delta keyframe — both channels resume together.
+				idx = int(m.idx)
+				total = int(m.ticks)
+				tick = int(m.tick)
+				verdict.idx = idx
+				verdict.resumed = true
+				session = Session.new()
+				session.start(float(m.lat), float(m.lon), "Спайк")
+				sim = session.sim
+				Persistence.restore(sim, m.payload)
+				recon = m.get("snap")
+				_seq = int(m.get("last_seq", -1)) + 1     # resume the command counter, never replay
 			"advance":
 				if sim == null:
 					continue
@@ -75,15 +94,23 @@ func _init() -> void:
 					tick += 1
 					for c in cmds:
 						if int(c.tick) == tick:
-							_apply(sim, c)
+							Command.execute(router, session, c)
 					sim.update(DT)
 					session.tick_research(DT)
 					# client #0 originates the scripted commands from its own (identical) map
 					if idx == 0:
-						var cmd := _scripted(sim, tick)
-						if not cmd.is_empty():
-							ws.send_text(Snapshot.to_wire(cmd))
+						var intent := _scripted(sim, tick)
+						if not intent.is_empty():
+							var env := Command.make(idx, _seq, str(intent.verb), intent.args)
+							_seq += 1
+							ws.send_text(Snapshot.to_wire(env))
 							verdict.cmds_sent = int(verdict.cmds_sent) + 1
+							# plan §4 over the real socket: an unacknowledged intent gets RESENT.
+							# The inbox must apply it exactly once — if idempotency were broken the
+							# world would gain a second wall and every hash after this would split.
+							if str(intent.verb) == "build":
+								ws.send_text(Snapshot.to_wire(env))
+								verdict.resends = int(verdict.resends) + 1
 				# ack AFTER any commands from this batch: TCP ordering then guarantees the server
 				# sees those commands before it opens the next batch (Plan §4 flow control)
 				ws.send_text(Snapshot.to_wire({"t": "ack", "tick": tick}))
@@ -92,7 +119,9 @@ func _init() -> void:
 					verdict.mismatches = int(verdict.mismatches) + 1
 					continue
 				verdict.hash_checks = int(verdict.hash_checks) + 1
-				if Persistence.world_hash(sim) != str(m.h):
+				var mine := Persistence.world_hash(sim)
+				(verdict.probes as Array).append("%d:%s/%s" % [tick, mine.left(6), str(m.h).left(6)])
+				if mine != str(m.h):
 					verdict.mismatches = int(verdict.mismatches) + 1
 			"snap":
 				# §8.3: rebuild the server's snapshot from the delta stream and hold it against a
@@ -122,30 +151,18 @@ func _init() -> void:
 	_finish(out_path, verdict)
 
 
-# same allowlisted application as the server — one grammar, three processes
-func _apply(sim: Variant, c: Dictionary) -> void:
-	var a: Dictionary = c.get("args", {})
-	match str(c.verb):
-		"order_gather":
-			sim.order_gather(int(a.x), int(a.y))
-		"order_move":
-			sim.order_move(int(a.x), int(a.y))
-		"try_build":
-			sim.try_build(str(a.kind), int(a.x), int(a.y))
-
-
-# the deterministic command script: targets computed from the map only (shared by all instances)
+# the deterministic intent script: targets computed from the map only (shared by all instances)
 func _scripted(sim: Variant, tick: int) -> Dictionary:
 	if tick == 30:
 		var tree := _nearest_tree(sim)
-		return {"t": "cmd", "verb": "order_gather", "args": {"x": tree.x, "y": tree.y}}
+		return {"verb": "order_gather", "args": {"x": tree.x, "y": tree.y}}
 	if tick == 200:
 		var cell := _buildable_near_spawn(sim)
 		if cell.x >= 0:
-			return {"t": "cmd", "verb": "try_build", "args": {"kind": "wall", "x": cell.x, "y": cell.y}}
+			return {"verb": "build", "args": {"kind": "wall", "x": cell.x, "y": cell.y}}
 	if tick == 350:
 		var sp: Vector2i = sim.map.spawn
-		return {"t": "cmd", "verb": "order_move", "args": {"x": sp.x + 3, "y": sp.y}}
+		return {"verb": "order_move", "args": {"x": sp.x + 3, "y": sp.y}}
 	return {}
 
 

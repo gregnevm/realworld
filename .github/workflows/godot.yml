@@ -24,7 +24,7 @@ jobs:
       - name: Headless suites (leak-gated)
         run: |
           set -o pipefail
-          for suite in run_tests run_kernel_tests run_catalog_tests run_progression_tests run_ui_tests run_determinism_tests run_snapshot_tests run_smoke; do
+          for suite in run_tests run_kernel_tests run_catalog_tests run_progression_tests run_ui_tests run_determinism_tests run_snapshot_tests run_command_tests run_rejoin_tests run_smoke; do
             echo "=== $suite ==="
             ./godot-bin --headless --path godot -s "res://tests/$suite.gd" 2>&1 | tee suite.log
             ! grep -q "ObjectDB instances were leaked" suite.log
@@ -40,7 +40,7 @@ jobs:
       # spec 0006 plan §2 end-to-end: 1 authoritative --headless server + 2 client processes over
       # a real localhost WebSocket, lockstep command echo — world_hash must match on all three.
       # Integration suite (spawns OS processes), so it runs outside the single-process loop above.
-      - name: Net transport spike (1 server + 2 clients, WebSocket)
+      - name: Net transport spike (server + 3 clients, one joining mid-run)
         run: ./godot-bin --headless --path godot -s res://tests/run_net_spike.gd
       - name: Scene parse check
         run: ./godot-bin --headless --path godot -s res://tests/parse_check.gd
