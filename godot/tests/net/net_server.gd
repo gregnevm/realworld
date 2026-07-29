@@ -29,6 +29,9 @@ const N_HINT := 56              # session.MAP_N — the bounds ctx while polling
 var _tcp := TCPServer.new()
 var _peers: Array = []          # WebSocketPeer per connected client
 var _inbox := Command.Inbox.new()   # plan §4: validation + idempotency + canonical ordering
+var _late_done := false
+var _store := Persistence.store_new()   # plan §5: the authoritative append-only hash chain
+var _commits := 0
 
 
 func _init() -> void:
@@ -36,6 +39,7 @@ func _init() -> void:
 	var port: int = args.get("port", 8901)
 	var want_clients: int = args.get("clients", 2)
 	var total_ticks: int = args.get("ticks", 600)
+	var late_at: int = args.get("late", 0)          # tick at which a late joiner is admitted (0 = none)
 	var out_path: String = args.get("out", "user://net_spike_server.json")
 
 	# a real Session (not a bare Sim): the snapshot channel reads the research slice through it,
@@ -46,7 +50,7 @@ func _init() -> void:
 	var bal: Variant = Balance.Balance.new()
 	var last_snap: Variant = null
 
-	var verdict := {"role": "server", "ok": false, "clients_seen": 0, "cmd_echoes": 0, "snaps_sent": 0, "refused": 0, "refusals": {}, "final": "", "err": ""}
+	var verdict := {"role": "server", "ok": false, "clients_seen": 0, "cmd_echoes": 0, "snaps_sent": 0, "refused": 0, "refusals": {}, "late_joined": false, "chain_ok": false, "chain_len": 0, "chain_head": "", "final": "", "err": ""}
 	if _tcp.listen(port, "127.0.0.1") != OK:
 		verdict.err = "listen failed on %d" % port
 		_finish(out_path, verdict)
@@ -87,6 +91,10 @@ func _init() -> void:
 			var h := {"t": "hash", "tick": tick, "h": Persistence.world_hash(sim)}
 			for p in _peers:
 				_send(p, h)
+			# plan §5: the server's record is the spec 0002 append-only chain — each commit links
+			# to the previous body hash, so a rewritten history is detectable, not merely unlikely
+			Persistence.store_commit(_store, Persistence.serialize_region(sim))
+			_commits += 1
 		# §8.3 snapshot channel: delta over the last WIRE-normalized snapshot (see snapshot.gd —
 		# the sender must diff wire-domain values or decimal-JSON float drift desyncs receivers)
 		if tick % SNAP_EVERY == 0:
@@ -97,6 +105,14 @@ func _init() -> void:
 			verdict.snaps_sent = int(verdict.snaps_sent) + 1
 			for p in _peers:
 				_send(p, sd)
+		# plan §5: a client that was not here at tick 0 joins mid-run. It gets the authoritative
+		# resume payload (save half + runtime half) AND the current snapshot as its delta
+		# keyframe — both channels must resume coherently or it desyncs on the next message.
+		# Gated on a TICK, not on wall-clock, so the test is deterministic on any runner.
+		if late_at > 0 and tick >= late_at and not _late_done:
+			_late_done = true
+			var joined := _accept_one_late(session, tick, total_ticks, last_snap)
+			verdict.late_joined = joined
 		# ack-gated lockstep (Plan §4 flow control): a headless server outruns real clients by
 		# orders of magnitude — without this gate a client command can arrive after the run is
 		# over. TCP ordering guarantees a command sent before the ack is received before it, so
@@ -111,6 +127,11 @@ func _init() -> void:
 
 	verdict.ok = str(verdict.err) == "" and tick == total_ticks
 	verdict.cmd_echoes = echoes
+	# the store keys by region (one live region here), so the depth of the chain is the commit
+	# COUNT, and `head` is the link the next commit — or a restarted server — must build on
+	verdict.chain_ok = Persistence.verify_store(_store) and str(_store.head) != ""
+	verdict.chain_len = _commits
+	verdict.chain_head = str(_store.head)
 	verdict.refused = _inbox.refused
 	for reason in _inbox.refusals:                 # StringName keys -> String for the JSON verdict
 		verdict.refusals[str(reason)] = int(_inbox.refusals[reason])
@@ -169,6 +190,41 @@ func _wait_acks(tick: int) -> bool:
 
 
 # ---- plumbing ----
+
+# Admit ONE queued connection mid-run and hand it everything it needs to be a peer of the others:
+# the resume payload (authoritative sim state), the current snapshot (delta-stream keyframe), the
+# tick it is joining at and its command seq high-water mark (plan §4 ledger -> §5 resume).
+func _accept_one_late(session: Variant, tick: int, total_ticks: int, last_snap: Variant) -> bool:
+	var waited := 0
+	while waited < ACCEPT_TIMEOUT_MSEC:
+		if _tcp.is_connection_available():
+			var ws := WebSocketPeer.new()
+			if ws.accept_stream(_tcp.take_connection()) == OK:
+				var settle := 0
+				while settle < ACCEPT_TIMEOUT_MSEC:
+					ws.poll()
+					if ws.get_ready_state() == WebSocketPeer.STATE_OPEN:
+						break
+					OS.delay_msec(5)
+					settle += 5
+				if ws.get_ready_state() != WebSocketPeer.STATE_OPEN:
+					return false
+				_peers.append(ws)
+				var idx := _peers.size() - 1
+				# it owes no acks for ticks it slept through, or the lockstep would stall forever
+				_acked[idx] = tick
+				_send(ws, {
+					"t": "resume", "idx": idx, "tick": tick, "ticks": total_ticks,
+					"lat": LAT, "lon": LON,
+					"payload": Persistence.resume_payload(session.sim),
+					"snap": last_snap,
+					"last_seq": _inbox.last_seq(idx),
+				})
+				return true
+		OS.delay_msec(5)
+		waited += 5
+	return false
+
 
 func _accept_clients(want: int) -> bool:
 	var waited := 0

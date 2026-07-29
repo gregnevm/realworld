@@ -117,10 +117,21 @@ const SHOT_HASH_FIELDS := ["x1", "y1", "x2", "y2", "t"]
 
 
 static func world_hash(sim) -> String:
+	return content_hash({"region": serialize_region(sim), "dyn": serialize_runtime(sim)})
+
+
+# ---------------- runtime half (spec 0006 plan §5) ----------------
+# serialize_region is the SAVE format: everything a player's world needs to come back tomorrow.
+# It deliberately does NOT carry the live dynamics — load_region resets threats and re-seeds the
+# environment, which is right for loading a save and WRONG for a rejoining client, who must land
+# byte-identical to the authoritative server or desync on the next raid roll. This is that missing
+# half: the volatile state world_hash covers. It is a NET/runtime record, not a save-format change
+# — the save keeps its shape and its migration story.
+static func serialize_runtime(sim) -> Dictionary:
 	var enemies: Array = []
 	for e in sim.enemies:
 		var slice := _pick(e, ENEMY_HASH_FIELDS)
-		# A* waypoints are Vector2i, which _canonical cannot address — flatten to [x, y] pairs.
+		# A* waypoints are Vector2i, which neither _canonical nor JSON can address — flatten.
 		var path: Array = []
 		for p in e.path:
 			path.append([int(p.x), int(p.y)])
@@ -129,7 +140,7 @@ static func world_hash(sim) -> String:
 	var shots: Array = []
 	for sh in sim.shots:
 		shots.append(_pick(sh, SHOT_HASH_FIELDS))
-	var dyn := {
+	return {
 		"dead": bool(sim.dead),
 		"craft_timer": float(sim.craft_timer),
 		"weather": String(sim.weather),
@@ -139,12 +150,141 @@ static func world_hash(sim) -> String:
 		"raid": (sim.raid as Dictionary).duplicate(true),
 		"patrol": (sim.patrol as Dictionary).duplicate(true),
 		"research_unlocked": (sim.research_unlocked as Dictionary).duplicate(true),
-		"env_rng_state": int(sim.env_rng.state),
-		"threat_rng_state": int(sim.threat_rng.state),
+		# STRINGS, not numbers: an rng cursor is a full 64-bit integer and JSON numbers are
+		# doubles — anything past 2^53 silently rounds (2564435455463813531 arrived as
+		# ...632), which resumes every stochastic stream at the wrong cursor. Strings
+		# round-trip exactly, and both sides hash the same string.
+		"env_rng_state": str(sim.env_rng.state),
+		"threat_rng_state": str(sim.threat_rng.state),
 		"enemies": enemies,
 		"shots": shots,
+		# convoys are authoritative state that PAYS OUT later (goods return on arrival), so two
+		# instances that disagree on them diverge at that moment — they belong in the hash and in
+		# any resume payload, even though the save format has never carried them.
+		"convoys": (sim.convoys as Array).duplicate(true),
+		"convoy_seq": int(sim.convoy_seq),
+		# The pawn's LIVE half. load_region deliberately drops `action` (a save resumes with the
+		# pawn idle — correct for a save, fatal for a rejoin: the server's pawn is mid-walk and the
+		# joiner's stands still, so their positions diverge on the very next tick) and PLAYER_FIELDS
+		# omits the cooldowns for the same reason.
+		"player_live": {
+			"action": _pack_action(sim),
+			"eat_cd": float(sim.player.get("eat_cd", 0.0)),
+			"atk_cd": float(sim.player.get("atk_cd", 0.0)),
+			"dep_cd": float(sim.player.get("dep_cd", 0.0)),
+		},
 	}
-	return content_hash({"region": serialize_region(sim), "dyn": dyn})
+
+
+# An action carries an A* path (Vector2i) and, when attacking, a LIVE enemy reference — neither
+# survives a wire. The path flattens; the target becomes its INDEX into the enemies array, which is
+# a stable id precisely because that array travels in the same record, in the same order.
+static func _pack_action(sim) -> Variant:
+	var a: Variant = sim.player.get("action")
+	if not (a is Dictionary):
+		return null
+	var out: Dictionary = (a as Dictionary).duplicate(true)
+	var path: Array = []
+	for p in (out.get("path", []) as Array):
+		path.append([int(p.x), int(p.y)])
+	out["path"] = path
+	if out.has("target"):
+		out["target_idx"] = (sim.enemies as Array).find(out.target)
+		out.erase("target")
+	return out
+
+
+static func _unpack_action(sim, packed: Variant) -> Variant:
+	if not (packed is Dictionary):
+		return null
+	var out: Dictionary = (packed as Dictionary).duplicate(true)
+	var path: Array = []
+	for p in (out.get("path", []) as Array):
+		path.append(Vector2i(int(p[0]), int(p[1])))
+	out["path"] = path
+	for f in ["cell", "nx", "ny"]:
+		if out.has(f):
+			out[f] = int(out[f])
+	if out.has("target_idx"):
+		var i := int(out.target_idx)
+		out.erase("target_idx")
+		if i >= 0 and i < (sim.enemies as Array).size():
+			out["target"] = sim.enemies[i]
+		else:
+			return null                    # the target died while we were away: the order is void
+	return out
+
+
+# Inverse of serialize_runtime. Applied AFTER load_region (which resets exactly these fields).
+static func apply_runtime(sim, rec: Dictionary) -> void:
+	sim.dead = bool(rec.get("dead", false))
+	sim.craft_timer = float(rec.get("craft_timer", 0.0))
+	sim.weather = StringName(str(rec.get("weather", "clear")))
+	sim.weather_t = float(rec.get("weather_t", 0.0))
+	sim.temp_offset = float(rec.get("temp_offset", 0.0))
+	sim.temp_offset_days = float(rec.get("temp_offset_days", 0.0))
+	sim.raid = _num_dict(rec.get("raid", {}), ["wave"])
+	sim.patrol = _num_dict(rec.get("patrol", {}), ["wave"])
+	sim.research_unlocked = (rec.get("research_unlocked", {}) as Dictionary).duplicate(true)
+	# The seed stays derived from the region (env_init already set it); only the CURSOR moves, and
+	# it is the cursor that decides the next raid roll. Restoring the seed without the state would
+	# silently rewind every stochastic stream to tick 0.
+	sim.env_rng.state = _rng_state(rec.get("env_rng_state"), sim.env_rng.state)
+	sim.threat_rng.state = _rng_state(rec.get("threat_rng_state"), sim.threat_rng.state)
+	sim.enemies = []
+	for e in (rec.get("enemies", []) as Array):
+		var live: Dictionary = (e as Dictionary).duplicate(true)
+		var path: Array = []
+		for p in (live.get("path", []) as Array):
+			path.append(Vector2i(int(p[0]), int(p[1])))
+		live["path"] = path
+		for f in ["tx", "ty"]:
+			live[f] = int(live.get(f, -1))
+		live["dead"] = bool(live.get("dead", false))
+		live["hit_flash"] = 0.0            # render-only juice; never replicated
+		sim.enemies.append(live)
+	sim.shots = (rec.get("shots", []) as Array).duplicate(true)
+	sim.convoys = (rec.get("convoys", []) as Array).duplicate(true)
+	for c in sim.convoys:
+		for f in ["id", "hub_index", "send_amt", "recv_amt", "dist"]:
+			if c.has(f):
+				c[f] = int(c[f])
+	sim.convoy_seq = int(rec.get("convoy_seq", 0))
+	# the pawn's live half — AFTER enemies, because an attack order resolves its target by index
+	var live: Dictionary = rec.get("player_live", {})
+	sim.player["action"] = _unpack_action(sim, live.get("action"))
+	for f in ["eat_cd", "atk_cd", "dep_cd"]:
+		sim.player[f] = float(live.get(f, 0.0))
+
+
+# A cursor written as a decimal string (see serialize_runtime); tolerate a raw int from an
+# in-process payload that never touched the wire.
+static func _rng_state(v: Variant, fallback: int) -> int:
+	if v is String:
+		return (v as String).to_int()
+	if v is int:
+		return v
+	return fallback
+
+
+# JSON turns every int into a float; these counters are compared and printed as ints.
+static func _num_dict(src: Variant, int_fields: Array) -> Dictionary:
+	var out: Dictionary = (src as Dictionary).duplicate(true)
+	for f in int_fields:
+		if out.has(f):
+			out[f] = int(out[f])
+	return out
+
+
+# What a rejoining client needs to land EXACTLY where the authoritative server is: the save half
+# (terrain, base, stock, pawn, clock) plus the runtime half (threats, weather, rng cursors).
+static func resume_payload(sim) -> Dictionary:
+	return {"region": serialize_region(sim), "runtime": serialize_runtime(sim)}
+
+
+static func restore(sim, payload: Dictionary) -> void:
+	sim.load_region(payload.region)
+	apply_runtime(sim, payload.runtime)
 
 static func decode_tiles(b64: String) -> PackedByteArray:
 	return Marshalls.base64_to_raw(b64)

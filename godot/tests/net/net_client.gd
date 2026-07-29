@@ -1,7 +1,8 @@
 # RealWorld — tests/net/net_client.gd : a client half of the spec 0006 transport spike.
 #
-# Connects to the spike server, builds its OWN sim from the seed recipe in the welcome (the
-# client never receives state — determinism IS the replication in this lockstep spike), then
+# Connects to the spike server and starts one of two ways: `welcome` (present at tick 0 — build the
+# world from the seed recipe, because determinism IS the replication in this lockstep spike) or
+# `resume` (joined mid-run — the server hands over authoritative state, plan §5). Either way it then
 # advances exactly as instructed by `advance` batches, applying the echoed command schedule.
 # Client #0 injects the scripted gather/build commands from ITS OWN sim's map (both maps are the
 # same pure function of lat/lon), which round-trips through the server queue back to everyone.
@@ -26,7 +27,7 @@ func _init() -> void:
 	var port: int = args.get("port", 8901)
 	var out_path: String = args.get("out", "user://net_spike_client.json")
 
-	var verdict := {"role": "client", "idx": -1, "ok": false, "hash_checks": 0, "mismatches": 0, "cmds_sent": 0, "resends": 0, "snap_checks": 0, "snap_mismatches": 0, "final": "", "err": ""}
+	var verdict := {"role": "client", "idx": -1, "ok": false, "resumed": false, "hash_checks": 0, "mismatches": 0, "cmds_sent": 0, "resends": 0, "snap_checks": 0, "snap_mismatches": 0, "probe_hash": "", "probe_tick": -1, "probes": [], "srv_final": "", "bye_tick": -1, "final": "", "err": ""}
 	var ws := WebSocketPeer.new()
 	if ws.connect_to_url("ws://127.0.0.1:%d" % port) != OK:
 		verdict.err = "connect_to_url failed"
@@ -69,6 +70,21 @@ func _init() -> void:
 				session = Session.new()
 				session.start(float(m.lat), float(m.lon), "Спайк")
 				sim = session.sim
+			"resume":
+				# plan §5: joined mid-run. The seed recipe alone would put us at tick 0, so the
+				# server hands over the authoritative state (save half + runtime half) and the
+				# current snapshot as our delta keyframe — both channels resume together.
+				idx = int(m.idx)
+				total = int(m.ticks)
+				tick = int(m.tick)
+				verdict.idx = idx
+				verdict.resumed = true
+				session = Session.new()
+				session.start(float(m.lat), float(m.lon), "Спайк")
+				sim = session.sim
+				Persistence.restore(sim, m.payload)
+				recon = m.get("snap")
+				_seq = int(m.get("last_seq", -1)) + 1     # resume the command counter, never replay
 			"advance":
 				if sim == null:
 					continue
@@ -102,7 +118,11 @@ func _init() -> void:
 					verdict.mismatches = int(verdict.mismatches) + 1
 					continue
 				verdict.hash_checks = int(verdict.hash_checks) + 1
-				if Persistence.world_hash(sim) != str(m.h):
+				var mine := Persistence.world_hash(sim)
+				(verdict.probes as Array).append("%d:%s/%s" % [tick, mine.left(6), str(m.h).left(6)])
+				verdict.probe_hash = mine
+				verdict.probe_tick = tick
+				if mine != str(m.h):
 					verdict.mismatches = int(verdict.mismatches) + 1
 			"snap":
 				# §8.3: rebuild the server's snapshot from the delta stream and hold it against a
@@ -118,6 +138,8 @@ func _init() -> void:
 					verdict.snap_mismatches = int(verdict.snap_mismatches) + 1
 			"bye":
 				verdict.final = Persistence.world_hash(sim) if sim != null else ""
+				verdict.srv_final = str(m.final)
+				verdict.bye_tick = tick
 				verdict.ok = tick == int(m.tick) and verdict.final == str(m.final) \
 					and int(verdict.mismatches) == 0 and int(verdict.hash_checks) > 0
 				if not bool(verdict.ok) and str(verdict.err) == "":

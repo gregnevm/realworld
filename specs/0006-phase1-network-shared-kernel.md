@@ -150,8 +150,12 @@ Full single-shard world of the whole Earth · large-scale player economy & facti
       in the transport spike.
 - [x] Command envelope (Plan §4) — **landed 2026-07-28, see §9.4**: `scripts/net/command.gd`
       (validation with reasons, canonical ordering, idempotency ledger) + `run_command_tests.gd`,
-      wired into the spike's server and clients. **← next action: authoritative persistence +
-      rejoin (Plan §5) — `Inbox.last_seq()` is the resume hook it builds on.**
+      wired into the spike's server and clients.
+- [x] Authoritative persistence + rejoin (Plan §5) — **landed 2026-07-29, see §9.5**: the runtime
+      half of the state (`Persistence.serialize_runtime`/`apply_runtime`/`resume_payload`), the
+      server's append-only chain, and a THIRD client that joins the live spike mid-run and matches
+      hashes to the end. **← Plan §1–§5 are now all closed; Phase 1 proper (a real server binary,
+      auth/identity, hosting) is the next scope decision, not a spike.**
 - [x] Fold the chosen boundary + protocol back into AGENTS.md and `GDD_BOOK` (✅ `section:risks`/`section:scope`; AGENTS.md + README 2026-07-27).
 
 ### 9.1 Spike results (2026-07-27, determinism half)
@@ -215,6 +219,52 @@ Full single-shard world of the whole Earth · large-scale player economy & facti
      round-trip the wire domain is idempotent, so drift can never accumulate.
   3. GDScript Variant `==` promotes bool to int (`true == 1`) while the canonical hash keeps
      them distinct → the codec's `_eq` is canonical (bool-strict, numeric int/float, recursive).
+### 9.5 Authoritative persistence + rejoin (2026-07-29, Plan §5)
+
+**The gap this closes.** `serialize_region` is the SAVE format and `load_region` is right to reset
+threats, re-seed the environment and null the pawn's order — that is what loading a save should do.
+It is exactly wrong for a rejoining client, who must land *byte-identical* to the authoritative
+server. So §5 adds the missing **runtime half** rather than bending the save format (which keeps its
+shape and its migration story): `serialize_runtime`/`apply_runtime` carry enemies, shots, raid and
+patrol cycles, weather, rng cursors, research gates, convoys and the pawn's live order;
+`resume_payload`/`restore` are the pair a joiner uses. `world_hash` is now defined *as* region +
+runtime, so the anti-desync tripwire and the resume payload can never drift apart — one definition,
+two uses. (Consequence: the hash constants quoted in §9.2–§9.4 predate this coverage change.)
+
+**Three landmines the live spike found that unit tests had missed.** Each is now a test:
+
+1. **The pawn's live order is authoritative state.** `load_region` nulls `action`; an *idle* pawn
+   resumes fine either way, which is why in-process tests passed while the socket spike diverged
+   immediately — the server's pawn was mid-walk from a `gather` command and the joiner's stood
+   still. The runtime half now carries `action` (path flattened) plus the `eat/atk/dep` cooldowns.
+2. **An attack order holds a live enemy reference** — the same class of problem as `order_attack`
+   on the wire (§9.4). It is packed as an **index into the replicated enemies array**, which is a
+   stable id precisely because that array travels in the same record, in the same order; if the
+   target died while the client was away, the order resolves to `null` (void), not to a wrong enemy.
+3. **An rng cursor is a 64-bit integer and JSON numbers are doubles.** `2564435455463813531`
+   arrived as `…632`, silently resuming every stochastic stream at the wrong cursor. Cursors now
+   travel as **strings**; both sides hash the same string. (Sibling of the §9.3 float landmines:
+   the wire is a type system, not a pipe.)
+
+**Proven live, not only in unit tests.** The transport spike now runs **one server + three
+clients**: two present from tick 0, and a third that the server leaves queued in the TCP backlog
+and admits at **tick 200** (gated on a tick, not wall-clock, so CI is deterministic). The joiner
+receives the resume payload *and* the current snapshot as its delta keyframe — both channels must
+resume together — then matches the server's `world_hash` at every subsequent probe (4/4) and at the
+end, with its snapshot stream reconstructing cleanly (8/8). Which client is the late one is left to
+the connect race, as in the wild.
+
+**The server's record is the append-only chain.** The spike server commits a region record every
+100 ticks onto the spec 0002 hash chain and verifies the store at the end (6 commits, verified,
+head reported in the verdict) — so "authoritative store" means a history whose rewriting is
+*detectable*, not just a file. `run_rejoin_tests.gd` additionally tampers with a committed record
+and asserts the chain notices.
+
+**A test-hygiene note worth keeping.** The spike's failure message hard-coded "0 mismatches" in its
+format string, so a genuinely diverging client still *read* as clean for one debugging round. Assertion
+messages must print the measured value, never the expected one; the per-probe `tick:local/remote`
+trail is now dumped on failure, which is what located landmine 1.
+
 ### 9.4 Command envelope (2026-07-28, Plan §4)
 
 `scripts/net/command.gd` turns the spike's ad-hoc verb messages into the Phase-1 command channel.
