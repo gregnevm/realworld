@@ -14,6 +14,7 @@ const WorldGen = preload("res://scripts/world_gen.gd")
 const Gear = preload("res://scripts/kernel/gear.gd")
 const HeroHealth = preload("res://scripts/sim/hero_health.gd")
 const CatalogDefs = preload("res://scripts/catalog_defs.gd")
+const Director = preload("res://scripts/sim/director.gd")
 
 # session: the SessionScript (has .sim). world/ctx: the same shapes the kernel consumes (built by HudRoot).
 # balance: a Balance director constructed ONCE by HudRoot and reused (never new() per frame).
@@ -191,11 +192,13 @@ static func _catalog_slice(sim) -> Dictionary:
 static func world_of(sim) -> Dictionary:
 	if sim == null:
 		return {"buildings": [], "stock": {}, "items": []}
+	# real sims: the ONE sim-side builder (sim/director.gd) — the HUD readout and the live Balance
+	# pacing read the SAME numbers and can never disagree. Lean fakes keep the data.gd fallback.
+	if sim.has_method("building_def"):
+		return Director.world_of(sim)
 	var bs := []
 	for b in sim.buildings:
-		# def seam when the sim provides it (catalogue buildings carry real hp); data.gd for fakes
-		var def: Dictionary = sim.building_def(String(b.kind)) if sim.has_method("building_def") else GameData.BUILDINGS.get(b.kind, {})
-		bs.append({"value": float(def.get("hp", 50.0)) * 0.5})
+		bs.append({"value": float(GameData.BUILDINGS.get(b.kind, {}).get("hp", 50.0)) * 0.5})
 	return {"buildings": bs, "stock": sim.stock, "items": (sim.player.get("items", []) as Array)}
 
 # --- region / seed (the shareable world address; spec pillar) ---

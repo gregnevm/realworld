@@ -24,8 +24,8 @@
 | `crafting_automation` | ✅ | ✅ | 🟡 | ✅ | `kernel/production.gd` bills (count/until); quality 0–6. Live catalogue craft (2026-07-29) is instant `sim.craft_catalog`; work-time bills remain kernel/sandbox |
 | `content_tree` | ✅ | ✅ | ✅ | ✅ | 335 defs, reachability-validated. **Live behind `use_catalog`** (2026-07-29, spec 0008 ph.3–4): the curated tier — 38 res / 73 builds / 27 recipes, neolithic→steel — builds, crafts and mines in the real game; the rest browsable until its map source ships |
 | `progression_research` | ✅ | ✅ | ✅ | ✅ | **spec 0007** — `kernel/progression.gd` queueable research pipeline over the tree; live from research benches (`session.tick_research`), surfaced in `ResearchPanel` (LEFT dock); planner (`research_path`/`steps_to_unlock`). Node + Godot mirrored tests |
-| `raids_pvp` | ✅ | ✅ | ✅ | ✅ | seeded raid/patrol cycles in `sim/threats.gd` (own timers + clan `raid_pressure` from `social.gd`). **NOT paced by Balance** — `Balance.assess()` feeds only the HUD threat readout (see `balance_director`) |
-| `balance_director` | ✅ | ✅ | 🟡 | ✅ | `kernel/balance.gd`; `decide()` AI seam; incident MTB pacing coded but **not driving the live sim** — assess() surfaces in the HUD only |
+| `raids_pvp` | ✅ | ✅ | ✅ | ✅ | **Paced by Balance since 2026-07-29** (`sim/director.gd`): MTB rolls arm the warning→wave cycle and the wave is sized by threat points (wealth + days + clan `raid_pressure`) — real escalation. Patrols stay the ambient `sim/threats.gd` channel |
+| `balance_director` | ✅ | ✅ | ✅ | ✅ | **live** (2026-07-29): `sim/director.gd` runs `Balance.tick()` on its own seeded stream — raids, disease (→ the health tracker), cold snaps (→ `apply_temp_anomaly`), cargo drops. `decide()` stays the AI seam; fauna/quest incidents wait for their substrate |
 | `convoy_logistics` | ✅ | ✅ | ✅ | ✅ | real hubs (Kyiv/Lviv/Odesa/…); trade offers |
 | `offline_persistence` | ✅ | ✅ | ✅ | ✅ | `persistence.gd` seed+diff+hash-chain; travel/permadeath |
 | `social` | ✅ | ✅ | ✅ | ✅ | `social.gd` clans/stances; `new_graph()` = Phase 1 wire-shape |
@@ -169,6 +169,20 @@ go-ahead, the 335-def tree now BUILDS and CRAFTS in the live game behind `use_ca
 - Remaining to full Option A: map sources for the hunting/exotic-mining raws, per-zone crop
   selection (hops/psychoid tiers), work-time crafting, and the deliberate default-ON flip for new
   games (spec 0008 §5.2).
+
+**Update (2026-07-29, the Balance director goes live):** the audit's one dishonest cell — «tactic
+escalation via Balance» while raids ran on a flat timer — is now true in code, not just corrected in
+prose. `sim/director.gd` runs `kernel/balance.gd`'s `tick()` every sim tick on its OWN seeded stream
+(cursor in the runtime record — twins and rejoiners replay the same storyteller): the raid incident
+arms the shipped warning→wave cycle with a wave SIZED by threat points (wealth + days survived +
+clan pressure through `assess()` — the flat `78+rand·46` reroll is gone, the cycle idles until the
+director arms it, and a fresh base gets a real grace period); disease lands on the live health
+tracker (the bed-tend immunity race); cold snaps ride the spec-E6 `apply_temp_anomaly` seam; cargo
+drops pay generosity-scaled scrap into the stock. Incidents without a live substrate
+(infestation/manhunter → fauna, quest → quests) still roll but their payloads are DROPPED, not
+faked. `decide()` remains the AI-policy seam; knobs stay at defaults. The HUD threat readout and
+the live pacing now read the same `world_of` numbers (one sim-side builder). `_t_director_live`
+covers twin hashes, every live incident channel, the armed raid cycle and live escalation.
 
 **Update (2026-07-29, farming goes live — the first renewable source):** `sim/farming.gd` bridges
 grow zones onto the last big unconsumed kernel comp — `things.gd CompGrower` (temperature- and

@@ -29,7 +29,8 @@ static func update_raids(s, dt: float) -> void:
 		if not raiders_left:
 			r.active = false
 			r.warned = false
-			r.next = 78.0 + s.threat_rng.randf() * 46.0
+			# the DIRECTOR owns the next raid now (sim/director.gd MTB roll) — the cycle idles
+			r.next = s.RAID_IDLE
 			r.timer = 0.0
 			s.banner = ""
 			s._log("✅ Рейд відбито!", "good")
@@ -52,7 +53,16 @@ static func spawn_wave(s) -> void:
 	if s.social != null:
 		pressure = Social.raid_pressure(s.social)
 		faction = Social.raid_faction_name(s.social, r.wave)
-	var cnt: int = clampi(int(ceil(float(GameData.raid_wave_size(s.time.day)) * pressure)), 1, 20)
+	# a director-armed raid carries its Balance payload: the wave is sized by THREAT POINTS (wealth +
+	# days + clan pressure through assess()) — the escalation the flat day-formula never had. A wave
+	# forced without the director (tests/smoke lowering `next`) keeps the legacy day formula.
+	var cnt: int
+	if r.has("director"):
+		cnt = clampi(int(r.director.get("count", 1)), 1, 20)
+		faction = str(r.director.get("faction", faction))
+		r.erase("director")
+	else:
+		cnt = clampi(int(ceil(float(GameData.raid_wave_size(s.time.day)) * pressure)), 1, 20)
 	var edge: int = s.threat_rng.randi() % 4
 	var placed := 0
 	var guard := 0

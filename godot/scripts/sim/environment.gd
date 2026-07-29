@@ -12,6 +12,7 @@ const GameData = preload("res://scripts/data.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
 
 const THREAT_STREAM_SALT := 0x7A1D5EED  # decorrelates the threat stream from the weather stream
+const DIRECTOR_STREAM_SALT := 0x0D1EC70  # the Balance director's own storyteller stream
 const MAX_ROOM_CELLS := 120             # bigger enclosed pockets are courtyards/caves, not rooms
 const WEATHER_LABEL := {&"clear": "ясно", &"rain": "дощ", &"snow": "сніг", &"fog": "туман", &"cold_snap": "мороз"}
 
@@ -22,6 +23,8 @@ static func env_init(s) -> void:
 	s.env_rng.seed = s.region_seed()
 	s.threat_rng = RandomNumberGenerator.new()
 	s.threat_rng.seed = s.region_seed() ^ THREAT_STREAM_SALT
+	s.director_rng = RandomNumberGenerator.new()
+	s.director_rng.seed = s.region_seed() ^ DIRECTOR_STREAM_SALT
 	s.temp_offset = 0.0
 	s.temp_offset_days = 0.0
 	s.weather = s.climate.weather(float(s.map.lat), float(s.map.lon), int(s.time.day), float(s.time.frac), s.env_rng)

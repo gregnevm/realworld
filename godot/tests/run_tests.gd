@@ -12,7 +12,9 @@ const Catalog = preload("res://scripts/kernel/catalog.gd")
 const KernelGear = preload("res://scripts/kernel/gear.gd")
 const KernelNeeds = preload("res://scripts/kernel/needs.gd")
 const KernelHealth = preload("res://scripts/kernel/health.gd")
+const KernelBalance = preload("res://scripts/kernel/balance.gd")
 const CatalogDefs = preload("res://scripts/catalog_defs.gd")
+const SimDirector = preload("res://scripts/sim/director.gd")
 
 
 func _init() -> void:
@@ -56,6 +58,7 @@ func _init() -> void:
 	_t_catalog_live()
 	_t_power_live()
 	_t_farming_live()
+	_t_director_live()
 	_t_no_global_rng()
 	_t_static_typing()
 	_t_stock_seam()
@@ -702,9 +705,16 @@ func _flat_sim(day: int = 195, use_catalog: bool = false) -> Variant:
 	s.time.day = day
 	s.time.frac = 0.5
 	s.weather = &"clear"
-	s.raid.next = 1e9
 	s.patrol.next = 1e9
+	_mute_director(s)   # isolation: no storyteller incidents mid-channel-test (raid idles by default)
 	return s
+
+# Zero every Balance category weight so the director rolls nothing (a weight of 0 never fires).
+# Director tests re-enable by resetting `s.balance = null` (a fresh instance = live defaults).
+func _mute_director(s) -> void:
+	s.balance = KernelBalance.Balance.new()
+	for cat in s.balance.category_weight:
+		s.balance.category_weight[cat] = 0.0
 
 func _t_hero_health() -> void:
 	var s = _flat_sim()
@@ -1546,6 +1556,76 @@ func _t_farming_live() -> void:
 			tw.update(1.0)
 	ok(Persistence.world_hash(t1) == Persistence.world_hash(t2), "близнюки з грядками хешуються однаково")
 	for sim_x in [off, s, s2, night, hy, mk, t1, t2]:
+		sim_x.dispose_farm()
+		sim_x.dispose_power()
+
+# ---------------- Balance-директор живий (sim/director.gd): пасить рейди, кидає інциденти ----------------
+func _t_director_live() -> void:
+	# 1) близнюки зі storyteller-потоком хешуються однаково (курсор режисера — авторитетний стан)
+	var t1 = _flat_sim()
+	var t2 = _flat_sim()
+	for tw in [t1, t2]:
+		tw.balance = null   # live director weights (the _flat_sim mute is for the OTHER tests)
+		for i in 120:
+			tw.update(0.5)
+			tw.player.hunger = 100.0
+			tw.player.rest = 100.0
+	ok(Persistence.world_hash(t1) == Persistence.world_hash(t2), "близнюки з режисером хешуються однаково (потік seeded)")
+	ok(Persistence.serialize_runtime(t1).has("director_rng_state"), "runtime несе курсор режисера (rejoin-точність)")
+
+	# 2) інциденти застосовуються по-справжньому
+	var s = _flat_sim()
+	# хвороба лягає на живий трекер; друга — не стакається (гонка імунітету — драма, не купа)
+	SimDirector.apply(s, {"incident": "disease", "label": "інфекція легень"})
+	var sick := 0
+	for h in s.health.hediffs:
+		if h is KernelHealth.Hediff_Disease:
+			sick += 1
+	ok(sick == 1, "інцидент-хвороба лягає на живий health-трекер")
+	SimDirector.apply(s, {"incident": "disease", "label": "лихоманка"})
+	sick = 0
+	for h in s.health.hediffs:
+		if h is KernelHealth.Hediff_Disease:
+			sick += 1
+	ok(sick == 1, "друга хвороба не стакається")
+	# похолодання їде в шов аномалії і минає
+	SimDirector.apply(s, {"incident": "cold_snap", "drop_c": 15.0, "days": 2.0})
+	ok(is_equal_approx(s.temp_offset, -15.0), "cold_snap падає в apply_temp_anomaly (−15°C)")
+	s._update_environment(2.1)
+	ok(s.temp_offset == 0.0, "аномалія минає за свої дні")
+	# вантаж падає у склад
+	var scrap0: int = s.res_amount("scrap")
+	SimDirector.apply(s, {"incident": "cargo", "stock": {"scrap": 10, "components": 2}})
+	ok(s.res_amount("scrap") == scrap0 + 10, "cargo-інцидент кладе брухт у склад")
+	# інцидент без субстрату — чесно скинутий, не зіграний
+	var foes0: int = s.enemies.size()
+	SimDirector.apply(s, {"incident": "manhunter", "count": 5})
+	ok(s.enemies.size() == foes0, "manhunter без фауни скинуто (не декорація)")
+
+	# 3) рейд: режисер армить цикл (банер → 12 с → хвиля РОЗМІРОМ від threat points)
+	ok(float(s.raid.next) >= 1.0e11, "без режисера рейд-цикл спить (RAID_IDLE)")
+	SimDirector.apply(s, {"incident": "raid", "count": 3, "faction": "тестовий клан"})
+	ok(bool(s.raid.warned) and s.banner != "", "режисер увімкнув попередження рейду")
+	for i in 14:
+		s.update(1.0)
+		s.player.hunger = 100.0
+		s.player.rest = 100.0
+	ok(s.raid.active and s.enemies.size() == 3, "хвиля прийшла за 12 с розміром із payload (3)")
+	for e in s.enemies.duplicate():
+		s._damage_enemy(e, 9999.0)
+	s.update(0.1)
+	ok(not s.raid.active and float(s.raid.next) >= 1.0e11, "після відбиття цикл знову чекає режисера")
+
+	# 4) ескалація ЖИВА: багатша база -> більші threat points -> більша хвиля (через world_of)
+	var rich = _flat_sim()
+	rich.stock[rich.res_key("wood")] = 400
+	rich.stock[rich.res_key("components")] = 60
+	var poor = _flat_sim()
+	var day := 5
+	var pts_rich := KernelBalance.Balance.threat_points(SimDirector.world_of(rich), day, 1.0)
+	var pts_poor := KernelBalance.Balance.threat_points(SimDirector.world_of(poor), day, 1.0)
+	ok(pts_rich > pts_poor, "threat points ростуть із багатством живої бази (%.0f > %.0f)" % [pts_rich, pts_poor])
+	for sim_x in [t1, t2, s, rich, poor]:
 		sim_x.dispose_farm()
 		sim_x.dispose_power()
 

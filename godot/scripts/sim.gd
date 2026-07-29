@@ -10,6 +10,7 @@ const WorldMeta = preload("res://scripts/sim/world_meta.gd")
 const HeroHealth = preload("res://scripts/sim/hero_health.gd")
 const SimPower = preload("res://scripts/sim/power.gd")
 const SimFarm = preload("res://scripts/sim/farming.gd")
+const Director = preload("res://scripts/sim/director.gd")
 const DataBridge = preload("res://scripts/data_bridge.gd")
 const CatalogDefs = preload("res://scripts/catalog_defs.gd")
 const Catalog = preload("res://scripts/kernel/catalog.gd")
@@ -23,7 +24,11 @@ var bgrid: Dictionary = {}
 var enemies: Array = []
 var shots: Array = []
 var time := {"frac": 0.28, "day": 1, "day_len": 150.0}
-var raid := {"timer": 0.0, "next": 95.0, "active": false, "warned": false, "wave": 0}
+# Raid pacing is DIRECTOR-driven (sim/director.gd): `next` idles at RAID_IDLE until Balance's raid
+# incident arms the cycle (warning + wave). The timer/next machinery stays so tests/smoke can still
+# force a wave by lowering `next` manually.
+const RAID_IDLE := 1.0e12
+var raid := {"timer": 0.0, "next": RAID_IDLE, "active": false, "warned": false, "wave": 0}
 var patrol := {"timer": 0.0, "next": 110.0, "wave": 0}   # лор: патрульні роботи Старого світу
 var research_unlocked: Dictionary = {}   # catalog research id -> true; session мостить із kernel/progression
 var use_catalog := false   # spec 0008 phase 2: OFF = stock живе на 6 data.gd-ключах (шліфований зріз
@@ -49,6 +54,10 @@ var power_sys: Variant = null        # kernel PowerNetSystem (created once)
 # Farming (sim/farming.gd): grower Thing per grow zone; b.growth/b.harvests are the saved truth.
 var farm_things: Dictionary = {}     # cell -> kernel Thing carrying CompGrower (derived cache)
 var farm_dirty := true
+# The Balance director (sim/director.gd): kernel/balance.gd finally PACES the game, not just the
+# HUD. Its own seeded stream (env_init) so storyteller rolls never desync raids or weather.
+var balance: Variant = null          # kernel Balance instance (knobs at defaults; AI seam later)
+var director_rng := RandomNumberGenerator.new()
 var move_input := Vector2.ZERO
 var messages: Array = []
 var messages_seq := 0              # monotonic lifetime append counter (spec 0005 §2.7 FeedbackBus seam);
@@ -149,7 +158,7 @@ func _reset_local_threats() -> void:
 	enemies = []
 	convoys = []
 	shots = []
-	raid = {"timer": 0.0, "next": 95.0, "active": false, "warned": false, "wave": int(raid.get("wave", 0))}
+	raid = {"timer": 0.0, "next": RAID_IDLE, "active": false, "warned": false, "wave": int(raid.get("wave", 0))}
 	patrol = {"timer": 0.0, "next": 110.0, "wave": int(patrol.get("wave", 0))}
 	banner = ""
 
@@ -837,6 +846,7 @@ func update(dt: float) -> void:
 	_update_environment(dt / time.day_len)
 	SimPower.update(self, dt)   # after environment (solar reads daylight, wind reads weather)
 	SimFarm.update(self, dt)    # after power (hydroponics grows only when the net delivered)
+	Director.update(self, dt)   # Balance rolls incidents; raids arm BEFORE threats tick below
 	_update_player(dt)
 	_update_crafting(dt)
 	_update_raids(dt)

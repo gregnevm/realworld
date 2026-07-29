@@ -168,6 +168,7 @@ static func serialize_runtime(sim) -> Dictionary:
 		# round-trip exactly, and both sides hash the same string.
 		"env_rng_state": str(sim.env_rng.state),
 		"threat_rng_state": str(sim.threat_rng.state),
+		"director_rng_state": str(sim.director_rng.state),
 		"enemies": enemies,
 		"shots": shots,
 		# convoys are authoritative state that PAYS OUT later (goods return on arrival), so two
@@ -243,6 +244,7 @@ static func apply_runtime(sim, rec: Dictionary) -> void:
 	# silently rewind every stochastic stream to tick 0.
 	sim.env_rng.state = _rng_state(rec.get("env_rng_state"), sim.env_rng.state)
 	sim.threat_rng.state = _rng_state(rec.get("threat_rng_state"), sim.threat_rng.state)
+	sim.director_rng.state = _rng_state(rec.get("director_rng_state"), sim.director_rng.state)
 	sim.enemies = []
 	for e in (rec.get("enemies", []) as Array):
 		var live: Dictionary = (e as Dictionary).duplicate(true)
