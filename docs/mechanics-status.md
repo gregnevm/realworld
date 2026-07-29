@@ -166,8 +166,22 @@ go-ahead, the 335-def tree now BUILDS and CRAFTS in the live game behind `use_ca
 - **UI**: the B/C/N browsers flip their badge «демо»→«живе» when the slice state IS the live sim;
   build rows arm the ordinary `select_build` ghost, craft rows run `sim.craft_catalog`, the
   StockPanel lists catalogue-only stock. Sandbox mode (flag OFF, shipped default) is untouched.
-- Remaining to full Option A: map sources for the hunting/farming/exotic-mining raws, the power net,
-  work-time crafting, and the deliberate default-ON flip for new games (spec 0008 §5.2).
+- Remaining to full Option A: map sources for the hunting/farming/exotic-mining raws, work-time
+  crafting, and the deliberate default-ON flip for new games (spec 0008 §5.2).
+
+**Update (2026-07-29, Batch 8c — the power net goes live):** `sim/power.gd` bridges the placed
+building dicts onto the kernel power organ (`kernel/power.gd`: sources/traders/batteries +
+PowerNetSystem with priority brownout shedding). The kernel comps own the physics; the building
+dicts stay the persistent truth (`b.fuel`/`b.charge` mirror back every tick → saves, `world_hash`,
+rejoin). Solar rides the real daylight curve, wind the seeded weather stream, fuel generators
+auto-refuel from the open stock (1 unit = 1 fuel). `sim.device_active` — the seam built for exactly
+this — now gates every power-TRADER def: browned-out turrets hold fire, unpowered stations refuse
+crafts with an honest `no_power`. The powered half of the catalogue (generators, batteries, solar,
+electric stations, auto-turrets, fridge) joins the live tier; the `power_conduit` stays out until
+nets are spatial. One region = one implicit net. HUD: a `power` slice + `PowerPanel` (hotkey E).
+Covered by `_t_power_live` (shedding order, battery buffering, day/night solar, refuel economy,
+fuel/charge persistence, twin hashes); the shipped flag-OFF slice pays zero cost and stays
+byte-identical.
 
 ## How to read this
 
