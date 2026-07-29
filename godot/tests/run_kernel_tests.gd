@@ -27,6 +27,7 @@ func _init() -> void:
 	_t_systems()
 	_t_climate()
 	_t_needs()
+	_t_deprivation()
 	_t_health()
 	_t_balance()
 	_t_agents()
@@ -171,6 +172,54 @@ func _t_needs() -> void:
 	var low = Needs.Need_Food.new()
 	low.cur = 0.4
 	ok(low.wants() and not low.critical(), "low food 'wants' a meal but is not yet critical")
+
+# ---------------- Deprivation hediffs (empty needs -> located conditions) ----------------
+func _t_deprivation() -> void:
+	# starvation: an empty stomach grows malnutrition toward the lethal 1.0; refeeding recedes it
+	var h = Health.HealthTracker.new()
+	for i in 4:
+		Needs.update_deprivation(h, 0.0, 1.0, 0.5)
+	var maln = Needs._find_hediff(h, Needs.Hediff_Malnutrition)
+	ok(maln != null and maln.severity > 0.0, "empty food grows malnutrition (тяж.%.2f)" % (maln.severity if maln else -1.0))
+	ok(h.capacity(Health.CAP_MANIPULATION) < 1.0 and h.capacity(Health.CAP_MOVING) < 1.0, "malnutrition weakens work and movement")
+	for i in 3:
+		Needs.update_deprivation(h, 0.0, 1.0, 1.0)
+	maln = Needs._find_hediff(h, Needs.Hediff_Malnutrition)
+	ok(maln != null and is_equal_approx(maln.severity, 1.0), "starvation saturates at the lethal 1.0 (host's death line)")
+	for i in 6:
+		Needs.update_deprivation(h, 1.0, 1.0, 0.5)
+	ok(Needs._find_hediff(h, Needs.Hediff_Malnutrition) == null, "refeeding clears malnutrition entirely")
+
+	# exhaustion: sleeplessness collapses consciousness (downed) but is CAPPED below lethal
+	var h2 = Health.HealthTracker.new()
+	for i in 8:
+		Needs.update_deprivation(h2, 1.0, 0.0, 0.5)
+	var exh = Needs._find_hediff(h2, Needs.Hediff_Exhaustion)
+	ok(exh != null and is_equal_approx(exh.severity, Needs.EXHAUSTION_SEVERITY_CAP), "exhaustion saturates at its sub-lethal cap")
+	ok(h2.capacity(Health.CAP_CONSCIOUSNESS) <= 0.1, "capped exhaustion floors consciousness (collapse)")
+	h2.tick({"dday": 0.01})
+	ok(h2.downed, "the tracker reads the collapse as downed")
+	for i in 2:
+		Needs.update_deprivation(h2, 1.0, 1.0, 0.5)
+	ok(Needs._find_hediff(h2, Needs.Hediff_Exhaustion) == null, "sleep clears exhaustion quickly")
+
+	# injury_on: the vital-part destruction number the host death policy reads
+	var h3 = Health.HealthTracker.new()
+	h3.injure(&"torso", 25.0)
+	h3.injure(&"torso", 10.0)
+	h3.injure(&"leg_l", 5.0)
+	ok(is_equal_approx(h3.injury_on(&"torso"), 35.0), "injury_on sums live severity per part")
+	ok(is_equal_approx(h3.injury_on(&"head"), 0.0), "injury_on is zero for an unhurt part")
+
+	# REGRESSION (live-sim integration): at PER-FRAME dday (~0.003) one tick of growth sits below any
+	# epsilon — an epsilon-based gone() swept a just-born condition the same tick and severity could
+	# never accumulate. Conditions must survive fine-grained ticking AND the tracker.tick sweep.
+	var h4 = Health.HealthTracker.new()
+	for i in 30:
+		Needs.update_deprivation(h4, 0.0, 1.0, 0.003)
+		h4.tick({"dday": 0.003})
+	var fine_maln = Needs._find_hediff(h4, Needs.Hediff_Malnutrition)
+	ok(fine_maln != null and fine_maln.severity > 0.03, "malnutrition accumulates at per-frame dday (тяж.%.3f)" % (fine_maln.severity if fine_maln else -1.0))
 
 # ---------------- Health (injuries / disease / capacities) ----------------
 func _t_health() -> void:
@@ -840,6 +889,13 @@ func _t_gear() -> void:
 	for i in 6:
 		Gear.update_comfort(hc3, 40.0, 0.0, 0.5)
 	ok(_find_h(hc3, Gear.Hediff_Heatstroke) != null, "hot felt temp grows heatstroke")
+	# REGRESSION: comfort survives per-frame dday + the tracker.tick sweep (see _t_deprivation)
+	var hc4 = Health.HealthTracker.new()
+	for i in 30:
+		Gear.update_comfort(hc4, -10.0, 0.0, 0.003)
+		hc4.tick({"dday": 0.003})
+	var fine_hypo = _find_h(hc4, Gear.Hediff_Hypothermia)
+	ok(fine_hypo != null and fine_hypo.severity > 0.05, "hypothermia accumulates at per-frame dday (тяж.%.3f)" % (fine_hypo.severity if fine_hypo else -1.0))
 
 	# 3) MEDBED TEND: fails without medicine/medbed; succeeds with both; better medic/quality => higher eff.
 	var medbed = Things.Thing.new(null)

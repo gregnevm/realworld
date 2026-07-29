@@ -164,6 +164,18 @@ class HealthTracker extends RefCounted:
 			b += h.bleed_rate()
 		return b
 
+	# Total live injury severity sitting on one body part. A VITAL part whose injuries reach its
+	# max_hp is destroyed — the host's death policy reads exactly this number.
+	func injury_on(part_key: StringName) -> float:
+		var prt: Variant = parts.get(part_key, null)
+		if prt == null:
+			return 0.0
+		var s := 0.0
+		for h in hediffs:
+			if h is Hediff_Injury and h.part == prt:
+				s += h.severity
+		return s
+
 	# A capacity in [0,1]: product of every hediff's factor, further weakened by blood loss for the
 	# capacities that depend on circulation (consciousness, movement).
 	func capacity(cap: StringName) -> float:
