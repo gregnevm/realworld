@@ -28,6 +28,9 @@ const Progression = preload("res://scripts/kernel/progression.gd")
 const Catalog = preload("res://scripts/kernel/catalog.gd")
 const WorldInput = preload("res://scripts/ui/world_input.gd")
 const Mechanics = preload("res://scripts/ui/mechanics.gd")
+const Sim = preload("res://scripts/sim.gd")
+const WorldGen = preload("res://scripts/world_gen.gd")
+const CatalogDefs = preload("res://scripts/catalog_defs.gd")
 
 
 func _init() -> void:
@@ -51,6 +54,7 @@ func _init() -> void:
 	_t_tech_intent()
 	_t_action_browsers()
 	_t_bom_tips()
+	_t_catalog_live_slice()
 	_t_panel_registry()
 	_t_overlay_registry()
 	_t_hotkey_contract()
@@ -123,8 +127,11 @@ func _t_snapshot() -> void:
 	ok(bool(snap.alive) and not bool(snap.dead), "snapshot reports alive world")
 	ok(String(snap.region.name) == "Тестоград" and int(snap.region.seed) == 12345678, "region slice reads coords + seed")
 	ok(snap.clock.phase == &"day" and String(snap.clock.hhmm) == "12:00", "clock slice maps frac->phase enum + hhmm")
-	ok((snap.vitals.bars as Array).size() == 3, "vitals slice has hp/hunger/rest bars")
+	ok((snap.vitals.bars as Array).size() == 4, "vitals slice has hp/hunger/rest/blood bars")
 	ok(snap.vitals.bars[1].state == &"good", "hunger 82 -> good urgency enum")
+	ok(snap.vitals.bars[3].id == &"blood" and int(snap.vitals.bars[3].pct) == 100, "blood bar defaults to full on a lean fake (graceful)")
+	ok(not bool(snap.vitals.downed) and (snap.vitals.conditions as Array).is_empty(), "located-health extras degrade gracefully on a fake sim")
+	ok(snap.vitals.comfort is StringName, "felt-°C comfort state is an enum (R11)")
 	ok(int(snap.stock.rows.wood) == 12 and int(snap.stock.total) == 17, "stock slice reads fake stock, total summed purely (R8)")
 	ok(int(snap.stock.cap) == 200, "stock slice reads storage cap")
 	ok(snap.stats.melee.has("value") and String(snap.stats.melee.explain) != "", "stat slice carries value+explain (R5 shape)")
@@ -411,6 +418,77 @@ func _t_action_browsers() -> void:
 	sim.dispose()   # the clicked-in station is a Thing<->Comp cycle until detached
 
 # ---------------- BOM guidance: the planner wired into the browser slots (spec 0008 phase 1) ----------------
+# ---- spec 0008 phase 3: the SAME catalog pipeline in LIVE mode — state from the real sim ----
+class _LiveSession extends RefCounted:
+	var sim: Variant = null
+	var started: Array = []
+	func start_research(id: String) -> bool:
+		started.append(id)
+		return true
+
+func _t_catalog_live_slice() -> void:
+	var nn := 16
+	var tiles := PackedByteArray()
+	tiles.resize(nn * nn)
+	tiles.fill(WorldGen.GRASS)
+	var sim = Sim.new()
+	sim.use_catalog = true
+	sim.new_game({"n": nn, "tiles": tiles, "nodes": {}, "spawn": Vector2i(8, 8), "lat": 50.4501, "lon": 30.5234})
+	sim.research_unlocked = {"fire_mastery": true}
+	sim.stock[sim.res_key("clay")] = 20
+	sim.stock[sim.res_key("stone")] = 20
+	var sess = _LiveSession.new()
+	sess.sim = sim
+	var snap := HudModel.snapshot(sess, {"buildings": [], "stock": sim.stock, "items": []}, {"day": 1}, Balance.Balance.new())
+	# the slice flips to live and its rows are honest: every build row is a live-buildable id
+	ok(bool(snap.catalog.get("live", false)), "catalog slice reports LIVE state when the sim flag is on")
+	var live_ids: Dictionary = CatalogDefs.live_ids()
+	var rows: Array = snap.catalog.build_actions
+	ok(not rows.is_empty(), "live build_actions surface catalogue-only buildings (%d)" % rows.size())
+	var all_live := true
+	var has_kiln := false
+	for r in rows:
+		if not live_ids.has(StringName(str(r.id))):
+			all_live = false
+		if str(r.id) == "kiln":
+			has_kiln = true
+	ok(all_live, "every live build row is placeable by the sim (filter holds)")
+	ok(has_kiln, "unlocked fire_mastery surfaces the kiln as a build action")
+	# a placed station feeds craft_actions from the LIVE world
+	sim.try_build("kiln", 3, 3)
+	var snap2 := HudModel.snapshot(sess, {"buildings": [], "stock": sim.stock, "items": []}, {"day": 1}, Balance.Balance.new())
+	var craft_ids: Array = []
+	for r in (snap2.catalog.craft_actions as Array):
+		craft_ids.append(str(r.id))
+	ok(craft_ids.has("make_charcoal"), "placed live kiln surfaces its recipes in craft_actions")
+	# catalogue-only stock lines surface in the stock slice (phase 4)
+	sim.stock["charcoal"] = 5
+	var snap3 := HudModel.snapshot(sess, {"buildings": [], "stock": sim.stock, "items": []}, {"day": 1}, Balance.Balance.new())
+	var extra: Array = snap3.stock.get("extra", [])
+	var has_charcoal := false
+	for e in extra:
+		if str(e.id) == "charcoal":
+			has_charcoal = true
+	ok(has_charcoal and int(snap3.stock.total) >= 5, "stock slice lists catalogue-only resources with icons")
+	# live verb routing (R9): cat_build arms the ordinary select_build ghost; cat_craft flashes honest refusals
+	var ic = InputCtl.InputController.new()
+	var sandbox = CatalogSim.new(CatalogView.default_db())
+	CatalogVerbs.install(ic, sandbox)
+	var armed: Array = []
+	ic.bind(&"select_build", func(_s, a): armed.append(str(a.kind)))
+	ic.dispatch(&"cat_build", {"id": "stone_wall"}, sess)
+	ok(armed == ["stone_wall"], "live cat_build arms the select_build ghost (same grammar as the BuildBar)")
+	ic.dispatch(&"cat_craft", {"id": "cut_block"}, sess)
+	ok("станція" in String(sim.flash_msg), "live cat_craft flashes the no-station refusal via the router (R10)")
+	ic.dispatch(&"cat_craft", {"id": "make_charcoal"}, sess)
+	ok(int(sim.stock.get("charcoal", 0)) == 7, "live cat_craft runs the recipe on the LIVE stock (5 -> 7)")
+	ic.dispatch(&"cat_research", {"id": "masonry"}, sess)
+	ok(sess.started == ["masonry"], "live cat_research feeds the session research pipeline")
+	# sandbox default is untouched: a flagless fake still reads the sandbox (badge stays «демо»)
+	var sandbox_snap := HudModel.snapshot(_fake_session(), {"buildings": [], "stock": {}, "items": []}, {"day": 1}, Balance.Balance.new())
+	ok(not bool(sandbox_snap.catalog.get("live", false)), "flag OFF keeps the sandbox catalog slice (shipped default)")
+	sandbox.dispose()   # Thing<->Comp cycles (leak gate)
+
 func _t_bom_tips() -> void:
 	var db = CatalogView.default_db()
 	# a thin stock affords almost nothing, so unlocked buildings surface as dimmed near-miss rows

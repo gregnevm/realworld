@@ -128,6 +128,9 @@ class ResearchTiersPanel extends PanelBase.Base:
 class ActionBrowser extends PanelBase.Base:
 	const POOL := 12               # fixed slot pool (R2); the slice is capped to match
 	var _slots: Array = []
+	var _head: Widgets.H2Header
+	var _note: Widgets.StatRow
+	var _live_badge: bool = false  # last badge state — set_header/set_row only on transition (R2 bind)
 	var _verb: StringName = &""    # intent verb this browser emits (cat_build / cat_craft / cat_research)
 	var _slice: String = ""        # catalog slice key it binds (build_actions / craft_actions / …)
 	var _title: String = ""
@@ -137,12 +140,12 @@ class ActionBrowser extends PanelBase.Base:
 		var vb := VBoxContainer.new()
 		vb.add_theme_constant_override("separation", 3)
 		add_child(vb)
-		var head := Widgets.H2Header.new()
-		vb.add_child(head)
-		head.set_header(_title, "демо")
-		var note := Widgets.StatRow.new()
-		vb.add_child(note)
-		note.set_row("ℹ", "пісочниця, не жива гра", "")
+		_head = Widgets.H2Header.new()
+		vb.add_child(_head)
+		_head.set_header(_title, "демо")
+		_note = Widgets.StatRow.new()
+		vb.add_child(_note)
+		_note.set_row("ℹ", "пісочниця, не жива гра", "")
 		for i in POOL:
 			var slot := Widgets.CatalogSlot.new()
 			vb.add_child(slot)
@@ -161,6 +164,16 @@ class ActionBrowser extends PanelBase.Base:
 		var cat: Dictionary = vm.catalog
 		if not bool(cat.get("available", false)):
 			return
+		# spec 0008 phase 3: a live-state snapshot flips the honesty badge — these rows now ACT on the
+		# world (one truth per action), so the «пісочниця» notice would itself be the lie.
+		var live: bool = bool(cat.get("live", false))
+		if live != _live_badge:
+			_live_badge = live
+			_head.set_header(_title, "живе" if live else "демо")
+			if live:
+				_note.set_row("🟢", "діє на живий світ", "")
+			else:
+				_note.set_row("ℹ", "пісочниця, не жива гра", "")
 		var rows: Array = cat.get(_slice, [])
 		for i in _slots.size():
 			if i < rows.size():

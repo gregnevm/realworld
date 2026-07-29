@@ -79,6 +79,9 @@ static func serialize_region(sim) -> Dictionary:
 		"place_name": str(m.get("place_name", "Регіон")),
 		"day": int(sim.time.day), "frac": float(sim.time.frac),
 		"player": _pick(sim.player, PLAYER_FIELDS),
+		# located health (sim/hero_health.gd): the tracker IS the body, so it saves with the pawn;
+		# records predating the field migrate from the player.hp float on load.
+		"health": sim.health_dict(),
 		# stock keys follow the sim's vocabulary (spec 0008: live ids vs catalogue ids) — persist the
 		# flag with them, else a cross-flag load reads the wrong keys and resources silently vanish.
 		"use_catalog": bool(sim.use_catalog),
@@ -87,7 +90,13 @@ static func serialize_region(sim) -> Dictionary:
 		"nodes": {},
 	}
 	for b in sim.buildings:
-		rec.buildings.append({"kind": b.kind, "x": int(b.x), "y": int(b.y), "hp": float(b.hp)})
+		var brec := {"kind": b.kind, "x": int(b.x), "y": int(b.y), "hp": float(b.hp)}
+		# power grid state (Batch 8c): a generator's tank and a battery's charge are save-state and
+		# world_hash-state. Only powered defs ever carry these keys, so pre-power saves are unchanged.
+		for f in ["fuel", "charge"]:
+			if b.has(f):
+				brec[f] = float(b[f])
+		rec.buildings.append(brec)
 	for cell in m.nodes:
 		var nd: Dictionary = m.nodes[cell]
 		rec.nodes[str(cell)] = {"kind": nd.kind, "amount": int(nd.amount)}

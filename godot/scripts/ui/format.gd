@@ -48,6 +48,7 @@ static func need_label(id: StringName) -> String:
 		&"hunger": return "Голод"
 		&"rest":   return "Відп."
 		&"water":  return "Вода"
+		&"blood":  return "Кров"
 		_:         return String(id)
 
 static func need_icon(id: StringName) -> String:
@@ -56,7 +57,22 @@ static func need_icon(id: StringName) -> String:
 		&"hunger": return "🍖"
 		&"rest":   return "😴"
 		&"water":  return "💧"
+		&"blood":  return "🩸"
 		_:         return "•"
+
+# --- felt temperature (comfort °C the body experiences) as an enum + icon (R11) ---
+static func comfort_enum(felt_c: float, comfort_min: float, comfort_max: float) -> StringName:
+	if felt_c < comfort_min:
+		return &"cold"
+	if felt_c > comfort_max:
+		return &"hot"
+	return &"ok"
+
+static func comfort_icon(state: StringName) -> String:
+	match state:
+		&"cold": return "❄"
+		&"hot":  return "🥵"
+		_:       return "✔"
 
 # --- region / seed (faithful %.4f precision — the shareable world address; spec pillar) ---
 static func region_line(place_name: String, lat: float, lon: float) -> String:

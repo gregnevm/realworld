@@ -9,6 +9,10 @@ const Social = preload("res://scripts/social.gd")
 const Persistence = preload("res://scripts/persistence.gd")
 const SessionScript = preload("res://scripts/session.gd")
 const Catalog = preload("res://scripts/kernel/catalog.gd")
+const KernelGear = preload("res://scripts/kernel/gear.gd")
+const KernelNeeds = preload("res://scripts/kernel/needs.gd")
+const KernelHealth = preload("res://scripts/kernel/health.gd")
+const CatalogDefs = preload("res://scripts/catalog_defs.gd")
 
 
 func _init() -> void:
@@ -40,11 +44,17 @@ func _init() -> void:
 	_t_session_travel()
 	_t_session_respawn()
 	_t_environment()
+	_t_hero_health()
+	_t_cold_exposure()
+	_t_deprivation_live()
+	_t_health_persistence()
 	_t_raid_determinism()
 	_t_patrols()
 	_t_content_pack()
 	_t_research_gates()
 	_t_use_catalog_persist()
+	_t_catalog_live()
+	_t_power_live()
 	_t_no_global_rng()
 	_t_static_typing()
 	_t_stock_seam()
@@ -678,6 +688,244 @@ func _t_environment() -> void:
 	ok(s.dark_work_mult() < night_mult, "torch light reduces the darkness penalty")
 	ok(s.light_at(14, 2) > 0.6, "torch cell is lit at night")
 
+# ---------------- located hero health (sim/hero_health.gd wiring the kernel tracker live) ----------------
+# a flat warm-summer arena: no map noise, comfort in-band, threats disarmed — isolates the channel under test
+func _flat_sim(day: int = 195, use_catalog: bool = false) -> Variant:
+	var nn := 16
+	var tiles := PackedByteArray()
+	tiles.resize(nn * nn)
+	tiles.fill(WorldGen.GRASS)
+	var s = Sim.new()
+	s.use_catalog = use_catalog   # BEFORE new_game (spec 0008 §5.2 — never flipped mid-save)
+	s.new_game({"n": nn, "tiles": tiles, "nodes": {}, "spawn": Vector2i(8, 8), "lat": 50.4501, "lon": 30.5234})
+	s.time.day = day
+	s.time.frac = 0.5
+	s.weather = &"clear"
+	s.raid.next = 1e9
+	s.patrol.next = 1e9
+	return s
+
+func _t_hero_health() -> void:
+	var s = _flat_sim()
+	ok(s.health != null and float(s.player.hp) == 100.0, "new game starts a fresh located-health tracker")
+	# an enemy blow lands as a LOCATED injury: severity = dmg × armor × INJURY_SCALE on a real part
+	var atk: Dictionary = GameData.make_raider(s.player.px + 0.5, s.player.py, 1)
+	atk.atk_cd = 0.0
+	s.enemies.append(atk)
+	s._update_enemies(0.01)
+	ok(s.health.hediffs.size() == 1, "the hit sits on the tracker as one wound")
+	var wound: Variant = s.health.hediffs[0]
+	ok(absf(float(wound.severity) - float(atk.dmg) * 0.55) < 0.01, "wound severity = post-armor damage × 0.55")
+	ok(wound.part != null, "the wound names a body part (%s)" % wound.part.label)
+	s.enemies.clear()
+	# hit location replays from the seeded threat stream: twin sims take the same wound
+	var a = _flat_sim()
+	var b = _flat_sim()
+	for tw in [a, b]:
+		var e2: Dictionary = GameData.make_raider(tw.player.px + 0.5, tw.player.py, 1)
+		e2.atk_cd = 0.0
+		tw.enemies.append(e2)
+		tw._update_enemies(0.01)
+	ok(String(a.health.hediffs[0].part.key) == String(b.health.hediffs[0].part.key), "same seed -> same hit location")
+	# an untended wound bleeds; sleeping in a bed tends it and the bleeding stops
+	var s2 = _flat_sim()
+	s2.health.injure(&"torso", 20.0, "рвана рана")
+	s2.update(0.5)
+	ok(float(s2.health.total_bleed()) > 0.0, "untended torso wound bleeds")
+	var blood0: float = float(s2.health.blood)
+	for i in 20:
+		s2.update(0.5)
+	ok(float(s2.health.blood) < blood0, "bleeding drains blood over ticks")
+	ok(float(s2.player.hp) < 100.0, "hp readout reflects the wounded body")
+	s2._place_building("bed", int(s2.player.px) + 1, int(s2.player.py), -1)
+	s2.player.rest = 50.0
+	s2.player.action = null
+	for i in 6:
+		s2.update(0.5)
+	ok(bool(s2.player.sleeping), "pawn sleeps by the bed")
+	ok(bool(s2.health.hediffs[0].tended) and float(s2.health.total_bleed()) == 0.0, "bed sleep tends the wound (bleeding stops)")
+	# a smashed vital part is death, and the verdict names the cause — through the real combat
+	# entry (HeroHealth.damage picks parts off the seeded stream; massive blows soon find a vital)
+	var s3 = _flat_sim()
+	var hits := 0
+	while not s3.dead and hits < 12:
+		Sim.HeroHealth.damage(s3, 200.0)
+		hits += 1
+	ok(s3.dead, "massive blows destroy a vital part and kill (%d hits)" % hits)
+	var died_msg := false
+	for m in s3.messages:
+		if "Причина смерті" in String(m.text):
+			died_msg = true
+	ok(died_msg, "death verdict names its cause in the feed")
+	# permadeath: the rookie arrives in an unscarred body
+	s3.respawn_new_pawn()
+	ok(s3.health.hediffs.is_empty() and float(s3.player.hp) == 100.0, "respawned pawn has a fresh tracker")
+	# wounded arms work slower and hit weaker; wounded legs walk slower (capacities feed the sim)
+	var s4 = _flat_sim()
+	var node := {"kind": "tree", "amount": 5}
+	var t0: float = s4.gather_time(node)
+	var dmg0: float = s4.melee_damage()
+	s4.health.injure(&"arm_l", 20.0)
+	s4.health.injure(&"arm_r", 20.0)
+	s4.health.injure(&"leg_l", 20.0)
+	ok(s4.gather_time(node) > t0, "wounded arms gather slower")
+	ok(s4.melee_damage() < dmg0, "wounded arms hit weaker")
+
+func _t_cold_exposure() -> void:
+	# Kyiv day 15 == deep winter: standing outside with no heat grows hypothermia — the climate BITES
+	var s = _flat_sim(15)
+	ok(s.hero_felt_c() < 12.0, "winter noon outdoors is below the comfort band (%.1f°C)" % s.hero_felt_c())
+	var hint := false
+	for m in s.messages:
+		if "холодно" in String(m.text):
+			hint = true
+	ok(hint, "cold spawn logs the fire-first onboarding hint")
+	var node := {"kind": "tree", "amount": 5}
+	var warm_time: float = s.gather_time(node)
+	for i in 60:
+		s.update(0.5)
+		s.player.hunger = 100.0
+		s.player.rest = 100.0
+	var hypo: Variant = null
+	for h in s.health.hediffs:
+		if h is KernelGear.Hediff_Hypothermia:
+			hypo = h
+	ok(hypo != null and float(hypo.severity) > 0.1, "unheated winter grows hypothermia (тяж.%.2f)" % (float(hypo.severity) if hypo else -1.0))
+	ok(s.gather_time(node) > warm_time, "freezing hands work slower (%.2f > %.2f)" % [s.gather_time(node), warm_time])
+	ok(float(s.player.hp) < 100.0, "hp readout drops as the cold deepens")
+	# a scrap vest adds felt warmth (data.gd insul)
+	var felt_bare: float = s.hero_felt_c()
+	s.player.items.append("vest")
+	s.equip("vest")
+	ok(absf(s.hero_felt_c() - (felt_bare + 3.0)) < 0.01, "vest adds +3°C felt warmth")
+	s.player.equipped["armor"] = ""
+	# an ENCLOSED, heated room holds the comfort band: severity recedes to nothing inside
+	# (a fire in the open field is NOT enough in deep winter — shelter + heat is the lesson)
+	s.player.px = 3.5
+	s.player.py = 3.5
+	s.player.action = null
+	s._place_building("wall", 2, 3, -1)
+	s._place_building("wall", 4, 3, -1)
+	s._place_building("wall", 3, 2, -1)
+	s._place_building("door", 3, 4, -1)
+	ok(s.is_indoor(3, 3), "the pawn's cell is now a room")
+	s._place_building("campfire", 3, 3, -1)
+	s._place_building("heater", 3, 3, -1)
+	ok(s.hero_felt_c() >= 12.0, "walls + campfire + heater lift the felt °C into the band (%.1f)" % s.hero_felt_c())
+	for i in 40:
+		s.update(0.5)
+		s.player.hunger = 100.0
+		s.player.rest = 100.0
+	var still_cold := false
+	for h in s.health.hediffs:
+		if h is KernelGear.Hediff_Hypothermia:
+			still_cold = true
+	ok(not still_cold, "sheltered heat recedes hypothermia to nothing (heat sources have teeth)")
+	# unrelenting deep cold is lethal: the death verdict says so
+	var s2 = _flat_sim(15)
+	s2.apply_temp_anomaly(-45.0, 20.0)
+	var guard := 0
+	while not s2.dead and guard < 400:
+		s2.update(0.5)
+		s2.player.hunger = 100.0
+		s2.player.rest = 100.0
+		guard += 1
+	ok(s2.dead, "unsheltered −45°C anomaly eventually kills")
+	var froze := false
+	for m in s2.messages:
+		if "замерз" in String(m.text):
+			froze = true
+	ok(froze, "the verdict names the cold")
+
+func _t_deprivation_live() -> void:
+	# starvation: an empty stomach is now a rising condition, not a silent hp drain — and it kills
+	var s = _flat_sim()
+	s.stock[s.res_key("food")] = 0
+	var guard := 0
+	while not s.dead and guard < 800:
+		s.update(0.5)
+		s.player.hunger = 0.0
+		s.player.rest = 100.0
+		guard += 1
+	ok(s.dead, "starvation kills after ~2 hungry days")
+	var starved := false
+	for m in s.messages:
+		if "голодна смерть" in String(m.text).to_lower():
+			starved = true
+	ok(starved, "the verdict names starvation")
+	# sleeplessness: collapse where you stand (downed -> forced sleep), NOT death
+	var s2 = _flat_sim()
+	var downed_seen := false
+	var guard2 := 0
+	while guard2 < 500 and not downed_seen:
+		s2.update(0.5)
+		s2.player.hunger = 100.0
+		s2.player.rest = 0.0
+		s2.player.sleeping = false   # no bed: fight the sleep until the body gives out
+		guard2 += 1
+		downed_seen = s2.hero_downed()
+	ok(downed_seen and not s2.dead, "exhaustion downs the pawn without killing")
+	# released to sleep, the collapse resolves: rest recovers, consciousness returns, the pawn wakes
+	var guard3 := 0
+	while s2.hero_downed() and guard3 < 200:
+		s2.update(0.5)
+		s2.player.hunger = 100.0
+		guard3 += 1
+	ok(not s2.hero_downed() and not s2.dead, "the collapsed pawn sleeps it off and gets up")
+
+func _t_health_persistence() -> void:
+	# wounds survive save/load byte-exactly, and the world hash covers them
+	var s = _flat_sim()
+	s.health.injure(&"leg_l", 9.0, "поріз")   # >= scar threshold: also seeds the scar debt
+	s.health.injure(&"torso", 6.0)
+	s.health.hediffs[0].tended = true
+	s.update(0.5)   # registers scar_watch + recomputes hp
+	var rec := Persistence.serialize_region(s)
+	ok(rec.has("health"), "serialize_region carries the health record")
+	var s2 = Sim.new()
+	s2.load_region(rec)
+	ok(Persistence.content_hash(s.health_dict()) == Persistence.content_hash(s2.health_dict()),
+		"load_region restores the tracker exactly (wounds, tended flags, scar debt)")
+	ok(absf(float(s.player.hp) - float(s2.player.hp)) < 0.01, "restored hp readout matches")
+	var watch: Array = s2.health_dict().get("scar_watch", [])
+	ok(watch.has("leg_l"), "the scar debt survives the round-trip")
+	# the wound is IN the world hash: twin worlds agree, a wound splits them
+	var t1 = _flat_sim()
+	var t2 = _flat_sim()
+	ok(Persistence.world_hash(t1) == Persistence.world_hash(t2), "twin worlds hash identically")
+	t1.health.injure(&"arm_l", 5.0)
+	ok(Persistence.world_hash(t1) != Persistence.world_hash(t2), "a wound changes the world hash (health is authoritative state)")
+	# rejoin: the resume payload lands the wounded pawn byte-identical
+	var r1 := Persistence.resume_payload(s)
+	var s3 = Sim.new()
+	Persistence.restore(s3, r1)
+	ok(Persistence.world_hash(s3) == Persistence.world_hash(s), "resume payload restores a hash-exact wounded world")
+	# travel: the capsule carries the body, wounds and all
+	var pawn: Dictionary = s.extract_pawn()
+	ok(pawn.has("health"), "extract_pawn packs the tracker")
+	var m := WorldGen.generate_map(50.5109, 30.7909, 16)
+	m["place_name"] = "Бровари"
+	var s4 = Sim.new()
+	s4.new_game(WorldGen.generate_map(49.8397, 24.0297, 16))
+	s4.arrive_region(m, pawn)
+	ok(Persistence.content_hash(s4.health_dict()) == Persistence.content_hash(s.health_dict()),
+		"arrive_region lands the same wounded body")
+	# legacy save (no health record): the old hp float migrates to a tended torso wound
+	var old_rec: Dictionary = Persistence.serialize_region(_flat_sim())
+	old_rec.erase("health")
+	old_rec.player.hp = 40.0
+	var s5 = Sim.new()
+	s5.load_region(old_rec)
+	ok(s5.health.hediffs.size() == 1 and s5.health.hediffs[0] is KernelHealth.Hediff_Injury, "legacy hp migrates to one torso wound")
+	ok(float(s5.health.total_bleed()) == 0.0, "the migrated wound is tended (no bleed surprise)")
+	ok(float(s5.player.hp) < 100.0 and float(s5.player.hp) > 0.0, "migrated readout reflects the lived-in body")
+	# JSON file round-trip (int->float coercion) keeps the record hash-stable
+	var via_json: Variant = JSON.parse_string(JSON.stringify(rec))
+	var s6 = Sim.new()
+	s6.load_region(via_json)
+	ok(Persistence.content_hash(s6.health_dict()) == Persistence.content_hash(s.health_dict()),
+		"health record survives a JSON round-trip")
+
 # «координати — це seed» поширюється й на загрози: рейд-хвилі, засідки на конвої та лут
 # ідуть з окремого seeded потоку (sim.threat_rng), незалежного від погодного (env_rng).
 func _t_raid_determinism() -> void:
@@ -795,7 +1043,8 @@ func _t_content_pack() -> void:
 	ok(int(s.stock.stone) == stone0 and "дослідження" in s.flash_msg, "турель заборонена до Механіки (кошти цілі)")
 	# відкриваємо гілки — все стає доступним
 	s.research_unlocked = {"masonry": true, "hunting": true, "smelting": true, "smithing": true, "machining": true}
-	# броня: панцир ріже вхідний урон удвічі
+	# броня: панцир ріже вхідний урон удвічі — удар лягає ЛОКАЛІЗОВАНОЮ раною на тракер
+	# (sim/hero_health.gd), тож звіряємо сумарну тяжкість ран, а не віднімання від hp-флоата
 	ok(bool(s.craft_item("plate").ok), "панцир скрафчено на верстаку (після Ковальства)")
 	ok(String(s.player.equipped.get("armor", "")) == "plate", "панцир екіповано у слот armor")
 	ok(absf(s.armor_mult() - 0.5) < 0.001, "панцир ріже урон удвічі")
@@ -804,9 +1053,14 @@ func _t_content_pack() -> void:
 	s.enemies.append(atk)
 	var php0: float = float(s.player.hp)
 	s._update_enemies(0.01)
-	ok(absf((php0 - float(s.player.hp)) - float(atk.dmg) * 0.5) < 0.01, "вхідний удар порізаний бронею")
+	var wound_sev := 0.0
+	for h in s.health.hediffs:
+		wound_sev += float(h.severity)
+	ok(absf(wound_sev - float(atk.dmg) * 0.5 * 0.55) < 0.01, "вхідний удар порізаний бронею і ліг раною на частину тіла")
+	ok(float(s.player.hp) <= php0, "hp-редаут відбиває отриману рану")
 	s.enemies.clear()
-	# кувалда і лук: топ-тір спорядження
+	# кувалда і лук: топ-тір спорядження (свіже тіло — поранена рука била б слабше, і це фіча)
+	s.health_reset()
 	ok(bool(s.craft_item("sledge").ok) and bool(s.craft_item("bow").ok), "кувалда і лук скрафчені")
 	ok(absf(s.melee_damage() - (12.0 + float(s.player.skills.combat) + 18.0)) < 0.01, "лук додає +18 урону")
 	ok(float(GameData.ITEMS.sledge.gather_mult) > float(GameData.ITEMS.pick.gather_mult), "кувалда швидша за кайло")
@@ -913,6 +1167,268 @@ func _t_research_gates() -> void:
 		% ("" if missing.is_empty() else " — " + ", ".join(PackedStringArray(missing))))
 	ok(drifted.is_empty(), "RESEARCH_LABEL mirrors catalogue labels exactly%s"
 		% ("" if drifted.is_empty() else " — " + ", ".join(PackedStringArray(drifted))))
+
+# ---------------- spec 0008 phases 3–4: живі каталожні build/craft + курований тір ----------------
+func _t_catalog_live() -> void:
+	# 0) курований фільтр — capability-driven чесність: defense без живого мозку не будується,
+	# кабель без ролі (мережа не просторова) — теж; data.gd-ids каталог НЕ дублює (одна правда на id).
+	# Powered-дефи ЖИВІ (Batch 8c): турель несе power-дикт і гейтиться мережею, не викинута.
+	ok(str(CatalogDefs.building("auto_turret").get("power", {}).get("role", "")) == "trader", "powered турель у тірі З power-диктом (мережа жива)")
+	ok(CatalogDefs.building("power_conduit").is_empty(), "кабель поза тіром (мережа не просторова — був би декор)")
+	ok(CatalogDefs.building("mortar").is_empty(), "мінoмет без живого мозку не будується (не декорація)")
+	ok(CatalogDefs.building("bed").is_empty() and CatalogDefs.building("wall").is_empty(), "data.gd-ids каталог не дублює")
+	ok(float(CatalogDefs.building("deadfall_trap").get("trap_dps", 0.0)) > 0.0, "каталожна пастка мапиться на живий trap_dps-мозок")
+	ok(int(CatalogDefs.building("warehouse").get("capacity", 0)) == 800, "ангар несе свою місткість у шов")
+	ok(bool(CatalogDefs.building("stone_wall").get("blocks", false)), "кам'яна стіна блокує (blocks з каталогу)")
+	# збагачений видобуток — чиста функція (cell, amount): детермінований і містить руду
+	var seq_a := []
+	var seq_b := []
+	var kinds := {}
+	for amt in range(1, 13):
+		seq_a.append(CatalogDefs.gather_yield("rock", 77, amt))
+		seq_b.append(CatalogDefs.gather_yield("rock", 77, amt))
+		kinds[CatalogDefs.gather_yield("rock", 77, amt)] = true
+	ok(str(seq_a) == str(seq_b), "вихід ноди — чиста функція (реплей точний)")
+	ok(kinds.has("stone") and kinds.has("iron_ore"), "скеля дає і камінь, і руду (%s)" % str(kinds.keys()))
+
+	# 1) прапор OFF: каталожні id-и відмовляють — шліфований зріз незмінний
+	var off = _flat_sim()
+	off.try_build("kiln", 3, 3)
+	ok(not off.has_building("kiln"), "flag OFF: каталожна будівля не ставиться")
+	ok(not bool(off.craft_catalog("make_charcoal").ok), "flag OFF: каталожний крафт відмовляє")
+
+	# 2) прапор ON: ворота -> будівництво -> крафт-ланцюг на ЖИВОМУ складі
+	var s = _flat_sim(195, true)
+	s.stock[s.res_key("clay")] = 20
+	s.stock[s.res_key("stone")] = 20
+	s.stock[s.res_key("wood")] = 20
+	s.try_build("kiln", 3, 3)
+	ok(not s.has_building("kiln") and "дослідження" in s.flash_msg, "ворота тримають: піч до Опанування вогню не ставиться")
+	s.research_unlocked = {"fire_mastery": true}
+	s.try_build("kiln", 3, 3)
+	ok(s.has_building("kiln"), "після unlock: каталожна піч стоїть у живому світі")
+	ok(int(s.res_amount("clay")) == 8, "будівництво сплатило каталожну ціну (глина 20→8)")
+	var r_no: Dictionary = s.craft_catalog("cut_block")
+	ok(not bool(r_no.ok) and StringName(r_no.reason) == &"no_station", "рецепт без станції відмовляє з причиною")
+	var r_ok: Dictionary = s.craft_catalog("make_charcoal")
+	ok(bool(r_ok.ok) and int(s.stock.get("charcoal", 0)) == 2, "піч перепалює дерево на вугілля (+2)")
+	ok(int(s.res_amount("wood")) == 16, "крафт сплатив входи (дерево 20→16)")
+
+	# 3) живий видобуток: скеля під прапором насипає руду в реальному циклі збору
+	var node_cell := 8 * 16 + 5
+	s.map.nodes[node_cell] = {"kind": "rock", "amount": 12}
+	s.order_gather(5, 8)
+	var guard := 0
+	while s.map.nodes.has(node_cell) and guard < 600:
+		s.update(0.1)
+		s.player.hunger = 100.0
+		s.player.rest = 100.0
+		guard += 1
+	var got_ore: bool = int(s.player.carry.get("iron_ore", 0)) + int(s.res_amount("iron_ore")) > 0
+	ok(got_ore, "живий збір зі скелі приніс залізну руду (курований тір відкрився)")
+
+	# 4) персистенс: каталожна будівля і відкритий склад переживають save/load + world_hash близнюки
+	var rec := Persistence.serialize_region(s)
+	var s2 = Sim.new()
+	s2.load_region(rec)
+	ok(s2.has_building("kiln"), "save/load відновлює каталожну будівлю")
+	ok(int(s2.stock.get("charcoal", 0)) == 2, "save/load відновлює каталожний склад")
+	var t1 = _flat_sim(195, true)
+	var t2 = _flat_sim(195, true)
+	ok(Persistence.world_hash(t1) == Persistence.world_hash(t2), "близнюки з прапором ON хешуються однаково")
+	t1.research_unlocked = {"fire_mastery": true}
+	t1.stock[t1.res_key("clay")] = 20
+	t1.try_build("kiln", 3, 3)
+	ok(Persistence.world_hash(t1) != Persistence.world_hash(t2), "каталожна будівля входить у world_hash")
+
+	# 5) досяжність живого тіра — виведена, не хардкоджена: замикання від живих сировин мусить
+	# накривати сталевий ланцюг (дзеркало tests/catalog.test.js — два валідатори не розійдуться)
+	var cat: Dictionary = Catalog.load_json()
+	var live_raws := ["wood", "stone", "raw_food", "scrap", "iron_ore", "coal", "clay", "sand", "copper_ore", "plant_fiber", "herbal"]
+	var closure := _live_closure(cat, live_raws)
+	for res_id in ["charcoal", "iron_bar", "steel", "components", "medicine", "ammo"]:
+		ok((closure.obtainable as Dictionary).has(StringName(res_id)), "живий тір досягає %s" % res_id)
+	ok((closure.obtainable as Dictionary).size() == 38, "замикання живого тіра: 38 ресурсів (закріплено)")
+	# кожен збагачений вихід нод — справжня сировина каталогу (одруківка = мертвий ресурс у кишені)
+	var res_ids := {}
+	for r in cat.get("resources", []):
+		res_ids[str(r.get("id", ""))] = true
+	for kind in CatalogDefs.GATHER_YIELD:
+		for rid in CatalogDefs.GATHER_YIELD[kind]:
+			ok(res_ids.has(str(rid)), "вихід ноди '%s' існує в каталозі (%s)" % [rid, kind])
+
+# Замикання досяжності від заданих сировин (та сама логіка, що Catalog.reachability, але з
+# довільним сідом замість усіх raw-джерел) — тестова копія для звірки живого тіра.
+func _live_closure(cat: Dictionary, seed_raws: Array) -> Dictionary:
+	var obtainable := {}
+	for rid in seed_raws:
+		obtainable[StringName(str(rid))] = true
+	var unlocked := {}
+	var built := {}
+	var made := {}
+	var changed := true
+	while changed:
+		changed = false
+		for r in cat.get("research", []):
+			var rid := StringName(str(r.get("id", "")))
+			if unlocked.has(rid):
+				continue
+			var all_met := true
+			for p in r.get("prereqs", []):
+				if not unlocked.has(StringName(str(p))):
+					all_met = false
+			if all_met:
+				unlocked[rid] = true
+				changed = true
+		for b in cat.get("buildings", []):
+			var bid := StringName(str(b.get("id", "")))
+			if built.has(bid):
+				continue
+			var cost_ok := true
+			for c in b.get("cost", {}):
+				if not obtainable.has(StringName(str(c))):
+					cost_ok = false
+			var gate := str(b.get("research", ""))
+			if cost_ok and (gate == "" or unlocked.has(StringName(gate))):
+				built[bid] = true
+				changed = true
+		for rc in cat.get("recipes", []):
+			var rcid := StringName(str(rc.get("id", "")))
+			if made.has(rcid):
+				continue
+			var in_ok := true
+			for c in rc.get("inputs", {}):
+				if not obtainable.has(StringName(str(c))):
+					in_ok = false
+			var rgate := str(rc.get("research", ""))
+			if built.has(StringName(str(rc.get("station", "")))) and in_ok and (rgate == "" or unlocked.has(StringName(rgate))):
+				made[rcid] = true
+				obtainable[StringName(str(rc.get("output", {}).get("id", "")))] = true
+				changed = true
+	return {"obtainable": obtainable, "built": built, "made": made}
+
+# ---------------- Batch 8c: жива енергомережа (sim/power.gd на кернел-PowerNetSystem) ----------------
+func _t_power_live() -> void:
+	# прапор OFF: жодної мережі — шліфований зріз не платить ані такту
+	var off = _flat_sim()
+	off.update(0.1)
+	ok((off.power_net as Dictionary).is_empty(), "flag OFF: мережа не існує (нульова ціна)")
+
+	# ON: станція без генератора знеструмлена; генератор оживлює її
+	var s = _flat_sim(195, true)
+	s.research_unlocked = {"electricity": true, "plasteel_working": true, "defense_systems": true}
+	for res in ["planks", "components", "steel", "circuit", "stone", "clay", "wood", "uranium", "chemfuel"]:
+		s.stock[s.res_key(res)] = 500
+	s.try_build("electric_smelter", 3, 3)
+	ok(s.has_building("electric_smelter"), "powered-станція будується (power-тір відкрився)")
+	# знайти рецепт цієї станції з каталогу (генерично — без хардкоду id; входи гранчено вище)
+	var cat: Dictionary = Catalog.load_json()
+	var rc_id := ""
+	for rc in cat.get("recipes", []):
+		if str(rc.get("station", "")) == "electric_smelter":
+			rc_id = str(rc.get("id", ""))
+			break
+	ok(rc_id != "", "у каталозі є рецепт електроплавильні (%s)" % rc_id)
+	s.update(0.1)
+	var r_dark: Dictionary = s.craft_catalog(rc_id)
+	ok(not bool(r_dark.ok) and StringName(r_dark.reason) == &"no_power", "без генератора станція знеструмлена (чесна відмова)")
+	s.try_build("wood_generator", 5, 3)
+	s.update(0.1)
+	ok(bool(s.craft_catalog(rc_id).ok), "генератор 400W живить плавильню 300W — крафт іде")
+	ok(float(s.power_net.supply) >= 399.0 and float(s.power_net.draw) >= 299.0, "HUD-знімок мережі несе supply/draw (%.0f/%.0f)" % [float(s.power_net.supply), float(s.power_net.draw)])
+
+	# пріоритетний шедінг: +автотурель (120W, pri 9) > бюджет 400 -> скидається плавильня (pri 5)
+	s.try_build("auto_turret", 7, 3)
+	s.update(0.1)
+	ok(bool(s.power_net.brownout), "перевантаження оголошено (420W > 400W)")
+	var turret_b: Variant = null
+	var smelter_b: Variant = null
+	for b in s.buildings:
+		if String(b.kind) == "auto_turret":
+			turret_b = b
+		elif String(b.kind) == "electric_smelter":
+			smelter_b = b
+	ok(s.device_active(turret_b) and not s.device_active(smelter_b), "шедінг за пріоритетом: турель (9) жива, плавильня (5) скинута")
+	# powered-турель реально стріляє лише під живленням
+	var foe: Dictionary = GameData.make_raider(7.5, 4.5, 1)
+	s.enemies.append(foe)
+	s._update_turrets(0.6)
+	ok(float(foe.hp) < float(foe.maxhp), "запитана турель стріляє (генерик-мозок + живлення)")
+	s.enemies.clear()
+
+	# батарея буферизує: прибрали турель -> надлишок заряджає; без генератора живить плавильню
+	s.demolish(7, 3)
+	s.try_build("battery", 9, 3)
+	for i in 10:
+		s.update(0.1)
+	var bat_b: Variant = null
+	var gen_b: Variant = null
+	for b in s.buildings:
+		if String(b.kind) == "battery":
+			bat_b = b
+		elif String(b.kind) == "wood_generator":
+			gen_b = b
+	ok(float(bat_b.get("charge", 0.0)) > 0.0, "надлишок заряджає батарею (+%.0f)" % float(bat_b.get("charge", 0.0)))
+	# паливо: генератор п'є дерево зі складу (авторефуел через шов)
+	var wood0: int = s.res_amount("wood")
+	for i in 12:
+		s.update(5.0)   # ~0.4 доби: burn 4/добу відчутний
+	ok(s.res_amount("wood") < wood0, "генератор споживає дерево зі складу (%d -> %d)" % [wood0, s.res_amount("wood")])
+	# глушимо паливо повністю -> батарея тримає плавильню, потім мережа гасне
+	s.stock[s.res_key("wood")] = 0
+	gen_b["fuel"] = 0.0
+	s.power_dirty = true
+	var held_by_battery: bool = false
+	var went_dark: bool = false
+	for i in 40:
+		s.update(0.1)
+		if s.device_active(smelter_b) and float(s.power_net.supply) == 0.0:
+			held_by_battery = true
+		if not s.device_active(smelter_b):
+			went_dark = true
+			break
+	ok(held_by_battery, "батарея тримає станцію після смерті генератора")
+	ok(went_dark, "розряджена мережа чесно гасне")
+
+	# соляр: удень генерує, вночі — ні (детермінований daylight)
+	var sol = _flat_sim(195, true)
+	sol.research_unlocked = {"electricity": true, "electronics": true}
+	for res in ["steel", "glass", "circuit"]:
+		sol.stock[sol.res_key(res)] = 100
+	sol.try_build("solar_panel", 3, 3)
+	sol.time.frac = 0.5
+	sol.update(0.1)
+	var day_supply: float = float(sol.power_net.supply)
+	sol.time.frac = 0.02
+	sol.update(0.1)
+	ok(day_supply > 500.0 and float(sol.power_net.supply) < 50.0, "соляр: день %dW -> ніч %dW (реальна крива світла)" % [int(day_supply), int(sol.power_net.supply)])
+
+	# персистенс: паливо/заряд їдуть у сейв і у world_hash
+	var rec := Persistence.serialize_region(s)
+	var has_charge := false
+	for b in rec.buildings:
+		if (b as Dictionary).has("charge"):
+			has_charge = true
+	ok(has_charge, "сейв несе заряд батареї")
+	var s2 = Sim.new()
+	s2.load_region(rec)
+	s2.update(0.1)
+	var bat2: Variant = null
+	for b in s2.buildings:
+		if String(b.kind) == "battery":
+			bat2 = b
+	ok(bat2 != null and absf(float(bat2.get("charge", 0.0)) - float(bat_b.get("charge", 0.0))) < 1.0, "load відновлює заряд батареї")
+	var t1 = _flat_sim(195, true)
+	var t2 = _flat_sim(195, true)
+	for tw in [t1, t2]:
+		tw.research_unlocked = {"electricity": true}
+		tw.stock[tw.res_key("planks")] = 100
+		tw.stock[tw.res_key("components")] = 100
+		tw.try_build("wood_generator", 3, 3)
+		tw.update(0.5)
+	ok(Persistence.world_hash(t1) == Persistence.world_hash(t2), "близнюки з мережею хешуються однаково (паливо в хеші)")
+	for sim_x in [s, s2, sol, t1, t2, off]:
+		sim_x.dispose_power()
 
 # spec 0008: сейв несе словник ключів складу — use_catalog мусить пережити роундтрип, інакше
 # save(ON) -> load(OFF) читає чужі ключі й склад «зникає» без діагностики.

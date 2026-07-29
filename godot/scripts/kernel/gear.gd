@@ -214,7 +214,10 @@ const COMFORT_MIN_C := 12.0
 const COMFORT_MAX_C := 30.0
 # How fast severity moves per game-day per °C past the band edge, and how fast it recedes inside the band.
 const COMFORT_GAIN_PER_C_DAY := 0.05
-const COMFORT_RECOVER_PER_DAY := 0.35
+# Recovery is deliberately MUCH faster than onset (full severity clears in ~half a day by a fire):
+# frostbite takes hours, warming up takes minutes — the asymmetry is what makes stepping out into a
+# lethal winter recoverable, so heat sources read as sanctuaries rather than slow-drip medicine.
+const COMFORT_RECOVER_PER_DAY := 2.0
 
 class Hediff_Hypothermia extends Health.Hediff:
 	func _init(p_part = null) -> void:
@@ -230,8 +233,12 @@ class Hediff_Hypothermia extends Health.Hediff:
 			return clampf(1.0 - severity * 0.5, 0.2, 1.0)
 		return 1.0
 
+	# EXACT zero, not an epsilon: at per-frame dday (~0.003) one tick of growth sits far below any
+	# epsilon, so an epsilon-gone() would sweep the hediff the same tick it is born and severity
+	# could never accumulate. Receding already reaches literal 0.0 (maxf-floored), so the sweep
+	# still collects fully-recovered hediffs.
 	func gone() -> bool:
-		return severity <= 0.02
+		return severity <= 0.0
 
 	func inspect() -> String:
 		return "переохолодження: тяж.%.2f" % severity
@@ -248,7 +255,7 @@ class Hediff_Heatstroke extends Health.Hediff:
 		return 1.0
 
 	func gone() -> bool:
-		return severity <= 0.02
+		return severity <= 0.0   # exact zero — see Hediff_Hypothermia.gone()
 
 	func inspect() -> String:
 		return "тепловий удар: тяж.%.2f" % severity

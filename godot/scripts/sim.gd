@@ -7,7 +7,11 @@ const Climate = preload("res://scripts/kernel/climate.gd")
 const Threats = preload("res://scripts/sim/threats.gd")
 const SimEnv = preload("res://scripts/sim/environment.gd")
 const WorldMeta = preload("res://scripts/sim/world_meta.gd")
+const HeroHealth = preload("res://scripts/sim/hero_health.gd")
+const SimPower = preload("res://scripts/sim/power.gd")
 const DataBridge = preload("res://scripts/data_bridge.gd")
+const CatalogDefs = preload("res://scripts/catalog_defs.gd")
+const Catalog = preload("res://scripts/kernel/catalog.gd")
 
 var map: Dictionary
 var n: int = 0
@@ -30,6 +34,17 @@ var regions: Array = []
 var convoy_seq := 0
 var craft_timer := 0.0
 var dead := false
+# Located hero health (kernel/health.gd tracker; driven by sim/hero_health.gd). player.hp is a
+# DERIVED readout of it; the tracker is what saves, travels and gets hit.
+var health: Variant = null
+var health_alerts: Dictionary = {}   # feed-toast stages per condition (view-side memory, not hashed)
+# Power grid (Batch 8c, sim/power.gd): a derived Thing fleet over the placed powered buildings.
+# power_net/power_active are the per-tick verdicts; fuel/charge live ON the building dicts (saved).
+var power_things: Dictionary = {}    # cell -> kernel Thing (derived cache; never serialized)
+var power_net: Dictionary = {}       # {supply, draw, stored, capacity, brownout} readout
+var power_active: Dictionary = {}    # cell -> bool : did the net deliver this tick
+var power_dirty := true              # building set changed -> rebuild the fleet lazily
+var power_sys: Variant = null        # kernel PowerNetSystem (created once)
 var move_input := Vector2.ZERO
 var messages: Array = []
 var messages_seq := 0              # monotonic lifetime append counter (spec 0005 §2.7 FeedbackBus seam);
@@ -102,6 +117,8 @@ func new_game(m: Dictionary) -> void:
 	_place_building("storage", lx, ly, -1)
 	_init_regions()
 	_env_init()
+	HeroHealth.reset(self)
+	HeroHealth.spawn_hint(self)
 
 # Arrive in a NEW region by capsule: your pawn + full personal inventory, but no base/stock here.
 func arrive_region(m: Dictionary, pawn: Dictionary) -> void:
@@ -119,6 +136,8 @@ func arrive_region(m: Dictionary, pawn: Dictionary) -> void:
 	_reset_local_threats()
 	_init_regions()
 	_env_init()
+	apply_health_dict(pawn.get("health", {}))   # wounds travel with the pawn (legacy pawn -> from hp)
+	HeroHealth.spawn_hint(self)
 	dead = false
 
 # Region-local state (raiders, convoys, pending raid) does not travel between regions.
@@ -141,6 +160,7 @@ func extract_pawn() -> Dictionary:
 		"equipped": (player.equipped as Dictionary).duplicate(true),
 		"items": (player.items as Array).duplicate(true),
 		"hp": float(player.hp), "hunger": float(player.hunger), "rest": float(player.rest),
+		"health": health_dict(),
 	}
 
 # Overwrite the current pawn's portable state with a travelling pawn, placed at this region's base.
@@ -149,6 +169,7 @@ func apply_pawn(pawn: Dictionary) -> void:
 		if pawn.has(k):
 			player[k] = (pawn[k].duplicate(true) if (pawn[k] is Dictionary or pawn[k] is Array) else pawn[k])
 	player.carry_cap = int(player.carry_cap)
+	apply_health_dict(pawn.get("health", {}))
 	var c := base_center()
 	player.px = c.x + 0.5
 	player.py = c.y + 1.5
@@ -198,9 +219,14 @@ func load_region(data: Dictionary) -> void:
 	bgrid = {}
 	_reset_local_threats()
 	for b in data.buildings:
-		_place_building(str(b.kind), int(b.x), int(b.y), float(b.hp))
+		var placed: Dictionary = _place_building(str(b.kind), int(b.x), int(b.y), float(b.hp))
+		for f in ["fuel", "charge"]:   # power grid state rides the building record (Batch 8c)
+			if b.has(f):
+				placed[f] = float(b[f])
 	_init_regions()
 	_env_init()
+	# AFTER the player fields: an old record has no "health" and migrates from the restored hp float
+	apply_health_dict(data.get("health", {}))
 	dead = false
 
 func _build_astar() -> void:
@@ -223,7 +249,7 @@ func _build_astar() -> void:
 func _refresh_solid(x: int, y: int) -> void:
 	var i := y * n + x
 	var solid := WorldGen.is_terrain_blocked(map.tiles[i])
-	if bgrid.has(i) and GameData.BUILDINGS[bgrid[i].kind].get("blocks", false):
+	if bgrid.has(i) and building_def(String(bgrid[i].kind)).get("blocks", false):
 		solid = true
 	astar.set_point_solid(Vector2i(x, y), solid)
 
@@ -231,7 +257,7 @@ func after_map_change() -> void:
 	# OSM overlay rewrote terrain: rebuild pathing grids + relocate to the new clearing
 	_build_astar()
 	for b in buildings:
-		if GameData.BUILDINGS[b.kind].get("blocks", false):
+		if building_def(String(b.kind)).get("blocks", false):
 			_refresh_solid(b.x, b.y)
 	var sp: Vector2i = map.spawn
 	player.px = sp.x + 0.5
@@ -277,7 +303,7 @@ func is_blocked(x: int, y: int) -> bool:
 	if WorldGen.is_terrain_blocked(map.tiles[y * n + x]):
 		return true
 	if bgrid.has(y * n + x):
-		return GameData.BUILDINGS[bgrid[y * n + x].kind].get("blocks", false)
+		return building_def(String(bgrid[y * n + x].kind)).get("blocks", false)
 	return false
 
 func carry_total() -> int:
@@ -295,7 +321,7 @@ func stock_total() -> int:
 func storage_cap() -> int:
 	var c := 200
 	for b in buildings:
-		var def: Dictionary = GameData.BUILDINGS[b.kind]
+		var def: Dictionary = building_def(String(b.kind))
 		if def.has("capacity"):
 			c += int(def.capacity)
 	return c
@@ -308,6 +334,16 @@ func deposit(res: String, amt: int) -> int:
 	if add < amt:
 		_log("⚠ Склад переповнений — частину втрачено.", "warn")
 	return add
+
+# ---------------- def seam (spec 0008 phase 3) ----------------
+# The ONE place a building id becomes a def dict. data.gd owns its tuned Phase-0 defs; with the flag
+# on, catalogue-only ids resolve through the CatalogDefs adapter (same dict shape), so every tick
+# path (blocks/heat/light/traps/turrets/capacity/hp) serves both vocabularies without caring.
+# {} == unknown/not-live-buildable (try_build refuses it).
+func building_def(kind: String) -> Dictionary:
+	if GameData.BUILDINGS.has(kind):
+		return GameData.BUILDINGS[kind]
+	return CatalogDefs.building(kind) if use_catalog else {}
 
 # ---------------- open stock (spec 0008 phase 2) ----------------
 # The ONE seam every stock access goes through. Live data.gd id -> storage key: identity while
@@ -393,7 +429,7 @@ func temp_at(x: int, y: int) -> float:
 	if is_indoor(x, y):
 		t += (INDOOR_SETPOINT_C - t) * INDOOR_INSULATION
 	for b in buildings:
-		var heat := float(GameData.BUILDINGS[b.kind].get("extra", {}).get("heat", 0.0))
+		var heat := float(building_def(String(b.kind)).get("extra", {}).get("heat", 0.0))
 		if heat <= 0.0 or not device_active(b):
 			continue
 		if absi(b.x - x) + absi(b.y - y) <= EMITTER_RADIUS:
@@ -403,6 +439,33 @@ func temp_at(x: int, y: int) -> float:
 func hero_temp_c() -> float:
 	return temp_at(int(player.px), int(player.py))
 
+# Equipped warmth °C (data.gd `insul` on worn gear) — raises the FELT temperature against the cold,
+# and symmetrically pushes it up in the heat (a scrap vest is a parka in summer; kernel gear parity).
+func hero_insulation_c() -> float:
+	var w := 0.0
+	for slot in player.equipped:
+		var id: String = String(player.equipped[slot])
+		if id != "" and GameData.ITEMS.has(id):
+			w += float(GameData.ITEMS[id].get("insul", 0.0))
+	return w
+
+# The comfort °C the BODY experiences: tile temp (indoor buffering + emitters) + worn insulation.
+func hero_felt_c() -> float:
+	return hero_temp_c() + hero_insulation_c()
+
+# ---------------- hero health (sim/hero_health.gd delegates) ----------------
+func hero_downed() -> bool:
+	return HeroHealth.is_downed(self)
+
+func health_dict() -> Dictionary:
+	return HeroHealth.to_dict(self)
+
+func apply_health_dict(d: Dictionary) -> void:
+	HeroHealth.apply_dict(self, d)
+
+func health_reset() -> void:
+	HeroHealth.reset(self)
+
 # Ambient daylight 0..1 from the real-latitude model (long winter nights at high latitude).
 func daylight_level() -> float:
 	return climate.daylight(float(map.lat), int(time.day), float(time.frac))
@@ -411,7 +474,7 @@ func daylight_level() -> float:
 func light_at(x: int, y: int) -> float:
 	var light := daylight_level()
 	for b in buildings:
-		if not bool(GameData.BUILDINGS[b.kind].get("extra", {}).get("light", false)):
+		if not bool(building_def(String(b.kind)).get("extra", {}).get("light", false)):
 			continue
 		if not device_active(b):
 			continue
@@ -421,10 +484,14 @@ func light_at(x: int, y: int) -> float:
 			light = maxf(light, clampf(1.0 - dist / radius, 0.0, 1.0))
 	return clampf(light, 0.0, 1.0)
 
-# Does this device run right now? Fuel-free passives (багаття/смолоскип) always do; grid devices
-# (heater/lamp/cooler/turret) gate on the power net once Batch 8c wires it — this is that seam.
-func device_active(_b) -> bool:
-	return true
+# Does this device run right now? Fuel-free passives (багаття/смолоскип — every data.gd def) always
+# do; a def that declares a power TRADER role runs only when the net delivered this tick (Batch 8c,
+# sim/power.gd — the seam this function was built for).
+func device_active(b) -> bool:
+	return SimPower.is_active(self, b)
+
+func dispose_power() -> void:
+	SimPower.dispose(self)
 
 func is_wet() -> bool:
 	return weather == &"rain" or weather == &"snow"
@@ -445,10 +512,11 @@ func _recompute_indoor() -> void:
 
 # ---------------- building ----------------
 func _place_building(kind: String, x: int, y: int, hp: float):
-	var def: Dictionary = GameData.BUILDINGS[kind]
-	var b := {"kind": kind, "x": x, "y": y, "hp": (def.hp if hp < 0 else hp), "cool": 0.0, "aim": 0.0}
+	var def: Dictionary = building_def(kind)
+	var b := {"kind": kind, "x": x, "y": y, "hp": (float(def.get("hp", 50.0)) if hp < 0 else hp), "cool": 0.0, "aim": 0.0}
 	buildings.append(b)
 	bgrid[y * n + x] = b
+	power_dirty = true
 	if def.get("blocks", false):
 		_refresh_solid(x, y)
 	if def.get("blocks", false) or kind.begins_with("door"):
@@ -458,8 +526,9 @@ func _place_building(kind: String, x: int, y: int, hp: float):
 func _remove_building(b) -> void:
 	buildings.erase(b)
 	bgrid.erase(b.y * n + b.x)
+	power_dirty = true
 	_refresh_solid(b.x, b.y)
-	if GameData.BUILDINGS[b.kind].get("blocks", false) or String(b.kind).begins_with("door"):
+	if building_def(String(b.kind)).get("blocks", false) or String(b.kind).begins_with("door"):
 		_recompute_indoor()
 
 func build_valid(x: int, y: int) -> bool:
@@ -478,12 +547,17 @@ func try_build(kind: String, x: int, y: int) -> void:
 	if not build_valid(x, y):
 		_flash("Тут не можна будувати.")
 		return
-	var def: Dictionary = GameData.BUILDINGS[kind]
+	# ONE def seam serves both vocabularies: data.gd ids always; catalogue-only ids when the flag is
+	# on ({} refusal covers unknown ids AND catalogue ids while the flag is off).
+	var def: Dictionary = building_def(kind)
+	if def.is_empty():
+		_flash("Тут не можна будувати.")
+		return
 	if not research_ok(def):
 		_flash("🔒 Потребує дослідження: %s." % _research_label(def))
 		return
 	if not afford(def.cost):
-		_flash("Бракує: " + GameData.cost_str(def.cost))
+		_flash("Бракує: " + _cost_str(def.cost))
 		return
 	GameData.pay_cost(stock, cost_keys(def.cost))
 	_place_building(kind, x, y, -1)
@@ -501,14 +575,15 @@ func demolish(x: int, y: int) -> Dictionary:
 				storages += 1
 		if storages <= 1:
 			return {"ok": false, "msg": "Не можна знести єдиний склад."}
+	var bdef: Dictionary = building_def(String(b.kind))
 	var refund := {}
-	for res in GameData.BUILDINGS[b.kind].cost:
-		var back: int = int(GameData.BUILDINGS[b.kind].cost[res]) / 2
+	for res in bdef.get("cost", {}):
+		var back: int = int(bdef.cost[res]) / 2
 		if back > 0:
 			deposit(res, back)
 			refund[res] = back
 	_remove_building(b)
-	_log("♻ %s розібрано%s." % [GameData.BUILDINGS[b.kind].name, (" (+" + GameData.cost_str(refund) + ")") if not refund.is_empty() else ""], "good")
+	_log("♻ %s розібрано%s." % [bdef.get("name", b.kind), (" (+" + _cost_str(refund) + ")") if not refund.is_empty() else ""], "good")
 	return {"ok": true}
 
 # ---------------- items / equipment (spec 0001) ----------------
@@ -518,7 +593,9 @@ func gather_time(node) -> float:
 	var tool: String = player.equipped.get("tool", "")
 	if tool != "" and GameData.ITEMS.has(tool):
 		mult *= float(GameData.ITEMS[tool].get("gather_mult", 1.0))
-	return info.time / mult * dark_work_mult()
+	# darkness and the body both slow the work: HeroHealth.work_mult reads the Manipulation capacity
+	# (wounded arms, deep cold, starvation), 1.0 at full health.
+	return info.time / mult * dark_work_mult() * HeroHealth.work_mult(self)
 
 # Ворота дерева досліджень: def без поля `research` відкритий завжди; інакше — лише коли session
 # домостив відповідний catalog-id у research_unlocked (ключі можуть бути String АБО StringName).
@@ -528,7 +605,17 @@ func research_ok(def: Dictionary) -> bool:
 
 func _research_label(def: Dictionary) -> String:
 	var need := String(def.get("research", ""))
-	return String(GameData.RESEARCH_LABEL.get(need, need))
+	# data.gd mirrors the labels for its own five gates; catalogue-only gates read the catalogue label
+	return String(GameData.RESEARCH_LABEL.get(need, CatalogDefs.research_label(need)))
+
+# Cost line valid in EITHER stock vocabulary (data.gd RES icons know only the 6 live ids).
+func _cost_str(cost: Dictionary) -> String:
+	if not use_catalog:
+		return GameData.cost_str(cost)
+	var parts := []
+	for k in cost:
+		parts.append("%s%d" % [CatalogDefs.res_icon(str(k)), int(cost[k])])
+	return " ".join(parts)
 
 # Броня ріже вхідний урон: 1.0 без броні, 0.7 у жилеті, 0.5 у панцирі (data.gd dmg_cut).
 func armor_mult() -> float:
@@ -542,13 +629,60 @@ func melee_damage() -> float:
 	var wpn: String = player.equipped.get("weapon", "")
 	if wpn != "" and GameData.ITEMS.has(wpn):
 		dmg += float(GameData.ITEMS[wpn].get("dmg_bonus", 0.0))
-	return dmg
+	return dmg * HeroHealth.melee_mult(self)   # a mangled arm swings weaker; 1.0 at full health
 
 func has_workbench() -> bool:
 	for b in buildings:
 		if b.kind == "workbench":
 			return true
 	return false
+
+func has_building(kind: String) -> bool:
+	for b in buildings:
+		if String(b.kind) == kind:
+			return true
+	return false
+
+# ---------------- catalogue crafting (spec 0008 phase 3) ----------------
+# Execute a catalogue recipe at its placed station: pay the inputs from the open stock, deposit the
+# output. Instant, like the slice's craft_item (work-time bills stay kernel-side for now). Returns
+# value-data {ok, reason, ...} — the ROUTER maps reasons to user-facing text (R10: no new Ukrainian
+# authored here; `label` fields pass through catalogue data).
+func craft_catalog(recipe_id: String) -> Dictionary:
+	var rc: Dictionary = CatalogDefs.recipe(recipe_id)
+	var refusal := _craft_refusal(rc)
+	if not refusal.is_empty():
+		return refusal
+	var inputs: Dictionary = rc.get("inputs", {})
+	GameData.pay_cost(stock, cost_keys(inputs))
+	var out: Dictionary = rc.get("output", {})
+	var added := deposit(String(out.get("id", "")), int(out.get("count", 1)))
+	return {"ok": true, "label": String(rc.get("label", recipe_id)), "added": added,
+		"out_icon": CatalogDefs.res_icon(String(out.get("id", "")))}
+
+# The first failing precondition as a value-data refusal ({} == craftable now). Single-exit
+# elif-chain so each guard names its reason without a return-ladder.
+func _craft_refusal(rc: Dictionary) -> Dictionary:
+	var station := String(rc.get("station", ""))
+	var st: Variant = null
+	for b in buildings:
+		if String(b.kind) == station:
+			st = b
+			break
+	var r: Dictionary = {}
+	if not use_catalog:
+		r = {"ok": false, "reason": &"catalog_off"}
+	elif rc.is_empty():
+		r = {"ok": false, "reason": &"unknown"}
+	elif st == null:
+		r = {"ok": false, "reason": &"no_station", "station_label": CatalogDefs.building_label(station)}
+	elif not device_active(st):
+		r = {"ok": false, "reason": &"no_power", "station_label": CatalogDefs.building_label(station)}
+	elif not research_ok(rc):
+		r = {"ok": false, "reason": &"locked", "research_label": _research_label(rc)}
+	elif not afford(rc.get("inputs", {})):
+		r = {"ok": false, "reason": &"cost", "missing": _cost_str(Catalog.missing_for(cost_keys(rc.get("inputs", {})), stock))}
+	return r
 
 func craft_item(item_id: String) -> Dictionary:
 	if not GameData.ITEMS.has(item_id):
@@ -674,6 +808,7 @@ func update(dt: float) -> void:
 		_log("🌅 Новий день: %d" % time.day)
 		_grant_daily_capsule()
 	_update_environment(dt / time.day_len)
+	SimPower.update(self, dt)   # after environment (solar reads daylight, wind reads weather)
 	_update_player(dt)
 	_update_crafting(dt)
 	_update_raids(dt)
@@ -693,16 +828,13 @@ func _update_player(dt: float) -> void:
 	p.dep_cd = max(0.0, p.dep_cd - dt)
 	p.hunger = clampf(p.hunger - 0.42 * dt, 0, 100)
 	p.rest = clampf(p.rest - (-14.0 if p.sleeping else 0.30) * dt, 0, 100)
-	if p.hunger <= 0:
-		p.hp -= 2.0 * dt
-	if p.rest <= 0:
-		p.hp -= 1.0 * dt
-	if p.hunger > 45 and p.rest > 25 and p.hp < 100:
-		p.hp = min(100.0, p.hp + 0.7 * dt)
-	p.hp = clampf(p.hp, 0, 100)
-	if p.hp <= 0 and not dead:
-		_on_death()
+	# located health (sim/hero_health.gd): empty needs and the real climate grow condition hediffs,
+	# wounds heal/bleed, the death verdict falls, and p.hp becomes the derived readout of it all.
+	HeroHealth.update(self, dt)
+	if dead:
 		return
+	if HeroHealth.is_downed(self):
+		return   # unconscious where they fell: no eating, hauling, orders or movement; needs run on
 	if p.hunger < 55 and p.eat_cd <= 0 and res_amount("food") >= 1 and _near_storage(2.2):
 		stock[res_key("food")] -= 1
 		p.hunger = min(100.0, p.hunger + 38.0)
@@ -713,13 +845,13 @@ func _update_player(dt: float) -> void:
 				var a := deposit(k, p.carry[k])
 				p.carry[k] -= a
 		p.dep_cd = 0.4
+	var step := 3.4 * HeroHealth.move_mult(self) * dt   # wounded legs / blood loss / freezing slow you
 	if move_input.length() > 0.1:
 		p.action = null
 		p.sleeping = false
-		var spd := 3.4 * dt
 		var v := move_input.normalized()
-		var nx: float = p.px + v.x * spd
-		var ny: float = p.py + v.y * spd
+		var nx: float = p.px + v.x * step
+		var ny: float = p.py + v.y * step
 		if not is_blocked(int(floor(nx)), int(floor(p.py))):
 			p.px = nx
 		if not is_blocked(int(floor(p.px)), int(floor(ny))):
@@ -733,7 +865,6 @@ func _update_player(dt: float) -> void:
 	if p.action == null:
 		_maybe_sleep(dt)
 		return
-	var step := 3.4 * dt
 	match p.action.type:
 		"move":
 			if _follow_path(p, p.action.path, step):
@@ -765,7 +896,15 @@ func _do_gather(dt: float, step: float) -> void:
 			_flash("Несеш максимум — на склад 📦.")
 			p.action = null
 			return
-		p.carry[info.res] = p.carry.get(info.res, 0) + 1
+		# phase 4 (spec 0008): under the open catalogue, a node yields its catalogue BUNDLE — rocks
+		# occasionally give ore/coal/clay/sand, trees fiber, bushes herbs. Pure function of
+		# (cell, remaining amount): deterministic, and it consumes NO rng stream.
+		var res: String = str(info.res)
+		if use_catalog:
+			var enriched := CatalogDefs.gather_yield(str(node.kind), int(a.cell), int(node.amount))
+			if enriched != "":
+				res = enriched
+		p.carry[res] = p.carry.get(res, 0) + 1
 		node.amount -= 1
 		p.skills.gather = min(20.0, p.skills.gather + 0.2)
 		if node.amount <= 0:

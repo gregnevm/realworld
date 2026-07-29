@@ -13,6 +13,7 @@ extends RefCounted
 const GameData = preload("res://scripts/data.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
 const Social = preload("res://scripts/social.gd")
+const HeroHealth = preload("res://scripts/sim/hero_health.gd")
 
 # ---------------- raids ----------------
 static func update_raids(s, dt: float) -> void:
@@ -129,7 +130,7 @@ static func update_enemies(s, dt: float) -> void:
 		# будь-яка майбутня будівля з trap_dps ранить воїв без правки цього мозку (як blocks/extra.heat)
 		var ti: int = int(e.py) * s.n + int(e.px)
 		if s.bgrid.has(ti):
-			var trap_dps := float(GameData.BUILDINGS[s.bgrid[ti].kind].get("trap_dps", 0.0))
+			var trap_dps := float(s.building_def(String(s.bgrid[ti].kind)).get("trap_dps", 0.0))
 			if trap_dps > 0.0:
 				damage_enemy(s, e, trap_dps * dt)
 				damage_building(s, s.bgrid[ti], 4.0 * dt, false, "")
@@ -140,10 +141,10 @@ static func update_enemies(s, dt: float) -> void:
 		if dtp < 1.25:
 			e.face = atan2(p.py - e.py, p.px - e.px)
 			if e.atk_cd <= 0:
-				p.hp = clampf(p.hp - e.dmg * s.armor_mult(), 0, 100)
+				# armor cuts the blow, then it lands as a LOCATED injury (sim/hero_health.gd picks
+				# the body part off the same threat stream; a smashed vital part is death right there)
+				HeroHealth.damage(s, e.dmg * s.armor_mult(), "удар робота" if String(e.get("kind", "raider")) == "bot" else "удар рейдера")
 				e.atk_cd = 1.1
-				if p.hp <= 0 and not s.dead:
-					on_death(s)
 			continue
 		var st: Variant = null
 		for b in s.buildings:
@@ -166,7 +167,7 @@ static func update_enemies(s, dt: float) -> void:
 		if not e.path.is_empty():
 			var nx: Vector2i = e.path[0]
 			var bi: int = nx.y * s.n + nx.x
-			if s.bgrid.has(bi) and GameData.BUILDINGS[s.bgrid[bi].kind].get("blocks", false):
+			if s.bgrid.has(bi) and s.building_def(String(s.bgrid[bi].kind)).get("blocks", false):
 				e.face = atan2(nx.y + 0.5 - e.py, nx.x + 0.5 - e.px)
 				if e.atk_cd <= 0:
 					damage_building(s, s.bgrid[bi], e.dmg, false, destroyer)
@@ -177,19 +178,25 @@ static func update_enemies(s, dt: float) -> void:
 		else:
 			s._step_to(e, center.x + 0.5, center.y + 0.5, step)
 
+# Data-capability turret brain (the trap_dps pattern): ANY building whose def carries a range fires —
+# data.gd's turret via {range, dps} (shot = dps×0.5 every 0.5s, exactly as shipped), catalogue turrets
+# via {range, shot_dmg, shot_cool}. Adding a turret def never edits this brain.
 static func update_turrets(s, dt: float) -> void:
 	for b in s.buildings:
-		if b.kind != "turret":
+		var def: Dictionary = s.building_def(String(b.kind))
+		var reach := float(def.get("range", 0.0))
+		if reach <= 0.0:
 			continue
-		var def: Dictionary = GameData.BUILDINGS.turret
+		if not s.device_active(b):
+			continue   # a browned-out powered turret holds fire (Batch 8c)
 		b.cool = max(0.0, b.cool - dt)
-		var e: Variant = s._nearest_enemy(b.x + 0.5, b.y + 0.5, def.range)
+		var e: Variant = s._nearest_enemy(b.x + 0.5, b.y + 0.5, reach)
 		if e == null:
 			continue
 		b.aim = atan2(e.py - (b.y + 0.5), e.px - (b.x + 0.5))
 		if b.cool <= 0:
-			b.cool = 0.5
-			damage_enemy(s, e, def.dps * 0.5)
+			b.cool = 0.5 if def.has("dps") else float(def.get("shot_cool", 1.0))
+			damage_enemy(s, e, float(def.dps) * 0.5 if def.has("dps") else float(def.get("shot_dmg", 0.0)))
 			s.shots.append({"x1": b.x + 0.5, "y1": b.y + 0.5, "x2": e.px, "y2": e.py, "t": 0.12})
 
 # ---------------- damage + death ----------------
@@ -207,10 +214,11 @@ static func damage_building(s, b, amt: float, steal: bool, destroyer: String = "
 			s.stock[s.res_key(kk)] -= lost
 	if b.hp <= 0:
 		s._remove_building(b)
+		var bname: String = str(s.building_def(String(b.kind)).get("name", b.kind))
 		if destroyer == "":
-			s._log("💥 %s зносилися від спрацьовувань." % GameData.BUILDINGS[b.kind].name, "bad")
+			s._log("💥 %s зносилися від спрацьовувань." % bname, "bad")
 		else:
-			s._log("💥 %s зруйновано %s." % [GameData.BUILDINGS[b.kind].name, destroyer], "bad")
+			s._log("💥 %s зруйновано %s." % [bname, destroyer], "bad")
 
 static func damage_enemy(s, e, amt: float) -> void:
 	e.hp -= amt
@@ -243,6 +251,7 @@ static func respawn_new_pawn(s) -> void:
 	if open == Vector2i(-1, -1):
 		open = s.map.spawn
 	s.player = s._default_player(open)
+	HeroHealth.reset(s)   # the rookie arrives in an unscarred body
 	s.enemies = []
 	s.raid.active = false
 	s.raid.warned = false

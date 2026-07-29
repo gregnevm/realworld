@@ -53,12 +53,13 @@ const ITEMS := {
 	"pick": {"name": "Кайло", "slot": "tool", "gather_mult": 1.9, "recipe": {"wood": 12, "stone": 16}},
 	"club": {"name": "Кийок", "slot": "weapon", "dmg_bonus": 6.0, "recipe": {"wood": 20}},
 	"spear": {"name": "Спис", "slot": "weapon", "dmg_bonus": 12.0, "recipe": {"wood": 15, "scrap": 8}},
-	# Контент-пак: топ-тір інструмент, далекий бій і броня (slot "armor", dmg_cut ріже вхідний урон).
+	# Контент-пак: топ-тір інструмент, далекий бій і броня (slot "armor", dmg_cut ріже вхідний урон;
+	# `insul` — °C тепла до відчутної температури тіла: жилет гріє, голий метал панцира — ледве).
 	# `research` — гейт із дерева досліджень (як у будівель); стартова четвірка — без воріт.
 	"sledge": {"name": "Кувалда", "slot": "tool", "gather_mult": 2.2, "recipe": {"wood": 20, "stone": 20, "scrap": 10}, "research": "masonry"},
 	"bow": {"name": "Лук", "slot": "weapon", "dmg_bonus": 18.0, "recipe": {"wood": 25, "scrap": 6}, "research": "hunting"},
-	"vest": {"name": "Жилет із брухту", "slot": "armor", "dmg_cut": 0.3, "recipe": {"scrap": 18}, "research": "smelting"},
-	"plate": {"name": "Панцир Старого світу", "slot": "armor", "dmg_cut": 0.5, "recipe": {"scrap": 24, "components": 3}, "research": "smithing"},
+	"vest": {"name": "Жилет із брухту", "slot": "armor", "dmg_cut": 0.3, "insul": 3.0, "recipe": {"scrap": 18}, "research": "smelting"},
+	"plate": {"name": "Панцир Старого світу", "slot": "armor", "dmg_cut": 0.5, "insul": 1.0, "recipe": {"scrap": 24, "components": 3}, "research": "smithing"},
 }
 const ITEM_ORDER := ["axe", "pick", "club", "spear", "sledge", "bow", "vest", "plate"]
 

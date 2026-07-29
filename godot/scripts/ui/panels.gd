@@ -9,10 +9,13 @@ const PanelBase = preload("res://scripts/ui/panel.gd")
 const Widgets = preload("res://scripts/ui/widgets.gd")
 const GameData = preload("res://scripts/data.gd")
 const Tokens = preload("res://scripts/ui/tokens.gd")
+const Fmt = preload("res://scripts/ui/format.gd")
 
 # ---- StockPanel (RIGHT dock) — THE PROOF SLICE: Snapshot -> Panel -> Widget -> Tokens end to end ----
 class StockPanel extends PanelBase.Base:
+	const EXTRA_POOL := 8          # fixed pool of catalogue-stock lines (R2; slice caps to match)
 	var _rows: Dictionary = {}     # res id -> StatRow
+	var _extra: Array = []         # StatRow pool for catalogue-only resources (spec 0008 phase 4)
 	var _total: Widgets.StatRow
 	func _init() -> void:
 		panel_id = &"stock"; dock = PanelBase.DOCK_RIGHT; priority = 10; default_open = true
@@ -27,6 +30,11 @@ class StockPanel extends PanelBase.Base:
 			var row := Widgets.StatRow.new()
 			vb.add_child(row); row.set_glyph_res(res)
 			_rows[res] = row
+		for i in EXTRA_POOL:
+			var xrow := Widgets.StatRow.new()
+			vb.add_child(xrow); xrow.set_row("•", "—", "")
+			xrow.visible = false
+			_extra.append(xrow)
 		_total = Widgets.StatRow.new()
 		vb.add_child(_total); _total.set_row("Σ", "Всього", "0")
 	func bind(vm) -> void:
@@ -38,11 +46,21 @@ class StockPanel extends PanelBase.Base:
 		var rows: Dictionary = st.rows
 		for res in _rows:
 			_rows[res].set_value(int(rows.get(res, 0)))
+		var extra: Array = st.get("extra", [])
+		for i in _extra.size():
+			if i < extra.size():
+				var e: Dictionary = extra[i]
+				_extra[i].set_row(String(e.icon), String(e.label), str(int(e.amt)))
+				_extra[i].visible = true
+			else:
+				_extra[i].visible = false
 		_total.set_value("%d/%d" % [int(st.total), int(st.cap)])
 
-# ---- VitalsPanel (LEFT dock) — hero need bars (day/HP/hunger/rest), colored by urgency enum ----
+# ---- VitalsPanel (LEFT dock) — hero need bars (HP/hunger/rest/blood) + located-health readout ----
 class VitalsPanel extends PanelBase.Base:
 	var _bars: Array = []          # NeedBar instances, in bar order
+	var _felt: Widgets.StatRow     # felt °C + comfort enum icon (R11: icon+число, не лише колір)
+	var _state: Widgets.StatRow    # worst hediff inspect line / здоровий / непритомний
 	var _carry: Widgets.StatRow
 	func _init() -> void:
 		panel_id = &"vitals"; dock = PanelBase.DOCK_LEFT; priority = 10; default_open = true
@@ -53,10 +71,14 @@ class VitalsPanel extends PanelBase.Base:
 		add_child(vb)
 		var head := Widgets.H2Header.new()
 		vb.add_child(head); head.set_header("Життєві", "need")
-		for i in 3:
+		for i in 4:
 			var bar := Widgets.NeedBar.new()
 			vb.add_child(bar)
 			_bars.append(bar)
+		_felt = Widgets.StatRow.new()
+		vb.add_child(_felt); _felt.set_row("🌡", "Відчуття", "—")
+		_state = Widgets.StatRow.new()
+		vb.add_child(_state); _state.set_row("🩺", "Стан", "—")
 		_carry = Widgets.StatRow.new()
 		vb.add_child(_carry); _carry.set_row("🎒", "Несе", "0/0")
 	func bind(vm) -> void:
@@ -64,11 +86,54 @@ class VitalsPanel extends PanelBase.Base:
 		build_once()
 		if not (vm is Dictionary) or not vm.has("vitals"):
 			return
-		var bars: Array = vm.vitals.bars
+		var v: Dictionary = vm.vitals
+		var bars: Array = v.bars
 		for i in mini(_bars.size(), bars.size()):
 			_bars[i].bind(bars[i])
-		var carry: Dictionary = vm.vitals.carry
+		_felt.set_value("%d°C %s" % [int(round(float(v.get("felt_c", 20.0)))), Fmt.comfort_icon(StringName(v.get("comfort", &"ok")))])
+		var conds: Array = v.get("conditions", [])
+		var state_line: String = "😵 непритомний" if bool(v.get("downed", false)) else ("✔ здоровий" if conds.is_empty() else String(conds[0]))
+		if not conds.is_empty() and bool(v.get("downed", false)):
+			state_line += " · " + String(conds[0])
+		_state.set_value(state_line)
+		var carry: Dictionary = v.carry
 		_carry.set_value("%d/%d" % [int(carry.cur), int(carry.cap)])
+
+# ---- PowerPanel (RIGHT dock) — the grid readout (Batch 8c): supply/draw/battery + brownout state ----
+class PowerPanel extends PanelBase.Base:
+	var _supply: Widgets.StatRow
+	var _draw: Widgets.StatRow
+	var _battery: Widgets.StatRow
+	var _state: Widgets.StatRow
+	func _init() -> void:
+		panel_id = &"power"; dock = PanelBase.DOCK_RIGHT; priority = 15; hotkey = KEY_E; default_open = false
+	func _build() -> void:
+		rebuild_count += 1
+		var vb := VBoxContainer.new()
+		vb.add_theme_constant_override("separation", 5)
+		add_child(vb)
+		var head := Widgets.H2Header.new()
+		vb.add_child(head); head.set_header("Енергія", "power")
+		_supply = Widgets.StatRow.new(); vb.add_child(_supply); _supply.set_row("⚡", "Генерація", "—")
+		_draw = Widgets.StatRow.new(); vb.add_child(_draw); _draw.set_row("🔌", "Споживання", "—")
+		_battery = Widgets.StatRow.new(); vb.add_child(_battery); _battery.set_row("🔋", "Батареї", "—")
+		_state = Widgets.StatRow.new(); vb.add_child(_state); _state.set_row("◦", "Стан", "мережі немає")
+	func bind(vm) -> void:
+		rebind_count += 1
+		build_once()
+		if not (vm is Dictionary) or not vm.has("power"):
+			return
+		var p: Dictionary = vm.power
+		if not bool(p.get("participants", false)):
+			_supply.set_value("—")
+			_draw.set_value("—")
+			_battery.set_value("—")
+			_state.set_value("мережі немає")
+			return
+		_supply.set_value("%dW" % int(p.supply))
+		_draw.set_value("%dW" % int(p.draw))
+		_battery.set_value("%d/%d" % [int(p.stored), int(p.capacity)])
+		_state.set_value("⚠ перевантаження" if StringName(p.state) == &"brownout" else "✔ стабільна")
 
 # ---- BalancePanel (RIGHT dock) — the director readout: threat gauge + phase (empty-gated until §8) ----
 class BalancePanel extends PanelBase.Base:

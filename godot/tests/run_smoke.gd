@@ -20,6 +20,9 @@ func _init() -> void:
 
 
 func _topup() -> void:
+	# hp is now a DERIVED readout of the located-health tracker (sim/hero_health.gd) — reset the
+	# tracker itself, else winter cold / wounds accumulate across the scripted playthrough
+	sim.health_reset()
 	sim.player.hp = 100.0
 	sim.player.hunger = 100.0
 	sim.player.rest = 100.0

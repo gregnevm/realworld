@@ -77,11 +77,14 @@ static func snapshot(db, state: Dictionary = {}) -> Dictionary:
 	var stock: Dictionary = state.get("stock", {})
 	return {
 		"available": true,
+		# spec 0008 phase 3: `live` marks a snapshot whose state IS the live sim (browsers act on the
+		# world); absent/false == the forward-engine sandbox. Panels badge themselves off this flag.
+		"live": bool(state.get("live", false)),
 		"summary": _summary(db, unlocked, stock),
 		"research": _research_rows(db, unlocked),
 		"tiers": _tiers(db, unlocked),
 		"next": _next_research(db, unlocked),
-		"build_actions": _build_actions(db, unlocked, stock),
+		"build_actions": _build_actions(db, unlocked, stock, state.get("build_filter", {})),
 		"craft_actions": _craft_actions(db, unlocked, stock, state.get("stations", {})),
 		"research_actions": _research_actions(db, unlocked),
 	}
@@ -114,10 +117,14 @@ static func raw_bill_str(db, cost: Dictionary) -> String:
 	return cost_str(db, Catalog.raw_requirements(default_cat(), cost))
 
 # Buildings whose research is unlocked: affordable ones first (clickable), then unaffordable (dimmed).
-static func _build_actions(db, unlocked: Dictionary, stock: Dictionary) -> Array:
+# A non-empty `filter` (id -> true) narrows the rows to that set — the live mode passes the
+# live-buildable adapter ids so no row can promise a building the sim would refuse to place.
+static func _build_actions(db, unlocked: Dictionary, stock: Dictionary, filter: Dictionary = {}) -> Array:
 	var ready: Array = []
 	var near: Array = []
 	for b in Catalog.buildings(db):
+		if not filter.is_empty() and not filter.has(b.id):
+			continue
 		if not _gate_ok(b.research(), unlocked):
 			continue
 		(ready if _afford(b.cost(), stock) else near).append(b)

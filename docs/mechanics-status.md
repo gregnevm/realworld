@@ -1,31 +1,31 @@
 # Mechanics catalogue — status tracker
 
-> Snapshot: **2026-07-05**. Purpose: make the *infrastructure-vs-content* gap visible — the kernel is
-> deep (~377 headless tests) but not every designed mechanic is yet wired into a playable slice. This
+> Snapshot: **2026-07-05**, last verified against code **2026-07-29**. Purpose: make the
+> *infrastructure-vs-content* gap visible — the kernel is deep (~880 headless asserts across the
+> Godot suites + 56 Node) but not every designed mechanic is yet wired into a playable slice. This
 > is the at-a-glance «what is real vs only designed» view that complements `GDD_BOOK/gdd.json`
 > (`section:mechanics_overview`) and the specs.
 >
-> Derived from specs 0001–0005 + `godot/scripts/kernel/` at snapshot time; treat integration/test
-> columns as **best-effort — the owner should correct any cell**. Batch 4 (gear) was **untracked** at
-> snapshot, so its row may have advanced since.
+> Derived from specs 0001–0005 + `godot/scripts/kernel/`; treat integration/test columns as
+> **best-effort — the owner should correct any cell**.
 
 **Legend:** ✅ done · 🟡 partial · ⬜ not started · ⚠️ untracked/uncommitted at snapshot
 
 | Mechanic (GDD id) | Designed | Coded | Integrated in playable slice | Tested (headless) | Notes |
 |---|:---:|:---:|:---:|:---:|---|
 | `map_generation` | ✅ | ✅ | ✅ | ✅ | `world_gen.gd`; OSM overlay + procedural fallback; coord-seed invariants |
-| `climate` | ✅ | ✅ | 🟡 | ✅ | `kernel/climate.gd` closed-form; seam to live weather API; game-side surfacing partial |
+| `climate` | ✅ | ✅ | ✅ | ✅ | `kernel/climate.gd` closed-form; seam to live weather API. **Temperature now BITES** (2026-07-29): felt °C drives hypothermia/heatstroke on the live pawn via `sim/hero_health.gd` — campfire/heater/walls are survival, not décor |
 | `character_sim` | ✅ | ✅ | ✅ | ✅ | `sim.gd` single hero |
-| `needs` | ✅ | ✅ | 🟡 | ✅ | `kernel/needs.gd` (food/rest); **water lives in `gear.gd`** ⚠️ |
-| `health` | ✅ | ✅ | 🟡 | ✅ | `kernel/health.gd` 6-part + hediffs; **scars/prosthetics/medicine in `gear.gd`** ⚠️ |
-| `inventory_gear` | ✅ | ⚠️ | ⬜ | ⚠️ | `gear.gd` exists but **untracked**; not yet wired into the sim loop |
+| `needs` | ✅ | ✅ | 🟡 | ✅ | hunger/rest floats live in `sim.gd`; their **consequences** are now kernel deprivation hediffs (`needs.gd` malnutrition/exhaustion, live 2026-07-29). The `Need` objects + water are still not consumed by the slice |
+| `health` | ✅ | ✅ | ✅ | ✅ | **live** (2026-07-29): `sim/hero_health.gd` wires the 6-part tracker into the sim — located combat wounds, bleeding, bed-tend, scars, capacity-driven speed/work/melee, downed, per-cause death. Medicine/medbed/prosthetics remain kernel-only |
+| `inventory_gear` | ✅ | ✅ | 🟡 | ✅ | `gear.gd` comfort hediffs + `insul` warmth on live armor are wired (2026-07-29); CompApparel/EquipModel/TendService still kernel-only |
 | `gathering` | ✅ | ✅ | ✅ | ✅ | tool multipliers formalized (axe 1.6× / pick 1.9×) |
 | `base_building` | ✅ | ✅ | ✅ | ✅ | building costs/HP in `data.gd` |
-| `crafting_automation` | ✅ | ✅ | 🟡 | ✅ | `kernel/production.gd` bills (count/until); quality 0–6. **Content tree now authored** — see below |
-| `content_tree` | ✅ | ✅ | 🟡 | ✅ | `content/catalog.json` + `kernel/catalog.gd`: 335 defs (78 res · 41 research · 87 build · 58 recipe · 71 item), reachability-validated |
+| `crafting_automation` | ✅ | ✅ | 🟡 | ✅ | `kernel/production.gd` bills (count/until); quality 0–6. Live catalogue craft (2026-07-29) is instant `sim.craft_catalog`; work-time bills remain kernel/sandbox |
+| `content_tree` | ✅ | ✅ | ✅ | ✅ | 335 defs, reachability-validated. **Live behind `use_catalog`** (2026-07-29, spec 0008 ph.3–4): the curated tier — 38 res / 73 builds / 27 recipes, neolithic→steel — builds, crafts and mines in the real game; the rest browsable until its map source ships |
 | `progression_research` | ✅ | ✅ | ✅ | ✅ | **spec 0007** — `kernel/progression.gd` queueable research pipeline over the tree; live from research benches (`session.tick_research`), surfaced in `ResearchPanel` (LEFT dock); planner (`research_path`/`steps_to_unlock`). Node + Godot mirrored tests |
-| `raids_pvp` | ✅ | ✅ | ✅ | ✅ | threat-driven waves + tactic escalation via Balance |
-| `balance_director` | ✅ | ✅ | 🟡 | ✅ | `kernel/balance.gd`; `decide()` AI seam; incident MTB pacing |
+| `raids_pvp` | ✅ | ✅ | ✅ | ✅ | seeded raid/patrol cycles in `sim/threats.gd` (own timers + clan `raid_pressure` from `social.gd`). **NOT paced by Balance** — `Balance.assess()` feeds only the HUD threat readout (see `balance_director`) |
+| `balance_director` | ✅ | ✅ | 🟡 | ✅ | `kernel/balance.gd`; `decide()` AI seam; incident MTB pacing coded but **not driving the live sim** — assess() surfaces in the HUD only |
 | `convoy_logistics` | ✅ | ✅ | ✅ | ✅ | real hubs (Kyiv/Lviv/Odesa/…); trade offers |
 | `offline_persistence` | ✅ | ✅ | ✅ | ✅ | `persistence.gd` seed+diff+hash-chain; travel/permadeath |
 | `social` | ✅ | ✅ | ✅ | ✅ | `social.gd` clans/stances; `new_graph()` = Phase 1 wire-shape |
@@ -121,6 +121,67 @@ station is placed it lists that station's recipes with their input shortfall. Pu
 untouched; tips are computed only for the ≤12 rows that survive the cap (no per-frame graph walk for
 hidden rows). Verified in `run_ui_tests.gd` `_t_bom_tips`. Spec 0008 phases 2–4 (the flagged
 `use_catalog` migration of the **live** sim onto the catalogue) remain owner-gated per the ADR.
+
+**Update (2026-07-29, mechanics integration):** the two biggest «coded-but-not-felt» kernel systems
+are now live in the playable slice, through a new sim domain module `sim/hero_health.gd` (the
+threats/environment decomposition pattern):
+
+- **Located health replaces the single hp float.** The hero owns a `kernel/health.gd` tracker: enemy
+  blows land as wounds on real body parts (armor still mitigates first), wounds bleed/fester/heal,
+  sleeping in a **bed** tends them (its medical role), severe healed wounds scar (`gear.gd`), and
+  capacities feed back — wounded legs walk slower, wounded arms gather/hit slower, collapse (`downed`)
+  drops the pawn where they stand. Death is per-cause (blood loss / destroyed vital / starvation /
+  freezing / heatstroke) and named in the feed. `player.hp` survives as a derived readout. The tracker
+  saves (`serialize_region.health`), travels in the capsule pawn, and is covered by `world_hash`
+  (rejoin lands byte-identical); legacy saves migrate their hp float into a tended torso wound.
+- **Temperature has teeth.** Felt °C (tile temp — indoor buffering + campfire/heater emitters — plus
+  `insul` warmth on worn gear) drives the kernel comfort hediffs (`gear.gd`) on the live pawn, and
+  empty needs drive the new deprivation hediffs (`needs.gd`: malnutrition kills at 1.0, exhaustion
+  collapses below the lethal line). A Kyiv day-1 spawn is deep winter and says so (`spawn hint`) —
+  fire-first is now a real opening move, and an enclosed heated room is the survival answer.
+- Kernel fix the integration exposed: condition hediffs' `gone()` used a 0.02 epsilon that swept a
+  just-born hediff at per-frame `dday` (~0.003/tick growth) — the comfort/deprivation authorities
+  only ever ran at coarse test steps. `gone()` is now exact-zero, with fine-dday regression tests.
+- HUD: the vitals slice adds a blood bar, felt-°C + comfort enum, condition inspect lines and the
+  downed flag (`VitalsPanel` renders them; R8/R11 hold). New/updated coverage in `run_tests.gd`
+  (`_t_hero_health`, `_t_cold_exposure`, `_t_deprivation_live`, `_t_health_persistence`) and the
+  kernel suite; all suites + determinism/rejoin/net gates green.
+
+Still kernel-only after this pass (deliberately): medicine + medbed `TendService`, CompApparel/
+EquipModel armor stacking, thirst, prosthetic surgery as a live verb, and Balance-driven incidents.
+
+**Update (2026-07-29, spec 0008 phases 3–4 — the catalogue becomes playable):** on the owner's §5
+go-ahead, the 335-def tree now BUILDS and CRAFTS in the live game behind `use_catalog`:
+
+- **Def seam `sim.building_def`** — data.gd's 13 tuned defs win their ids; catalogue-only buildings
+  resolve through the `catalog_defs.gd` adapter into the same dict shape, so every tick path
+  (blocks/enclosure/heat/light/traps/turrets/capacity/hp/render) serves both vocabularies.
+- **Curated live tier, derived not hand-listed**: categories structure/production/storage/defense,
+  power-free (no live power net — powered turrets would run for free), defense only with a live brain
+  (generic turret loop by `range`/`cooldown`; traps by `trap_dps`). The reachability closure from the
+  live raws pins the tier at **38 resources / 73 buildings / 27 recipes** (neolithic→steel/components),
+  mirrored in Node (`catalog.test.js`) and Godot (`_t_catalog_live`).
+- **Phase 4 sourcing**: under the flag, rocks yield ore/coal/clay/sand interleaved with stone, trees
+  fiber, bushes herbs — a pure function of (cell, amount), zero rng consumed, worldgen goldens intact.
+- **UI**: the B/C/N browsers flip their badge «демо»→«живе» when the slice state IS the live sim;
+  build rows arm the ordinary `select_build` ghost, craft rows run `sim.craft_catalog`, the
+  StockPanel lists catalogue-only stock. Sandbox mode (flag OFF, shipped default) is untouched.
+- Remaining to full Option A: map sources for the hunting/farming/exotic-mining raws, work-time
+  crafting, and the deliberate default-ON flip for new games (spec 0008 §5.2).
+
+**Update (2026-07-29, Batch 8c — the power net goes live):** `sim/power.gd` bridges the placed
+building dicts onto the kernel power organ (`kernel/power.gd`: sources/traders/batteries +
+PowerNetSystem with priority brownout shedding). The kernel comps own the physics; the building
+dicts stay the persistent truth (`b.fuel`/`b.charge` mirror back every tick → saves, `world_hash`,
+rejoin). Solar rides the real daylight curve, wind the seeded weather stream, fuel generators
+auto-refuel from the open stock (1 unit = 1 fuel). `sim.device_active` — the seam built for exactly
+this — now gates every power-TRADER def: browned-out turrets hold fire, unpowered stations refuse
+crafts with an honest `no_power`. The powered half of the catalogue (generators, batteries, solar,
+electric stations, auto-turrets, fridge) joins the live tier; the `power_conduit` stays out until
+nets are spatial. One region = one implicit net. HUD: a `power` slice + `PowerPanel` (hotkey E).
+Covered by `_t_power_live` (shedding order, battery buffering, day/night solar, refuel economy,
+fuel/charge persistence, twin hashes); the shipped flag-OFF slice pays zero cost and stays
+byte-identical.
 
 ## How to read this
 
