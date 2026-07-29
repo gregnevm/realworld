@@ -47,7 +47,8 @@ var health_alerts: Dictionary = {}   # feed-toast stages per condition (view-sid
 # Power grid (Batch 8c, sim/power.gd): a derived Thing fleet over the placed powered buildings.
 # power_net/power_active are the per-tick verdicts; fuel/charge live ON the building dicts (saved).
 var power_things: Dictionary = {}    # cell -> kernel Thing (derived cache; never serialized)
-var power_net: Dictionary = {}       # {supply, draw, stored, capacity, brownout} readout
+var power_nets: Array = []           # Array of participant-cell Arrays: SPATIAL grids (adjacency+conduits)
+var power_net: Dictionary = {}       # aggregate {supply, draw, stored, capacity, brownout} readout
 var power_active: Dictionary = {}    # cell -> bool : did the net deliver this tick
 var power_dirty := true              # building set changed -> rebuild the fleet lazily
 var power_sys: Variant = null        # kernel PowerNetSystem (created once)
@@ -238,6 +239,8 @@ func load_region(data: Dictionary) -> void:
 				placed[f] = float(b[f])
 		if b.has("harvests"):
 			placed["harvests"] = int(b.harvests)
+		if b.has("crop"):
+			placed["crop"] = str(b.crop)
 	_init_regions()
 	_env_init()
 	# AFTER the player fields: an old record has no "health" and migrates from the restored hp float
@@ -627,6 +630,24 @@ func _research_label(def: Dictionary) -> String:
 	var need := String(def.get("research", ""))
 	# data.gd mirrors the labels for its own five gates; catalogue-only gates read the catalogue label
 	return String(GameData.RESEARCH_LABEL.get(need, CatalogDefs.research_label(need)))
+
+# ---------------- crop selection (farming v2) ----------------
+# Cycle the selected crop of an OWN grow building ("" == the mixed rotation). Value-data result —
+# the router owns the user-facing text (R10); label passes through catalogue data.
+func set_crop(x: int, y: int) -> Dictionary:
+	if not _in(x, y) or not bgrid.has(y * n + x):
+		return {"ok": false}
+	var b: Dictionary = bgrid[y * n + x]
+	if not bool(building_def(String(b.kind)).get("grow", false)):
+		return {"ok": false}
+	var crop := CatalogDefs.next_crop(String(b.get("crop", "")))
+	if crop == "":
+		b.erase("crop")
+	else:
+		b["crop"] = crop
+	return {"ok": true, "crop": crop,
+		"label": CatalogDefs.res_label(crop) if crop != "" else "",
+		"icon": CatalogDefs.res_icon(crop) if crop != "" else ""}
 
 # The best cooked meal in stock ("" = none / flag off): highest nutrition first, deterministic
 # tie-break by id. Meal keys only ever exist in the open-stock vocabulary.

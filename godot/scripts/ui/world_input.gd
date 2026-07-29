@@ -32,8 +32,9 @@ class WorldInput extends Node:
 	var speed_idx := 0
 
 	# PURE click grammar (main.gd _handle_click parity): armed build wins; then a raider within
-	# ATTACK_RADIUS of the cursor; then a resource node under the cursor; else walk there.
-	static func decide_click(enemies: Array, nodes: Dictionary, n: int, selected_build: String, t: Vector2i, fx: float, fy: float) -> Dictionary:
+	# ATTACK_RADIUS of the cursor; then a resource node under the cursor; then an OWN grow zone
+	# (cycles its crop — the farming v2 verb); else walk there.
+	static func decide_click(enemies: Array, nodes: Dictionary, n: int, selected_build: String, t: Vector2i, fx: float, fy: float, grow_cells: Dictionary = {}) -> Dictionary:
 		if selected_build != "":
 			return {"verb": &"build", "args": {"kind": selected_build, "x": t.x, "y": t.y}}
 		var best: Variant = null
@@ -47,6 +48,8 @@ class WorldInput extends Node:
 			return {"verb": &"order_attack", "args": {"target": best}}
 		if t.x >= 0 and t.y >= 0 and t.x < n and t.y < n and nodes.has(t.y * n + t.x):
 			return {"verb": &"order_gather", "args": {"x": t.x, "y": t.y}}
+		if grow_cells.has(t.y * n + t.x):
+			return {"verb": &"set_crop", "args": {"x": t.x, "y": t.y}}
 		return {"verb": &"order_move", "args": {"x": t.x, "y": t.y}}
 
 	# PURE key grammar for the build bar: digits 1..9,0 arm/disarm a GameData.BUILD_ORDER slot.
@@ -126,7 +129,12 @@ class WorldInput extends Node:
 	func _click(t: Vector2i) -> void:
 		var sim: Variant = session.sim
 		var w: Vector2 = view.get_global_mouse_position()
-		var d: Dictionary = decide_click(sim.enemies, sim.map.nodes, int(sim.n), String(view.selected_build), t, w.x / TILE, w.y / TILE)
+		var grow_cells: Dictionary = {}
+		if sim.has_method("building_def"):
+			for cell in sim.bgrid:
+				if bool(sim.building_def(String(sim.bgrid[cell].kind)).get("grow", false)):
+					grow_cells[cell] = true
+		var d: Dictionary = decide_click(sim.enemies, sim.map.nodes, int(sim.n), String(view.selected_build), t, w.x / TILE, w.y / TILE, grow_cells)
 		router.dispatch(StringName(d.verb), d.args, session)
 
 	# Digits arm the ghost through the SAME select_build verb the BuildBar clicks use — one owner

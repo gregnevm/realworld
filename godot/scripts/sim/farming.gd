@@ -67,7 +67,10 @@ static func update(s, dt: float) -> void:
 		t.tick({"temp_c": s.temp_at(x, y), "light": s.light_at(x, y), "dday": dday})
 		var grower: Variant = t.get_comp(Things.CompGrower)
 		if grower.mature():
-			var crop: String = CatalogDefs.farm_crop(int(cell), int(b.get("harvests", 0)))
+			# a SELECTED crop (set_crop verb) wins; the mixed per-cell rotation is the default
+			var crop: String = String(b.get("crop", ""))
+			if crop == "":
+				crop = CatalogDefs.farm_crop(int(cell), int(b.get("harvests", 0)))
 			var added: int = s.deposit(crop, CatalogDefs.FARM_YIELD)
 			b["harvests"] = int(b.get("harvests", 0)) + 1
 			t.flags["growth"] = 0.0   # replant the cycle

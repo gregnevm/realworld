@@ -14,6 +14,14 @@ static func install(ic) -> void:
 	ic.bind(&"order_attack", func(s, a): s.sim.order_attack(a.target))
 	ic.bind(&"build",        func(s, a): s.sim.try_build(String(a.kind), int(a.x), int(a.y)))
 	ic.bind(&"cancel_action", func(s, _a): s.sim.player.action = null)   # Esc: скасувати наказ пішки
+	# клік по своїй грядці циклить культуру (farming v2); текст — тут, сим повертає value-data (R10)
+	ic.bind(&"set_crop", func(s, a):
+		var r: Dictionary = s.sim.set_crop(int(a.x), int(a.y))
+		if bool(r.get("ok", false)):
+			var what := "мішана грядка"
+			if str(r.get("crop", "")) != "":
+				what = "%s%s" % [str(r.get("icon", "")), str(r.get("label", ""))]
+			s.sim._flash("🌱 Культура: " + what))
 	ic.bind(&"deconstruct",  func(s, a):
 		var r: Dictionary = s.sim.demolish(int(a.x), int(a.y))
 		if not r.ok: s.sim._flash(String(r.get("msg", ""))))

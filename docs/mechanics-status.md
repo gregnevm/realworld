@@ -166,9 +166,16 @@ go-ahead, the 335-def tree now BUILDS and CRAFTS in the live game behind `use_ca
 - **UI**: the B/C/N browsers flip their badge «демо»→«живе» when the slice state IS the live sim;
   build rows arm the ordinary `select_build` ghost, craft rows run `sim.craft_catalog`, the
   StockPanel lists catalogue-only stock. Sandbox mode (flag OFF, shipped default) is untouched.
-- Remaining to full Option A: map sources for the hunting/exotic-mining raws, per-zone crop
-  selection (hops/psychoid tiers), work-time crafting, and the deliberate default-ON flip for new
-  games (spec 0008 §5.2).
+- Remaining to full Option A: map sources for the hunting/exotic-mining raws, work-time crafting,
+  and the deliberate default-ON flip for new games (spec 0008 §5.2).
+
+**Update (2026-07-29, the follow-through pass):** the two debts this PR left itself are paid.
+**Crop selection** (`set_crop` verb — clicking your own grow zone cycles мішана→зерно→їжа→волокно→
+трави→hops; `b.crop` persists and overrides the mixed rotation) opens the brewery chain — the live
+tier is now pinned at **44 resources** (hops/wort/beer), mirrored Node+Godot. **Power nets are
+SPATIAL**: participants group by 4-adjacency and `power_conduit` (now buildable) extends a grid
+across distance — a generator powers what it touches or what a cable line reaches; each grid solves
+its own brownout, the HUD reads the aggregate.
 
 **Update (2026-07-29, the Balance director goes live):** the audit's one dishonest cell — «tactic
 escalation via Balance» while raids ran on a flat timer — is now true in code, not just corrected in

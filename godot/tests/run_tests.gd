@@ -1185,7 +1185,7 @@ func _t_catalog_live() -> void:
 	# кабель без ролі (мережа не просторова) — теж; data.gd-ids каталог НЕ дублює (одна правда на id).
 	# Powered-дефи ЖИВІ (Batch 8c): турель несе power-дикт і гейтиться мережею, не викинута.
 	ok(str(CatalogDefs.building("auto_turret").get("power", {}).get("role", "")) == "trader", "powered турель у тірі З power-диктом (мережа жива)")
-	ok(CatalogDefs.building("power_conduit").is_empty(), "кабель поза тіром (мережа не просторова — був би декор)")
+	ok(bool(CatalogDefs.building("power_conduit").get("conduit", false)), "кабель у тірі як пасивна ланка (мережі просторові)")
 	ok(CatalogDefs.building("mortar").is_empty(), "мінoмет без живого мозку не будується (не декорація)")
 	ok(CatalogDefs.building("bed").is_empty() and CatalogDefs.building("wall").is_empty(), "data.gd-ids каталог не дублює")
 	ok(float(CatalogDefs.building("deadfall_trap").get("trap_dps", 0.0)) > 0.0, "каталожна пастка мапиться на живий trap_dps-мозок")
@@ -1255,11 +1255,11 @@ func _t_catalog_live() -> void:
 	# 5) досяжність живого тіра — виведена, не хардкоджена: замикання від живих сировин мусить
 	# накривати сталевий ланцюг (дзеркало tests/catalog.test.js — два валідатори не розійдуться)
 	var cat: Dictionary = Catalog.load_json()
-	var live_raws := ["wood", "stone", "raw_food", "scrap", "iron_ore", "coal", "clay", "sand", "copper_ore", "plant_fiber", "herbal", "grain"]
+	var live_raws := ["wood", "stone", "raw_food", "scrap", "iron_ore", "coal", "clay", "sand", "copper_ore", "plant_fiber", "herbal", "grain", "hops"]
 	var closure := _live_closure(cat, live_raws)
-	for res_id in ["charcoal", "iron_bar", "steel", "components", "medicine", "ammo", "flour", "bread"]:
+	for res_id in ["charcoal", "iron_bar", "steel", "components", "medicine", "ammo", "flour", "bread", "beer"]:
 		ok((closure.obtainable as Dictionary).has(StringName(res_id)), "живий тір досягає %s" % res_id)
-	ok((closure.obtainable as Dictionary).size() == 41, "замикання живого тіра: 41 ресурс (закріплено)")
+	ok((closure.obtainable as Dictionary).size() == 44, "замикання живого тіра: 44 ресурси (закріплено)")
 	# кожен збагачений вихід нод — справжня сировина каталогу (одруківка = мертвий ресурс у кишені)
 	var res_ids := {}
 	for r in cat.get("resources", []):
@@ -1325,11 +1325,11 @@ func _t_power_live() -> void:
 	off.update(0.1)
 	ok((off.power_net as Dictionary).is_empty(), "flag OFF: мережа не існує (нульова ціна)")
 
-	# ON: станція без генератора знеструмлена; генератор оживлює її
+	# ON: станція без генератора знеструмлена; генератор оживлює її ЛИШЕ через просторову мережу
 	var s = _flat_sim(195, true)
 	s.research_unlocked = {"electricity": true, "plasteel_working": true, "defense_systems": true}
-	for res in ["planks", "components", "steel", "circuit", "stone", "clay", "wood", "uranium", "chemfuel"]:
-		s.stock[s.res_key(res)] = 500
+	for res in ["planks", "components", "steel", "circuit", "stone", "clay", "wood", "uranium", "chemfuel", "copper_wire"]:
+		s.stock[s.res_key(res)] = 40
 	s.try_build("electric_smelter", 3, 3)
 	ok(s.has_building("electric_smelter"), "powered-станція будується (power-тір відкрився)")
 	# знайти рецепт цієї станції з каталогу (генерично — без хардкоду id; входи гранчено вище)
@@ -1343,12 +1343,17 @@ func _t_power_live() -> void:
 	s.update(0.1)
 	var r_dark: Dictionary = s.craft_catalog(rc_id)
 	ok(not bool(r_dark.ok) and StringName(r_dark.reason) == &"no_power", "без генератора станція знеструмлена (чесна відмова)")
+	# мережі ПРОСТОРОВІ: генератор через клітину — окрема мережа, поки кабель не з'єднає
 	s.try_build("wood_generator", 5, 3)
 	s.update(0.1)
-	ok(bool(s.craft_catalog(rc_id).ok), "генератор 400W живить плавильню 300W — крафт іде")
+	ok(not bool(s.craft_catalog(rc_id).ok), "генератор без лінії НЕ живить (мережі просторові)")
+	s.try_build("power_conduit", 4, 3)
+	s.update(0.1)
+	ok(bool(s.craft_catalog(rc_id).ok), "кабель з'єднав: генератор 400W живить плавильню 300W")
 	ok(float(s.power_net.supply) >= 399.0 and float(s.power_net.draw) >= 299.0, "HUD-знімок мережі несе supply/draw (%.0f/%.0f)" % [float(s.power_net.supply), float(s.power_net.draw)])
 
 	# пріоритетний шедінг: +автотурель (120W, pri 9) > бюджет 400 -> скидається плавильня (pri 5)
+	s.try_build("power_conduit", 6, 3)
 	s.try_build("auto_turret", 7, 3)
 	s.update(0.1)
 	ok(bool(s.power_net.brownout), "перевантаження оголошено (420W > 400W)")
@@ -1369,6 +1374,8 @@ func _t_power_live() -> void:
 
 	# батарея буферизує: прибрали турель -> надлишок заряджає; без генератора живить плавильню
 	s.demolish(7, 3)
+	s.try_build("power_conduit", 7, 3)
+	s.try_build("power_conduit", 8, 3)
 	s.try_build("battery", 9, 3)
 	for i in 10:
 		s.update(0.1)
@@ -1516,7 +1523,7 @@ func _t_farming_live() -> void:
 		elif String(b.kind) == "grow_zone":
 			plot = b
 	ok(float(tray.get("growth", 0.0)) == 0.0 and float(plot.get("growth", 0.0)) > 0.0, "знеструмлена гідропоніка не росте (мережа годує їжу)")
-	hy.try_build("wood_generator", 7, 3)
+	hy.try_build("wood_generator", 3, 4)   # впритул: мережі просторові — далекий генератор не живив би
 	for i in 10:
 		hy.update(1.0)
 		hy.player.hunger = 100.0
@@ -1546,6 +1553,51 @@ func _t_farming_live() -> void:
 	ok(int(mk.stock.get("bread", 0)) == 0, "голодний пішак з'їв хліб першим")
 	ok(float(mk.player.hunger) > 90.0, "хліб ситніший за сировину (+55)")
 	ok(mk.res_amount("food") == raw0, "сира їжа не чіпалась, поки був хліб")
+
+	# вибір культури (farming v2): клік циклить, обрана культура перекриває ротацію, hops -> пиво
+	var cr = _flat_sim(195, true)
+	cr.research_unlocked = {"agriculture": true, "brewing": true}
+	for res in ["wood", "stone", "iron_bar", "grain"]:
+		cr.stock[cr.res_key(res)] = 30
+	cr.try_build("grow_zone", 3, 3)
+	ok(not bool(cr.set_crop(9, 9).ok), "set_crop поза грядкою відмовляє")
+	var seen_cycle: Array = []
+	for i in CatalogDefs.CROP_CYCLE.size():
+		seen_cycle.append(str(cr.set_crop(3, 3).get("crop", "?")))
+	ok(seen_cycle[0] == "grain" and seen_cycle[4] == "hops" and seen_cycle[5] == "", "клік циклить культури і вертає до мішаної (%s)" % str(seen_cycle))
+	for i in 5:
+		cr.set_crop(3, 3)   # догортаємо цикл назад до hops
+	var czone: Variant = null
+	for b in cr.buildings:
+		if String(b.kind) == "grow_zone":
+			czone = b
+	ok(String(czone.get("crop", "")) == "hops", "обрана культура сидить на грядці")
+	var guard2 := 0
+	while int(czone.get("harvests", 0)) < 1 and guard2 < 600:
+		cr.update(5.0)
+		cr.player.hunger = 100.0
+		cr.player.rest = 100.0
+		guard2 += 1
+	ok(int(cr.stock.get("hops", 0)) > 0, "грядка з обраною культурою дає hops (не ротацію)")
+	# бровар: сусло і пиво — ланцюг живий
+	cr.try_build("brewery", 5, 5)
+	cr.stock["hops"] = int(cr.stock.get("hops", 0)) + 3
+	cr.stock[cr.res_key("grain")] = 10
+	ok(bool(cr.craft_catalog("brew_wort").ok), "броварня заварює сусло (зерно+hops)")
+	ok(bool(cr.craft_catalog("ferment_beer").ok) and int(cr.stock.get("beer", 0)) >= 4, "пиво збродило (+4)")
+	# культура переживає save/load
+	var crec := Persistence.serialize_region(cr)
+	var cr2 = Sim.new()
+	cr2.load_region(crec)
+	var czone2: Variant = null
+	for b in cr2.buildings:
+		if String(b.kind) == "grow_zone":
+			czone2 = b
+	ok(String(czone2.get("crop", "")) == "hops", "обрана культура переживає save/load")
+	cr.dispose_farm()
+	cr.dispose_power()
+	cr2.dispose_farm()
+	cr2.dispose_power()
 	# твіни з фермами хешуються однаково (growth/harvests у хеші)
 	var t1 = _flat_sim(195, true)
 	var t2 = _flat_sim(195, true)

@@ -15,7 +15,10 @@ max-line-length: 200
 max-file-lines: 1300
 
 # sim.gd is the deliberate public facade of the live sim; progression.gd is the research API.
-max-public-methods: 64
+# sim.gd — документований фасад («публічний API незмінний — делегати»): кожен новий живий домен
+# (health/power/farming/director/crop) додає йому 1–3 делегати. 72 — поточний стелю-запас фасаду;
+# росте разом із ним свідомо, не мовчазним вимиканням правила.
+max-public-methods: 72
 
 disable:
   # the codebase co-locates consts with their domain section (e.g. PAWN_FIELDS beside extract_pawn)
