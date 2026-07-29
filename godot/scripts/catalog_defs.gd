@@ -55,6 +55,10 @@ const MEAL_NUTRITION := {
 	"lavish_meal": 90.0, "pemmican": 42.0, "kibble": 25.0,
 }
 
+# ---- medicine (sim/hero_health.gd bed-tend consumes; kernel TendService owns the math) ----
+# Quality multiplier per consumable medicine (better meds deliver a bigger tend relief burst).
+const MED_RELIEF := {"medicine": 1.2, "herbal_medicine": 0.9}
+
 # Per-node-kind yield cycles (phase 4). Index = posmod(cell*31 + amount, size) — a fixed, seeded-by-
 # geometry rotation, so the SAME node depletes into the SAME bundle on every replay/rejoin/twin.
 const GATHER_YIELD := {
@@ -91,7 +95,9 @@ static func _build_cache() -> void:
 		if GameData.BUILDINGS.has(id):
 			continue                                # data.gd owns this id — the tuned def wins
 		var category := str(b.get("category", ""))
-		if not LIVE_CATEGORIES.has(category):
+		# category filter, with ONE exception: the medical beds (comfort, `medbed:true` in the data)
+		# — their mechanic (sleepable bed + tend quality) is live via hero_health's bed-tend
+		if not LIVE_CATEGORIES.has(category) and not bool(b.get("medbed", false)):
 			continue
 		var power: Dictionary = b.get("power", {})
 		var is_conduit: bool = category == "power" and str(power.get("role", "")) == ""
@@ -126,6 +132,13 @@ static func _build_cache() -> void:
 			def["range"] = float(b.get("range", 0.0))
 			def["shot_dmg"] = float(b.get("damage", 0.0))
 			def["shot_cool"] = float(b.get("cooldown", 1.0))
+			if b.has("ammo_max"):
+				def["ammo_max"] = int(b.get("ammo_max", 0))   # this turret FIRES stock ammo
+		if bool(b.get("bed", false)):
+			def["bed"] = true                       # sleepable (sim bed capability)
+		if bool(b.get("medbed", false)):
+			# kernel CompMedbed.quality_mult formula (0.6 + 0.15 × tier) — one truth for the math
+			def["medbed_mult"] = 0.6 + 0.15 * float(b.get("med_quality", 2))
 		if not power.is_empty():
 			def["power"] = power.duplicate(true)    # sim/power.gd reads role/rated/draw/capacity
 		if is_conduit:

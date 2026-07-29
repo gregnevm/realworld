@@ -21,6 +21,7 @@ const Health = preload("res://scripts/kernel/health.gd")
 const Gear = preload("res://scripts/kernel/gear.gd")
 const Needs = preload("res://scripts/kernel/needs.gd")
 const GameData = preload("res://scripts/data.gd")
+const CatalogDefs = preload("res://scripts/catalog_defs.gd")
 
 # Fraction of post-armor damage that lands as injury severity (part max_hp ~25..40, raider dmg
 # ~7..25: ×0.55 keeps early fights survivable and late fights lethal without armor).
@@ -57,11 +58,25 @@ static func update(s, dt: float) -> void:
 	# 3) injuries heal/bleed/fester, blood moves, downed recomputes
 	tracker.tick({"dday": dday})
 	Gear.resolve_to_scar(tracker)
-	# 4) sleeping in a bed tends wounds (stops bleeding, fights infection) — the bed's medical role
-	if bool(p.sleeping) and _near_bed(s):
+	# 4) sleeping in a bed tends wounds (stops bleeding, fights infection) — the bed's medical role.
+	# The TEND EVENT (fresh hediffs just flagged) also consumes ONE medicine when the open stock has
+	# it: a kernel-TendService-style relief burst (infection down, immunity up), scaled by medicine
+	# quality × the bed's medbed multiplier. Bounded: one consumption per batch of new hediffs.
+	var bed_mult: float = _bed_mult(s)
+	if bool(p.sleeping) and bed_mult > 0.0:
 		var tended: int = tracker.tend_all()
 		if tended > 0:
-			s._log("🩹 Сон у ліжку: рани оброблено (%d)." % tended, "good")
+			var med := _consume_medicine(s)
+			if med == "":
+				s._log("🩹 Сон у ліжку: рани оброблено (%d)." % tended, "good")
+			else:
+				var eff: float = Gear.TendService.effectiveness(0.0, float(CatalogDefs.MED_RELIEF[med]) * bed_mult)
+				for h in tracker.hediffs:
+					if h is Health.Hediff_Injury:
+						h.infection = maxf(0.0, float(h.infection) - 0.2 * eff)
+					elif h is Health.Hediff_Disease:
+						h.immunity = clampf(float(h.immunity) + 0.2 * eff, 0.0, 1.2)
+				s._log("💊 %s: рани оброблено як слід (еф. %.2f)." % [CatalogDefs.res_label(med), eff], "good")
 	# 5) death policy: any channel at its ceiling ends the pawn
 	var cause: String = death_cause(tracker)
 	if cause != "" and not s.dead:
@@ -301,11 +316,25 @@ static func spawn_hint(s) -> void:
 		s._log("🥵 Тут спекотно (%.0f°C). Приміщення дає прохолоду." % felt, "warn")
 
 # ---------------- internals ----------------
-static func _near_bed(s) -> bool:
+# 0.0 == no bed near; else the best nearby bed's tend-quality multiplier (a plain bed is 1.0, the
+# catalogue medical beds carry medbed_mult > 1 through the def seam).
+static func _bed_mult(s) -> float:
+	var best := 0.0
 	for b in s.buildings:
-		if b.kind == "bed" and s._dist(s.player.px, s.player.py, b.x + 0.5, b.y + 0.5) < 1.6:
-			return true
-	return false
+		var def: Dictionary = s.building_def(String(b.kind))
+		if def.get("bed", false) and s._dist(s.player.px, s.player.py, b.x + 0.5, b.y + 0.5) < 1.6:
+			best = maxf(best, float(def.get("medbed_mult", 1.0)))
+	return best
+
+# Consume the best medicine in the open stock ("" = none / flag off). Deterministic preference order.
+static func _consume_medicine(s) -> String:
+	if not bool(s.use_catalog):
+		return ""
+	for med in ["medicine", "herbal_medicine"]:
+		if int(s.res_amount(med)) >= 1:
+			s.stock[s.res_key(med)] -= 1
+			return med
+	return ""
 
 static func _is_condition(h) -> bool:
 	return h is Needs.Hediff_Malnutrition or h is Needs.Hediff_Exhaustion \

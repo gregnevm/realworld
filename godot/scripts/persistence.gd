@@ -97,8 +97,9 @@ static func serialize_region(sim) -> Dictionary:
 		for f in ["fuel", "charge", "growth"]:
 			if b.has(f):
 				brec[f] = float(b[f])
-		if b.has("harvests"):
-			brec["harvests"] = int(b.harvests)
+		for f in ["harvests", "ammo"]:
+			if b.has(f):
+				brec[f] = int(b[f])
 		if b.has("crop"):
 			brec["crop"] = str(b.crop)   # the zone's selected crop (farming v2)
 		rec.buildings.append(brec)

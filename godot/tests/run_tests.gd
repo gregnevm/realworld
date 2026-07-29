@@ -59,6 +59,7 @@ func _init() -> void:
 	_t_power_live()
 	_t_farming_live()
 	_t_director_live()
+	_t_polish_live()
 	_t_no_global_rng()
 	_t_static_typing()
 	_t_stock_seam()
@@ -1328,7 +1329,7 @@ func _t_power_live() -> void:
 	# ON: станція без генератора знеструмлена; генератор оживлює її ЛИШЕ через просторову мережу
 	var s = _flat_sim(195, true)
 	s.research_unlocked = {"electricity": true, "plasteel_working": true, "defense_systems": true}
-	for res in ["planks", "components", "steel", "circuit", "stone", "clay", "wood", "uranium", "chemfuel", "copper_wire"]:
+	for res in ["planks", "components", "steel", "circuit", "stone", "clay", "wood", "uranium", "chemfuel", "copper_wire", "ammo"]:
 		s.stock[s.res_key(res)] = 40
 	s.try_build("electric_smelter", 3, 3)
 	ok(s.has_building("electric_smelter"), "powered-станція будується (power-тір відкрився)")
@@ -1678,6 +1679,77 @@ func _t_director_live() -> void:
 	var pts_poor := KernelBalance.Balance.threat_points(SimDirector.world_of(poor), day, 1.0)
 	ok(pts_rich > pts_poor, "threat points ростуть із багатством живої бази (%.0f > %.0f)" % [pts_rich, pts_poor])
 	for sim_x in [t1, t2, s, rich, poor]:
+		sim_x.dispose_farm()
+		sim_x.dispose_power()
+
+# ---------------- шліфування: медицина/medbed live + справжні набої турелей ----------------
+func _t_polish_live() -> void:
+	# медикамент на tend-подію: сон у ліжку споживає 1 і збиває інфекцію relief-бурстом
+	var s = _flat_sim(195, true)
+	s.stock["medicine"] = 2
+	s.health.injure(&"torso", 12.0, "рвана рана")
+	s.health.hediffs[0].infection = 0.5
+	s._place_building("bed", int(s.player.px) + 1, int(s.player.py), -1)
+	s.player.rest = 50.0
+	s.player.action = null
+	for i in 4:
+		s.update(0.5)
+		s.player.hunger = 100.0
+	ok(int(s.stock.get("medicine", 0)) == 1, "tend-подія спожила рівно 1 медикамент")
+	ok(float(s.health.hediffs[0].infection) < 0.42, "медикамент збив інфекцію бурстом (0.5 -> %.2f)" % float(s.health.hediffs[0].infection))
+	ok(bool(s.health.hediffs[0].tended), "рана оброблена")
+	# каталожне медичне ліжко: спиться (bed-капабіліті) і лікує краще (medbed_mult з даних)
+	ok(bool(CatalogDefs.building("hospital_bed").get("bed", false)), "лікарняне ліжко — спальне (capability з даних)")
+	ok(absf(float(CatalogDefs.building("hospital_bed").get("medbed_mult", 0.0)) - 1.2) < 0.01, "medbed_mult за кернел-формулою якості (q4 -> 1.2)")
+	var m = _flat_sim(195, true)
+	m.research_unlocked = {"microelectronics": true}
+	m.stock[m.res_key("steel")] = 40
+	m.stock[m.res_key("components")] = 10
+	m.try_build("hospital_bed", int(m.player.px) - 1, int(m.player.py))   # (9,8) зайнята стартовим складом
+	ok(m.has_building("hospital_bed"), "лікарняне ліжко будується")
+	m.player.rest = 50.0
+	m.player.action = null
+	for i in 3:
+		m.update(0.5)
+		m.player.hunger = 100.0
+	ok(bool(m.player.sleeping), "пішак спить біля каталожного медліжка (bed-капабіліті, не id)")
+
+	# набої: каталожна турель стріляє БОЄПРИПАСАМИ — суха мовчить, зі складом перезаряджається
+	var a = _flat_sim(195, true)
+	a.research_unlocked = {"electricity": true, "defense_systems": true}
+	for res in ["planks", "components", "steel", "circuit", "wood"]:
+		a.stock[a.res_key(res)] = 40
+	a.try_build("wood_generator", 3, 3)
+	a.try_build("auto_turret", 4, 3)   # впритул до генератора (мережі просторові)
+	var foe: Dictionary = GameData.make_raider(5.5, 3.5, 1)
+	foe.path_cd = 1e9   # стій на місці: ціль для турелі, не штурм
+	a.enemies.append(foe)
+	for i in 6:
+		a.update(0.5)
+		a.player.hunger = 100.0
+		a.player.rest = 100.0
+	ok(float(foe.hp) == float(foe.maxhp), "суха автотурель мовчить (набоїв немає)")
+	a.stock["ammo"] = 5
+	for i in 6:
+		a.update(0.5)
+		a.player.hunger = 100.0
+		a.player.rest = 100.0
+	ok(float(foe.hp) < float(foe.maxhp), "з набоями турель стріляє")
+	var tb: Variant = null
+	for b in a.buildings:
+		if String(b.kind) == "auto_turret":
+			tb = b
+	ok(int(tb.get("ammo", 0)) + int(a.stock.get("ammo", 0)) < 5, "постріли реально палять набої (магазин+склад < 5)")
+	# магазин персистується
+	var arec := Persistence.serialize_region(a)
+	var a2 = Sim.new()
+	a2.load_region(arec)
+	var tb2: Variant = null
+	for b in a2.buildings:
+		if String(b.kind) == "auto_turret":
+			tb2 = b
+	ok(int(tb2.get("ammo", -1)) == int(tb.get("ammo", 0)), "магазин турелі переживає save/load")
+	for sim_x in [s, m, a, a2]:
 		sim_x.dispose_farm()
 		sim_x.dispose_power()
 

@@ -190,7 +190,9 @@ static func update_enemies(s, dt: float) -> void:
 
 # Data-capability turret brain (the trap_dps pattern): ANY building whose def carries a range fires —
 # data.gd's turret via {range, dps} (shot = dps×0.5 every 0.5s, exactly as shipped), catalogue turrets
-# via {range, shot_dmg, shot_cool}. Adding a turret def never edits this brain.
+# via {range, shot_dmg, shot_cool}. A def with `ammo_max` FIRES STOCK AMMO: it reloads one round per
+# tick from the open stock and holds fire dry — the ammo chain (gunpowder -> ammo) has a real gun.
+# Adding a turret def never edits this brain.
 static func update_turrets(s, dt: float) -> void:
 	for b in s.buildings:
 		var def: Dictionary = s.building_def(String(b.kind))
@@ -199,12 +201,22 @@ static func update_turrets(s, dt: float) -> void:
 			continue
 		if not s.device_active(b):
 			continue   # a browned-out powered turret holds fire (Batch 8c)
+		var ammo_max := int(def.get("ammo_max", 0))
+		if ammo_max > 0 and int(b.get("ammo", 0)) < ammo_max and s.res_amount("ammo") >= 1:
+			s.stock[s.res_key("ammo")] -= 1
+			b["ammo"] = int(b.get("ammo", 0)) + 1
 		b.cool = max(0.0, b.cool - dt)
 		var e: Variant = s._nearest_enemy(b.x + 0.5, b.y + 0.5, reach)
 		if e == null:
 			continue
 		b.aim = atan2(e.py - (b.y + 0.5), e.px - (b.x + 0.5))
 		if b.cool <= 0:
+			if ammo_max > 0:
+				if int(b.get("ammo", 0)) < 1:
+					continue   # dry magazine: the reload line above will feed it when stock has ammo
+				b["ammo"] = int(b.get("ammo", 0)) - 1
+				if int(b.ammo) == 0 and s.res_amount("ammo") == 0:
+					s._log("🔫 %s: набої скінчились." % str(def.get("name", b.kind)), "warn")
 			b.cool = 0.5 if def.has("dps") else float(def.get("shot_cool", 1.0))
 			damage_enemy(s, e, float(def.dps) * 0.5 if def.has("dps") else float(def.get("shot_dmg", 0.0)))
 			s.shots.append({"x1": b.x + 0.5, "y1": b.y + 0.5, "x2": e.px, "y2": e.py, "t": 0.12})

@@ -234,11 +234,12 @@ func load_region(data: Dictionary) -> void:
 	_reset_local_threats()
 	for b in data.buildings:
 		var placed: Dictionary = _place_building(str(b.kind), int(b.x), int(b.y), float(b.hp))
-		for f in ["fuel", "charge", "growth"]:   # power/farming state rides the building record
+		for f in ["fuel", "charge", "growth"]:   # power/farming/defense state rides the record
 			if b.has(f):
 				placed[f] = float(b[f])
-		if b.has("harvests"):
-			placed["harvests"] = int(b.harvests)
+		for f in ["harvests", "ammo"]:
+			if b.has(f):
+				placed[f] = int(b[f])
 		if b.has("crop"):
 			placed["crop"] = str(b.crop)
 	_init_regions()
@@ -1012,7 +1013,9 @@ func _maybe_sleep(_dt: float) -> void:
 		return
 	var bed: Variant = null
 	for b in buildings:
-		if b.kind == "bed" and _dist(p.px, p.py, b.x + 0.5, b.y + 0.5) < 1.6:
+		# bed CAPABILITY, not the id: data.gd's bed carries `bed:true`, and so do the live
+		# catalogue medical beds (medbed/hospital_bed) — a future bed def sleeps without edits
+		if building_def(String(b.kind)).get("bed", false) and _dist(p.px, p.py, b.x + 0.5, b.y + 0.5) < 1.6:
 			bed = b
 			break
 	p.sleeping = (bed != null and _nearest_enemy(p.px, p.py, 9) == null)

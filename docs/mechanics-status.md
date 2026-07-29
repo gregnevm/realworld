@@ -169,6 +169,18 @@ go-ahead, the 335-def tree now BUILDS and CRAFTS in the live game behind `use_ca
 - Remaining to full Option A: map sources for the hunting/exotic-mining raws, work-time crafting,
   and the deliberate default-ON flip for new games (spec 0008 §5.2).
 
+**Update (2026-07-29, the polish pass — medicine and ammo get real):** two more «kernel-only»
+remainders close. **Medicine lives**: the bed-tend event now consumes ONE medicine from the open
+stock (medicine > herbal_medicine, deterministic) and delivers a kernel-TendService-style relief
+burst (infection down, immunity up) scaled by medicine quality × the bed's `medbed_mult`; the
+catalogue medical beds (`medbed`/`hospital_bed`, `medbed:true` in the data) join the live tier as
+sleepable beds with the kernel CompMedbed quality formula — and the sim's bed check is now the
+`bed` CAPABILITY, not the id. The herbal→medicine chain finally has a consumer. **Ammo is real**:
+catalogue turrets with `ammo_max` fire STOCK AMMO — one round per shot, auto-reload from the stock
+(the fuel pattern), dry magazines hold fire and say so; `b.ammo` persists. The gunpowder→ammo chain
+has a gun. data.gd's turret keeps its shipped free-firing behaviour (no ammo_max — suites hold).
+Covered by `_t_polish_live`.
+
 **Update (2026-07-29, the follow-through pass):** the two debts this PR left itself are paid.
 **Crop selection** (`set_crop` verb — clicking your own grow zone cycles мішана→зерно→їжа→волокно→
 трави→hops; `b.crop` persists and overrides the mixed rotation) opens the brewery chain — the live
