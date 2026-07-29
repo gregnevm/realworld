@@ -21,8 +21,8 @@
 | `inventory_gear` | ✅ | ✅ | 🟡 | ✅ | `gear.gd` comfort hediffs + `insul` warmth on live armor are wired (2026-07-29); CompApparel/EquipModel/TendService still kernel-only |
 | `gathering` | ✅ | ✅ | ✅ | ✅ | tool multipliers formalized (axe 1.6× / pick 1.9×) |
 | `base_building` | ✅ | ✅ | ✅ | ✅ | building costs/HP in `data.gd` |
-| `crafting_automation` | ✅ | ✅ | 🟡 | ✅ | `kernel/production.gd` bills (count/until); quality 0–6. **Content tree now authored** — see below |
-| `content_tree` | ✅ | ✅ | 🟡 | ✅ | `content/catalog.json` + `kernel/catalog.gd`: 335 defs (78 res · 41 research · 87 build · 58 recipe · 71 item), reachability-validated |
+| `crafting_automation` | ✅ | ✅ | 🟡 | ✅ | `kernel/production.gd` bills (count/until); quality 0–6. Live catalogue craft (2026-07-29) is instant `sim.craft_catalog`; work-time bills remain kernel/sandbox |
+| `content_tree` | ✅ | ✅ | ✅ | ✅ | 335 defs, reachability-validated. **Live behind `use_catalog`** (2026-07-29, spec 0008 ph.3–4): the curated tier — 38 res / 73 builds / 27 recipes, neolithic→steel — builds, crafts and mines in the real game; the rest browsable until its map source ships |
 | `progression_research` | ✅ | ✅ | ✅ | ✅ | **spec 0007** — `kernel/progression.gd` queueable research pipeline over the tree; live from research benches (`session.tick_research`), surfaced in `ResearchPanel` (LEFT dock); planner (`research_path`/`steps_to_unlock`). Node + Godot mirrored tests |
 | `raids_pvp` | ✅ | ✅ | ✅ | ✅ | seeded raid/patrol cycles in `sim/threats.gd` (own timers + clan `raid_pressure` from `social.gd`). **NOT paced by Balance** — `Balance.assess()` feeds only the HUD threat readout (see `balance_director`) |
 | `balance_director` | ✅ | ✅ | 🟡 | ✅ | `kernel/balance.gd`; `decide()` AI seam; incident MTB pacing coded but **not driving the live sim** — assess() surfaces in the HUD only |
@@ -149,6 +149,25 @@ threats/environment decomposition pattern):
 
 Still kernel-only after this pass (deliberately): medicine + medbed `TendService`, CompApparel/
 EquipModel armor stacking, thirst, prosthetic surgery as a live verb, and Balance-driven incidents.
+
+**Update (2026-07-29, spec 0008 phases 3–4 — the catalogue becomes playable):** on the owner's §5
+go-ahead, the 335-def tree now BUILDS and CRAFTS in the live game behind `use_catalog`:
+
+- **Def seam `sim.building_def`** — data.gd's 13 tuned defs win their ids; catalogue-only buildings
+  resolve through the `catalog_defs.gd` adapter into the same dict shape, so every tick path
+  (blocks/enclosure/heat/light/traps/turrets/capacity/hp/render) serves both vocabularies.
+- **Curated live tier, derived not hand-listed**: categories structure/production/storage/defense,
+  power-free (no live power net — powered turrets would run for free), defense only with a live brain
+  (generic turret loop by `range`/`cooldown`; traps by `trap_dps`). The reachability closure from the
+  live raws pins the tier at **38 resources / 73 buildings / 27 recipes** (neolithic→steel/components),
+  mirrored in Node (`catalog.test.js`) and Godot (`_t_catalog_live`).
+- **Phase 4 sourcing**: under the flag, rocks yield ore/coal/clay/sand interleaved with stone, trees
+  fiber, bushes herbs — a pure function of (cell, amount), zero rng consumed, worldgen goldens intact.
+- **UI**: the B/C/N browsers flip their badge «демо»→«живе» when the slice state IS the live sim;
+  build rows arm the ordinary `select_build` ghost, craft rows run `sim.craft_catalog`, the
+  StockPanel lists catalogue-only stock. Sandbox mode (flag OFF, shipped default) is untouched.
+- Remaining to full Option A: map sources for the hunting/farming/exotic-mining raws, the power net,
+  work-time crafting, and the deliberate default-ON flip for new games (spec 0008 §5.2).
 
 ## How to read this
 

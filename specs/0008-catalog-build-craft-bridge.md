@@ -1,13 +1,14 @@
-# Spec 0008 — Catalog build/craft integration (resource-system bridge) — ADR, design-only
+# Spec 0008 — Catalog build/craft integration (resource-system bridge) — ADR
 
-> Status: **phases 1–2 shipped · phases 3–4 wait on §5 sign-off** (drafted 2026-07-08; updated
-> 2026-07-11). Phase 1 (BOM planner) landed in the catalog browsers; phase 2 (open catalogue-keyed
-> stock) landed behind `sim.use_catalog` — **default OFF**, so the shipped slice stays byte-identical
-> (its suites prove it) and no §5 decision is pre-empted. The seam is `sim.res_key/res_amount/`
-> `cost_keys/afford` — every stock access (sim internals, sim/ modules, hud_model slices) goes through
-> it, covered by `_t_open_stock` in `run_tests.gd` (both flag states). Depends on **spec 0007** (the
-> research→unlock pipeline, now live — it is the gate this step consumes) and **spec 0004 +
-> `docs/catalog.md`** (the 335-def tree). Design intent for the player side: `GDD_BOOK/gdd.json`
+> Status: **phases 1–4 shipped** (drafted 2026-07-08; §5 signed off + phases 3–4 landed 2026-07-29 on
+> the owner's go-ahead). Phase 1 (BOM planner) landed in the catalog browsers; phase 2 (open
+> catalogue-keyed stock) behind `sim.use_catalog`; phase 3 (the gated live build/craft) and phase 4
+> (the curated live resource tier) — see §6 below. The flag stays **default OFF**, so the shipped
+> slice stays byte-identical (its suites prove it). The stock seam is `sim.res_key/res_amount/`
+> `cost_keys/afford`; the NEW def seam is `sim.building_def` (data.gd first, `catalog_defs.gd`
+> adapter for catalogue-only ids when the flag is on). Depends on **spec 0007** (the research→unlock
+> pipeline, live — it is the gate this step consumes) and **spec 0004 + `docs/catalog.md`** (the
+> 335-def tree). Design intent for the player side: `GDD_BOOK/gdd.json`
 > (`section:mechanics_overview`, `section:scope`).
 
 ---
@@ -79,18 +80,55 @@ keeps the slice playable and the suites green.
 4. **Grow the live resource set** outward along reachability until the alias map is empty and Option A is
    complete.
 
-## 4. What ships now vs later
+## 4. What ships now vs later (historical — all four phases have since shipped)
 
 - **Now (safe, this spec's companion PR may include):** phase 1's BOM planner — pure, Node+Godot
   mirrored, zero sim risk; it is useful on its own (tooltips) and is the foundation the rest builds on.
-- **Later (needs this ADR approved):** phases 2–4 (the flagged sim/stock changes + the build/craft
-  panels). They alter the sim's build/craft/save paths, so they wait on owner sign-off per the AGENTS.md
-  migration rule.
+- **Later (needed this ADR approved):** phases 2–4 (the flagged sim/stock changes + the build/craft
+  panels). They alter the sim's build/craft/save paths, so they waited on owner sign-off per the
+  AGENTS.md migration rule — granted 2026-07-29 (§5).
 
-## 5. Open decisions for the owner
+## 5. Decisions (owner go-ahead 2026-07-29; recorded with the rationale applied)
 
-1. Confirm **Option A (phased via C)** over B.
-2. Save-shape: is a one-time migration of the 6-key stock to the open stock acceptable, or must both
-   coexist behind the flag indefinitely?
-3. Scope of phase 4: promote the *whole* 78-resource tree, or a curated first tier (neolithic → iron)
-   for the first playable pass?
+1. **Option A (phased via C) — confirmed** over B. The alias layer never materialised as a throwaway
+   map: `data_bridge.gd` (6 ids) IS the alias, and it stays permanently as the legacy-save
+   vocabulary bridge.
+2. **Save-shape: both coexist behind the flag; no forced migration.** Phase 2 already persists
+   `use_catalog` per save, so old saves keep reading their 6-key stock forever. Flipping the DEFAULT
+   to ON for new games is the one remaining switch — it is deliberately NOT taken here: it flips the
+   suites' baseline world and deserves its own commit once the live tier has play-time behind it.
+3. **Phase-4 scope: the curated first tier, DERIVED not hand-listed.** The live tier = the
+   catalogue's own reachability closure seeded from the resources the live map actually sources
+   (wood/stone/raw_food/scrap + the phase-4 node-yield raws: iron_ore/coal/clay/sand/copper_ore/
+   plant_fiber/herbal). That closes over 38 resources / 73 buildings / 27 recipes / 43 items —
+   neolithic through steel/components. The remainder (hunting, farming, exotic mining tiers:
+   meat/hide/grain/wool/gold/uranium…) stays browsable-but-unreachable until its map source ships.
+
+## 6. What phases 3–4 shipped (2026-07-29)
+
+- **Def seam `sim.building_def(kind)`** — the ONE place a building id becomes a def dict: data.gd
+  first (its 13 tuned Phase-0 defs win — one truth per id), the `catalog_defs.gd` adapter for
+  catalogue-only ids when the flag is on. Every tick path (blocks/enclosure/heat/light/traps/
+  turrets/capacity/hp/refunds) reads the seam, so both vocabularies ride the same sim.
+- **Curated live-buildable filter (capability-driven, not a hand list)** in `catalog_defs.gd`:
+  categories structure/production/storage/defense only; no `power` participation (no live power net —
+  a free-running powered turret would be the reverse of a decorative trap); defense must map onto a
+  live brain (turret-shaped `range+cooldown` → the generic turret loop, or `trap` → `trap_dps`).
+  Power/farming/comfort/art/utility/ship wait for their systems.
+- **Live build** rides the EXISTING grammar: a catalog browser row arms the ordinary `select_build`
+  ghost; the map click lands in `sim.try_build`, which now speaks catalogue ids through the def seam
+  (gate → afford → pay → place). No new verb; wire commands work for catalogue ids for free.
+- **Live craft**: `sim.craft_catalog(recipe_id)` — station placed (id equality: the live `workbench`
+  IS the catalogue station `workbench`) → research gate → afford inputs → pay → deposit output.
+  Instant, like the slice's `craft_item`; kernel work-time bills remain the sandbox/kernel model.
+  Returns value-data reasons; the router (`catalog_verbs.gd`) owns the refusal texts (R10).
+- **Phase 4 node-yield enrichment**: under the flag, gathering yields each node kind's catalogue
+  bundle (rocks: ore/coal/clay/sand interleaved with stone; trees: fiber; bushes: herbs/fiber) via a
+  PURE function of (cell, remaining amount) — deterministic, replay/rejoin-exact, and it consumes NO
+  rng stream, so threat/weather determinism cannot shift by a draw. Worldgen untouched (goldens hold).
+- **HUD**: the three catalog browsers switch their honesty badge to «живе» when the snapshot's state
+  IS the live sim (`live` flag in the catalog slice); `build_actions` are filtered to the
+  live-buildable set so no row promises what the sim would refuse; the StockPanel grows a fixed pool
+  of catalogue-stock lines. Sandbox mode (flag OFF) is pixel-identical to before.
+- **Tests**: `_t_catalog_live` (run_tests) covers both flag states end to end; the Node mirror pins
+  the live-tier closure so the two validators can never disagree about what the live game can reach.
