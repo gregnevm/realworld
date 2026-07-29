@@ -1,31 +1,31 @@
 # Mechanics catalogue — status tracker
 
-> Snapshot: **2026-07-05**. Purpose: make the *infrastructure-vs-content* gap visible — the kernel is
-> deep (~377 headless tests) but not every designed mechanic is yet wired into a playable slice. This
+> Snapshot: **2026-07-05**, last verified against code **2026-07-29**. Purpose: make the
+> *infrastructure-vs-content* gap visible — the kernel is deep (~880 headless asserts across the
+> Godot suites + 56 Node) but not every designed mechanic is yet wired into a playable slice. This
 > is the at-a-glance «what is real vs only designed» view that complements `GDD_BOOK/gdd.json`
 > (`section:mechanics_overview`) and the specs.
 >
-> Derived from specs 0001–0005 + `godot/scripts/kernel/` at snapshot time; treat integration/test
-> columns as **best-effort — the owner should correct any cell**. Batch 4 (gear) was **untracked** at
-> snapshot, so its row may have advanced since.
+> Derived from specs 0001–0005 + `godot/scripts/kernel/`; treat integration/test columns as
+> **best-effort — the owner should correct any cell**.
 
 **Legend:** ✅ done · 🟡 partial · ⬜ not started · ⚠️ untracked/uncommitted at snapshot
 
 | Mechanic (GDD id) | Designed | Coded | Integrated in playable slice | Tested (headless) | Notes |
 |---|:---:|:---:|:---:|:---:|---|
 | `map_generation` | ✅ | ✅ | ✅ | ✅ | `world_gen.gd`; OSM overlay + procedural fallback; coord-seed invariants |
-| `climate` | ✅ | ✅ | 🟡 | ✅ | `kernel/climate.gd` closed-form; seam to live weather API; game-side surfacing partial |
+| `climate` | ✅ | ✅ | ✅ | ✅ | `kernel/climate.gd` closed-form; seam to live weather API. **Temperature now BITES** (2026-07-29): felt °C drives hypothermia/heatstroke on the live pawn via `sim/hero_health.gd` — campfire/heater/walls are survival, not décor |
 | `character_sim` | ✅ | ✅ | ✅ | ✅ | `sim.gd` single hero |
-| `needs` | ✅ | ✅ | 🟡 | ✅ | `kernel/needs.gd` (food/rest); **water lives in `gear.gd`** ⚠️ |
-| `health` | ✅ | ✅ | 🟡 | ✅ | `kernel/health.gd` 6-part + hediffs; **scars/prosthetics/medicine in `gear.gd`** ⚠️ |
-| `inventory_gear` | ✅ | ⚠️ | ⬜ | ⚠️ | `gear.gd` exists but **untracked**; not yet wired into the sim loop |
+| `needs` | ✅ | ✅ | 🟡 | ✅ | hunger/rest floats live in `sim.gd`; their **consequences** are now kernel deprivation hediffs (`needs.gd` malnutrition/exhaustion, live 2026-07-29). The `Need` objects + water are still not consumed by the slice |
+| `health` | ✅ | ✅ | ✅ | ✅ | **live** (2026-07-29): `sim/hero_health.gd` wires the 6-part tracker into the sim — located combat wounds, bleeding, bed-tend, scars, capacity-driven speed/work/melee, downed, per-cause death. Medicine/medbed/prosthetics remain kernel-only |
+| `inventory_gear` | ✅ | ✅ | 🟡 | ✅ | `gear.gd` comfort hediffs + `insul` warmth on live armor are wired (2026-07-29); CompApparel/EquipModel/TendService still kernel-only |
 | `gathering` | ✅ | ✅ | ✅ | ✅ | tool multipliers formalized (axe 1.6× / pick 1.9×) |
 | `base_building` | ✅ | ✅ | ✅ | ✅ | building costs/HP in `data.gd` |
 | `crafting_automation` | ✅ | ✅ | 🟡 | ✅ | `kernel/production.gd` bills (count/until); quality 0–6. **Content tree now authored** — see below |
 | `content_tree` | ✅ | ✅ | 🟡 | ✅ | `content/catalog.json` + `kernel/catalog.gd`: 335 defs (78 res · 41 research · 87 build · 58 recipe · 71 item), reachability-validated |
 | `progression_research` | ✅ | ✅ | ✅ | ✅ | **spec 0007** — `kernel/progression.gd` queueable research pipeline over the tree; live from research benches (`session.tick_research`), surfaced in `ResearchPanel` (LEFT dock); planner (`research_path`/`steps_to_unlock`). Node + Godot mirrored tests |
-| `raids_pvp` | ✅ | ✅ | ✅ | ✅ | threat-driven waves + tactic escalation via Balance |
-| `balance_director` | ✅ | ✅ | 🟡 | ✅ | `kernel/balance.gd`; `decide()` AI seam; incident MTB pacing |
+| `raids_pvp` | ✅ | ✅ | ✅ | ✅ | seeded raid/patrol cycles in `sim/threats.gd` (own timers + clan `raid_pressure` from `social.gd`). **NOT paced by Balance** — `Balance.assess()` feeds only the HUD threat readout (see `balance_director`) |
+| `balance_director` | ✅ | ✅ | 🟡 | ✅ | `kernel/balance.gd`; `decide()` AI seam; incident MTB pacing coded but **not driving the live sim** — assess() surfaces in the HUD only |
 | `convoy_logistics` | ✅ | ✅ | ✅ | ✅ | real hubs (Kyiv/Lviv/Odesa/…); trade offers |
 | `offline_persistence` | ✅ | ✅ | ✅ | ✅ | `persistence.gd` seed+diff+hash-chain; travel/permadeath |
 | `social` | ✅ | ✅ | ✅ | ✅ | `social.gd` clans/stances; `new_graph()` = Phase 1 wire-shape |
@@ -121,6 +121,34 @@ station is placed it lists that station's recipes with their input shortfall. Pu
 untouched; tips are computed only for the ≤12 rows that survive the cap (no per-frame graph walk for
 hidden rows). Verified in `run_ui_tests.gd` `_t_bom_tips`. Spec 0008 phases 2–4 (the flagged
 `use_catalog` migration of the **live** sim onto the catalogue) remain owner-gated per the ADR.
+
+**Update (2026-07-29, mechanics integration):** the two biggest «coded-but-not-felt» kernel systems
+are now live in the playable slice, through a new sim domain module `sim/hero_health.gd` (the
+threats/environment decomposition pattern):
+
+- **Located health replaces the single hp float.** The hero owns a `kernel/health.gd` tracker: enemy
+  blows land as wounds on real body parts (armor still mitigates first), wounds bleed/fester/heal,
+  sleeping in a **bed** tends them (its medical role), severe healed wounds scar (`gear.gd`), and
+  capacities feed back — wounded legs walk slower, wounded arms gather/hit slower, collapse (`downed`)
+  drops the pawn where they stand. Death is per-cause (blood loss / destroyed vital / starvation /
+  freezing / heatstroke) and named in the feed. `player.hp` survives as a derived readout. The tracker
+  saves (`serialize_region.health`), travels in the capsule pawn, and is covered by `world_hash`
+  (rejoin lands byte-identical); legacy saves migrate their hp float into a tended torso wound.
+- **Temperature has teeth.** Felt °C (tile temp — indoor buffering + campfire/heater emitters — plus
+  `insul` warmth on worn gear) drives the kernel comfort hediffs (`gear.gd`) on the live pawn, and
+  empty needs drive the new deprivation hediffs (`needs.gd`: malnutrition kills at 1.0, exhaustion
+  collapses below the lethal line). A Kyiv day-1 spawn is deep winter and says so (`spawn hint`) —
+  fire-first is now a real opening move, and an enclosed heated room is the survival answer.
+- Kernel fix the integration exposed: condition hediffs' `gone()` used a 0.02 epsilon that swept a
+  just-born hediff at per-frame `dday` (~0.003/tick growth) — the comfort/deprivation authorities
+  only ever ran at coarse test steps. `gone()` is now exact-zero, with fine-dday regression tests.
+- HUD: the vitals slice adds a blood bar, felt-°C + comfort enum, condition inspect lines and the
+  downed flag (`VitalsPanel` renders them; R8/R11 hold). New/updated coverage in `run_tests.gd`
+  (`_t_hero_health`, `_t_cold_exposure`, `_t_deprivation_live`, `_t_health_persistence`) and the
+  kernel suite; all suites + determinism/rejoin/net gates green.
+
+Still kernel-only after this pass (deliberately): medicine + medbed `TendService`, CompApparel/
+EquipModel armor stacking, thirst, prosthetic surgery as a live verb, and Balance-driven incidents.
 
 ## How to read this
 
