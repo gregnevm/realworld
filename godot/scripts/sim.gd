@@ -9,6 +9,7 @@ const SimEnv = preload("res://scripts/sim/environment.gd")
 const WorldMeta = preload("res://scripts/sim/world_meta.gd")
 const HeroHealth = preload("res://scripts/sim/hero_health.gd")
 const SimPower = preload("res://scripts/sim/power.gd")
+const SimFarm = preload("res://scripts/sim/farming.gd")
 const DataBridge = preload("res://scripts/data_bridge.gd")
 const CatalogDefs = preload("res://scripts/catalog_defs.gd")
 const Catalog = preload("res://scripts/kernel/catalog.gd")
@@ -45,6 +46,9 @@ var power_net: Dictionary = {}       # {supply, draw, stored, capacity, brownout
 var power_active: Dictionary = {}    # cell -> bool : did the net deliver this tick
 var power_dirty := true              # building set changed -> rebuild the fleet lazily
 var power_sys: Variant = null        # kernel PowerNetSystem (created once)
+# Farming (sim/farming.gd): grower Thing per grow zone; b.growth/b.harvests are the saved truth.
+var farm_things: Dictionary = {}     # cell -> kernel Thing carrying CompGrower (derived cache)
+var farm_dirty := true
 var move_input := Vector2.ZERO
 var messages: Array = []
 var messages_seq := 0              # monotonic lifetime append counter (spec 0005 §2.7 FeedbackBus seam);
@@ -220,9 +224,11 @@ func load_region(data: Dictionary) -> void:
 	_reset_local_threats()
 	for b in data.buildings:
 		var placed: Dictionary = _place_building(str(b.kind), int(b.x), int(b.y), float(b.hp))
-		for f in ["fuel", "charge"]:   # power grid state rides the building record (Batch 8c)
+		for f in ["fuel", "charge", "growth"]:   # power/farming state rides the building record
 			if b.has(f):
 				placed[f] = float(b[f])
+		if b.has("harvests"):
+			placed["harvests"] = int(b.harvests)
 	_init_regions()
 	_env_init()
 	# AFTER the player fields: an old record has no "health" and migrates from the restored hp float
@@ -493,6 +499,9 @@ func device_active(b) -> bool:
 func dispose_power() -> void:
 	SimPower.dispose(self)
 
+func dispose_farm() -> void:
+	SimFarm.dispose(self)
+
 func is_wet() -> bool:
 	return weather == &"rain" or weather == &"snow"
 
@@ -517,6 +526,7 @@ func _place_building(kind: String, x: int, y: int, hp: float):
 	buildings.append(b)
 	bgrid[y * n + x] = b
 	power_dirty = true
+	farm_dirty = true
 	if def.get("blocks", false):
 		_refresh_solid(x, y)
 	if def.get("blocks", false) or kind.begins_with("door"):
@@ -527,6 +537,7 @@ func _remove_building(b) -> void:
 	buildings.erase(b)
 	bgrid.erase(b.y * n + b.x)
 	power_dirty = true
+	farm_dirty = true
 	_refresh_solid(b.x, b.y)
 	if building_def(String(b.kind)).get("blocks", false) or String(b.kind).begins_with("door"):
 		_recompute_indoor()
@@ -607,6 +618,22 @@ func _research_label(def: Dictionary) -> String:
 	var need := String(def.get("research", ""))
 	# data.gd mirrors the labels for its own five gates; catalogue-only gates read the catalogue label
 	return String(GameData.RESEARCH_LABEL.get(need, CatalogDefs.research_label(need)))
+
+# The best cooked meal in stock ("" = none / flag off): highest nutrition first, deterministic
+# tie-break by id. Meal keys only ever exist in the open-stock vocabulary.
+func _best_meal() -> String:
+	if not use_catalog:
+		return ""
+	var best := ""
+	var best_n := 0.0
+	var ids: Array = CatalogDefs.MEAL_NUTRITION.keys()
+	ids.sort()
+	for id in ids:
+		var nutrition := float(CatalogDefs.MEAL_NUTRITION[id])
+		if int(stock.get(id, 0)) >= 1 and nutrition > best_n:
+			best = str(id)
+			best_n = nutrition
+	return best
 
 # Cost line valid in EITHER stock vocabulary (data.gd RES icons know only the 6 live ids).
 func _cost_str(cost: Dictionary) -> String:
@@ -809,6 +836,7 @@ func update(dt: float) -> void:
 		_grant_daily_capsule()
 	_update_environment(dt / time.day_len)
 	SimPower.update(self, dt)   # after environment (solar reads daylight, wind reads weather)
+	SimFarm.update(self, dt)    # after power (hydroponics grows only when the net delivered)
 	_update_player(dt)
 	_update_crafting(dt)
 	_update_raids(dt)
@@ -835,10 +863,18 @@ func _update_player(dt: float) -> void:
 		return
 	if HeroHealth.is_downed(self):
 		return   # unconscious where they fell: no eating, hauling, orders or movement; needs run on
-	if p.hunger < 55 and p.eat_cd <= 0 and res_amount("food") >= 1 and _near_storage(2.2):
-		stock[res_key("food")] -= 1
-		p.hunger = min(100.0, p.hunger + 38.0)
-		p.eat_cd = 2.5
+	if p.hunger < 55 and p.eat_cd <= 0 and _near_storage(2.2):
+		# cooked meals first (spec 0008: thing-outputs are edible stock — cooking beats foraging);
+		# the flag-OFF path is byte-identical to the shipped slice (no meal keys can exist there)
+		var meal := _best_meal()
+		if meal != "":
+			stock[meal] -= 1
+			p.hunger = min(100.0, p.hunger + CatalogDefs.meal_nutrition(meal))
+			p.eat_cd = 2.5
+		elif res_amount("food") >= 1:
+			stock[res_key("food")] -= 1
+			p.hunger = min(100.0, p.hunger + 38.0)
+			p.eat_cd = 2.5
 	if carry_total() > 0 and p.dep_cd <= 0 and _near_storage(1.8):
 		for k in p.carry.keys():
 			if p.carry[k] > 0:

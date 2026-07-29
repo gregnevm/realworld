@@ -27,12 +27,31 @@ extends RefCounted
 const Catalog = preload("res://scripts/kernel/catalog.gd")
 const GameData = preload("res://scripts/data.gd")
 
-const LIVE_CATEGORIES := ["structure", "production", "storage", "defense", "power"]
+const LIVE_CATEGORIES := ["structure", "production", "storage", "defense", "power", "farming"]
 const STORAGE_DEFAULT_CAPACITY := 150
 
 # Which stock resource refuels each fuel-kind generator (1 stock unit == 1 fuel unit). Geothermal
 # burns nothing (burn_per_day 0) so it never refuels. Data-side map — adding a generator adds a row.
 const GENERATOR_FUEL := {"wood_generator": "wood", "chemfuel_generator": "chemfuel"}
+
+# ---- farming (sim/farming.gd consumes; kernel CompGrower owns the growth physics) ----
+# One grow cycle (days) at grow_mult 1.0, and the kernel gates it reads (crops dormant outside the
+# temp band or in the dark — the same climate that bites the pawn now feeds or starves the fields).
+const FARM_GROW_DAYS := 3.0
+const FARM_TEMP_MIN := 5.0
+const FARM_TEMP_MAX := 42.0
+const FARM_MIN_LIGHT := 0.3
+const FARM_YIELD := 6
+# v1 is a MIXED plot: each harvest yields the next staple in a per-cell rotation (the gather_yield
+# pattern) — deterministic, no crop-selection UI yet. Hops/psychoid wait for a select-crop verb.
+const FARM_ROTATION := ["grain", "raw_food", "plant_fiber", "grain", "herbal", "raw_food"]
+
+# Meal THING-outputs (bread, cooked meals) land in stock and are EDIBLE: hunger restored per unit.
+# raw_food's inline value is 38 (sim.gd) — cooking beats foraging, lavish beats everything.
+const MEAL_NUTRITION := {
+	"bread": 55.0, "simple_meal": 48.0, "fine_meal": 70.0,
+	"lavish_meal": 90.0, "pemmican": 42.0, "kibble": 25.0,
+}
 
 # Per-node-kind yield cycles (phase 4). Index = posmod(cell*31 + amount, size) — a fixed, seeded-by-
 # geometry rotation, so the SAME node depletes into the SAME bundle on every replay/rejoin/twin.
@@ -72,6 +91,8 @@ static func _build_cache() -> void:
 		var power: Dictionary = b.get("power", {})
 		if category == "power" and str(power.get("role", "")) == "":
 			continue                                # the conduit: no role, nets aren't spatial yet
+		if category == "farming" and not bool(b.get("grow", false)):
+			continue                                # farming must map onto the live grower brain
 		var is_trap := bool(b.get("trap", false))
 		var is_turret: bool = float(b.get("range", 0.0)) > 0.0 and float(b.get("cooldown", 0.0)) > 0.0
 		if category == "defense" and not (is_trap or is_turret):
@@ -101,6 +122,9 @@ static func _build_cache() -> void:
 			def["shot_cool"] = float(b.get("cooldown", 1.0))
 		if not power.is_empty():
 			def["power"] = power.duplicate(true)    # sim/power.gd reads role/rated/draw/capacity
+		if bool(b.get("grow", false)):
+			def["grow"] = true                      # sim/farming.gd reads grow (+mult) per zone
+			def["grow_mult"] = float(b.get("grow_mult", 1.0))
 		_live[id] = def
 
 # The data.gd-shaped def for a live-buildable catalogue building ({} = not live-buildable).
@@ -136,6 +160,15 @@ static func res_icon(id: String) -> String:
 # The stock resource a fuel generator burns ("" = self-sufficient, e.g. geothermal).
 static func generator_fuel(id: String) -> String:
 	return str(GENERATOR_FUEL.get(id, ""))
+
+# The crop a plot yields on its Nth harvest — a pure per-cell rotation (the gather_yield pattern):
+# deterministic, replay/rejoin-exact, no rng.
+static func farm_crop(cell: int, harvests: int) -> String:
+	return str(FARM_ROTATION[posmod(cell * 17 + harvests, FARM_ROTATION.size())])
+
+# Hunger a meal unit restores (0.0 == not a meal).
+static func meal_nutrition(id: String) -> float:
+	return float(MEAL_NUTRITION.get(id, 0.0))
 
 # Ukrainian label of a building id from EITHER vocabulary (data.gd def name / adapter name / the id).
 static func building_label(id: String) -> String:

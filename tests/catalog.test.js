@@ -336,15 +336,16 @@ const LIVE_RAWS = [
   "wood", "stone", "raw_food", "scrap",                       // the 4 map node kinds
   "iron_ore", "coal", "clay", "sand", "copper_ore",           // rock's enriched yield (phase 4)
   "plant_fiber", "herbal",                                    // tree/bush enriched yield (phase 4)
+  "grain",                                                    // grow-zone rotation (farming live)
 ];
 
-test("catalog: live-tier closure reaches the steel chain (pinned at 38 resources)", () => {
+test("catalog: live-tier closure reaches the steel + bread chains (pinned at 41 resources)", () => {
   const cat = loadCatalog();
   const live = reachability(cat, LIVE_RAWS);
-  for (const id of ["charcoal", "iron_bar", "steel", "components", "medicine", "ammo"]) {
+  for (const id of ["charcoal", "iron_bar", "steel", "components", "medicine", "ammo", "flour", "bread"]) {
     assert.ok(live.obtainable.has(id), `live tier reaches ${id}`);
   }
-  assert.strictEqual(live.obtainable.size, 38, "live-tier obtainable resources pinned (38/78)");
+  assert.strictEqual(live.obtainable.size, 41, "live-tier obtainable resources pinned (41/78)");
   // every live raw is a genuine catalogue RAW resource (a typo here = a dead resource in the pocket)
   const rawIds = new Set(cat.resources.filter(isRaw).map((r) => r.id));
   for (const id of LIVE_RAWS) assert.ok(rawIds.has(id), `live raw "${id}" is a catalogue raw`);

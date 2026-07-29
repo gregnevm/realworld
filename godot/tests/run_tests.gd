@@ -55,6 +55,7 @@ func _init() -> void:
 	_t_use_catalog_persist()
 	_t_catalog_live()
 	_t_power_live()
+	_t_farming_live()
 	_t_no_global_rng()
 	_t_static_typing()
 	_t_stock_seam()
@@ -1244,11 +1245,11 @@ func _t_catalog_live() -> void:
 	# 5) досяжність живого тіра — виведена, не хардкоджена: замикання від живих сировин мусить
 	# накривати сталевий ланцюг (дзеркало tests/catalog.test.js — два валідатори не розійдуться)
 	var cat: Dictionary = Catalog.load_json()
-	var live_raws := ["wood", "stone", "raw_food", "scrap", "iron_ore", "coal", "clay", "sand", "copper_ore", "plant_fiber", "herbal"]
+	var live_raws := ["wood", "stone", "raw_food", "scrap", "iron_ore", "coal", "clay", "sand", "copper_ore", "plant_fiber", "herbal", "grain"]
 	var closure := _live_closure(cat, live_raws)
-	for res_id in ["charcoal", "iron_bar", "steel", "components", "medicine", "ammo"]:
+	for res_id in ["charcoal", "iron_bar", "steel", "components", "medicine", "ammo", "flour", "bread"]:
 		ok((closure.obtainable as Dictionary).has(StringName(res_id)), "живий тір досягає %s" % res_id)
-	ok((closure.obtainable as Dictionary).size() == 38, "замикання живого тіра: 38 ресурсів (закріплено)")
+	ok((closure.obtainable as Dictionary).size() == 41, "замикання живого тіра: 41 ресурс (закріплено)")
 	# кожен збагачений вихід нод — справжня сировина каталогу (одруківка = мертвий ресурс у кишені)
 	var res_ids := {}
 	for r in cat.get("resources", []):
@@ -1428,6 +1429,124 @@ func _t_power_live() -> void:
 		tw.update(0.5)
 	ok(Persistence.world_hash(t1) == Persistence.world_hash(t2), "близнюки з мережею хешуються однаково (паливо в хеші)")
 	for sim_x in [s, s2, sol, t1, t2, off]:
+		sim_x.dispose_power()
+
+# ---------------- фермерство (sim/farming.gd на кернел-CompGrower) + їстівні страви ----------------
+func _t_farming_live() -> void:
+	# OFF: грядка недосяжна — зріз незмінний
+	var off = _flat_sim()
+	off.try_build("grow_zone", 3, 3)
+	ok(not off.has_building("grow_zone"), "flag OFF: грядка не ставиться")
+
+	# ON: посадив улітку вдень — виросло; врожай детермінований ротацією клітини
+	var s = _flat_sim(195, true)
+	s.research_unlocked = {"agriculture": true}
+	s.try_build("grow_zone", 3, 3)
+	ok(s.has_building("grow_zone"), "грядка будується (2 дерева)")
+	var zone: Variant = null
+	for b in s.buildings:
+		if String(b.kind) == "grow_zone":
+			zone = b
+	for i in 20:
+		s.update(1.0)
+		s.player.hunger = 100.0
+		s.player.rest = 100.0
+	ok(float(zone.get("growth", 0.0)) > 0.0, "літній день росте посів (ріст %.2f)" % float(zone.get("growth", 0.0)))
+	# середина циклу переживає save/load (b.growth/b.harvests — сейв-стан)
+	var mid: float = float(zone.get("growth", 0.0))
+	var rec := Persistence.serialize_region(s)
+	var s2 = Sim.new()
+	s2.load_region(rec)
+	var zone2: Variant = null
+	for b in s2.buildings:
+		if String(b.kind) == "grow_zone":
+			zone2 = b
+	ok(absf(float(zone2.get("growth", 0.0)) - mid) < 0.001, "ріст переживає save/load (%.2f)" % mid)
+	# доводимо цикл до жнив: перший урожай клітини 51 — зерно (ротація детермінована)
+	var guard := 0
+	while int(zone.get("harvests", 0)) < 1 and guard < 600:
+		s.update(5.0)
+		s.player.hunger = 100.0
+		s.player.rest = 100.0
+		guard += 1
+	ok(int(zone.get("harvests", 0)) >= 1, "грядка дала врожай (цикл ~3 доби)")
+	ok(int(s.stock.get("grain", 0)) > 0, "перший урожай цієї клітини — зерно (ротація)")
+	ok(float(zone.get("growth", 1.0)) < 1.0, "після жнив цикл пересіяно")
+
+	# ніч — спокій: без світла посів не росте (та сама крива, що гейтить роботу й соляр)
+	var night = _flat_sim(195, true)
+	night.research_unlocked = {"agriculture": true}
+	night.try_build("grow_zone", 3, 3)
+	night.time.frac = 0.02
+	for i in 20:
+		night.update(1.0)
+		night.player.rest = 100.0
+	var nzone: Variant = null
+	for b in night.buildings:
+		if String(b.kind) == "grow_zone":
+			nzone = b
+	ok(float(nzone.get("growth", 0.0)) == 0.0, "вночі посів спить (світло < порогу)")
+
+	# гідропоніка: без живлення не росте; з генератором росте ШВИДШЕ за грядку (×2.4)
+	var hy = _flat_sim(195, true)
+	hy.research_unlocked = {"agriculture": true, "electricity": true}
+	for res in ["steel", "components", "copper_wire", "planks", "wood"]:
+		hy.stock[hy.res_key(res)] = 200
+	hy.try_build("hydroponics", 3, 3)
+	hy.try_build("grow_zone", 5, 3)
+	for i in 10:
+		hy.update(1.0)
+		hy.player.hunger = 100.0
+		hy.player.rest = 100.0
+	var tray: Variant = null
+	var plot: Variant = null
+	for b in hy.buildings:
+		if String(b.kind) == "hydroponics":
+			tray = b
+		elif String(b.kind) == "grow_zone":
+			plot = b
+	ok(float(tray.get("growth", 0.0)) == 0.0 and float(plot.get("growth", 0.0)) > 0.0, "знеструмлена гідропоніка не росте (мережа годує їжу)")
+	hy.try_build("wood_generator", 7, 3)
+	for i in 10:
+		hy.update(1.0)
+		hy.player.hunger = 100.0
+		hy.player.rest = 100.0
+	ok(float(tray.get("growth", 0.0)) > 0.0, "запитана гідропоніка росте")
+	var plot_before: float = float(plot.get("growth", 0.0))
+	var tray_before: float = float(tray.get("growth", 0.0))
+	for i in 10:
+		hy.update(1.0)
+		hy.player.hunger = 100.0
+		hy.player.rest = 100.0
+	ok(float(tray.get("growth", 0.0)) - tray_before > float(plot.get("growth", 0.0)) - plot_before, "гідропоніка росте швидше за грядку (×2.4)")
+
+	# страви: зерно -> борошно (жорна) -> хліб (плита) -> пішак ЇСТЬ хліб першим (краща ситність)
+	var mk = _flat_sim(195, true)
+	mk.research_unlocked = {"agriculture": true, "cooking": true}
+	for res in ["wood", "stone", "iron_bar", "components", "grain"]:
+		mk.stock[mk.res_key(res)] = 30   # під cap складу (450) — інакше deposit виходу дає 0
+	mk.try_build("millstone", 3, 3)
+	mk.try_build("fueled_stove", 5, 3)
+	ok(bool(mk.craft_catalog("mill_flour").ok), "жорна мелють зерно на борошно")
+	ok(bool(mk.craft_catalog("bake_bread").ok) and int(mk.stock.get("bread", 0)) == 1, "плита пече хліб (thing-output у складі)")
+	var raw0: int = mk.res_amount("food")
+	mk.player.hunger = 40.0
+	mk.player.eat_cd = 0.0
+	mk.update(0.05)
+	ok(int(mk.stock.get("bread", 0)) == 0, "голодний пішак з'їв хліб першим")
+	ok(float(mk.player.hunger) > 90.0, "хліб ситніший за сировину (+55)")
+	ok(mk.res_amount("food") == raw0, "сира їжа не чіпалась, поки був хліб")
+	# твіни з фермами хешуються однаково (growth/harvests у хеші)
+	var t1 = _flat_sim(195, true)
+	var t2 = _flat_sim(195, true)
+	for tw in [t1, t2]:
+		tw.research_unlocked = {"agriculture": true}
+		tw.try_build("grow_zone", 3, 3)
+		for i in 6:
+			tw.update(1.0)
+	ok(Persistence.world_hash(t1) == Persistence.world_hash(t2), "близнюки з грядками хешуються однаково")
+	for sim_x in [off, s, s2, night, hy, mk, t1, t2]:
+		sim_x.dispose_farm()
 		sim_x.dispose_power()
 
 # spec 0008: сейв несе словник ключів складу — use_catalog мусить пережити роундтрип, інакше

@@ -166,8 +166,21 @@ go-ahead, the 335-def tree now BUILDS and CRAFTS in the live game behind `use_ca
 - **UI**: the B/C/N browsers flip their badge «демо»→«живе» when the slice state IS the live sim;
   build rows arm the ordinary `select_build` ghost, craft rows run `sim.craft_catalog`, the
   StockPanel lists catalogue-only stock. Sandbox mode (flag OFF, shipped default) is untouched.
-- Remaining to full Option A: map sources for the hunting/farming/exotic-mining raws, work-time
-  crafting, and the deliberate default-ON flip for new games (spec 0008 §5.2).
+- Remaining to full Option A: map sources for the hunting/exotic-mining raws, per-zone crop
+  selection (hops/psychoid tiers), work-time crafting, and the deliberate default-ON flip for new
+  games (spec 0008 §5.2).
+
+**Update (2026-07-29, farming goes live — the first renewable source):** `sim/farming.gd` bridges
+grow zones onto the last big unconsumed kernel comp — `things.gd CompGrower` (temperature- and
+light-gated growth). Each zone ticks with ITS OWN cell's felt world (`temp_at`/`light_at`): a
+walled, heated, lit room is literally a greenhouse, a Kyiv winter starves an outdoor field, night
+puts crops to sleep — the same climate that bites the pawn now feeds or starves the base.
+Hydroponics (×2.4) gates on `device_active`: the power net literally feeds food. v1 is a MIXED plot
+(deterministic per-cell harvest rotation, the gather_yield pattern; per-zone crop selection is a
+later verb). `b.growth`/`b.harvests` persist like fuel/charge. Cooked meal thing-outputs (bread &
+co) are now EDIBLE stock — auto-eat prefers the most nourishing (`MEAL_NUTRITION`), so the grain →
+flour → bread chain genuinely feeds the pawn. The live tier grows 38 → **41 resources**, pinned
+mirror-wise in Node and Godot. Covered by `_t_farming_live`.
 
 **Update (2026-07-29, Batch 8c — the power net goes live):** `sim/power.gd` bridges the placed
 building dicts onto the kernel power organ (`kernel/power.gd`: sources/traders/batteries +
