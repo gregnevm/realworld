@@ -15,6 +15,7 @@ const Persistence = preload("res://scripts/persistence.gd")
 const HudModel = preload("res://scripts/ui/hud_model.gd")
 const Balance = preload("res://scripts/kernel/balance.gd")
 const Snapshot = preload("res://scripts/net/snapshot.gd")
+const Command = preload("res://scripts/net/command.gd")
 
 const LAT := 50.4501
 const LON := 30.5234
@@ -22,12 +23,12 @@ const DT := 0.1
 const BATCH := 10
 const HASH_EVERY := 100
 const SNAP_EVERY := 50
-const ALLOWED_VERBS := ["order_gather", "order_move", "try_build"]
 const ACCEPT_TIMEOUT_MSEC := 30000
+const N_HINT := 56              # session.MAP_N — the bounds ctx while polling outside the tick loop
 
 var _tcp := TCPServer.new()
 var _peers: Array = []          # WebSocketPeer per connected client
-var _pending: Array = []        # commands queued from clients for the NEXT batch
+var _inbox := Command.Inbox.new()   # plan §4: validation + idempotency + canonical ordering
 
 
 func _init() -> void:
@@ -45,7 +46,7 @@ func _init() -> void:
 	var bal: Variant = Balance.Balance.new()
 	var last_snap: Variant = null
 
-	var verdict := {"role": "server", "ok": false, "clients_seen": 0, "cmd_echoes": 0, "snaps_sent": 0, "final": "", "err": ""}
+	var verdict := {"role": "server", "ok": false, "clients_seen": 0, "cmd_echoes": 0, "snaps_sent": 0, "refused": 0, "refusals": {}, "final": "", "err": ""}
 	if _tcp.listen(port, "127.0.0.1") != OK:
 		verdict.err = "listen failed on %d" % port
 		_finish(out_path, verdict)
@@ -64,13 +65,13 @@ func _init() -> void:
 	var tick := 0
 	var echoes := 0
 	while tick < total_ticks:
-		_poll_incoming()
+		_poll_incoming({"n": int(sim.n)})
 		var count := mini(BATCH, total_ticks - tick)
-		var cmds: Array = []
-		for c in _pending:                       # schedule everything queued into this batch's first tick
+		# plan §4: the inbox already validated, de-duplicated and canonically ordered these — the
+		# server just stamps the tick they land on and echoes that schedule verbatim
+		var cmds: Array = _inbox.drain()
+		for c in cmds:
 			c["tick"] = tick + 1
-			cmds.append(c)
-		_pending = []
 		echoes += cmds.size()
 		var msg := {"t": "advance", "base": tick, "count": count, "cmds": cmds}
 		for p in _peers:
@@ -110,28 +111,31 @@ func _init() -> void:
 
 	verdict.ok = str(verdict.err) == "" and tick == total_ticks
 	verdict.cmd_echoes = echoes
+	verdict.refused = _inbox.refused
+	for reason in _inbox.refusals:                 # StringName keys -> String for the JSON verdict
+		verdict.refusals[str(reason)] = int(_inbox.refusals[reason])
 	verdict.final = final_hash
 	_finish(out_path, verdict)
 
 
 # ---- lockstep helpers ----
 
-# a client command is trusted only by verb allowlist + int-coerced args — §8.4 validation seed
+# Args arrive already validated and coerced by the envelope (net/command.gd), so this is a plain
+# dispatch — the same shape the InputController router uses (R9: one vocabulary, one meaning).
 func _apply(sim: Variant, c: Dictionary) -> void:
-	var verb := str(c.verb)
-	if not ALLOWED_VERBS.has(verb):
-		return
-	var a: Dictionary = c.get("args", {})
-	match verb:
+	var a: Dictionary = c.a
+	match str(c.v):
 		"order_gather":
-			sim.order_gather(int(a.x), int(a.y))
+			sim.order_gather(a.x, a.y)
 		"order_move":
-			sim.order_move(int(a.x), int(a.y))
-		"try_build":
-			sim.try_build(str(a.kind), int(a.x), int(a.y))
+			sim.order_move(a.x, a.y)
+		"build":
+			sim.try_build(a.kind, a.x, a.y)
+		"cancel_action":
+			sim.player.action = null
 
 
-func _poll_incoming() -> void:
+func _poll_incoming(ctx: Dictionary = {}) -> void:
 	for i in _peers.size():
 		var p: WebSocketPeer = _peers[i]
 		p.poll()
@@ -141,7 +145,7 @@ func _poll_incoming() -> void:
 				continue
 			match str(d.get("t")):
 				"cmd":
-					_pending.append({"verb": str(d.get("verb")), "args": d.get("args", {}), "from": i})
+					_inbox.accept(d, ctx)
 				"ack":
 					_acked[i] = int(d.get("tick", -1))
 
@@ -152,7 +156,7 @@ var _acked: Dictionary = {}     # peer index -> last acked tick
 func _wait_acks(tick: int) -> bool:
 	var waited := 0
 	while waited < ACCEPT_TIMEOUT_MSEC:
-		_poll_incoming()
+		_poll_incoming({"n": N_HINT})
 		var got := 0
 		for i in _peers.size():
 			if int(_acked.get(i, -1)) >= tick:

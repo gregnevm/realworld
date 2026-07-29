@@ -147,9 +147,11 @@ Full single-shard world of the whole Earth · large-scale player economy & facti
       proven end-to-end.
 - [x] Snapshot delta-encoder over `HudModel.snapshot()` (Plan §3) — **landed 2026-07-27, see
       §9.3**: `scripts/net/snapshot.gd` codec + `run_snapshot_tests.gd` + a live delta channel
-      in the transport spike. **← next action: formalize the command envelope (Plan §4 —
-      idempotency/validation over the proven ack-gated grammar), then authoritative
-      persistence + rejoin (Plan §5).**
+      in the transport spike.
+- [x] Command envelope (Plan §4) — **landed 2026-07-28, see §9.4**: `scripts/net/command.gd`
+      (validation with reasons, canonical ordering, idempotency ledger) + `run_command_tests.gd`,
+      wired into the spike's server and clients. **← next action: authoritative persistence +
+      rejoin (Plan §5) — `Inbox.last_seq()` is the resume hook it builds on.**
 - [x] Fold the chosen boundary + protocol back into AGENTS.md and `GDD_BOOK` (✅ `section:risks`/`section:scope`; AGENTS.md + README 2026-07-27).
 
 ### 9.1 Spike results (2026-07-27, determinism half)
@@ -213,6 +215,41 @@ Full single-shard world of the whole Earth · large-scale player economy & facti
      round-trip the wire domain is idempotent, so drift can never accumulate.
   3. GDScript Variant `==` promotes bool to int (`true == 1`) while the canonical hash keeps
      them distinct → the codec's `_eq` is canonical (bool-strict, numeric int/float, recursive).
+### 9.4 Command envelope (2026-07-28, Plan §4)
+
+`scripts/net/command.gd` turns the spike's ad-hoc verb messages into the Phase-1 command channel.
+Envelope: `{t:"cmd", c: client_id, n: seq, v: verb, a: args}`; the server stamps the tick it lands
+on. Three properties, each with a test that fails loudly if it regresses:
+
+- **Validation with a reason.** `WIRE_VERBS` declares each client-sendable verb *and its arg
+  contract*; `validate()` checks shape, exact arg set (extra args are as wrong as missing ones),
+  types, bounds (`[0, n)` for coordinates) and returns **coerced** args — the JSON wire makes every
+  int a float, and applying the raw payload would feed the sim `15.0`. Refusals are a closed set
+  (`bad_shape`/`unknown_verb`/`bad_args`/`duplicate`/`stale_seq`) and are counted, because a
+  silently-dropped command is a desync the client cannot see. Deliberately **structural only**:
+  the sim stays the single authority on content (does this building exist, is it affordable) —
+  duplicating those rules here would create a second, drifting truth.
+- **The wire vocabulary is a SUBSET of the router grammar** (R9: one mutation vocabulary), enforced
+  by a tripwire that greps `ui/input_verbs.gd`. Two verbs are **deliberately off the wire**:
+  `order_attack`, whose router arg is a *live enemy Dictionary* — a reference cannot cross a socket
+  and R8 forbids it in value data, so putting it on the wire needs stable server-side enemy ids
+  first (a named Phase-1 task, not a silent gap); and the region-migration verbs
+  (`launch_capsule`/`accept_invite`), which are a session-level protocol for §5, not in-region tick
+  commands. A client sending either is refused with `unknown_verb`, never crashed on.
+- **Canonical ordering.** `Inbox.drain()` sorts by `(client_id, seq)` — socket arrival order,
+  `Dictionary` iteration order and peer index all drop out. Two clients acting in the same tick
+  would otherwise schedule differently per instance and split the world hash (§4). Tested by
+  feeding the same four intents in two different arrival orders and asserting identical batches.
+- **Idempotency.** `(client_id, seq)` is the identity of an intent: a resend is applied exactly
+  once (within the batch and after it), a seq below the applied high-water mark is `stale_seq`, and
+  counters are per client. `last_seq(client_id)` is the resume hook a rejoining client needs — the
+  first concrete piece of Plan §5.
+- **Proven over the real socket, not just in unit tests:** the spike's client now deliberately
+  **resends** its build intent; the server refuses the copy as `duplicate`, the echoed schedule
+  stays at 3 commands, and the final `world_hash` is **`9d29a9c8` — byte-identical to the pre-§4
+  run**. That equality is the point: the envelope changed the channel's guarantees without changing
+  the world it produces.
+
 - **Live over the socket:** the transport spike now streams a `snap` delta every 50 ticks;
   each client reconstructs and hash-compares against its locally computed snapshot — 12/12
   deltas, 0 mismatches on both clients, run-to-run deterministic. `content_hash` doubles as the

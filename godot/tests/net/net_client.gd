@@ -14,6 +14,7 @@ const Persistence = preload("res://scripts/persistence.gd")
 const HudModel = preload("res://scripts/ui/hud_model.gd")
 const Balance = preload("res://scripts/kernel/balance.gd")
 const Snapshot = preload("res://scripts/net/snapshot.gd")
+const Command = preload("res://scripts/net/command.gd")
 
 const DT := 0.1
 const CONNECT_TIMEOUT_MSEC := 30000
@@ -25,7 +26,7 @@ func _init() -> void:
 	var port: int = args.get("port", 8901)
 	var out_path: String = args.get("out", "user://net_spike_client.json")
 
-	var verdict := {"role": "client", "idx": -1, "ok": false, "hash_checks": 0, "mismatches": 0, "cmds_sent": 0, "snap_checks": 0, "snap_mismatches": 0, "final": "", "err": ""}
+	var verdict := {"role": "client", "idx": -1, "ok": false, "hash_checks": 0, "mismatches": 0, "cmds_sent": 0, "resends": 0, "snap_checks": 0, "snap_mismatches": 0, "final": "", "err": ""}
 	var ws := WebSocketPeer.new()
 	if ws.connect_to_url("ws://127.0.0.1:%d" % port) != OK:
 		verdict.err = "connect_to_url failed"
@@ -41,6 +42,7 @@ func _init() -> void:
 	var sim: Variant = null
 	var bal: Variant = Balance.Balance.new()
 	var recon: Variant = null            # reconstruction of the server's snapshot stream (§8.3)
+	var _seq := 0                        # this client's monotonic intent counter (plan §4 identity)
 	var idx := -1
 	var tick := 0
 	var total := 0
@@ -80,10 +82,18 @@ func _init() -> void:
 					session.tick_research(DT)
 					# client #0 originates the scripted commands from its own (identical) map
 					if idx == 0:
-						var cmd := _scripted(sim, tick)
-						if not cmd.is_empty():
-							ws.send_text(Snapshot.to_wire(cmd))
+						var intent := _scripted(sim, tick)
+						if not intent.is_empty():
+							var env := Command.make(idx, _seq, str(intent.verb), intent.args)
+							_seq += 1
+							ws.send_text(Snapshot.to_wire(env))
 							verdict.cmds_sent = int(verdict.cmds_sent) + 1
+							# plan §4 over the real socket: an unacknowledged intent gets RESENT.
+							# The inbox must apply it exactly once — if idempotency were broken the
+							# world would gain a second wall and every hash after this would split.
+							if str(intent.verb) == "build":
+								ws.send_text(Snapshot.to_wire(env))
+								verdict.resends = int(verdict.resends) + 1
 				# ack AFTER any commands from this batch: TCP ordering then guarantees the server
 				# sees those commands before it opens the next batch (Plan §4 flow control)
 				ws.send_text(Snapshot.to_wire({"t": "ack", "tick": tick}))
@@ -122,30 +132,32 @@ func _init() -> void:
 	_finish(out_path, verdict)
 
 
-# same allowlisted application as the server — one grammar, three processes
+# same envelope, same dispatch as the server — one grammar, three processes
 func _apply(sim: Variant, c: Dictionary) -> void:
-	var a: Dictionary = c.get("args", {})
-	match str(c.verb):
+	var a: Dictionary = c.a
+	match str(c.v):
 		"order_gather":
 			sim.order_gather(int(a.x), int(a.y))
 		"order_move":
 			sim.order_move(int(a.x), int(a.y))
-		"try_build":
+		"build":
 			sim.try_build(str(a.kind), int(a.x), int(a.y))
+		"cancel_action":
+			sim.player.action = null
 
 
-# the deterministic command script: targets computed from the map only (shared by all instances)
+# the deterministic intent script: targets computed from the map only (shared by all instances)
 func _scripted(sim: Variant, tick: int) -> Dictionary:
 	if tick == 30:
 		var tree := _nearest_tree(sim)
-		return {"t": "cmd", "verb": "order_gather", "args": {"x": tree.x, "y": tree.y}}
+		return {"verb": "order_gather", "args": {"x": tree.x, "y": tree.y}}
 	if tick == 200:
 		var cell := _buildable_near_spawn(sim)
 		if cell.x >= 0:
-			return {"t": "cmd", "verb": "try_build", "args": {"kind": "wall", "x": cell.x, "y": cell.y}}
+			return {"verb": "build", "args": {"kind": "wall", "x": cell.x, "y": cell.y}}
 	if tick == 350:
 		var sp: Vector2i = sim.map.spawn
-		return {"t": "cmd", "verb": "order_move", "args": {"x": sp.x + 3, "y": sp.y}}
+		return {"verb": "order_move", "args": {"x": sp.x + 3, "y": sp.y}}
 	return {}
 
 

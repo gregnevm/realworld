@@ -27,6 +27,9 @@ echo.
 echo === Snapshot delta codec (spec 0006 - wire fidelity + payload size) ===
 "%GODOT%" --headless --path "%~dp0godot" -s res://tests/run_snapshot_tests.gd
 echo.
+echo === Command envelope (spec 0006 - validation / ordering / idempotency) ===
+"%GODOT%" --headless --path "%~dp0godot" -s res://tests/run_command_tests.gd
+echo.
 echo === Net transport spike (spec 0006 - 1 server + 2 clients over WebSocket) ===
 "%GODOT%" --headless --path "%~dp0godot" -s res://tests/run_net_spike.gd
 echo.

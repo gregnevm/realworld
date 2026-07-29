@@ -66,8 +66,14 @@ func _init() -> void:
 		"server verdict ok, 2 clients served (echoed %d commands)" % int(server.get("cmd_echoes", 0)))
 	# idx 0 goes to whichever client won the connect race — assert the sum, not a fixed process
 	var sent := int(c1.get("cmds_sent", 0)) + int(c2.get("cmds_sent", 0))
+	var resends := int(c1.get("resends", 0)) + int(c2.get("resends", 0))
 	ok(int(server.get("cmd_echoes", 0)) == 3 and sent == 3,
 		"command round-trip: 3 verbs client->server->all (gather/build/move)")
+	# plan §4 over the socket: one intent was deliberately RESENT; the inbox must refuse the copy
+	# as a duplicate, so the echoed schedule stays at 3 and the world hashes never split
+	var refusals: Dictionary = server.get("refusals", {})
+	ok(resends == 1 and int(server.get("refused", 0)) == 1 and int(refusals.get("duplicate", 0)) == 1,
+		"idempotency over the wire: the resent build was refused as duplicate (refusals: %s)" % str(refusals))
 	for v in [c1, c2]:
 		ok(bool(v.get("ok", false)) and int(v.get("mismatches", 1)) == 0 and int(v.get("hash_checks", 0)) == TOTAL_TICKS / 100,
 			"client %d verdict ok: %d hash probes, 0 mismatches%s" % [
