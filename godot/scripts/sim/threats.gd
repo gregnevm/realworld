@@ -13,6 +13,7 @@ extends RefCounted
 const GameData = preload("res://scripts/data.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
 const Social = preload("res://scripts/social.gd")
+const HeroHealth = preload("res://scripts/sim/hero_health.gd")
 
 # ---------------- raids ----------------
 static func update_raids(s, dt: float) -> void:
@@ -140,10 +141,10 @@ static func update_enemies(s, dt: float) -> void:
 		if dtp < 1.25:
 			e.face = atan2(p.py - e.py, p.px - e.px)
 			if e.atk_cd <= 0:
-				p.hp = clampf(p.hp - e.dmg * s.armor_mult(), 0, 100)
+				# armor cuts the blow, then it lands as a LOCATED injury (sim/hero_health.gd picks
+				# the body part off the same threat stream; a smashed vital part is death right there)
+				HeroHealth.damage(s, e.dmg * s.armor_mult(), "удар робота" if String(e.get("kind", "raider")) == "bot" else "удар рейдера")
 				e.atk_cd = 1.1
-				if p.hp <= 0 and not s.dead:
-					on_death(s)
 			continue
 		var st: Variant = null
 		for b in s.buildings:
@@ -243,6 +244,7 @@ static func respawn_new_pawn(s) -> void:
 	if open == Vector2i(-1, -1):
 		open = s.map.spawn
 	s.player = s._default_player(open)
+	HeroHealth.reset(s)   # the rookie arrives in an unscarred body
 	s.enemies = []
 	s.raid.active = false
 	s.raid.warned = false

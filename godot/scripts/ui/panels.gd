@@ -9,6 +9,7 @@ const PanelBase = preload("res://scripts/ui/panel.gd")
 const Widgets = preload("res://scripts/ui/widgets.gd")
 const GameData = preload("res://scripts/data.gd")
 const Tokens = preload("res://scripts/ui/tokens.gd")
+const Fmt = preload("res://scripts/ui/format.gd")
 
 # ---- StockPanel (RIGHT dock) — THE PROOF SLICE: Snapshot -> Panel -> Widget -> Tokens end to end ----
 class StockPanel extends PanelBase.Base:
@@ -40,9 +41,11 @@ class StockPanel extends PanelBase.Base:
 			_rows[res].set_value(int(rows.get(res, 0)))
 		_total.set_value("%d/%d" % [int(st.total), int(st.cap)])
 
-# ---- VitalsPanel (LEFT dock) — hero need bars (day/HP/hunger/rest), colored by urgency enum ----
+# ---- VitalsPanel (LEFT dock) — hero need bars (HP/hunger/rest/blood) + located-health readout ----
 class VitalsPanel extends PanelBase.Base:
 	var _bars: Array = []          # NeedBar instances, in bar order
+	var _felt: Widgets.StatRow     # felt °C + comfort enum icon (R11: icon+число, не лише колір)
+	var _state: Widgets.StatRow    # worst hediff inspect line / здоровий / непритомний
 	var _carry: Widgets.StatRow
 	func _init() -> void:
 		panel_id = &"vitals"; dock = PanelBase.DOCK_LEFT; priority = 10; default_open = true
@@ -53,10 +56,14 @@ class VitalsPanel extends PanelBase.Base:
 		add_child(vb)
 		var head := Widgets.H2Header.new()
 		vb.add_child(head); head.set_header("Життєві", "need")
-		for i in 3:
+		for i in 4:
 			var bar := Widgets.NeedBar.new()
 			vb.add_child(bar)
 			_bars.append(bar)
+		_felt = Widgets.StatRow.new()
+		vb.add_child(_felt); _felt.set_row("🌡", "Відчуття", "—")
+		_state = Widgets.StatRow.new()
+		vb.add_child(_state); _state.set_row("🩺", "Стан", "—")
 		_carry = Widgets.StatRow.new()
 		vb.add_child(_carry); _carry.set_row("🎒", "Несе", "0/0")
 	func bind(vm) -> void:
@@ -64,10 +71,17 @@ class VitalsPanel extends PanelBase.Base:
 		build_once()
 		if not (vm is Dictionary) or not vm.has("vitals"):
 			return
-		var bars: Array = vm.vitals.bars
+		var v: Dictionary = vm.vitals
+		var bars: Array = v.bars
 		for i in mini(_bars.size(), bars.size()):
 			_bars[i].bind(bars[i])
-		var carry: Dictionary = vm.vitals.carry
+		_felt.set_value("%d°C %s" % [int(round(float(v.get("felt_c", 20.0)))), Fmt.comfort_icon(StringName(v.get("comfort", &"ok")))])
+		var conds: Array = v.get("conditions", [])
+		var state_line: String = "😵 непритомний" if bool(v.get("downed", false)) else ("✔ здоровий" if conds.is_empty() else String(conds[0]))
+		if not conds.is_empty() and bool(v.get("downed", false)):
+			state_line += " · " + String(conds[0])
+		_state.set_value(state_line)
+		var carry: Dictionary = v.carry
 		_carry.set_value("%d/%d" % [int(carry.cur), int(carry.cap)])
 
 # ---- BalancePanel (RIGHT dock) — the director readout: threat gauge + phase (empty-gated until §8) ----

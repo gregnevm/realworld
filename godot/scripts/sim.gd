@@ -7,6 +7,7 @@ const Climate = preload("res://scripts/kernel/climate.gd")
 const Threats = preload("res://scripts/sim/threats.gd")
 const SimEnv = preload("res://scripts/sim/environment.gd")
 const WorldMeta = preload("res://scripts/sim/world_meta.gd")
+const HeroHealth = preload("res://scripts/sim/hero_health.gd")
 const DataBridge = preload("res://scripts/data_bridge.gd")
 
 var map: Dictionary
@@ -30,6 +31,10 @@ var regions: Array = []
 var convoy_seq := 0
 var craft_timer := 0.0
 var dead := false
+# Located hero health (kernel/health.gd tracker; driven by sim/hero_health.gd). player.hp is a
+# DERIVED readout of it; the tracker is what saves, travels and gets hit.
+var health: Variant = null
+var health_alerts: Dictionary = {}   # feed-toast stages per condition (view-side memory, not hashed)
 var move_input := Vector2.ZERO
 var messages: Array = []
 var messages_seq := 0              # monotonic lifetime append counter (spec 0005 §2.7 FeedbackBus seam);
@@ -102,6 +107,8 @@ func new_game(m: Dictionary) -> void:
 	_place_building("storage", lx, ly, -1)
 	_init_regions()
 	_env_init()
+	HeroHealth.reset(self)
+	HeroHealth.spawn_hint(self)
 
 # Arrive in a NEW region by capsule: your pawn + full personal inventory, but no base/stock here.
 func arrive_region(m: Dictionary, pawn: Dictionary) -> void:
@@ -119,6 +126,8 @@ func arrive_region(m: Dictionary, pawn: Dictionary) -> void:
 	_reset_local_threats()
 	_init_regions()
 	_env_init()
+	apply_health_dict(pawn.get("health", {}))   # wounds travel with the pawn (legacy pawn -> from hp)
+	HeroHealth.spawn_hint(self)
 	dead = false
 
 # Region-local state (raiders, convoys, pending raid) does not travel between regions.
@@ -141,6 +150,7 @@ func extract_pawn() -> Dictionary:
 		"equipped": (player.equipped as Dictionary).duplicate(true),
 		"items": (player.items as Array).duplicate(true),
 		"hp": float(player.hp), "hunger": float(player.hunger), "rest": float(player.rest),
+		"health": health_dict(),
 	}
 
 # Overwrite the current pawn's portable state with a travelling pawn, placed at this region's base.
@@ -149,6 +159,7 @@ func apply_pawn(pawn: Dictionary) -> void:
 		if pawn.has(k):
 			player[k] = (pawn[k].duplicate(true) if (pawn[k] is Dictionary or pawn[k] is Array) else pawn[k])
 	player.carry_cap = int(player.carry_cap)
+	apply_health_dict(pawn.get("health", {}))
 	var c := base_center()
 	player.px = c.x + 0.5
 	player.py = c.y + 1.5
@@ -201,6 +212,8 @@ func load_region(data: Dictionary) -> void:
 		_place_building(str(b.kind), int(b.x), int(b.y), float(b.hp))
 	_init_regions()
 	_env_init()
+	# AFTER the player fields: an old record has no "health" and migrates from the restored hp float
+	apply_health_dict(data.get("health", {}))
 	dead = false
 
 func _build_astar() -> void:
@@ -403,6 +416,33 @@ func temp_at(x: int, y: int) -> float:
 func hero_temp_c() -> float:
 	return temp_at(int(player.px), int(player.py))
 
+# Equipped warmth °C (data.gd `insul` on worn gear) — raises the FELT temperature against the cold,
+# and symmetrically pushes it up in the heat (a scrap vest is a parka in summer; kernel gear parity).
+func hero_insulation_c() -> float:
+	var w := 0.0
+	for slot in player.equipped:
+		var id: String = String(player.equipped[slot])
+		if id != "" and GameData.ITEMS.has(id):
+			w += float(GameData.ITEMS[id].get("insul", 0.0))
+	return w
+
+# The comfort °C the BODY experiences: tile temp (indoor buffering + emitters) + worn insulation.
+func hero_felt_c() -> float:
+	return hero_temp_c() + hero_insulation_c()
+
+# ---------------- hero health (sim/hero_health.gd delegates) ----------------
+func hero_downed() -> bool:
+	return HeroHealth.is_downed(self)
+
+func health_dict() -> Dictionary:
+	return HeroHealth.to_dict(self)
+
+func apply_health_dict(d: Dictionary) -> void:
+	HeroHealth.apply_dict(self, d)
+
+func health_reset() -> void:
+	HeroHealth.reset(self)
+
 # Ambient daylight 0..1 from the real-latitude model (long winter nights at high latitude).
 func daylight_level() -> float:
 	return climate.daylight(float(map.lat), int(time.day), float(time.frac))
@@ -518,7 +558,9 @@ func gather_time(node) -> float:
 	var tool: String = player.equipped.get("tool", "")
 	if tool != "" and GameData.ITEMS.has(tool):
 		mult *= float(GameData.ITEMS[tool].get("gather_mult", 1.0))
-	return info.time / mult * dark_work_mult()
+	# darkness and the body both slow the work: HeroHealth.work_mult reads the Manipulation capacity
+	# (wounded arms, deep cold, starvation), 1.0 at full health.
+	return info.time / mult * dark_work_mult() * HeroHealth.work_mult(self)
 
 # Ворота дерева досліджень: def без поля `research` відкритий завжди; інакше — лише коли session
 # домостив відповідний catalog-id у research_unlocked (ключі можуть бути String АБО StringName).
@@ -542,7 +584,7 @@ func melee_damage() -> float:
 	var wpn: String = player.equipped.get("weapon", "")
 	if wpn != "" and GameData.ITEMS.has(wpn):
 		dmg += float(GameData.ITEMS[wpn].get("dmg_bonus", 0.0))
-	return dmg
+	return dmg * HeroHealth.melee_mult(self)   # a mangled arm swings weaker; 1.0 at full health
 
 func has_workbench() -> bool:
 	for b in buildings:
@@ -693,16 +735,13 @@ func _update_player(dt: float) -> void:
 	p.dep_cd = max(0.0, p.dep_cd - dt)
 	p.hunger = clampf(p.hunger - 0.42 * dt, 0, 100)
 	p.rest = clampf(p.rest - (-14.0 if p.sleeping else 0.30) * dt, 0, 100)
-	if p.hunger <= 0:
-		p.hp -= 2.0 * dt
-	if p.rest <= 0:
-		p.hp -= 1.0 * dt
-	if p.hunger > 45 and p.rest > 25 and p.hp < 100:
-		p.hp = min(100.0, p.hp + 0.7 * dt)
-	p.hp = clampf(p.hp, 0, 100)
-	if p.hp <= 0 and not dead:
-		_on_death()
+	# located health (sim/hero_health.gd): empty needs and the real climate grow condition hediffs,
+	# wounds heal/bleed, the death verdict falls, and p.hp becomes the derived readout of it all.
+	HeroHealth.update(self, dt)
+	if dead:
 		return
+	if HeroHealth.is_downed(self):
+		return   # unconscious where they fell: no eating, hauling, orders or movement; needs run on
 	if p.hunger < 55 and p.eat_cd <= 0 and res_amount("food") >= 1 and _near_storage(2.2):
 		stock[res_key("food")] -= 1
 		p.hunger = min(100.0, p.hunger + 38.0)
@@ -713,13 +752,13 @@ func _update_player(dt: float) -> void:
 				var a := deposit(k, p.carry[k])
 				p.carry[k] -= a
 		p.dep_cd = 0.4
+	var step := 3.4 * HeroHealth.move_mult(self) * dt   # wounded legs / blood loss / freezing slow you
 	if move_input.length() > 0.1:
 		p.action = null
 		p.sleeping = false
-		var spd := 3.4 * dt
 		var v := move_input.normalized()
-		var nx: float = p.px + v.x * spd
-		var ny: float = p.py + v.y * spd
+		var nx: float = p.px + v.x * step
+		var ny: float = p.py + v.y * step
 		if not is_blocked(int(floor(nx)), int(floor(p.py))):
 			p.px = nx
 		if not is_blocked(int(floor(p.px)), int(floor(ny))):
@@ -733,7 +772,6 @@ func _update_player(dt: float) -> void:
 	if p.action == null:
 		_maybe_sleep(dt)
 		return
-	var step := 3.4 * dt
 	match p.action.type:
 		"move":
 			if _follow_path(p, p.action.path, step):

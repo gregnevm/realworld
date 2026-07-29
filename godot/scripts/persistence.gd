@@ -79,6 +79,9 @@ static func serialize_region(sim) -> Dictionary:
 		"place_name": str(m.get("place_name", "Регіон")),
 		"day": int(sim.time.day), "frac": float(sim.time.frac),
 		"player": _pick(sim.player, PLAYER_FIELDS),
+		# located health (sim/hero_health.gd): the tracker IS the body, so it saves with the pawn;
+		# records predating the field migrate from the player.hp float on load.
+		"health": sim.health_dict(),
 		# stock keys follow the sim's vocabulary (spec 0008: live ids vs catalogue ids) — persist the
 		# flag with them, else a cross-flag load reads the wrong keys and resources silently vanish.
 		"use_catalog": bool(sim.use_catalog),

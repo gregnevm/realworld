@@ -9,6 +9,9 @@ const Social = preload("res://scripts/social.gd")
 const Persistence = preload("res://scripts/persistence.gd")
 const SessionScript = preload("res://scripts/session.gd")
 const Catalog = preload("res://scripts/kernel/catalog.gd")
+const KernelGear = preload("res://scripts/kernel/gear.gd")
+const KernelNeeds = preload("res://scripts/kernel/needs.gd")
+const KernelHealth = preload("res://scripts/kernel/health.gd")
 
 
 func _init() -> void:
@@ -40,6 +43,10 @@ func _init() -> void:
 	_t_session_travel()
 	_t_session_respawn()
 	_t_environment()
+	_t_hero_health()
+	_t_cold_exposure()
+	_t_deprivation_live()
+	_t_health_persistence()
 	_t_raid_determinism()
 	_t_patrols()
 	_t_content_pack()
@@ -678,6 +685,243 @@ func _t_environment() -> void:
 	ok(s.dark_work_mult() < night_mult, "torch light reduces the darkness penalty")
 	ok(s.light_at(14, 2) > 0.6, "torch cell is lit at night")
 
+# ---------------- located hero health (sim/hero_health.gd wiring the kernel tracker live) ----------------
+# a flat warm-summer arena: no map noise, comfort in-band, threats disarmed — isolates the channel under test
+func _flat_sim(day: int = 195) -> Variant:
+	var nn := 16
+	var tiles := PackedByteArray()
+	tiles.resize(nn * nn)
+	tiles.fill(WorldGen.GRASS)
+	var s = Sim.new()
+	s.new_game({"n": nn, "tiles": tiles, "nodes": {}, "spawn": Vector2i(8, 8), "lat": 50.4501, "lon": 30.5234})
+	s.time.day = day
+	s.time.frac = 0.5
+	s.weather = &"clear"
+	s.raid.next = 1e9
+	s.patrol.next = 1e9
+	return s
+
+func _t_hero_health() -> void:
+	var s = _flat_sim()
+	ok(s.health != null and float(s.player.hp) == 100.0, "new game starts a fresh located-health tracker")
+	# an enemy blow lands as a LOCATED injury: severity = dmg × armor × INJURY_SCALE on a real part
+	var atk: Dictionary = GameData.make_raider(s.player.px + 0.5, s.player.py, 1)
+	atk.atk_cd = 0.0
+	s.enemies.append(atk)
+	s._update_enemies(0.01)
+	ok(s.health.hediffs.size() == 1, "the hit sits on the tracker as one wound")
+	var wound: Variant = s.health.hediffs[0]
+	ok(absf(float(wound.severity) - float(atk.dmg) * 0.55) < 0.01, "wound severity = post-armor damage × 0.55")
+	ok(wound.part != null, "the wound names a body part (%s)" % wound.part.label)
+	s.enemies.clear()
+	# hit location replays from the seeded threat stream: twin sims take the same wound
+	var a = _flat_sim()
+	var b = _flat_sim()
+	for tw in [a, b]:
+		var e2: Dictionary = GameData.make_raider(tw.player.px + 0.5, tw.player.py, 1)
+		e2.atk_cd = 0.0
+		tw.enemies.append(e2)
+		tw._update_enemies(0.01)
+	ok(String(a.health.hediffs[0].part.key) == String(b.health.hediffs[0].part.key), "same seed -> same hit location")
+	# an untended wound bleeds; sleeping in a bed tends it and the bleeding stops
+	var s2 = _flat_sim()
+	s2.health.injure(&"torso", 20.0, "рвана рана")
+	s2.update(0.5)
+	ok(float(s2.health.total_bleed()) > 0.0, "untended torso wound bleeds")
+	var blood0: float = float(s2.health.blood)
+	for i in 20:
+		s2.update(0.5)
+	ok(float(s2.health.blood) < blood0, "bleeding drains blood over ticks")
+	ok(float(s2.player.hp) < 100.0, "hp readout reflects the wounded body")
+	s2._place_building("bed", int(s2.player.px) + 1, int(s2.player.py), -1)
+	s2.player.rest = 50.0
+	s2.player.action = null
+	for i in 6:
+		s2.update(0.5)
+	ok(bool(s2.player.sleeping), "pawn sleeps by the bed")
+	ok(bool(s2.health.hediffs[0].tended) and float(s2.health.total_bleed()) == 0.0, "bed sleep tends the wound (bleeding stops)")
+	# a smashed vital part is death, and the verdict names the cause — through the real combat
+	# entry (HeroHealth.damage picks parts off the seeded stream; massive blows soon find a vital)
+	var s3 = _flat_sim()
+	var hits := 0
+	while not s3.dead and hits < 12:
+		Sim.HeroHealth.damage(s3, 200.0)
+		hits += 1
+	ok(s3.dead, "massive blows destroy a vital part and kill (%d hits)" % hits)
+	var died_msg := false
+	for m in s3.messages:
+		if "Причина смерті" in String(m.text):
+			died_msg = true
+	ok(died_msg, "death verdict names its cause in the feed")
+	# permadeath: the rookie arrives in an unscarred body
+	s3.respawn_new_pawn()
+	ok(s3.health.hediffs.is_empty() and float(s3.player.hp) == 100.0, "respawned pawn has a fresh tracker")
+	# wounded arms work slower and hit weaker; wounded legs walk slower (capacities feed the sim)
+	var s4 = _flat_sim()
+	var node := {"kind": "tree", "amount": 5}
+	var t0: float = s4.gather_time(node)
+	var dmg0: float = s4.melee_damage()
+	s4.health.injure(&"arm_l", 20.0)
+	s4.health.injure(&"arm_r", 20.0)
+	s4.health.injure(&"leg_l", 20.0)
+	ok(s4.gather_time(node) > t0, "wounded arms gather slower")
+	ok(s4.melee_damage() < dmg0, "wounded arms hit weaker")
+
+func _t_cold_exposure() -> void:
+	# Kyiv day 15 == deep winter: standing outside with no heat grows hypothermia — the climate BITES
+	var s = _flat_sim(15)
+	ok(s.hero_felt_c() < 12.0, "winter noon outdoors is below the comfort band (%.1f°C)" % s.hero_felt_c())
+	var hint := false
+	for m in s.messages:
+		if "холодно" in String(m.text):
+			hint = true
+	ok(hint, "cold spawn logs the fire-first onboarding hint")
+	var node := {"kind": "tree", "amount": 5}
+	var warm_time: float = s.gather_time(node)
+	for i in 60:
+		s.update(0.5)
+		s.player.hunger = 100.0
+		s.player.rest = 100.0
+	var hypo: Variant = null
+	for h in s.health.hediffs:
+		if h is KernelGear.Hediff_Hypothermia:
+			hypo = h
+	ok(hypo != null and float(hypo.severity) > 0.1, "unheated winter grows hypothermia (тяж.%.2f)" % (float(hypo.severity) if hypo else -1.0))
+	ok(s.gather_time(node) > warm_time, "freezing hands work slower (%.2f > %.2f)" % [s.gather_time(node), warm_time])
+	ok(float(s.player.hp) < 100.0, "hp readout drops as the cold deepens")
+	# a scrap vest adds felt warmth (data.gd insul)
+	var felt_bare: float = s.hero_felt_c()
+	s.player.items.append("vest")
+	s.equip("vest")
+	ok(absf(s.hero_felt_c() - (felt_bare + 3.0)) < 0.01, "vest adds +3°C felt warmth")
+	s.player.equipped["armor"] = ""
+	# an ENCLOSED, heated room holds the comfort band: severity recedes to nothing inside
+	# (a fire in the open field is NOT enough in deep winter — shelter + heat is the lesson)
+	s.player.px = 3.5
+	s.player.py = 3.5
+	s.player.action = null
+	s._place_building("wall", 2, 3, -1)
+	s._place_building("wall", 4, 3, -1)
+	s._place_building("wall", 3, 2, -1)
+	s._place_building("door", 3, 4, -1)
+	ok(s.is_indoor(3, 3), "the pawn's cell is now a room")
+	s._place_building("campfire", 3, 3, -1)
+	s._place_building("heater", 3, 3, -1)
+	ok(s.hero_felt_c() >= 12.0, "walls + campfire + heater lift the felt °C into the band (%.1f)" % s.hero_felt_c())
+	for i in 40:
+		s.update(0.5)
+		s.player.hunger = 100.0
+		s.player.rest = 100.0
+	var still_cold := false
+	for h in s.health.hediffs:
+		if h is KernelGear.Hediff_Hypothermia:
+			still_cold = true
+	ok(not still_cold, "sheltered heat recedes hypothermia to nothing (heat sources have teeth)")
+	# unrelenting deep cold is lethal: the death verdict says so
+	var s2 = _flat_sim(15)
+	s2.apply_temp_anomaly(-45.0, 20.0)
+	var guard := 0
+	while not s2.dead and guard < 400:
+		s2.update(0.5)
+		s2.player.hunger = 100.0
+		s2.player.rest = 100.0
+		guard += 1
+	ok(s2.dead, "unsheltered −45°C anomaly eventually kills")
+	var froze := false
+	for m in s2.messages:
+		if "замерз" in String(m.text):
+			froze = true
+	ok(froze, "the verdict names the cold")
+
+func _t_deprivation_live() -> void:
+	# starvation: an empty stomach is now a rising condition, not a silent hp drain — and it kills
+	var s = _flat_sim()
+	s.stock[s.res_key("food")] = 0
+	var guard := 0
+	while not s.dead and guard < 800:
+		s.update(0.5)
+		s.player.hunger = 0.0
+		s.player.rest = 100.0
+		guard += 1
+	ok(s.dead, "starvation kills after ~2 hungry days")
+	var starved := false
+	for m in s.messages:
+		if "голодна смерть" in String(m.text).to_lower():
+			starved = true
+	ok(starved, "the verdict names starvation")
+	# sleeplessness: collapse where you stand (downed -> forced sleep), NOT death
+	var s2 = _flat_sim()
+	var downed_seen := false
+	var guard2 := 0
+	while guard2 < 500 and not downed_seen:
+		s2.update(0.5)
+		s2.player.hunger = 100.0
+		s2.player.rest = 0.0
+		s2.player.sleeping = false   # no bed: fight the sleep until the body gives out
+		guard2 += 1
+		downed_seen = s2.hero_downed()
+	ok(downed_seen and not s2.dead, "exhaustion downs the pawn without killing")
+	# released to sleep, the collapse resolves: rest recovers, consciousness returns, the pawn wakes
+	var guard3 := 0
+	while s2.hero_downed() and guard3 < 200:
+		s2.update(0.5)
+		s2.player.hunger = 100.0
+		guard3 += 1
+	ok(not s2.hero_downed() and not s2.dead, "the collapsed pawn sleeps it off and gets up")
+
+func _t_health_persistence() -> void:
+	# wounds survive save/load byte-exactly, and the world hash covers them
+	var s = _flat_sim()
+	s.health.injure(&"leg_l", 9.0, "поріз")   # >= scar threshold: also seeds the scar debt
+	s.health.injure(&"torso", 6.0)
+	s.health.hediffs[0].tended = true
+	s.update(0.5)   # registers scar_watch + recomputes hp
+	var rec := Persistence.serialize_region(s)
+	ok(rec.has("health"), "serialize_region carries the health record")
+	var s2 = Sim.new()
+	s2.load_region(rec)
+	ok(Persistence.content_hash(s.health_dict()) == Persistence.content_hash(s2.health_dict()),
+		"load_region restores the tracker exactly (wounds, tended flags, scar debt)")
+	ok(absf(float(s.player.hp) - float(s2.player.hp)) < 0.01, "restored hp readout matches")
+	var watch: Array = s2.health_dict().get("scar_watch", [])
+	ok(watch.has("leg_l"), "the scar debt survives the round-trip")
+	# the wound is IN the world hash: twin worlds agree, a wound splits them
+	var t1 = _flat_sim()
+	var t2 = _flat_sim()
+	ok(Persistence.world_hash(t1) == Persistence.world_hash(t2), "twin worlds hash identically")
+	t1.health.injure(&"arm_l", 5.0)
+	ok(Persistence.world_hash(t1) != Persistence.world_hash(t2), "a wound changes the world hash (health is authoritative state)")
+	# rejoin: the resume payload lands the wounded pawn byte-identical
+	var r1 := Persistence.resume_payload(s)
+	var s3 = Sim.new()
+	Persistence.restore(s3, r1)
+	ok(Persistence.world_hash(s3) == Persistence.world_hash(s), "resume payload restores a hash-exact wounded world")
+	# travel: the capsule carries the body, wounds and all
+	var pawn: Dictionary = s.extract_pawn()
+	ok(pawn.has("health"), "extract_pawn packs the tracker")
+	var m := WorldGen.generate_map(50.5109, 30.7909, 16)
+	m["place_name"] = "Бровари"
+	var s4 = Sim.new()
+	s4.new_game(WorldGen.generate_map(49.8397, 24.0297, 16))
+	s4.arrive_region(m, pawn)
+	ok(Persistence.content_hash(s4.health_dict()) == Persistence.content_hash(s.health_dict()),
+		"arrive_region lands the same wounded body")
+	# legacy save (no health record): the old hp float migrates to a tended torso wound
+	var old_rec: Dictionary = Persistence.serialize_region(_flat_sim())
+	old_rec.erase("health")
+	old_rec.player.hp = 40.0
+	var s5 = Sim.new()
+	s5.load_region(old_rec)
+	ok(s5.health.hediffs.size() == 1 and s5.health.hediffs[0] is KernelHealth.Hediff_Injury, "legacy hp migrates to one torso wound")
+	ok(float(s5.health.total_bleed()) == 0.0, "the migrated wound is tended (no bleed surprise)")
+	ok(float(s5.player.hp) < 100.0 and float(s5.player.hp) > 0.0, "migrated readout reflects the lived-in body")
+	# JSON file round-trip (int->float coercion) keeps the record hash-stable
+	var via_json: Variant = JSON.parse_string(JSON.stringify(rec))
+	var s6 = Sim.new()
+	s6.load_region(via_json)
+	ok(Persistence.content_hash(s6.health_dict()) == Persistence.content_hash(s.health_dict()),
+		"health record survives a JSON round-trip")
+
 # «координати — це seed» поширюється й на загрози: рейд-хвилі, засідки на конвої та лут
 # ідуть з окремого seeded потоку (sim.threat_rng), незалежного від погодного (env_rng).
 func _t_raid_determinism() -> void:
@@ -795,7 +1039,8 @@ func _t_content_pack() -> void:
 	ok(int(s.stock.stone) == stone0 and "дослідження" in s.flash_msg, "турель заборонена до Механіки (кошти цілі)")
 	# відкриваємо гілки — все стає доступним
 	s.research_unlocked = {"masonry": true, "hunting": true, "smelting": true, "smithing": true, "machining": true}
-	# броня: панцир ріже вхідний урон удвічі
+	# броня: панцир ріже вхідний урон удвічі — удар лягає ЛОКАЛІЗОВАНОЮ раною на тракер
+	# (sim/hero_health.gd), тож звіряємо сумарну тяжкість ран, а не віднімання від hp-флоата
 	ok(bool(s.craft_item("plate").ok), "панцир скрафчено на верстаку (після Ковальства)")
 	ok(String(s.player.equipped.get("armor", "")) == "plate", "панцир екіповано у слот armor")
 	ok(absf(s.armor_mult() - 0.5) < 0.001, "панцир ріже урон удвічі")
@@ -804,9 +1049,14 @@ func _t_content_pack() -> void:
 	s.enemies.append(atk)
 	var php0: float = float(s.player.hp)
 	s._update_enemies(0.01)
-	ok(absf((php0 - float(s.player.hp)) - float(atk.dmg) * 0.5) < 0.01, "вхідний удар порізаний бронею")
+	var wound_sev := 0.0
+	for h in s.health.hediffs:
+		wound_sev += float(h.severity)
+	ok(absf(wound_sev - float(atk.dmg) * 0.5 * 0.55) < 0.01, "вхідний удар порізаний бронею і ліг раною на частину тіла")
+	ok(float(s.player.hp) <= php0, "hp-редаут відбиває отриману рану")
 	s.enemies.clear()
-	# кувалда і лук: топ-тір спорядження
+	# кувалда і лук: топ-тір спорядження (свіже тіло — поранена рука била б слабше, і це фіча)
+	s.health_reset()
 	ok(bool(s.craft_item("sledge").ok) and bool(s.craft_item("bow").ok), "кувалда і лук скрафчені")
 	ok(absf(s.melee_damage() - (12.0 + float(s.player.skills.combat) + 18.0)) < 0.01, "лук додає +18 урону")
 	ok(float(GameData.ITEMS.sledge.gather_mult) > float(GameData.ITEMS.pick.gather_mult), "кувалда швидша за кайло")

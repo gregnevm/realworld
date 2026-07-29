@@ -11,6 +11,8 @@ const CatalogView = preload("res://scripts/ui/catalog_view.gd")
 const CatalogSim = preload("res://scripts/catalog_sim.gd")
 const Social = preload("res://scripts/social.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
+const Gear = preload("res://scripts/kernel/gear.gd")
+const HeroHealth = preload("res://scripts/sim/hero_health.gd")
 
 # session: the SessionScript (has .sim). world/ctx: the same shapes the kernel consumes (built by HudRoot).
 # balance: a Balance director constructed ONCE by HudRoot and reused (never new() per frame).
@@ -229,13 +231,22 @@ static func _need_row(id: StringName, v: float) -> Dictionary:
 	}
 
 static func _vitals_slice(p: Dictionary, sim) -> Dictionary:
+	# located health (sim/hero_health.gd): blood bar, condition inspect lines, downed flag and the
+	# felt-°C comfort state. All value data (R8); lean test fakes lack the tracker -> full-health row.
+	var tracker: Variant = sim.get("health")
+	var felt: float = float(sim.hero_felt_c()) if sim.has_method("hero_felt_c") else 20.0
 	return {
 		"bars": [
 			_need_row(&"hp", float(p.get("hp", 0.0))),
 			_need_row(&"hunger", float(p.get("hunger", 0.0))),
 			_need_row(&"rest", float(p.get("rest", 0.0))),
+			_need_row(&"blood", 100.0 * (float(tracker.blood) if tracker != null else 1.0)),
 		],
 		"sleeping": bool(p.get("sleeping", false)),
+		"downed": bool(tracker.downed) if tracker != null else false,
+		"conditions": HeroHealth.condition_lines(sim) if tracker != null else [],
+		"felt_c": felt,
+		"comfort": Fmt.comfort_enum(felt, Gear.COMFORT_MIN_C, Gear.COMFORT_MAX_C),
 		"carry": {"cur": int(sim.carry_total()), "cap": int(p.get("carry_cap", 0))},
 	}
 
