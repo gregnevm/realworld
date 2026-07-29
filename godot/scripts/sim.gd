@@ -9,6 +9,8 @@ const SimEnv = preload("res://scripts/sim/environment.gd")
 const WorldMeta = preload("res://scripts/sim/world_meta.gd")
 const HeroHealth = preload("res://scripts/sim/hero_health.gd")
 const SimPower = preload("res://scripts/sim/power.gd")
+const SimFarm = preload("res://scripts/sim/farming.gd")
+const Director = preload("res://scripts/sim/director.gd")
 const DataBridge = preload("res://scripts/data_bridge.gd")
 const CatalogDefs = preload("res://scripts/catalog_defs.gd")
 const Catalog = preload("res://scripts/kernel/catalog.gd")
@@ -22,8 +24,12 @@ var bgrid: Dictionary = {}
 var enemies: Array = []
 var shots: Array = []
 var time := {"frac": 0.28, "day": 1, "day_len": 150.0}
-var raid := {"timer": 0.0, "next": 95.0, "active": false, "warned": false, "wave": 0}
-var patrol := {"timer": 0.0, "next": 110.0, "wave": 0}   # лор: патрульні роботи Старого світу
+# Raid pacing is DIRECTOR-driven (sim/director.gd): `next` idles at RAID_IDLE until Balance's raid
+# incident arms the cycle (warning + wave). The timer/next machinery stays so tests/smoke can still
+# force a wave by lowering `next` manually.
+const RAID_IDLE := 1.0e12
+var raid := {"timer": 0.0, "next": RAID_IDLE, "active": false, "warned": false, "wave": 0}
+var patrol := {"timer": 0.0, "next": 300.0, "wave": 0}   # патрульні роботи; перший контакт ~день 3
 var research_unlocked: Dictionary = {}   # catalog research id -> true; session мостить із kernel/progression
 var use_catalog := false   # spec 0008 phase 2: OFF = stock живе на 6 data.gd-ключах (шліфований зріз
                            # байт-у-байт, його сьюти це доводять); ON = ключі stock — catalogue-ids через
@@ -41,10 +47,18 @@ var health_alerts: Dictionary = {}   # feed-toast stages per condition (view-sid
 # Power grid (Batch 8c, sim/power.gd): a derived Thing fleet over the placed powered buildings.
 # power_net/power_active are the per-tick verdicts; fuel/charge live ON the building dicts (saved).
 var power_things: Dictionary = {}    # cell -> kernel Thing (derived cache; never serialized)
-var power_net: Dictionary = {}       # {supply, draw, stored, capacity, brownout} readout
+var power_nets: Array = []           # Array of participant-cell Arrays: SPATIAL grids (adjacency+conduits)
+var power_net: Dictionary = {}       # aggregate {supply, draw, stored, capacity, brownout} readout
 var power_active: Dictionary = {}    # cell -> bool : did the net deliver this tick
 var power_dirty := true              # building set changed -> rebuild the fleet lazily
 var power_sys: Variant = null        # kernel PowerNetSystem (created once)
+# Farming (sim/farming.gd): grower Thing per grow zone; b.growth/b.harvests are the saved truth.
+var farm_things: Dictionary = {}     # cell -> kernel Thing carrying CompGrower (derived cache)
+var farm_dirty := true
+# The Balance director (sim/director.gd): kernel/balance.gd finally PACES the game, not just the
+# HUD. Its own seeded stream (env_init) so storyteller rolls never desync raids or weather.
+var balance: Variant = null          # kernel Balance instance (knobs at defaults; AI seam later)
+var director_rng := RandomNumberGenerator.new()
 var move_input := Vector2.ZERO
 var messages: Array = []
 var messages_seq := 0              # monotonic lifetime append counter (spec 0005 §2.7 FeedbackBus seam);
@@ -145,8 +159,8 @@ func _reset_local_threats() -> void:
 	enemies = []
 	convoys = []
 	shots = []
-	raid = {"timer": 0.0, "next": 95.0, "active": false, "warned": false, "wave": int(raid.get("wave", 0))}
-	patrol = {"timer": 0.0, "next": 110.0, "wave": int(patrol.get("wave", 0))}
+	raid = {"timer": 0.0, "next": RAID_IDLE, "active": false, "warned": false, "wave": int(raid.get("wave", 0))}
+	patrol = {"timer": 0.0, "next": 300.0, "wave": int(patrol.get("wave", 0))}
 	banner = ""
 
 # The pawn's portable inventory + condition (what a capsule carries).
@@ -220,9 +234,14 @@ func load_region(data: Dictionary) -> void:
 	_reset_local_threats()
 	for b in data.buildings:
 		var placed: Dictionary = _place_building(str(b.kind), int(b.x), int(b.y), float(b.hp))
-		for f in ["fuel", "charge"]:   # power grid state rides the building record (Batch 8c)
+		for f in ["fuel", "charge", "growth"]:   # power/farming/defense state rides the record
 			if b.has(f):
 				placed[f] = float(b[f])
+		for f in ["harvests", "ammo"]:
+			if b.has(f):
+				placed[f] = int(b[f])
+		if b.has("crop"):
+			placed["crop"] = str(b.crop)
 	_init_regions()
 	_env_init()
 	# AFTER the player fields: an old record has no "health" and migrates from the restored hp float
@@ -493,6 +512,9 @@ func device_active(b) -> bool:
 func dispose_power() -> void:
 	SimPower.dispose(self)
 
+func dispose_farm() -> void:
+	SimFarm.dispose(self)
+
 func is_wet() -> bool:
 	return weather == &"rain" or weather == &"snow"
 
@@ -517,6 +539,7 @@ func _place_building(kind: String, x: int, y: int, hp: float):
 	buildings.append(b)
 	bgrid[y * n + x] = b
 	power_dirty = true
+	farm_dirty = true
 	if def.get("blocks", false):
 		_refresh_solid(x, y)
 	if def.get("blocks", false) or kind.begins_with("door"):
@@ -527,6 +550,7 @@ func _remove_building(b) -> void:
 	buildings.erase(b)
 	bgrid.erase(b.y * n + b.x)
 	power_dirty = true
+	farm_dirty = true
 	_refresh_solid(b.x, b.y)
 	if building_def(String(b.kind)).get("blocks", false) or String(b.kind).begins_with("door"):
 		_recompute_indoor()
@@ -607,6 +631,40 @@ func _research_label(def: Dictionary) -> String:
 	var need := String(def.get("research", ""))
 	# data.gd mirrors the labels for its own five gates; catalogue-only gates read the catalogue label
 	return String(GameData.RESEARCH_LABEL.get(need, CatalogDefs.research_label(need)))
+
+# ---------------- crop selection (farming v2) ----------------
+# Cycle the selected crop of an OWN grow building ("" == the mixed rotation). Value-data result —
+# the router owns the user-facing text (R10); label passes through catalogue data.
+func set_crop(x: int, y: int) -> Dictionary:
+	if not _in(x, y) or not bgrid.has(y * n + x):
+		return {"ok": false}
+	var b: Dictionary = bgrid[y * n + x]
+	if not bool(building_def(String(b.kind)).get("grow", false)):
+		return {"ok": false}
+	var crop := CatalogDefs.next_crop(String(b.get("crop", "")))
+	if crop == "":
+		b.erase("crop")
+	else:
+		b["crop"] = crop
+	return {"ok": true, "crop": crop,
+		"label": CatalogDefs.res_label(crop) if crop != "" else "",
+		"icon": CatalogDefs.res_icon(crop) if crop != "" else ""}
+
+# The best cooked meal in stock ("" = none / flag off): highest nutrition first, deterministic
+# tie-break by id. Meal keys only ever exist in the open-stock vocabulary.
+func _best_meal() -> String:
+	if not use_catalog:
+		return ""
+	var best := ""
+	var best_n := 0.0
+	var ids: Array = CatalogDefs.MEAL_NUTRITION.keys()
+	ids.sort()
+	for id in ids:
+		var nutrition := float(CatalogDefs.MEAL_NUTRITION[id])
+		if int(stock.get(id, 0)) >= 1 and nutrition > best_n:
+			best = str(id)
+			best_n = nutrition
+	return best
 
 # Cost line valid in EITHER stock vocabulary (data.gd RES icons know only the 6 live ids).
 func _cost_str(cost: Dictionary) -> String:
@@ -809,6 +867,8 @@ func update(dt: float) -> void:
 		_grant_daily_capsule()
 	_update_environment(dt / time.day_len)
 	SimPower.update(self, dt)   # after environment (solar reads daylight, wind reads weather)
+	SimFarm.update(self, dt)    # after power (hydroponics grows only when the net delivered)
+	Director.update(self, dt)   # Balance rolls incidents; raids arm BEFORE threats tick below
 	_update_player(dt)
 	_update_crafting(dt)
 	_update_raids(dt)
@@ -835,10 +895,18 @@ func _update_player(dt: float) -> void:
 		return
 	if HeroHealth.is_downed(self):
 		return   # unconscious where they fell: no eating, hauling, orders or movement; needs run on
-	if p.hunger < 55 and p.eat_cd <= 0 and res_amount("food") >= 1 and _near_storage(2.2):
-		stock[res_key("food")] -= 1
-		p.hunger = min(100.0, p.hunger + 38.0)
-		p.eat_cd = 2.5
+	if p.hunger < 55 and p.eat_cd <= 0 and _near_storage(2.2):
+		# cooked meals first (spec 0008: thing-outputs are edible stock — cooking beats foraging);
+		# the flag-OFF path is byte-identical to the shipped slice (no meal keys can exist there)
+		var meal := _best_meal()
+		if meal != "":
+			stock[meal] -= 1
+			p.hunger = min(100.0, p.hunger + CatalogDefs.meal_nutrition(meal))
+			p.eat_cd = 2.5
+		elif res_amount("food") >= 1:
+			stock[res_key("food")] -= 1
+			p.hunger = min(100.0, p.hunger + 38.0)
+			p.eat_cd = 2.5
 	if carry_total() > 0 and p.dep_cd <= 0 and _near_storage(1.8):
 		for k in p.carry.keys():
 			if p.carry[k] > 0:
@@ -945,7 +1013,9 @@ func _maybe_sleep(_dt: float) -> void:
 		return
 	var bed: Variant = null
 	for b in buildings:
-		if b.kind == "bed" and _dist(p.px, p.py, b.x + 0.5, b.y + 0.5) < 1.6:
+		# bed CAPABILITY, not the id: data.gd's bed carries `bed:true`, and so do the live
+		# catalogue medical beds (medbed/hospital_bed) — a future bed def sleeps without edits
+		if building_def(String(b.kind)).get("bed", false) and _dist(p.px, p.py, b.x + 0.5, b.y + 0.5) < 1.6:
 			bed = b
 			break
 	p.sleeping = (bed != null and _nearest_enemy(p.px, p.py, 9) == null)

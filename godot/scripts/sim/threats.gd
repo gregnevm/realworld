@@ -29,7 +29,8 @@ static func update_raids(s, dt: float) -> void:
 		if not raiders_left:
 			r.active = false
 			r.warned = false
-			r.next = 78.0 + s.threat_rng.randf() * 46.0
+			# the DIRECTOR owns the next raid now (sim/director.gd MTB roll) — the cycle idles
+			r.next = s.RAID_IDLE
 			r.timer = 0.0
 			s.banner = ""
 			s._log("✅ Рейд відбито!", "good")
@@ -52,7 +53,16 @@ static func spawn_wave(s) -> void:
 	if s.social != null:
 		pressure = Social.raid_pressure(s.social)
 		faction = Social.raid_faction_name(s.social, r.wave)
-	var cnt: int = clampi(int(ceil(float(GameData.raid_wave_size(s.time.day)) * pressure)), 1, 20)
+	# a director-armed raid carries its Balance payload: the wave is sized by THREAT POINTS (wealth +
+	# days + clan pressure through assess()) — the escalation the flat day-formula never had. A wave
+	# forced without the director (tests/smoke lowering `next`) keeps the legacy day formula.
+	var cnt: int
+	if r.has("director"):
+		cnt = clampi(int(r.director.get("count", 1)), 1, 20)
+		faction = str(r.director.get("faction", faction))
+		r.erase("director")
+	else:
+		cnt = clampi(int(ceil(float(GameData.raid_wave_size(s.time.day)) * pressure)), 1, 20)
 	var edge: int = s.threat_rng.randi() % 4
 	var placed := 0
 	var guard := 0
@@ -87,15 +97,16 @@ static func edge_cell(s, edge: int) -> Vector2i:
 	return Vector2i(x, y)
 
 # ---------------- patrol robots (лор: автоматика Старого світу) ----------------
-# Постапокаліпсис: час від часу регіон перетинає патруль роботів — в'язка амбієнтна загроза поза
-# рейд-циклом (без банера й ескалації хвиль). Той самий seeded threat-потік: світ відтворюваний.
+# Постапокаліпсис: зрідка регіон перетинає патруль роботів — амбієнтна загроза поза рейд-циклом
+# (без банера й ескалації хвиль). Бойовка тут — спеція, не основна страва: вікно ~2.8–4.8 ігрових
+# діб тримає компонентний дріп живим, не перетворюючи гру на тир. Той самий seeded threat-потік.
 static func update_patrols(s, dt: float) -> void:
 	var pt: Dictionary = s.patrol
 	pt.timer += dt
 	if pt.timer < pt.next:
 		return
 	pt.timer = 0.0
-	pt.next = 95.0 + s.threat_rng.randf() * 70.0
+	pt.next = 420.0 + s.threat_rng.randf() * 300.0
 	if s.raid.active:
 		return   # одна битва за раз: під час рейду патруль не накладаємо
 	spawn_patrol(s)
@@ -180,7 +191,9 @@ static func update_enemies(s, dt: float) -> void:
 
 # Data-capability turret brain (the trap_dps pattern): ANY building whose def carries a range fires —
 # data.gd's turret via {range, dps} (shot = dps×0.5 every 0.5s, exactly as shipped), catalogue turrets
-# via {range, shot_dmg, shot_cool}. Adding a turret def never edits this brain.
+# via {range, shot_dmg, shot_cool}. A def with `ammo_max` FIRES STOCK AMMO: it reloads one round per
+# tick from the open stock and holds fire dry — the ammo chain (gunpowder -> ammo) has a real gun.
+# Adding a turret def never edits this brain.
 static func update_turrets(s, dt: float) -> void:
 	for b in s.buildings:
 		var def: Dictionary = s.building_def(String(b.kind))
@@ -189,12 +202,22 @@ static func update_turrets(s, dt: float) -> void:
 			continue
 		if not s.device_active(b):
 			continue   # a browned-out powered turret holds fire (Batch 8c)
+		var ammo_max := int(def.get("ammo_max", 0))
+		if ammo_max > 0 and int(b.get("ammo", 0)) < ammo_max and s.res_amount("ammo") >= 1:
+			s.stock[s.res_key("ammo")] -= 1
+			b["ammo"] = int(b.get("ammo", 0)) + 1
 		b.cool = max(0.0, b.cool - dt)
 		var e: Variant = s._nearest_enemy(b.x + 0.5, b.y + 0.5, reach)
 		if e == null:
 			continue
 		b.aim = atan2(e.py - (b.y + 0.5), e.px - (b.x + 0.5))
 		if b.cool <= 0:
+			if ammo_max > 0:
+				if int(b.get("ammo", 0)) < 1:
+					continue   # dry magazine: the reload line above will feed it when stock has ammo
+				b["ammo"] = int(b.get("ammo", 0)) - 1
+				if int(b.ammo) == 0 and s.res_amount("ammo") == 0:
+					s._log("🔫 %s: набої скінчились." % str(def.get("name", b.kind)), "warn")
 			b.cool = 0.5 if def.has("dps") else float(def.get("shot_cool", 1.0))
 			damage_enemy(s, e, float(def.dps) * 0.5 if def.has("dps") else float(def.get("shot_dmg", 0.0)))
 			s.shots.append({"x1": b.x + 0.5, "y1": b.y + 0.5, "x2": e.px, "y2": e.py, "t": 0.12})

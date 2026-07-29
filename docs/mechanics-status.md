@@ -24,8 +24,8 @@
 | `crafting_automation` | ✅ | ✅ | 🟡 | ✅ | `kernel/production.gd` bills (count/until); quality 0–6. Live catalogue craft (2026-07-29) is instant `sim.craft_catalog`; work-time bills remain kernel/sandbox |
 | `content_tree` | ✅ | ✅ | ✅ | ✅ | 335 defs, reachability-validated. **Live behind `use_catalog`** (2026-07-29, spec 0008 ph.3–4): the curated tier — 38 res / 73 builds / 27 recipes, neolithic→steel — builds, crafts and mines in the real game; the rest browsable until its map source ships |
 | `progression_research` | ✅ | ✅ | ✅ | ✅ | **spec 0007** — `kernel/progression.gd` queueable research pipeline over the tree; live from research benches (`session.tick_research`), surfaced in `ResearchPanel` (LEFT dock); planner (`research_path`/`steps_to_unlock`). Node + Godot mirrored tests |
-| `raids_pvp` | ✅ | ✅ | ✅ | ✅ | seeded raid/patrol cycles in `sim/threats.gd` (own timers + clan `raid_pressure` from `social.gd`). **NOT paced by Balance** — `Balance.assess()` feeds only the HUD threat readout (see `balance_director`) |
-| `balance_director` | ✅ | ✅ | 🟡 | ✅ | `kernel/balance.gd`; `decide()` AI seam; incident MTB pacing coded but **not driving the live sim** — assess() surfaces in the HUD only |
+| `raids_pvp` | ✅ | ✅ | ✅ | ✅ | **Paced by Balance since 2026-07-29** (`sim/director.gd`): MTB rolls arm the warning→wave cycle and the wave is sized by threat points (wealth + days + clan `raid_pressure`) — real escalation. **Rare by design** (owner's call): weight ×0.25 ≈ one raid per ~10 game-days; patrols (the ambient `sim/threats.gd` channel) every ~2.8–4.8 days, first contact ~day 3 — combat is spice, not the loop |
+| `balance_director` | ✅ | ✅ | ✅ | ✅ | **live** (2026-07-29): `sim/director.gd` runs `Balance.tick()` on its own seeded stream — raids, disease (→ the health tracker), cold snaps (→ `apply_temp_anomaly`), cargo drops. `decide()` stays the AI seam; fauna/quest incidents wait for their substrate |
 | `convoy_logistics` | ✅ | ✅ | ✅ | ✅ | real hubs (Kyiv/Lviv/Odesa/…); trade offers |
 | `offline_persistence` | ✅ | ✅ | ✅ | ✅ | `persistence.gd` seed+diff+hash-chain; travel/permadeath |
 | `social` | ✅ | ✅ | ✅ | ✅ | `social.gd` clans/stances; `new_graph()` = Phase 1 wire-shape |
@@ -166,8 +166,60 @@ go-ahead, the 335-def tree now BUILDS and CRAFTS in the live game behind `use_ca
 - **UI**: the B/C/N browsers flip their badge «демо»→«живе» when the slice state IS the live sim;
   build rows arm the ordinary `select_build` ghost, craft rows run `sim.craft_catalog`, the
   StockPanel lists catalogue-only stock. Sandbox mode (flag OFF, shipped default) is untouched.
-- Remaining to full Option A: map sources for the hunting/farming/exotic-mining raws, work-time
-  crafting, and the deliberate default-ON flip for new games (spec 0008 §5.2).
+- Remaining to full Option A: map sources for the hunting/exotic-mining raws, work-time crafting,
+  and the deliberate default-ON flip for new games (spec 0008 §5.2).
+
+**Update (2026-07-29, the polish pass — medicine and ammo get real):** two more «kernel-only»
+remainders close. **Medicine lives**: the bed-tend event now consumes ONE medicine from the open
+stock (medicine > herbal_medicine, deterministic) and delivers a kernel-TendService-style relief
+burst (infection down, immunity up) scaled by medicine quality × the bed's `medbed_mult`; the
+catalogue medical beds (`medbed`/`hospital_bed`, `medbed:true` in the data) join the live tier as
+sleepable beds with the kernel CompMedbed quality formula — and the sim's bed check is now the
+`bed` CAPABILITY, not the id. The herbal→medicine chain finally has a consumer. **Ammo is real**:
+catalogue turrets with `ammo_max` fire STOCK AMMO — one round per shot, auto-reload from the stock
+(the fuel pattern), dry magazines hold fire and say so; `b.ammo` persists. The gunpowder→ammo chain
+has a gun. data.gd's turret keeps its shipped free-firing behaviour (no ammo_max — suites hold).
+Covered by `_t_polish_live`.
+
+**Update (2026-07-29, the follow-through pass):** the two debts this PR left itself are paid.
+**Crop selection** (`set_crop` verb — clicking your own grow zone cycles мішана→зерно→їжа→волокно→
+трави→hops; `b.crop` persists and overrides the mixed rotation) opens the brewery chain — the live
+tier is now pinned at **44 resources** (hops/wort/beer), mirrored Node+Godot. **Power nets are
+SPATIAL**: participants group by 4-adjacency and `power_conduit` (now buildable) extends a grid
+across distance — a generator powers what it touches or what a cable line reaches; each grid solves
+its own brownout, the HUD reads the aggregate.
+
+**Update (2026-07-29, the Balance director goes live):** the audit's one dishonest cell — «tactic
+escalation via Balance» while raids ran on a flat timer — is now true in code, not just corrected in
+prose. `sim/director.gd` runs `kernel/balance.gd`'s `tick()` every sim tick on its OWN seeded stream
+(cursor in the runtime record — twins and rejoiners replay the same storyteller): the raid incident
+arms the shipped warning→wave cycle with a wave SIZED by threat points (wealth + days survived +
+clan pressure through `assess()` — the flat `78+rand·46` reroll is gone, the cycle idles until the
+director arms it, and a fresh base gets a real grace period); disease lands on the live health
+tracker (the bed-tend immunity race); cold snaps ride the spec-E6 `apply_temp_anomaly` seam; cargo
+drops pay generosity-scaled scrap into the stock. Incidents without a live substrate
+(infestation/manhunter → fauna, quest → quests) still roll but their payloads are DROPPED, not
+faked. `decide()` remains the AI-policy seam; knobs stay at defaults. The HUD threat readout and
+the live pacing now read the same `world_of` numbers (one sim-side builder). `_t_director_live`
+covers twin hashes, every live incident channel, the armed raid cycle and live escalation.
+**Retune (same day, owner's call — «рейди — не основна механіка»):** combat demoted to punctuation.
+`THREAT_BIG_WEIGHT` 2.0 → 0.25 (a raid every ~10 game-days instead of ~1.2), patrol window
+95–165 s → 420–720 s (~2.8–4.8 game-days, component drip intact), first patrol 110 s → 300 s (~day
+3 — a real building grace). Wave SIZING (threat-point escalation) is untouched: when a raid finally
+lands, it still lands scaled. Pinned in `_t_patrols` (both windows) and `_t_director_live` (weight
+< 1.0).
+
+**Update (2026-07-29, farming goes live — the first renewable source):** `sim/farming.gd` bridges
+grow zones onto the last big unconsumed kernel comp — `things.gd CompGrower` (temperature- and
+light-gated growth). Each zone ticks with ITS OWN cell's felt world (`temp_at`/`light_at`): a
+walled, heated, lit room is literally a greenhouse, a Kyiv winter starves an outdoor field, night
+puts crops to sleep — the same climate that bites the pawn now feeds or starves the base.
+Hydroponics (×2.4) gates on `device_active`: the power net literally feeds food. v1 is a MIXED plot
+(deterministic per-cell harvest rotation, the gather_yield pattern; per-zone crop selection is a
+later verb). `b.growth`/`b.harvests` persist like fuel/charge. Cooked meal thing-outputs (bread &
+co) are now EDIBLE stock — auto-eat prefers the most nourishing (`MEAL_NUTRITION`), so the grain →
+flour → bread chain genuinely feeds the pawn. The live tier grows 38 → **41 resources**, pinned
+mirror-wise in Node and Godot. Covered by `_t_farming_live`.
 
 **Update (2026-07-29, Batch 8c — the power net goes live):** `sim/power.gd` bridges the placed
 building dicts onto the kernel power organ (`kernel/power.gd`: sources/traders/batteries +

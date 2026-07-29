@@ -599,6 +599,12 @@ func _t_world_input_grammar() -> void:
 	# a resource node under the cursor -> gather (tile index i = y*n + x)
 	d = WI.decide_click([], {2 * 8 + 4: {"kind": "tree"}}, 8, "", Vector2i(4, 2), 4.5, 2.5)
 	ok(StringName(d.verb) == &"order_gather" and int(d.args.y) == 2, "node under the cursor -> gather")
+	# an OWN grow zone under the cursor -> cycle its crop (farming v2 verb)
+	d = WI.decide_click([], {}, 8, "", Vector2i(4, 4), 4.5, 4.5, {4 * 8 + 4: true})
+	ok(StringName(d.verb) == &"set_crop" and int(d.args.x) == 4, "grow zone under the cursor -> set_crop")
+	# ...but a resource node on the same cell wins (gather beats crop-cycling)
+	d = WI.decide_click([], {4 * 8 + 4: {"kind": "bush"}}, 8, "", Vector2i(4, 4), 4.5, 4.5, {4 * 8 + 4: true})
+	ok(StringName(d.verb) == &"order_gather", "node wins over the grow zone on the same cell")
 	# empty tile -> walk
 	d = WI.decide_click([], {}, 8, "", Vector2i(6, 6), 6.5, 6.5)
 	ok(StringName(d.verb) == &"order_move" and int(d.args.x) == 6, "empty tile -> move")

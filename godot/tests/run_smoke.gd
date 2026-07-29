@@ -8,10 +8,17 @@ const GameData = preload("res://scripts/data.gd")
 
 var sim
 
+const KernelBalance = preload("res://scripts/kernel/balance.gd")
+
 func _init() -> void:
 	print("== RealWorld Godot playthrough smoke ==")
 	sim = Sim.new()
 	sim.new_game(WorldGen.generate_map(50.4501, 30.5234, 56))
+	# mute the storyteller: the scripted playthrough forces its own raid; a director roll mid-gather
+	# would divert the pawn into combat and flake the walk/gather asserts
+	sim.balance = KernelBalance.Balance.new()
+	for cat in sim.balance.category_weight:
+		sim.balance.category_weight[cat] = 0.0
 	_smoke_gather()
 	_smoke_build_and_craft()
 	_smoke_raid()

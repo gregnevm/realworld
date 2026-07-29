@@ -91,11 +91,17 @@ static func serialize_region(sim) -> Dictionary:
 	}
 	for b in sim.buildings:
 		var brec := {"kind": b.kind, "x": int(b.x), "y": int(b.y), "hp": float(b.hp)}
-		# power grid state (Batch 8c): a generator's tank and a battery's charge are save-state and
-		# world_hash-state. Only powered defs ever carry these keys, so pre-power saves are unchanged.
-		for f in ["fuel", "charge"]:
+		# building-module state: a generator's tank, a battery's charge (Batch 8c) and a grow zone's
+		# cycle (farming) are save-state and world_hash-state. Only defs with those mechanics ever
+		# carry the keys, so older saves are unchanged.
+		for f in ["fuel", "charge", "growth"]:
 			if b.has(f):
 				brec[f] = float(b[f])
+		for f in ["harvests", "ammo"]:
+			if b.has(f):
+				brec[f] = int(b[f])
+		if b.has("crop"):
+			brec["crop"] = str(b.crop)   # the zone's selected crop (farming v2)
 		rec.buildings.append(brec)
 	for cell in m.nodes:
 		var nd: Dictionary = m.nodes[cell]
@@ -165,6 +171,7 @@ static func serialize_runtime(sim) -> Dictionary:
 		# round-trip exactly, and both sides hash the same string.
 		"env_rng_state": str(sim.env_rng.state),
 		"threat_rng_state": str(sim.threat_rng.state),
+		"director_rng_state": str(sim.director_rng.state),
 		"enemies": enemies,
 		"shots": shots,
 		# convoys are authoritative state that PAYS OUT later (goods return on arrival), so two
@@ -240,6 +247,7 @@ static func apply_runtime(sim, rec: Dictionary) -> void:
 	# silently rewind every stochastic stream to tick 0.
 	sim.env_rng.state = _rng_state(rec.get("env_rng_state"), sim.env_rng.state)
 	sim.threat_rng.state = _rng_state(rec.get("threat_rng_state"), sim.threat_rng.state)
+	sim.director_rng.state = _rng_state(rec.get("director_rng_state"), sim.director_rng.state)
 	sim.enemies = []
 	for e in (rec.get("enemies", []) as Array):
 		var live: Dictionary = (e as Dictionary).duplicate(true)

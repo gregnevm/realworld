@@ -7,9 +7,11 @@
 # persistent truth — fuel/charge mirror back onto `b` every tick, so saves, world_hash and rejoin
 # carry the grid state without ever serializing a Thing.
 #
-# One region == one implicit net (the kernel model; RimWorld's conduit routing is deliberately out —
-# the catalogue's power_conduit stays un-buildable until nets are spatial). Wind rides the REAL
-# weather stream, solar rides the REAL daylight curve — both deterministic, no rng consumed.
+# Nets are SPATIAL: participants (sources/traders/batteries) group into grids by 4-adjacency, and
+# power_conduit chains extend a grid across distance — a generator powers what it touches or what a
+# cable line reaches, RimWorld-style. Each grid solves independently (its own brownout), the HUD
+# reads the aggregate. Wind rides the REAL weather stream, solar the REAL daylight curve — both
+# deterministic, no rng consumed.
 #
 # Static functions over the sim instance `s` (threats/environment pattern): no module state, no
 # sim.gd preload. Thing<->Comp cycles are OWNED here: every rebuild detaches the previous fleet and
@@ -26,16 +28,21 @@ const WIND_FACTOR := {
 }
 
 # ---------------- fleet lifecycle ----------------
-# (Re)build the Thing fleet from the placed powered buildings. Called lazily from update() when the
-# building set changed (s.power_dirty). Detaches the old fleet first — the cycles die here.
+# (Re)build the Thing fleet AND the spatial grids from the placed buildings. Called lazily from
+# update() when the building set changed (s.power_dirty). Detaches the old fleet first.
 static func rebuild(s) -> void:
 	dispose(s)
 	s.power_things = {}
+	var linked: Dictionary = {}   # every net-relevant cell: participants AND passive conduits
 	for b in s.buildings:
-		var pw: Dictionary = s.building_def(String(b.kind)).get("power", {})
+		var def: Dictionary = s.building_def(String(b.kind))
+		var cell: int = int(b.y) * s.n + int(b.x)
+		if bool(def.get("conduit", false)):
+			linked[cell] = true
+			continue
+		var pw: Dictionary = def.get("power", {})
 		if pw.is_empty():
 			continue
-		var cell: int = int(b.y) * s.n + int(b.x)
 		var t: Variant = Power.Things.Thing.new(null)
 		match str(pw.get("role", "")):
 			"source":
@@ -50,14 +57,54 @@ static func rebuild(s) -> void:
 			_:
 				continue
 		s.power_things[cell] = t
+		linked[cell] = true
+	s.power_nets = _grids(s, linked)
 	if s.power_sys == null:
 		s.power_sys = Power.PowerNetSystem.new()
 	s.power_dirty = false
+
+# Connected components over the net-relevant cells (4-adjacency): a grid is what touches or what a
+# conduit line reaches. Returns sorted Arrays of PARTICIPANT cells (conduits are edges, not members);
+# grids with no participants are dropped. Deterministic: seeds and members iterate sorted.
+static func _grids(s, linked: Dictionary) -> Array:
+	var seeds: Array = linked.keys()
+	seeds.sort()
+	var seen: Dictionary = {}
+	var out: Array = []
+	for seed_cell in seeds:
+		if seen.has(seed_cell):
+			continue
+		var comp: Array = [seed_cell]
+		seen[seed_cell] = true
+		var head := 0
+		while head < comp.size():
+			var cell: int = comp[head]
+			head += 1
+			var cx: int = cell % s.n
+			var cy: int = cell / s.n
+			for d in [[1, 0], [-1, 0], [0, 1], [0, -1]]:
+				var nx: int = cx + d[0]
+				var ny: int = cy + d[1]
+				if nx < 0 or ny < 0 or nx >= s.n or ny >= s.n:
+					continue
+				var nc: int = ny * s.n + nx
+				if linked.has(nc) and not seen.has(nc):
+					seen[nc] = true
+					comp.append(nc)
+		var members: Array = []
+		for cell in comp:
+			if s.power_things.has(cell):
+				members.append(cell)
+		if not members.is_empty():
+			members.sort()
+			out.append(members)
+	return out
 
 static func dispose(s) -> void:
 	for cell in s.power_things:
 		s.power_things[cell].detach()
 	s.power_things = {}
+	s.power_nets = []
 	s.power_active = {}
 	s.power_net = {}
 
@@ -86,9 +133,18 @@ static func update(s, dt: float) -> void:
 			t.tick(ctx)
 			_auto_refuel(s, s.bgrid.get(cell, null), src)
 	var prev_brownout: bool = bool(s.power_net.get("brownout", false))
-	var world := {"things": things, "power": {}}
-	s.power_sys.system_tick(world, ctx)
-	s.power_net = world.power
+	# solve each SPATIAL grid independently (its own supply/demand/brownout); HUD reads the aggregate
+	var agg := {"supply": 0.0, "draw": 0.0, "stored": 0.0, "capacity": 0.0, "brownout": false}
+	for grid in s.power_nets:
+		var grid_things: Array = []
+		for cell in grid:
+			grid_things.append(s.power_things[cell])
+		var world := {"things": grid_things, "power": {}}
+		s.power_sys.system_tick(world, ctx)
+		for k in ["supply", "draw", "stored", "capacity"]:
+			agg[k] = float(agg[k]) + float(world.power.get(k, 0.0))
+		agg["brownout"] = bool(agg["brownout"]) or bool(world.power.get("brownout", false))
+	s.power_net = agg
 	# mirror the mutable grid state back onto the building dicts (the persistent truth) + the
 	# per-cell active verdict sim.device_active reads
 	s.power_active = {}
@@ -105,7 +161,7 @@ static func update(s, dt: float) -> void:
 		if tr != null:
 			s.power_active[cell] = tr.is_live()
 	if bool(s.power_net.get("brownout", false)) and not prev_brownout:
-		s._log("⚡ Мережа перевантажена: скинуто наймолодші споживачі.", "warn")
+		s._log("⚡ Мережа не тягне: частину споживачів знеструмлено.", "warn")
 	elif prev_brownout and not bool(s.power_net.get("brownout", false)):
 		s._log("⚡ Живлення відновлено.", "good")
 
