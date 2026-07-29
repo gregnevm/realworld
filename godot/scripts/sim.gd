@@ -8,6 +8,7 @@ const Threats = preload("res://scripts/sim/threats.gd")
 const SimEnv = preload("res://scripts/sim/environment.gd")
 const WorldMeta = preload("res://scripts/sim/world_meta.gd")
 const HeroHealth = preload("res://scripts/sim/hero_health.gd")
+const SimPower = preload("res://scripts/sim/power.gd")
 const DataBridge = preload("res://scripts/data_bridge.gd")
 const CatalogDefs = preload("res://scripts/catalog_defs.gd")
 const Catalog = preload("res://scripts/kernel/catalog.gd")
@@ -37,6 +38,13 @@ var dead := false
 # DERIVED readout of it; the tracker is what saves, travels and gets hit.
 var health: Variant = null
 var health_alerts: Dictionary = {}   # feed-toast stages per condition (view-side memory, not hashed)
+# Power grid (Batch 8c, sim/power.gd): a derived Thing fleet over the placed powered buildings.
+# power_net/power_active are the per-tick verdicts; fuel/charge live ON the building dicts (saved).
+var power_things: Dictionary = {}    # cell -> kernel Thing (derived cache; never serialized)
+var power_net: Dictionary = {}       # {supply, draw, stored, capacity, brownout} readout
+var power_active: Dictionary = {}    # cell -> bool : did the net deliver this tick
+var power_dirty := true              # building set changed -> rebuild the fleet lazily
+var power_sys: Variant = null        # kernel PowerNetSystem (created once)
 var move_input := Vector2.ZERO
 var messages: Array = []
 var messages_seq := 0              # monotonic lifetime append counter (spec 0005 §2.7 FeedbackBus seam);
@@ -211,7 +219,10 @@ func load_region(data: Dictionary) -> void:
 	bgrid = {}
 	_reset_local_threats()
 	for b in data.buildings:
-		_place_building(str(b.kind), int(b.x), int(b.y), float(b.hp))
+		var placed: Dictionary = _place_building(str(b.kind), int(b.x), int(b.y), float(b.hp))
+		for f in ["fuel", "charge"]:   # power grid state rides the building record (Batch 8c)
+			if b.has(f):
+				placed[f] = float(b[f])
 	_init_regions()
 	_env_init()
 	# AFTER the player fields: an old record has no "health" and migrates from the restored hp float
@@ -473,10 +484,14 @@ func light_at(x: int, y: int) -> float:
 			light = maxf(light, clampf(1.0 - dist / radius, 0.0, 1.0))
 	return clampf(light, 0.0, 1.0)
 
-# Does this device run right now? Fuel-free passives (багаття/смолоскип) always do; grid devices
-# (heater/lamp/cooler/turret) gate on the power net once Batch 8c wires it — this is that seam.
-func device_active(_b) -> bool:
-	return true
+# Does this device run right now? Fuel-free passives (багаття/смолоскип — every data.gd def) always
+# do; a def that declares a power TRADER role runs only when the net delivered this tick (Batch 8c,
+# sim/power.gd — the seam this function was built for).
+func device_active(b) -> bool:
+	return SimPower.is_active(self, b)
+
+func dispose_power() -> void:
+	SimPower.dispose(self)
 
 func is_wet() -> bool:
 	return weather == &"rain" or weather == &"snow"
@@ -501,6 +516,7 @@ func _place_building(kind: String, x: int, y: int, hp: float):
 	var b := {"kind": kind, "x": x, "y": y, "hp": (float(def.get("hp", 50.0)) if hp < 0 else hp), "cool": 0.0, "aim": 0.0}
 	buildings.append(b)
 	bgrid[y * n + x] = b
+	power_dirty = true
 	if def.get("blocks", false):
 		_refresh_solid(x, y)
 	if def.get("blocks", false) or kind.begins_with("door"):
@@ -510,6 +526,7 @@ func _place_building(kind: String, x: int, y: int, hp: float):
 func _remove_building(b) -> void:
 	buildings.erase(b)
 	bgrid.erase(b.y * n + b.x)
+	power_dirty = true
 	_refresh_solid(b.x, b.y)
 	if building_def(String(b.kind)).get("blocks", false) or String(b.kind).begins_with("door"):
 		_recompute_indoor()
@@ -632,24 +649,40 @@ func has_building(kind: String) -> bool:
 # value-data {ok, reason, ...} — the ROUTER maps reasons to user-facing text (R10: no new Ukrainian
 # authored here; `label` fields pass through catalogue data).
 func craft_catalog(recipe_id: String) -> Dictionary:
-	if not use_catalog:
-		return {"ok": false, "reason": &"catalog_off"}
 	var rc: Dictionary = CatalogDefs.recipe(recipe_id)
-	if rc.is_empty():
-		return {"ok": false, "reason": &"unknown"}
-	var station := String(rc.get("station", ""))
-	if not has_building(station):
-		return {"ok": false, "reason": &"no_station", "station_label": CatalogDefs.building_label(station)}
-	if not research_ok(rc):
-		return {"ok": false, "reason": &"locked", "research_label": _research_label(rc)}
+	var refusal := _craft_refusal(rc)
+	if not refusal.is_empty():
+		return refusal
 	var inputs: Dictionary = rc.get("inputs", {})
-	if not afford(inputs):
-		return {"ok": false, "reason": &"cost", "missing": _cost_str(Catalog.missing_for(cost_keys(inputs), stock))}
 	GameData.pay_cost(stock, cost_keys(inputs))
 	var out: Dictionary = rc.get("output", {})
 	var added := deposit(String(out.get("id", "")), int(out.get("count", 1)))
 	return {"ok": true, "label": String(rc.get("label", recipe_id)), "added": added,
 		"out_icon": CatalogDefs.res_icon(String(out.get("id", "")))}
+
+# The first failing precondition as a value-data refusal ({} == craftable now). Single-exit
+# elif-chain so each guard names its reason without a return-ladder.
+func _craft_refusal(rc: Dictionary) -> Dictionary:
+	var station := String(rc.get("station", ""))
+	var st: Variant = null
+	for b in buildings:
+		if String(b.kind) == station:
+			st = b
+			break
+	var r: Dictionary = {}
+	if not use_catalog:
+		r = {"ok": false, "reason": &"catalog_off"}
+	elif rc.is_empty():
+		r = {"ok": false, "reason": &"unknown"}
+	elif st == null:
+		r = {"ok": false, "reason": &"no_station", "station_label": CatalogDefs.building_label(station)}
+	elif not device_active(st):
+		r = {"ok": false, "reason": &"no_power", "station_label": CatalogDefs.building_label(station)}
+	elif not research_ok(rc):
+		r = {"ok": false, "reason": &"locked", "research_label": _research_label(rc)}
+	elif not afford(rc.get("inputs", {})):
+		r = {"ok": false, "reason": &"cost", "missing": _cost_str(Catalog.missing_for(cost_keys(rc.get("inputs", {})), stock))}
+	return r
 
 func craft_item(item_id: String) -> Dictionary:
 	if not GameData.ITEMS.has(item_id):
@@ -775,6 +808,7 @@ func update(dt: float) -> void:
 		_log("🌅 Новий день: %d" % time.day)
 		_grant_daily_capsule()
 	_update_environment(dt / time.day_len)
+	SimPower.update(self, dt)   # after environment (solar reads daylight, wind reads weather)
 	_update_player(dt)
 	_update_crafting(dt)
 	_update_raids(dt)

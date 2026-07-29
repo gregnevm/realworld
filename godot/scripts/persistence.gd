@@ -90,7 +90,13 @@ static func serialize_region(sim) -> Dictionary:
 		"nodes": {},
 	}
 	for b in sim.buildings:
-		rec.buildings.append({"kind": b.kind, "x": int(b.x), "y": int(b.y), "hp": float(b.hp)})
+		var brec := {"kind": b.kind, "x": int(b.x), "y": int(b.y), "hp": float(b.hp)}
+		# power grid state (Batch 8c): a generator's tank and a battery's charge are save-state and
+		# world_hash-state. Only powered defs ever carry these keys, so pre-power saves are unchanged.
+		for f in ["fuel", "charge"]:
+			if b.has(f):
+				brec[f] = float(b[f])
+		rec.buildings.append(brec)
 	for cell in m.nodes:
 		var nd: Dictionary = m.nodes[cell]
 		rec.nodes[str(cell)] = {"kind": nd.kind, "amount": int(nd.amount)}

@@ -7,10 +7,11 @@
 # CURATED LIVE TIER (spec 0008 §5.3): not every catalogue building may enter the live game yet — a
 # def whose MECHANIC is not simulated would be a decorative trap (build it, nothing happens). The
 # filter is capability-driven, not a hand list:
-#   • categories structure / production / storage / defense only (power, farming, comfort, art,
-#     utility, ship wait for their systems; data.gd already owns the live comfort/light/heat pieces);
-#   • no `power` participation (there is no live power net — a free-running powered turret would be
-#     the reverse trap);
+#   • categories structure / production / storage / defense / power (farming, comfort, art, utility,
+#     ship wait for their systems; data.gd already owns the live comfort/light/heat pieces);
+#   • power participation is LIVE (Batch 8c, sim/power.gd): sources/batteries build in the power
+#     category; trader (drawing) defs in the live categories gate on the net via device_active.
+#     The power_conduit stays out — nets are region-wide, not spatial, so a cable would be decor;
 #   • defense must map onto a live brain: turret-shaped (range+cooldown) or trap-shaped (trap);
 #   • ids data.gd owns are EXCLUDED — the tuned Phase-0 defs win, one truth per id (BuildBar is
 #     their home; the catalog browser complements with the catalogue-only content).
@@ -26,8 +27,12 @@ extends RefCounted
 const Catalog = preload("res://scripts/kernel/catalog.gd")
 const GameData = preload("res://scripts/data.gd")
 
-const LIVE_CATEGORIES := ["structure", "production", "storage", "defense"]
+const LIVE_CATEGORIES := ["structure", "production", "storage", "defense", "power"]
 const STORAGE_DEFAULT_CAPACITY := 150
+
+# Which stock resource refuels each fuel-kind generator (1 stock unit == 1 fuel unit). Geothermal
+# burns nothing (burn_per_day 0) so it never refuels. Data-side map — adding a generator adds a row.
+const GENERATOR_FUEL := {"wood_generator": "wood", "chemfuel_generator": "chemfuel"}
 
 # Per-node-kind yield cycles (phase 4). Index = posmod(cell*31 + amount, size) — a fixed, seeded-by-
 # geometry rotation, so the SAME node depletes into the SAME bundle on every replay/rejoin/twin.
@@ -64,8 +69,9 @@ static func _build_cache() -> void:
 		var category := str(b.get("category", ""))
 		if not LIVE_CATEGORIES.has(category):
 			continue
-		if not (b.get("power", {}) as Dictionary).is_empty():
-			continue                                # no live power net -> powered defs wait
+		var power: Dictionary = b.get("power", {})
+		if category == "power" and str(power.get("role", "")) == "":
+			continue                                # the conduit: no role, nets aren't spatial yet
 		var is_trap := bool(b.get("trap", false))
 		var is_turret: bool = float(b.get("range", 0.0)) > 0.0 and float(b.get("cooldown", 0.0)) > 0.0
 		if category == "defense" and not (is_trap or is_turret):
@@ -93,6 +99,8 @@ static func _build_cache() -> void:
 			def["range"] = float(b.get("range", 0.0))
 			def["shot_dmg"] = float(b.get("damage", 0.0))
 			def["shot_cool"] = float(b.get("cooldown", 1.0))
+		if not power.is_empty():
+			def["power"] = power.duplicate(true)    # sim/power.gd reads role/rated/draw/capacity
 		_live[id] = def
 
 # The data.gd-shaped def for a live-buildable catalogue building ({} = not live-buildable).
@@ -124,6 +132,10 @@ static func res_icon(id: String) -> String:
 	_build_cache()
 	var icon := str(_res_icons.get(id, ""))
 	return icon if icon != "" else id + " "
+
+# The stock resource a fuel generator burns ("" = self-sufficient, e.g. geothermal).
+static func generator_fuel(id: String) -> String:
+	return str(GENERATOR_FUEL.get(id, ""))
 
 # Ukrainian label of a building id from EITHER vocabulary (data.gd def name / adapter name / the id).
 static func building_label(id: String) -> String:

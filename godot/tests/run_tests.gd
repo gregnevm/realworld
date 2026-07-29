@@ -54,6 +54,7 @@ func _init() -> void:
 	_t_research_gates()
 	_t_use_catalog_persist()
 	_t_catalog_live()
+	_t_power_live()
 	_t_no_global_rng()
 	_t_static_typing()
 	_t_stock_seam()
@@ -1169,9 +1170,11 @@ func _t_research_gates() -> void:
 
 # ---------------- spec 0008 phases 3–4: живі каталожні build/craft + курований тір ----------------
 func _t_catalog_live() -> void:
-	# 0) курований фільтр — capability-driven чесність: без power-мережі powered-дефи не будуються,
-	# defense без живого мозку (турель/пастка) — теж; data.gd-ids каталог НЕ дублює (одна правда на id)
-	ok(CatalogDefs.building("auto_turret").is_empty(), "powered турель поза живим тіром (немає мережі — була б безкоштовна)")
+	# 0) курований фільтр — capability-driven чесність: defense без живого мозку не будується,
+	# кабель без ролі (мережа не просторова) — теж; data.gd-ids каталог НЕ дублює (одна правда на id).
+	# Powered-дефи ЖИВІ (Batch 8c): турель несе power-дикт і гейтиться мережею, не викинута.
+	ok(str(CatalogDefs.building("auto_turret").get("power", {}).get("role", "")) == "trader", "powered турель у тірі З power-диктом (мережа жива)")
+	ok(CatalogDefs.building("power_conduit").is_empty(), "кабель поза тіром (мережа не просторова — був би декор)")
 	ok(CatalogDefs.building("mortar").is_empty(), "мінoмет без живого мозку не будується (не декорація)")
 	ok(CatalogDefs.building("bed").is_empty() and CatalogDefs.building("wall").is_empty(), "data.gd-ids каталог не дублює")
 	ok(float(CatalogDefs.building("deadfall_trap").get("trap_dps", 0.0)) > 0.0, "каталожна пастка мапиться на живий trap_dps-мозок")
@@ -1303,6 +1306,129 @@ func _live_closure(cat: Dictionary, seed_raws: Array) -> Dictionary:
 				obtainable[StringName(str(rc.get("output", {}).get("id", "")))] = true
 				changed = true
 	return {"obtainable": obtainable, "built": built, "made": made}
+
+# ---------------- Batch 8c: жива енергомережа (sim/power.gd на кернел-PowerNetSystem) ----------------
+func _t_power_live() -> void:
+	# прапор OFF: жодної мережі — шліфований зріз не платить ані такту
+	var off = _flat_sim()
+	off.update(0.1)
+	ok((off.power_net as Dictionary).is_empty(), "flag OFF: мережа не існує (нульова ціна)")
+
+	# ON: станція без генератора знеструмлена; генератор оживлює її
+	var s = _flat_sim(195, true)
+	s.research_unlocked = {"electricity": true, "plasteel_working": true, "defense_systems": true}
+	for res in ["planks", "components", "steel", "circuit", "stone", "clay", "wood", "uranium", "chemfuel"]:
+		s.stock[s.res_key(res)] = 500
+	s.try_build("electric_smelter", 3, 3)
+	ok(s.has_building("electric_smelter"), "powered-станція будується (power-тір відкрився)")
+	# знайти рецепт цієї станції з каталогу (генерично — без хардкоду id; входи гранчено вище)
+	var cat: Dictionary = Catalog.load_json()
+	var rc_id := ""
+	for rc in cat.get("recipes", []):
+		if str(rc.get("station", "")) == "electric_smelter":
+			rc_id = str(rc.get("id", ""))
+			break
+	ok(rc_id != "", "у каталозі є рецепт електроплавильні (%s)" % rc_id)
+	s.update(0.1)
+	var r_dark: Dictionary = s.craft_catalog(rc_id)
+	ok(not bool(r_dark.ok) and StringName(r_dark.reason) == &"no_power", "без генератора станція знеструмлена (чесна відмова)")
+	s.try_build("wood_generator", 5, 3)
+	s.update(0.1)
+	ok(bool(s.craft_catalog(rc_id).ok), "генератор 400W живить плавильню 300W — крафт іде")
+	ok(float(s.power_net.supply) >= 399.0 and float(s.power_net.draw) >= 299.0, "HUD-знімок мережі несе supply/draw (%.0f/%.0f)" % [float(s.power_net.supply), float(s.power_net.draw)])
+
+	# пріоритетний шедінг: +автотурель (120W, pri 9) > бюджет 400 -> скидається плавильня (pri 5)
+	s.try_build("auto_turret", 7, 3)
+	s.update(0.1)
+	ok(bool(s.power_net.brownout), "перевантаження оголошено (420W > 400W)")
+	var turret_b: Variant = null
+	var smelter_b: Variant = null
+	for b in s.buildings:
+		if String(b.kind) == "auto_turret":
+			turret_b = b
+		elif String(b.kind) == "electric_smelter":
+			smelter_b = b
+	ok(s.device_active(turret_b) and not s.device_active(smelter_b), "шедінг за пріоритетом: турель (9) жива, плавильня (5) скинута")
+	# powered-турель реально стріляє лише під живленням
+	var foe: Dictionary = GameData.make_raider(7.5, 4.5, 1)
+	s.enemies.append(foe)
+	s._update_turrets(0.6)
+	ok(float(foe.hp) < float(foe.maxhp), "запитана турель стріляє (генерик-мозок + живлення)")
+	s.enemies.clear()
+
+	# батарея буферизує: прибрали турель -> надлишок заряджає; без генератора живить плавильню
+	s.demolish(7, 3)
+	s.try_build("battery", 9, 3)
+	for i in 10:
+		s.update(0.1)
+	var bat_b: Variant = null
+	var gen_b: Variant = null
+	for b in s.buildings:
+		if String(b.kind) == "battery":
+			bat_b = b
+		elif String(b.kind) == "wood_generator":
+			gen_b = b
+	ok(float(bat_b.get("charge", 0.0)) > 0.0, "надлишок заряджає батарею (+%.0f)" % float(bat_b.get("charge", 0.0)))
+	# паливо: генератор п'є дерево зі складу (авторефуел через шов)
+	var wood0: int = s.res_amount("wood")
+	for i in 12:
+		s.update(5.0)   # ~0.4 доби: burn 4/добу відчутний
+	ok(s.res_amount("wood") < wood0, "генератор споживає дерево зі складу (%d -> %d)" % [wood0, s.res_amount("wood")])
+	# глушимо паливо повністю -> батарея тримає плавильню, потім мережа гасне
+	s.stock[s.res_key("wood")] = 0
+	gen_b["fuel"] = 0.0
+	s.power_dirty = true
+	var held_by_battery: bool = false
+	var went_dark: bool = false
+	for i in 40:
+		s.update(0.1)
+		if s.device_active(smelter_b) and float(s.power_net.supply) == 0.0:
+			held_by_battery = true
+		if not s.device_active(smelter_b):
+			went_dark = true
+			break
+	ok(held_by_battery, "батарея тримає станцію після смерті генератора")
+	ok(went_dark, "розряджена мережа чесно гасне")
+
+	# соляр: удень генерує, вночі — ні (детермінований daylight)
+	var sol = _flat_sim(195, true)
+	sol.research_unlocked = {"electricity": true, "electronics": true}
+	for res in ["steel", "glass", "circuit"]:
+		sol.stock[sol.res_key(res)] = 100
+	sol.try_build("solar_panel", 3, 3)
+	sol.time.frac = 0.5
+	sol.update(0.1)
+	var day_supply: float = float(sol.power_net.supply)
+	sol.time.frac = 0.02
+	sol.update(0.1)
+	ok(day_supply > 500.0 and float(sol.power_net.supply) < 50.0, "соляр: день %dW -> ніч %dW (реальна крива світла)" % [int(day_supply), int(sol.power_net.supply)])
+
+	# персистенс: паливо/заряд їдуть у сейв і у world_hash
+	var rec := Persistence.serialize_region(s)
+	var has_charge := false
+	for b in rec.buildings:
+		if (b as Dictionary).has("charge"):
+			has_charge = true
+	ok(has_charge, "сейв несе заряд батареї")
+	var s2 = Sim.new()
+	s2.load_region(rec)
+	s2.update(0.1)
+	var bat2: Variant = null
+	for b in s2.buildings:
+		if String(b.kind) == "battery":
+			bat2 = b
+	ok(bat2 != null and absf(float(bat2.get("charge", 0.0)) - float(bat_b.get("charge", 0.0))) < 1.0, "load відновлює заряд батареї")
+	var t1 = _flat_sim(195, true)
+	var t2 = _flat_sim(195, true)
+	for tw in [t1, t2]:
+		tw.research_unlocked = {"electricity": true}
+		tw.stock[tw.res_key("planks")] = 100
+		tw.stock[tw.res_key("components")] = 100
+		tw.try_build("wood_generator", 3, 3)
+		tw.update(0.5)
+	ok(Persistence.world_hash(t1) == Persistence.world_hash(t2), "близнюки з мережею хешуються однаково (паливо в хеші)")
+	for sim_x in [s, s2, sol, t1, t2, off]:
+		sim_x.dispose_power()
 
 # spec 0008: сейв несе словник ключів складу — use_catalog мусить пережити роундтрип, інакше
 # save(ON) -> load(OFF) читає чужі ключі й склад «зникає» без діагностики.

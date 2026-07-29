@@ -187,6 +187,8 @@ static func update_turrets(s, dt: float) -> void:
 		var reach := float(def.get("range", 0.0))
 		if reach <= 0.0:
 			continue
+		if not s.device_active(b):
+			continue   # a browned-out powered turret holds fire (Batch 8c)
 		b.cool = max(0.0, b.cool - dt)
 		var e: Variant = s._nearest_enemy(b.x + 0.5, b.y + 0.5, reach)
 		if e == null:

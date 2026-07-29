@@ -21,6 +21,8 @@ static func _flash_refusal(s, r: Dictionary) -> void:
 	match StringName(r.get("reason", &"")):
 		&"no_station":
 			s.sim._flash("Потрібна станція: %s." % str(r.get("station_label", "?")))
+		&"no_power":
+			s.sim._flash("⚡ Немає живлення: %s знеструмлено." % str(r.get("station_label", "?")))
 		&"locked":
 			s.sim._flash("🔒 Потребує дослідження: %s." % str(r.get("research_label", "?")))
 		&"cost":

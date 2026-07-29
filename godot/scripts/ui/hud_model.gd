@@ -31,6 +31,7 @@ static func snapshot(session, world: Dictionary, ctx: Dictionary, balance) -> Di
 		"vitals":    _vitals_slice(p, sim),
 		"stats":     _stats_slice(sim),
 		"stock":     _stock_slice(sim),
+		"power":     _power_slice(sim),
 		"build":     _build_slice(sim),
 		"threat":    _threat_slice(world, ctx, balance),
 		"equipment": _equipment_slice(sim),
@@ -319,6 +320,21 @@ static func _stock_extras(sim) -> Array:
 			"amt": int(sim.stock[k]),
 		})
 	return out
+
+# --- power grid (Batch 8c readout; {participants:false} until powered buildings exist / on fakes) ---
+static func _power_slice(sim) -> Dictionary:
+	var net: Variant = sim.get("power_net")
+	if net == null or not (net is Dictionary) or (net as Dictionary).is_empty():
+		return {"participants": false}
+	var d: Dictionary = net
+	return {
+		"participants": true,
+		"supply": float(d.get("supply", 0.0)),
+		"draw": float(d.get("draw", 0.0)),
+		"stored": float(d.get("stored", 0.0)),
+		"capacity": float(d.get("capacity", 0.0)),
+		"state": &"brownout" if bool(d.get("brownout", false)) else &"ok",
+	}
 
 # --- build palette (afford flag per building; locked = research-ворота ще не відкриті, spec 0007) ---
 static func _build_slice(sim) -> Dictionary:

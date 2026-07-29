@@ -21,6 +21,7 @@ static func register_all(panel_registry, overlay_registry) -> void:
 	panel_registry.register(CatalogPanels.ResearchBrowser.new())
 	# RIGHT dock — world / economy / director / content tree + hotkey'd world panels (M/V/O/H)
 	panel_registry.register(Panels.StockPanel.new())
+	panel_registry.register(Panels.PowerPanel.new())
 	panel_registry.register(Panels.BalancePanel.new())
 	panel_registry.register(CatalogPanels.TechPanel.new())
 	panel_registry.register(CatalogPanels.ResearchTiersPanel.new())

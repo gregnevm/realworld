@@ -99,6 +99,42 @@ class VitalsPanel extends PanelBase.Base:
 		var carry: Dictionary = v.carry
 		_carry.set_value("%d/%d" % [int(carry.cur), int(carry.cap)])
 
+# ---- PowerPanel (RIGHT dock) — the grid readout (Batch 8c): supply/draw/battery + brownout state ----
+class PowerPanel extends PanelBase.Base:
+	var _supply: Widgets.StatRow
+	var _draw: Widgets.StatRow
+	var _battery: Widgets.StatRow
+	var _state: Widgets.StatRow
+	func _init() -> void:
+		panel_id = &"power"; dock = PanelBase.DOCK_RIGHT; priority = 15; hotkey = KEY_E; default_open = false
+	func _build() -> void:
+		rebuild_count += 1
+		var vb := VBoxContainer.new()
+		vb.add_theme_constant_override("separation", 5)
+		add_child(vb)
+		var head := Widgets.H2Header.new()
+		vb.add_child(head); head.set_header("Енергія", "power")
+		_supply = Widgets.StatRow.new(); vb.add_child(_supply); _supply.set_row("⚡", "Генерація", "—")
+		_draw = Widgets.StatRow.new(); vb.add_child(_draw); _draw.set_row("🔌", "Споживання", "—")
+		_battery = Widgets.StatRow.new(); vb.add_child(_battery); _battery.set_row("🔋", "Батареї", "—")
+		_state = Widgets.StatRow.new(); vb.add_child(_state); _state.set_row("◦", "Стан", "мережі немає")
+	func bind(vm) -> void:
+		rebind_count += 1
+		build_once()
+		if not (vm is Dictionary) or not vm.has("power"):
+			return
+		var p: Dictionary = vm.power
+		if not bool(p.get("participants", false)):
+			_supply.set_value("—")
+			_draw.set_value("—")
+			_battery.set_value("—")
+			_state.set_value("мережі немає")
+			return
+		_supply.set_value("%dW" % int(p.supply))
+		_draw.set_value("%dW" % int(p.draw))
+		_battery.set_value("%d/%d" % [int(p.stored), int(p.capacity)])
+		_state.set_value("⚠ перевантаження" if StringName(p.state) == &"brownout" else "✔ стабільна")
+
 # ---- BalancePanel (RIGHT dock) — the director readout: threat gauge + phase (empty-gated until §8) ----
 class BalancePanel extends PanelBase.Base:
 	var _gauge: Widgets.Gauge
