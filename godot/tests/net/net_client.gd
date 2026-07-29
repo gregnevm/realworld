@@ -27,7 +27,7 @@ func _init() -> void:
 	var port: int = args.get("port", 8901)
 	var out_path: String = args.get("out", "user://net_spike_client.json")
 
-	var verdict := {"role": "client", "idx": -1, "ok": false, "resumed": false, "hash_checks": 0, "mismatches": 0, "cmds_sent": 0, "resends": 0, "snap_checks": 0, "snap_mismatches": 0, "probe_hash": "", "probe_tick": -1, "probes": [], "srv_final": "", "bye_tick": -1, "final": "", "err": ""}
+	var verdict := {"role": "client", "idx": -1, "ok": false, "resumed": false, "hash_checks": 0, "mismatches": 0, "cmds_sent": 0, "resends": 0, "snap_checks": 0, "snap_mismatches": 0, "probes": [], "final": "", "err": ""}
 	var ws := WebSocketPeer.new()
 	if ws.connect_to_url("ws://127.0.0.1:%d" % port) != OK:
 		verdict.err = "connect_to_url failed"
@@ -44,6 +44,7 @@ func _init() -> void:
 	var bal: Variant = Balance.Balance.new()
 	var recon: Variant = null            # reconstruction of the server's snapshot stream (§8.3)
 	var _seq := 0                        # this client's monotonic intent counter (plan §4 identity)
+	var router: Variant = Command.new_router()   # §2: the same executor the server runs
 	var idx := -1
 	var tick := 0
 	var total := 0
@@ -93,7 +94,7 @@ func _init() -> void:
 					tick += 1
 					for c in cmds:
 						if int(c.tick) == tick:
-							_apply(sim, c)
+							Command.execute(router, session, c)
 					sim.update(DT)
 					session.tick_research(DT)
 					# client #0 originates the scripted commands from its own (identical) map
@@ -120,8 +121,6 @@ func _init() -> void:
 				verdict.hash_checks = int(verdict.hash_checks) + 1
 				var mine := Persistence.world_hash(sim)
 				(verdict.probes as Array).append("%d:%s/%s" % [tick, mine.left(6), str(m.h).left(6)])
-				verdict.probe_hash = mine
-				verdict.probe_tick = tick
 				if mine != str(m.h):
 					verdict.mismatches = int(verdict.mismatches) + 1
 			"snap":
@@ -138,8 +137,6 @@ func _init() -> void:
 					verdict.snap_mismatches = int(verdict.snap_mismatches) + 1
 			"bye":
 				verdict.final = Persistence.world_hash(sim) if sim != null else ""
-				verdict.srv_final = str(m.final)
-				verdict.bye_tick = tick
 				verdict.ok = tick == int(m.tick) and verdict.final == str(m.final) \
 					and int(verdict.mismatches) == 0 and int(verdict.hash_checks) > 0
 				if not bool(verdict.ok) and str(verdict.err) == "":
@@ -152,20 +149,6 @@ func _init() -> void:
 		ws.poll()
 		OS.delay_msec(5)
 	_finish(out_path, verdict)
-
-
-# same envelope, same dispatch as the server — one grammar, three processes
-func _apply(sim: Variant, c: Dictionary) -> void:
-	var a: Dictionary = c.a
-	match str(c.v):
-		"order_gather":
-			sim.order_gather(int(a.x), int(a.y))
-		"order_move":
-			sim.order_move(int(a.x), int(a.y))
-		"build":
-			sim.try_build(str(a.kind), int(a.x), int(a.y))
-		"cancel_action":
-			sim.player.action = null
 
 
 # the deterministic intent script: targets computed from the map only (shared by all instances)

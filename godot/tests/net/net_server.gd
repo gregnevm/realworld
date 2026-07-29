@@ -24,14 +24,16 @@ const BATCH := 10
 const HASH_EVERY := 100
 const SNAP_EVERY := 50
 const ACCEPT_TIMEOUT_MSEC := 30000
-const N_HINT := 56              # session.MAP_N — the bounds ctx while polling outside the tick loop
 
 var _tcp := TCPServer.new()
 var _peers: Array = []          # WebSocketPeer per connected client
 var _inbox := Command.Inbox.new()   # plan §4: validation + idempotency + canonical ordering
 var _late_done := false
+var _router: Variant = Command.new_router()   # §2: the ONE executor, shared with the HUD
 var _store := Persistence.store_new()   # plan §5: the authoritative append-only hash chain
 var _commits := 0
+var _n := 0                     # live map size; the bounds ctx for envelope validation
+var _acked: Dictionary = {}     # peer index -> last acked tick
 
 
 func _init() -> void:
@@ -47,6 +49,7 @@ func _init() -> void:
 	var session: Variant = Session.new()
 	session.start(LAT, LON, "Спайк")
 	var sim: Variant = session.sim
+	_n = int(sim.n)
 	var bal: Variant = Balance.Balance.new()
 	var last_snap: Variant = null
 
@@ -69,7 +72,7 @@ func _init() -> void:
 	var tick := 0
 	var echoes := 0
 	while tick < total_ticks:
-		_poll_incoming({"n": int(sim.n)})
+		_poll_incoming({"n": _n})
 		var count := mini(BATCH, total_ticks - tick)
 		# plan §4: the inbox already validated, de-duplicated and canonically ordered these — the
 		# server just stamps the tick they land on and echoes that schedule verbatim
@@ -84,7 +87,7 @@ func _init() -> void:
 			tick += 1
 			for c in cmds:
 				if int(c.tick) == tick:
-					_apply(sim, c)
+					Command.execute(_router, session, c)
 			sim.update(DT)
 			session.tick_research(DT)
 		if tick % HASH_EVERY == 0:
@@ -141,21 +144,6 @@ func _init() -> void:
 
 # ---- lockstep helpers ----
 
-# Args arrive already validated and coerced by the envelope (net/command.gd), so this is a plain
-# dispatch — the same shape the InputController router uses (R9: one vocabulary, one meaning).
-func _apply(sim: Variant, c: Dictionary) -> void:
-	var a: Dictionary = c.a
-	match str(c.v):
-		"order_gather":
-			sim.order_gather(a.x, a.y)
-		"order_move":
-			sim.order_move(a.x, a.y)
-		"build":
-			sim.try_build(a.kind, a.x, a.y)
-		"cancel_action":
-			sim.player.action = null
-
-
 func _poll_incoming(ctx: Dictionary = {}) -> void:
 	for i in _peers.size():
 		var p: WebSocketPeer = _peers[i]
@@ -171,13 +159,10 @@ func _poll_incoming(ctx: Dictionary = {}) -> void:
 					_acked[i] = int(d.get("tick", -1))
 
 
-var _acked: Dictionary = {}     # peer index -> last acked tick
-
-
 func _wait_acks(tick: int) -> bool:
 	var waited := 0
 	while waited < ACCEPT_TIMEOUT_MSEC:
-		_poll_incoming({"n": N_HINT})
+		_poll_incoming({"n": _n})
 		var got := 0
 		for i in _peers.size():
 			if int(_acked.get(i, -1)) >= tick:

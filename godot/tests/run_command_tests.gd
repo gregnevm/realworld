@@ -69,6 +69,15 @@ func _t_vocabulary_is_a_subset() -> void:
 	# order_attack takes a LIVE enemy Dictionary — it cannot cross a socket and must stay off the wire
 	ok(not Command.WIRE_VERBS.has("order_attack"), "order_attack is excluded: its arg is a live ref, not value data")
 	ok(_reason(Command.make(1, 0, "order_attack", {"target": {}})) == Command.R_VERB, "a client sending order_attack is refused, not crashed on")
+	# ...and ONE executor, not just one vocabulary: a net process that re-implemented the verb table
+	# would drift from the router the moment a verb gained a rule (this regressed once — the server
+	# passed raw args where the client coerced them). Every net file dispatches, none re-implements.
+	var offenders: Array = []
+	for f in ["net_server.gd", "net_client.gd"]:
+		var net_src := FileAccess.get_file_as_string("res://tests/net/" + f)
+		if net_src.contains("sim.order_move(") or net_src.contains("sim.try_build(") or net_src.contains("sim.order_gather("):
+			offenders.append(f)
+	ok(offenders.is_empty(), "no net process calls a sim mutator directly — all go through the router (R9): %s" % str(offenders))
 
 
 func _t_idempotency() -> void:

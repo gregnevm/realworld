@@ -19,7 +19,8 @@
 # already refuses gracefully. Duplicating content rules here would create a second, drifting truth.
 extends RefCounted
 
-const Snapshot = preload("res://scripts/net/snapshot.gd")
+const InputVerbs = preload("res://scripts/ui/input_verbs.gd")
+const Router = preload("res://scripts/ui/input_controller.gd")
 
 # Arg contracts for the verbs a CLIENT may send. Keys are ui/input_verbs.gd verb names — the wire
 # vocabulary is a SUBSET of the router grammar, never a parallel one. Type tags: "i" int, "f" float,
@@ -177,6 +178,24 @@ class Inbox:
 	# What a rejoining client must be told so it can resume its seq counter (plan §5 hook).
 	func last_seq(client_id: int) -> int:
 		return int(applied.get(client_id, -1))
+
+
+# ---------------- execution ----------------
+# §2 says client intents flow through the EXISTING router and nothing else. A net process that
+# re-implemented the verb table would be the second mutation vocabulary R9 exists to prevent, and
+# the two copies would drift the moment a verb gained a rule — so a wire command is executed by the
+# same router the HUD's panels and hotkeys use. Adding a verb stays one edit to WIRE_VERBS; what it
+# MEANS is defined once, in input_verbs.gd.
+static func new_router() -> Variant:
+	var ic: Variant = Router.InputController.new()
+	InputVerbs.install(ic)
+	return ic
+
+
+# String -> StringName is a wire-domain detail (JSON has no StringName): it belongs here, once,
+# rather than in every process that owns a socket.
+static func execute(router: Variant, session: Variant, cmd: Dictionary) -> void:
+	router.dispatch(StringName(str(cmd.v)), cmd.a, session)
 
 
 # self-reference for the inner class (an inner class cannot see the outer script's statics by name)
