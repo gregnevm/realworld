@@ -974,7 +974,7 @@ func _t_raid_determinism() -> void:
 func _t_patrols() -> void:
 	var a = Sim.new()
 	a.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
-	ok(float(a.patrol.next) > 0.0 and int(a.patrol.wave) == 0, "патруль зведений і чекає свого часу")
+	ok(float(a.patrol.next) >= 300.0 and int(a.patrol.wave) == 0, "патруль зведений; перший контакт не раніше ~дня 3 (грейс на розбудову)")
 	a._spawn_patrol()
 	ok(not a.enemies.is_empty(), "патруль виходить на мапу (%d од.)" % a.enemies.size())
 	var bot: Dictionary = a.enemies[0]
@@ -1010,7 +1010,7 @@ func _t_patrols() -> void:
 	var wave0 := int(d.patrol.wave)
 	d._update_patrols(0.1)
 	ok(int(d.patrol.wave) == wave0 and d.enemies.is_empty(), "під час рейду патруль не накладається")
-	ok(float(d.patrol.timer) == 0.0 and float(d.patrol.next) >= 95.0, "таймер патруля перезаряджений")
+	ok(float(d.patrol.timer) == 0.0 and float(d.patrol.next) >= 420.0, "таймер перезаряджений у РІДКІСНЕ вікно (бойовка — не основна механіка)")
 
 # Контент-пак: лампа/обігрівач/шипи (будівлі), кувалда/лук/броня (спорядження), 5-хабова торгівля.
 func _t_content_pack() -> void:
@@ -1625,6 +1625,8 @@ func _t_director_live() -> void:
 			tw.player.rest = 100.0
 	ok(Persistence.world_hash(t1) == Persistence.world_hash(t2), "близнюки з режисером хешуються однаково (потік seeded)")
 	ok(Persistence.serialize_runtime(t1).has("director_rng_state"), "runtime несе курсор режисера (rejoin-точність)")
+	ok(float(t1.balance.category_weight[KernelBalance.CAT_THREAT_BIG]) < 1.0,
+		"рейди рідкісні за дизайном: вага threat_big тягне MTB нижче кернел-дефолту (×%.2f)" % float(t1.balance.category_weight[KernelBalance.CAT_THREAT_BIG]))
 
 	# 2) інциденти застосовуються по-справжньому
 	var s = _flat_sim()

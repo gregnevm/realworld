@@ -28,9 +28,10 @@ const Social = preload("res://scripts/social.gd")
 const LIVE_INCIDENTS := ["raid", "disease", "cold_snap", "cargo"]
 # Seconds between the raid warning and the wave (the shipped slice's own lead time).
 const RAID_WARN_LEAD := 12.0
-# threat_big cadence weight: kernel MTB 2.4 days is siege pacing; ×2 ≈ a raid every ~1.2 game-days,
-# close to the shipped slice's rhythm while keeping the MTB curve (and its escalation) in charge.
-const THREAT_BIG_WEIGHT := 2.0
+# threat_big cadence weight: raids are a RARE punctuation, not the core loop (owner's call —
+# survival/building is the game, combat is spice). Kernel MTB 2.4 days at ×0.25 ≈ one raid per
+# ~10 game-days; the MTB curve still owns timing and threat points still size the wave that lands.
+const THREAT_BIG_WEIGHT := 0.25
 
 # The Balance `world` dict for a LIVE sim — the one sim-side builder (hud_model delegates here for
 # real sims, so the HUD readout and the live pacing can never disagree on the numbers).

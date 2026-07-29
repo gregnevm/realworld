@@ -29,7 +29,7 @@ var time := {"frac": 0.28, "day": 1, "day_len": 150.0}
 # force a wave by lowering `next` manually.
 const RAID_IDLE := 1.0e12
 var raid := {"timer": 0.0, "next": RAID_IDLE, "active": false, "warned": false, "wave": 0}
-var patrol := {"timer": 0.0, "next": 110.0, "wave": 0}   # лор: патрульні роботи Старого світу
+var patrol := {"timer": 0.0, "next": 300.0, "wave": 0}   # патрульні роботи; перший контакт ~день 3
 var research_unlocked: Dictionary = {}   # catalog research id -> true; session мостить із kernel/progression
 var use_catalog := false   # spec 0008 phase 2: OFF = stock живе на 6 data.gd-ключах (шліфований зріз
                            # байт-у-байт, його сьюти це доводять); ON = ключі stock — catalogue-ids через
@@ -160,7 +160,7 @@ func _reset_local_threats() -> void:
 	convoys = []
 	shots = []
 	raid = {"timer": 0.0, "next": RAID_IDLE, "active": false, "warned": false, "wave": int(raid.get("wave", 0))}
-	patrol = {"timer": 0.0, "next": 110.0, "wave": int(patrol.get("wave", 0))}
+	patrol = {"timer": 0.0, "next": 300.0, "wave": int(patrol.get("wave", 0))}
 	banner = ""
 
 # The pawn's portable inventory + condition (what a capsule carries).

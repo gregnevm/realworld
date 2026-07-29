@@ -24,7 +24,7 @@
 | `crafting_automation` | ✅ | ✅ | 🟡 | ✅ | `kernel/production.gd` bills (count/until); quality 0–6. Live catalogue craft (2026-07-29) is instant `sim.craft_catalog`; work-time bills remain kernel/sandbox |
 | `content_tree` | ✅ | ✅ | ✅ | ✅ | 335 defs, reachability-validated. **Live behind `use_catalog`** (2026-07-29, spec 0008 ph.3–4): the curated tier — 38 res / 73 builds / 27 recipes, neolithic→steel — builds, crafts and mines in the real game; the rest browsable until its map source ships |
 | `progression_research` | ✅ | ✅ | ✅ | ✅ | **spec 0007** — `kernel/progression.gd` queueable research pipeline over the tree; live from research benches (`session.tick_research`), surfaced in `ResearchPanel` (LEFT dock); planner (`research_path`/`steps_to_unlock`). Node + Godot mirrored tests |
-| `raids_pvp` | ✅ | ✅ | ✅ | ✅ | **Paced by Balance since 2026-07-29** (`sim/director.gd`): MTB rolls arm the warning→wave cycle and the wave is sized by threat points (wealth + days + clan `raid_pressure`) — real escalation. Patrols stay the ambient `sim/threats.gd` channel |
+| `raids_pvp` | ✅ | ✅ | ✅ | ✅ | **Paced by Balance since 2026-07-29** (`sim/director.gd`): MTB rolls arm the warning→wave cycle and the wave is sized by threat points (wealth + days + clan `raid_pressure`) — real escalation. **Rare by design** (owner's call): weight ×0.25 ≈ one raid per ~10 game-days; patrols (the ambient `sim/threats.gd` channel) every ~2.8–4.8 days, first contact ~day 3 — combat is spice, not the loop |
 | `balance_director` | ✅ | ✅ | ✅ | ✅ | **live** (2026-07-29): `sim/director.gd` runs `Balance.tick()` on its own seeded stream — raids, disease (→ the health tracker), cold snaps (→ `apply_temp_anomaly`), cargo drops. `decide()` stays the AI seam; fauna/quest incidents wait for their substrate |
 | `convoy_logistics` | ✅ | ✅ | ✅ | ✅ | real hubs (Kyiv/Lviv/Odesa/…); trade offers |
 | `offline_persistence` | ✅ | ✅ | ✅ | ✅ | `persistence.gd` seed+diff+hash-chain; travel/permadeath |
@@ -202,6 +202,12 @@ drops pay generosity-scaled scrap into the stock. Incidents without a live subst
 faked. `decide()` remains the AI-policy seam; knobs stay at defaults. The HUD threat readout and
 the live pacing now read the same `world_of` numbers (one sim-side builder). `_t_director_live`
 covers twin hashes, every live incident channel, the armed raid cycle and live escalation.
+**Retune (same day, owner's call — «рейди — не основна механіка»):** combat demoted to punctuation.
+`THREAT_BIG_WEIGHT` 2.0 → 0.25 (a raid every ~10 game-days instead of ~1.2), patrol window
+95–165 s → 420–720 s (~2.8–4.8 game-days, component drip intact), first patrol 110 s → 300 s (~day
+3 — a real building grace). Wave SIZING (threat-point escalation) is untouched: when a raid finally
+lands, it still lands scaled. Pinned in `_t_patrols` (both windows) and `_t_director_live` (weight
+< 1.0).
 
 **Update (2026-07-29, farming goes live — the first renewable source):** `sim/farming.gd` bridges
 grow zones onto the last big unconsumed kernel comp — `things.gd CompGrower` (temperature- and
