@@ -12,6 +12,7 @@ const Catalog = preload("res://scripts/kernel/catalog.gd")
 const KernelGear = preload("res://scripts/kernel/gear.gd")
 const KernelNeeds = preload("res://scripts/kernel/needs.gd")
 const KernelHealth = preload("res://scripts/kernel/health.gd")
+const CatalogDefs = preload("res://scripts/catalog_defs.gd")
 
 
 func _init() -> void:
@@ -52,6 +53,7 @@ func _init() -> void:
 	_t_content_pack()
 	_t_research_gates()
 	_t_use_catalog_persist()
+	_t_catalog_live()
 	_t_no_global_rng()
 	_t_static_typing()
 	_t_stock_seam()
@@ -687,12 +689,13 @@ func _t_environment() -> void:
 
 # ---------------- located hero health (sim/hero_health.gd wiring the kernel tracker live) ----------------
 # a flat warm-summer arena: no map noise, comfort in-band, threats disarmed — isolates the channel under test
-func _flat_sim(day: int = 195) -> Variant:
+func _flat_sim(day: int = 195, use_catalog: bool = false) -> Variant:
 	var nn := 16
 	var tiles := PackedByteArray()
 	tiles.resize(nn * nn)
 	tiles.fill(WorldGen.GRASS)
 	var s = Sim.new()
+	s.use_catalog = use_catalog   # BEFORE new_game (spec 0008 §5.2 — never flipped mid-save)
 	s.new_game({"n": nn, "tiles": tiles, "nodes": {}, "spawn": Vector2i(8, 8), "lat": 50.4501, "lon": 30.5234})
 	s.time.day = day
 	s.time.frac = 0.5
@@ -1163,6 +1166,143 @@ func _t_research_gates() -> void:
 		% ("" if missing.is_empty() else " — " + ", ".join(PackedStringArray(missing))))
 	ok(drifted.is_empty(), "RESEARCH_LABEL mirrors catalogue labels exactly%s"
 		% ("" if drifted.is_empty() else " — " + ", ".join(PackedStringArray(drifted))))
+
+# ---------------- spec 0008 phases 3–4: живі каталожні build/craft + курований тір ----------------
+func _t_catalog_live() -> void:
+	# 0) курований фільтр — capability-driven чесність: без power-мережі powered-дефи не будуються,
+	# defense без живого мозку (турель/пастка) — теж; data.gd-ids каталог НЕ дублює (одна правда на id)
+	ok(CatalogDefs.building("auto_turret").is_empty(), "powered турель поза живим тіром (немає мережі — була б безкоштовна)")
+	ok(CatalogDefs.building("mortar").is_empty(), "мінoмет без живого мозку не будується (не декорація)")
+	ok(CatalogDefs.building("bed").is_empty() and CatalogDefs.building("wall").is_empty(), "data.gd-ids каталог не дублює")
+	ok(float(CatalogDefs.building("deadfall_trap").get("trap_dps", 0.0)) > 0.0, "каталожна пастка мапиться на живий trap_dps-мозок")
+	ok(int(CatalogDefs.building("warehouse").get("capacity", 0)) == 800, "ангар несе свою місткість у шов")
+	ok(bool(CatalogDefs.building("stone_wall").get("blocks", false)), "кам'яна стіна блокує (blocks з каталогу)")
+	# збагачений видобуток — чиста функція (cell, amount): детермінований і містить руду
+	var seq_a := []
+	var seq_b := []
+	var kinds := {}
+	for amt in range(1, 13):
+		seq_a.append(CatalogDefs.gather_yield("rock", 77, amt))
+		seq_b.append(CatalogDefs.gather_yield("rock", 77, amt))
+		kinds[CatalogDefs.gather_yield("rock", 77, amt)] = true
+	ok(str(seq_a) == str(seq_b), "вихід ноди — чиста функція (реплей точний)")
+	ok(kinds.has("stone") and kinds.has("iron_ore"), "скеля дає і камінь, і руду (%s)" % str(kinds.keys()))
+
+	# 1) прапор OFF: каталожні id-и відмовляють — шліфований зріз незмінний
+	var off = _flat_sim()
+	off.try_build("kiln", 3, 3)
+	ok(not off.has_building("kiln"), "flag OFF: каталожна будівля не ставиться")
+	ok(not bool(off.craft_catalog("make_charcoal").ok), "flag OFF: каталожний крафт відмовляє")
+
+	# 2) прапор ON: ворота -> будівництво -> крафт-ланцюг на ЖИВОМУ складі
+	var s = _flat_sim(195, true)
+	s.stock[s.res_key("clay")] = 20
+	s.stock[s.res_key("stone")] = 20
+	s.stock[s.res_key("wood")] = 20
+	s.try_build("kiln", 3, 3)
+	ok(not s.has_building("kiln") and "дослідження" in s.flash_msg, "ворота тримають: піч до Опанування вогню не ставиться")
+	s.research_unlocked = {"fire_mastery": true}
+	s.try_build("kiln", 3, 3)
+	ok(s.has_building("kiln"), "після unlock: каталожна піч стоїть у живому світі")
+	ok(int(s.res_amount("clay")) == 8, "будівництво сплатило каталожну ціну (глина 20→8)")
+	var r_no: Dictionary = s.craft_catalog("cut_block")
+	ok(not bool(r_no.ok) and StringName(r_no.reason) == &"no_station", "рецепт без станції відмовляє з причиною")
+	var r_ok: Dictionary = s.craft_catalog("make_charcoal")
+	ok(bool(r_ok.ok) and int(s.stock.get("charcoal", 0)) == 2, "піч перепалює дерево на вугілля (+2)")
+	ok(int(s.res_amount("wood")) == 16, "крафт сплатив входи (дерево 20→16)")
+
+	# 3) живий видобуток: скеля під прапором насипає руду в реальному циклі збору
+	var node_cell := 8 * 16 + 5
+	s.map.nodes[node_cell] = {"kind": "rock", "amount": 12}
+	s.order_gather(5, 8)
+	var guard := 0
+	while s.map.nodes.has(node_cell) and guard < 600:
+		s.update(0.1)
+		s.player.hunger = 100.0
+		s.player.rest = 100.0
+		guard += 1
+	var got_ore: bool = int(s.player.carry.get("iron_ore", 0)) + int(s.res_amount("iron_ore")) > 0
+	ok(got_ore, "живий збір зі скелі приніс залізну руду (курований тір відкрився)")
+
+	# 4) персистенс: каталожна будівля і відкритий склад переживають save/load + world_hash близнюки
+	var rec := Persistence.serialize_region(s)
+	var s2 = Sim.new()
+	s2.load_region(rec)
+	ok(s2.has_building("kiln"), "save/load відновлює каталожну будівлю")
+	ok(int(s2.stock.get("charcoal", 0)) == 2, "save/load відновлює каталожний склад")
+	var t1 = _flat_sim(195, true)
+	var t2 = _flat_sim(195, true)
+	ok(Persistence.world_hash(t1) == Persistence.world_hash(t2), "близнюки з прапором ON хешуються однаково")
+	t1.research_unlocked = {"fire_mastery": true}
+	t1.stock[t1.res_key("clay")] = 20
+	t1.try_build("kiln", 3, 3)
+	ok(Persistence.world_hash(t1) != Persistence.world_hash(t2), "каталожна будівля входить у world_hash")
+
+	# 5) досяжність живого тіра — виведена, не хардкоджена: замикання від живих сировин мусить
+	# накривати сталевий ланцюг (дзеркало tests/catalog.test.js — два валідатори не розійдуться)
+	var cat: Dictionary = Catalog.load_json()
+	var live_raws := ["wood", "stone", "raw_food", "scrap", "iron_ore", "coal", "clay", "sand", "copper_ore", "plant_fiber", "herbal"]
+	var closure := _live_closure(cat, live_raws)
+	for res_id in ["charcoal", "iron_bar", "steel", "components", "medicine", "ammo"]:
+		ok((closure.obtainable as Dictionary).has(StringName(res_id)), "живий тір досягає %s" % res_id)
+	ok((closure.obtainable as Dictionary).size() == 38, "замикання живого тіра: 38 ресурсів (закріплено)")
+	# кожен збагачений вихід нод — справжня сировина каталогу (одруківка = мертвий ресурс у кишені)
+	var res_ids := {}
+	for r in cat.get("resources", []):
+		res_ids[str(r.get("id", ""))] = true
+	for kind in CatalogDefs.GATHER_YIELD:
+		for rid in CatalogDefs.GATHER_YIELD[kind]:
+			ok(res_ids.has(str(rid)), "вихід ноди '%s' існує в каталозі (%s)" % [rid, kind])
+
+# Замикання досяжності від заданих сировин (та сама логіка, що Catalog.reachability, але з
+# довільним сідом замість усіх raw-джерел) — тестова копія для звірки живого тіра.
+func _live_closure(cat: Dictionary, seed_raws: Array) -> Dictionary:
+	var obtainable := {}
+	for rid in seed_raws:
+		obtainable[StringName(str(rid))] = true
+	var unlocked := {}
+	var built := {}
+	var made := {}
+	var changed := true
+	while changed:
+		changed = false
+		for r in cat.get("research", []):
+			var rid := StringName(str(r.get("id", "")))
+			if unlocked.has(rid):
+				continue
+			var all_met := true
+			for p in r.get("prereqs", []):
+				if not unlocked.has(StringName(str(p))):
+					all_met = false
+			if all_met:
+				unlocked[rid] = true
+				changed = true
+		for b in cat.get("buildings", []):
+			var bid := StringName(str(b.get("id", "")))
+			if built.has(bid):
+				continue
+			var cost_ok := true
+			for c in b.get("cost", {}):
+				if not obtainable.has(StringName(str(c))):
+					cost_ok = false
+			var gate := str(b.get("research", ""))
+			if cost_ok and (gate == "" or unlocked.has(StringName(gate))):
+				built[bid] = true
+				changed = true
+		for rc in cat.get("recipes", []):
+			var rcid := StringName(str(rc.get("id", "")))
+			if made.has(rcid):
+				continue
+			var in_ok := true
+			for c in rc.get("inputs", {}):
+				if not obtainable.has(StringName(str(c))):
+					in_ok = false
+			var rgate := str(rc.get("research", ""))
+			if built.has(StringName(str(rc.get("station", "")))) and in_ok and (rgate == "" or unlocked.has(StringName(rgate))):
+				made[rcid] = true
+				obtainable[StringName(str(rc.get("output", {}).get("id", "")))] = true
+				changed = true
+	return {"obtainable": obtainable, "built": built, "made": made}
 
 # spec 0008: сейв несе словник ключів складу — use_catalog мусить пережити роундтрип, інакше
 # save(ON) -> load(OFF) читає чужі ключі й склад «зникає» без діагностики.

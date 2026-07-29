@@ -13,6 +13,7 @@ const Social = preload("res://scripts/social.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
 const Gear = preload("res://scripts/kernel/gear.gd")
 const HeroHealth = preload("res://scripts/sim/hero_health.gd")
+const CatalogDefs = preload("res://scripts/catalog_defs.gd")
 
 # session: the SessionScript (has .sim). world/ctx: the same shapes the kernel consumes (built by HudRoot).
 # balance: a Balance director constructed ONCE by HudRoot and reused (never new() per frame).
@@ -163,11 +164,24 @@ static func _cost_line(id: String, cost: Dictionary) -> String:
 	return String(_cost_cache[id])
 
 # --- content tree (the deep catalogue surfaced in the HUD via the CatalogView pipeline) ---
-# Value-data only (R8). Reads the process-shared forward-engine model (catalog_sim) so the browsers'
-# actionable rows and the router's build/craft/research commands operate the SAME state — browse an
-# action, click it, watch the counts move. The live data.gd sim (`sim`) is untouched; this is a
-# parallel catalogue model whose db is the cached default catalogue.
-static func _catalog_slice(_sim) -> Dictionary:
+# Value-data only (R8). TWO sources behind one slice (spec 0008 phase 3):
+#   • sim.use_catalog ON  -> the LIVE sim is the state: its unlocked research, its open stock, its
+#     placed stations — browser rows are real actions on the real world (build_actions filtered to
+#     the live-buildable adapter set so every row the player can click actually places);
+#   • flag OFF (shipped default) -> the process-shared forward-engine model (catalog_sim), honestly
+#     badged as a sandbox by the panels.
+static func _catalog_slice(sim) -> Dictionary:
+	if sim != null and bool(sim.get("use_catalog") == true):
+		var stations: Dictionary = {}
+		for b in sim.buildings:
+			stations[StringName(String(b.kind))] = true
+		return CatalogView.snapshot(CatalogView.default_db(), {
+			"unlocked": sim.research_unlocked,
+			"stock": sim.stock,
+			"stations": stations,
+			"build_filter": CatalogDefs.live_ids(),
+			"live": true,
+		})
 	var cs: Variant = CatalogSim.shared(CatalogView.default_db())
 	return CatalogView.snapshot(cs.db, cs.view_state())
 
@@ -178,7 +192,8 @@ static func world_of(sim) -> Dictionary:
 		return {"buildings": [], "stock": {}, "items": []}
 	var bs := []
 	for b in sim.buildings:
-		var def: Dictionary = GameData.BUILDINGS.get(b.kind, {})
+		# def seam when the sim provides it (catalogue buildings carry real hp); data.gd for fakes
+		var def: Dictionary = sim.building_def(String(b.kind)) if sim.has_method("building_def") else GameData.BUILDINGS.get(b.kind, {})
 		bs.append({"value": float(def.get("hp", 50.0)) * 0.5})
 	return {"buildings": bs, "stock": sim.stock, "items": (sim.player.get("items", []) as Array)}
 
@@ -272,7 +287,38 @@ static func _stock_slice(sim) -> Dictionary:
 		var amt: int = _amount(sim, res)
 		rows[res] = amt
 		total += amt
-	return {"rows": rows, "total": total, "cap": int(sim.storage_cap())}
+	var extra: Array = _stock_extras(sim)
+	for e in extra:
+		total += int(e.amt)
+	return {"rows": rows, "total": total, "cap": int(sim.storage_cap()), "extra": extra}
+
+# Catalogue-only stock lines (spec 0008 phase 4): under the open stock, mining/crafting accumulates
+# resources beyond the six live ids — surface every nonzero one (sorted, capped to the panel pool)
+# with its catalogue icon+label. [] when the flag is off / on lean fakes (graceful).
+const STOCK_EXTRA_CAP := 8
+static func _stock_extras(sim) -> Array:
+	if sim == null or not bool(sim.get("use_catalog") == true):
+		return []
+	var mapped: Dictionary = {}
+	for res in GameData.RES_ORDER:
+		mapped[String(sim.res_key(res))] = true
+	var db: Variant = CatalogView.default_db()
+	var keys: Array = (sim.stock as Dictionary).keys()
+	keys.sort()
+	var out: Array = []
+	for k in keys:
+		if out.size() >= STOCK_EXTRA_CAP:
+			break
+		if mapped.has(str(k)) or int(sim.stock[k]) <= 0:
+			continue
+		var d: Variant = db.get_def(StringName(str(k)))
+		out.append({
+			"id": str(k),
+			"icon": String(d.icon()) if d != null and d.has_method("icon") else "•",
+			"label": String(d.label()) if d != null and d.has_method("label") else str(k),
+			"amt": int(sim.stock[k]),
+		})
+	return out
 
 # --- build palette (afford flag per building; locked = research-ворота ще не відкриті, spec 0007) ---
 static func _build_slice(sim) -> Dictionary:

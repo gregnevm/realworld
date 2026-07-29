@@ -327,3 +327,25 @@ test("catalog: tree has real depth (chain length >= 3 to advanced tier)", () => 
   assert.ok(cat.resources.some((r) => r.tier >= 3), "catalog reaches tier-3 advanced resources");
   assert.ok(cat.research.some((r) => r.tier >= 7), "research tree reaches tier 7+");
 });
+
+// ---- spec 0008 §5.3: the CURATED LIVE TIER — the same fixpoint, seeded from the raws the live map
+// actually sources (4 node kinds + the phase-4 node-yield bundle). Mirrors _t_catalog_live in
+// godot/tests/run_tests.gd one-for-one, so the Godot slice and this validator can never disagree
+// about what the live game can reach. If catalog edits shift the closure, update BOTH pins together.
+const LIVE_RAWS = [
+  "wood", "stone", "raw_food", "scrap",                       // the 4 map node kinds
+  "iron_ore", "coal", "clay", "sand", "copper_ore",           // rock's enriched yield (phase 4)
+  "plant_fiber", "herbal",                                    // tree/bush enriched yield (phase 4)
+];
+
+test("catalog: live-tier closure reaches the steel chain (pinned at 38 resources)", () => {
+  const cat = loadCatalog();
+  const live = reachability(cat, LIVE_RAWS);
+  for (const id of ["charcoal", "iron_bar", "steel", "components", "medicine", "ammo"]) {
+    assert.ok(live.obtainable.has(id), `live tier reaches ${id}`);
+  }
+  assert.strictEqual(live.obtainable.size, 38, "live-tier obtainable resources pinned (38/78)");
+  // every live raw is a genuine catalogue RAW resource (a typo here = a dead resource in the pocket)
+  const rawIds = new Set(cat.resources.filter(isRaw).map((r) => r.id));
+  for (const id of LIVE_RAWS) assert.ok(rawIds.has(id), `live raw "${id}" is a catalogue raw`);
+});

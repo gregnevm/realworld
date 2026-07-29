@@ -13,7 +13,9 @@ const Fmt = preload("res://scripts/ui/format.gd")
 
 # ---- StockPanel (RIGHT dock) — THE PROOF SLICE: Snapshot -> Panel -> Widget -> Tokens end to end ----
 class StockPanel extends PanelBase.Base:
+	const EXTRA_POOL := 8          # fixed pool of catalogue-stock lines (R2; slice caps to match)
 	var _rows: Dictionary = {}     # res id -> StatRow
+	var _extra: Array = []         # StatRow pool for catalogue-only resources (spec 0008 phase 4)
 	var _total: Widgets.StatRow
 	func _init() -> void:
 		panel_id = &"stock"; dock = PanelBase.DOCK_RIGHT; priority = 10; default_open = true
@@ -28,6 +30,11 @@ class StockPanel extends PanelBase.Base:
 			var row := Widgets.StatRow.new()
 			vb.add_child(row); row.set_glyph_res(res)
 			_rows[res] = row
+		for i in EXTRA_POOL:
+			var xrow := Widgets.StatRow.new()
+			vb.add_child(xrow); xrow.set_row("•", "—", "")
+			xrow.visible = false
+			_extra.append(xrow)
 		_total = Widgets.StatRow.new()
 		vb.add_child(_total); _total.set_row("Σ", "Всього", "0")
 	func bind(vm) -> void:
@@ -39,6 +46,14 @@ class StockPanel extends PanelBase.Base:
 		var rows: Dictionary = st.rows
 		for res in _rows:
 			_rows[res].set_value(int(rows.get(res, 0)))
+		var extra: Array = st.get("extra", [])
+		for i in _extra.size():
+			if i < extra.size():
+				var e: Dictionary = extra[i]
+				_extra[i].set_row(String(e.icon), String(e.label), str(int(e.amt)))
+				_extra[i].visible = true
+			else:
+				_extra[i].visible = false
 		_total.set_value("%d/%d" % [int(st.total), int(st.cap)])
 
 # ---- VitalsPanel (LEFT dock) — hero need bars (HP/hunger/rest/blood) + located-health readout ----

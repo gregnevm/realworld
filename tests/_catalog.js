@@ -29,9 +29,16 @@ function isRaw(res) {
 // of obtainable stock ids, unlocked research, built buildings, made recipes and made items — the
 // ground truth that "nothing in the tree is stranded" and that a fully-researched pipeline opens
 // everything. Mirrors catalog.gd's reachability() (and progression.gd's end-state).
-function reachability(cat) {
+// `seedRaws` (spec 0008 §5.3): an optional array narrowing the starting stock to the raws a given
+// host actually sources — the LIVE-TIER closure of the Godot slice is this same fixpoint seeded
+// from its map raws. null == every catalogue raw (the full-tree invariant, default).
+function reachability(cat, seedRaws = null) {
   const obtainable = new Set();
-  for (const r of cat.resources) if (isRaw(r)) obtainable.add(r.id);
+  if (seedRaws === null) {
+    for (const r of cat.resources) if (isRaw(r)) obtainable.add(r.id);
+  } else {
+    for (const id of seedRaws) obtainable.add(id);
+  }
   const unlockedResearch = new Set();
   const builtBuildings = new Set();
   const madeRecipes = new Set();

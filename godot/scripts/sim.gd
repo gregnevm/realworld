@@ -9,6 +9,8 @@ const SimEnv = preload("res://scripts/sim/environment.gd")
 const WorldMeta = preload("res://scripts/sim/world_meta.gd")
 const HeroHealth = preload("res://scripts/sim/hero_health.gd")
 const DataBridge = preload("res://scripts/data_bridge.gd")
+const CatalogDefs = preload("res://scripts/catalog_defs.gd")
+const Catalog = preload("res://scripts/kernel/catalog.gd")
 
 var map: Dictionary
 var n: int = 0
@@ -236,7 +238,7 @@ func _build_astar() -> void:
 func _refresh_solid(x: int, y: int) -> void:
 	var i := y * n + x
 	var solid := WorldGen.is_terrain_blocked(map.tiles[i])
-	if bgrid.has(i) and GameData.BUILDINGS[bgrid[i].kind].get("blocks", false):
+	if bgrid.has(i) and building_def(String(bgrid[i].kind)).get("blocks", false):
 		solid = true
 	astar.set_point_solid(Vector2i(x, y), solid)
 
@@ -244,7 +246,7 @@ func after_map_change() -> void:
 	# OSM overlay rewrote terrain: rebuild pathing grids + relocate to the new clearing
 	_build_astar()
 	for b in buildings:
-		if GameData.BUILDINGS[b.kind].get("blocks", false):
+		if building_def(String(b.kind)).get("blocks", false):
 			_refresh_solid(b.x, b.y)
 	var sp: Vector2i = map.spawn
 	player.px = sp.x + 0.5
@@ -290,7 +292,7 @@ func is_blocked(x: int, y: int) -> bool:
 	if WorldGen.is_terrain_blocked(map.tiles[y * n + x]):
 		return true
 	if bgrid.has(y * n + x):
-		return GameData.BUILDINGS[bgrid[y * n + x].kind].get("blocks", false)
+		return building_def(String(bgrid[y * n + x].kind)).get("blocks", false)
 	return false
 
 func carry_total() -> int:
@@ -308,7 +310,7 @@ func stock_total() -> int:
 func storage_cap() -> int:
 	var c := 200
 	for b in buildings:
-		var def: Dictionary = GameData.BUILDINGS[b.kind]
+		var def: Dictionary = building_def(String(b.kind))
 		if def.has("capacity"):
 			c += int(def.capacity)
 	return c
@@ -321,6 +323,16 @@ func deposit(res: String, amt: int) -> int:
 	if add < amt:
 		_log("⚠ Склад переповнений — частину втрачено.", "warn")
 	return add
+
+# ---------------- def seam (spec 0008 phase 3) ----------------
+# The ONE place a building id becomes a def dict. data.gd owns its tuned Phase-0 defs; with the flag
+# on, catalogue-only ids resolve through the CatalogDefs adapter (same dict shape), so every tick
+# path (blocks/heat/light/traps/turrets/capacity/hp) serves both vocabularies without caring.
+# {} == unknown/not-live-buildable (try_build refuses it).
+func building_def(kind: String) -> Dictionary:
+	if GameData.BUILDINGS.has(kind):
+		return GameData.BUILDINGS[kind]
+	return CatalogDefs.building(kind) if use_catalog else {}
 
 # ---------------- open stock (spec 0008 phase 2) ----------------
 # The ONE seam every stock access goes through. Live data.gd id -> storage key: identity while
@@ -406,7 +418,7 @@ func temp_at(x: int, y: int) -> float:
 	if is_indoor(x, y):
 		t += (INDOOR_SETPOINT_C - t) * INDOOR_INSULATION
 	for b in buildings:
-		var heat := float(GameData.BUILDINGS[b.kind].get("extra", {}).get("heat", 0.0))
+		var heat := float(building_def(String(b.kind)).get("extra", {}).get("heat", 0.0))
 		if heat <= 0.0 or not device_active(b):
 			continue
 		if absi(b.x - x) + absi(b.y - y) <= EMITTER_RADIUS:
@@ -451,7 +463,7 @@ func daylight_level() -> float:
 func light_at(x: int, y: int) -> float:
 	var light := daylight_level()
 	for b in buildings:
-		if not bool(GameData.BUILDINGS[b.kind].get("extra", {}).get("light", false)):
+		if not bool(building_def(String(b.kind)).get("extra", {}).get("light", false)):
 			continue
 		if not device_active(b):
 			continue
@@ -485,8 +497,8 @@ func _recompute_indoor() -> void:
 
 # ---------------- building ----------------
 func _place_building(kind: String, x: int, y: int, hp: float):
-	var def: Dictionary = GameData.BUILDINGS[kind]
-	var b := {"kind": kind, "x": x, "y": y, "hp": (def.hp if hp < 0 else hp), "cool": 0.0, "aim": 0.0}
+	var def: Dictionary = building_def(kind)
+	var b := {"kind": kind, "x": x, "y": y, "hp": (float(def.get("hp", 50.0)) if hp < 0 else hp), "cool": 0.0, "aim": 0.0}
 	buildings.append(b)
 	bgrid[y * n + x] = b
 	if def.get("blocks", false):
@@ -499,7 +511,7 @@ func _remove_building(b) -> void:
 	buildings.erase(b)
 	bgrid.erase(b.y * n + b.x)
 	_refresh_solid(b.x, b.y)
-	if GameData.BUILDINGS[b.kind].get("blocks", false) or String(b.kind).begins_with("door"):
+	if building_def(String(b.kind)).get("blocks", false) or String(b.kind).begins_with("door"):
 		_recompute_indoor()
 
 func build_valid(x: int, y: int) -> bool:
@@ -518,12 +530,17 @@ func try_build(kind: String, x: int, y: int) -> void:
 	if not build_valid(x, y):
 		_flash("Тут не можна будувати.")
 		return
-	var def: Dictionary = GameData.BUILDINGS[kind]
+	# ONE def seam serves both vocabularies: data.gd ids always; catalogue-only ids when the flag is
+	# on ({} refusal covers unknown ids AND catalogue ids while the flag is off).
+	var def: Dictionary = building_def(kind)
+	if def.is_empty():
+		_flash("Тут не можна будувати.")
+		return
 	if not research_ok(def):
 		_flash("🔒 Потребує дослідження: %s." % _research_label(def))
 		return
 	if not afford(def.cost):
-		_flash("Бракує: " + GameData.cost_str(def.cost))
+		_flash("Бракує: " + _cost_str(def.cost))
 		return
 	GameData.pay_cost(stock, cost_keys(def.cost))
 	_place_building(kind, x, y, -1)
@@ -541,14 +558,15 @@ func demolish(x: int, y: int) -> Dictionary:
 				storages += 1
 		if storages <= 1:
 			return {"ok": false, "msg": "Не можна знести єдиний склад."}
+	var bdef: Dictionary = building_def(String(b.kind))
 	var refund := {}
-	for res in GameData.BUILDINGS[b.kind].cost:
-		var back: int = int(GameData.BUILDINGS[b.kind].cost[res]) / 2
+	for res in bdef.get("cost", {}):
+		var back: int = int(bdef.cost[res]) / 2
 		if back > 0:
 			deposit(res, back)
 			refund[res] = back
 	_remove_building(b)
-	_log("♻ %s розібрано%s." % [GameData.BUILDINGS[b.kind].name, (" (+" + GameData.cost_str(refund) + ")") if not refund.is_empty() else ""], "good")
+	_log("♻ %s розібрано%s." % [bdef.get("name", b.kind), (" (+" + _cost_str(refund) + ")") if not refund.is_empty() else ""], "good")
 	return {"ok": true}
 
 # ---------------- items / equipment (spec 0001) ----------------
@@ -570,7 +588,17 @@ func research_ok(def: Dictionary) -> bool:
 
 func _research_label(def: Dictionary) -> String:
 	var need := String(def.get("research", ""))
-	return String(GameData.RESEARCH_LABEL.get(need, need))
+	# data.gd mirrors the labels for its own five gates; catalogue-only gates read the catalogue label
+	return String(GameData.RESEARCH_LABEL.get(need, CatalogDefs.research_label(need)))
+
+# Cost line valid in EITHER stock vocabulary (data.gd RES icons know only the 6 live ids).
+func _cost_str(cost: Dictionary) -> String:
+	if not use_catalog:
+		return GameData.cost_str(cost)
+	var parts := []
+	for k in cost:
+		parts.append("%s%d" % [CatalogDefs.res_icon(str(k)), int(cost[k])])
+	return " ".join(parts)
 
 # Броня ріже вхідний урон: 1.0 без броні, 0.7 у жилеті, 0.5 у панцирі (data.gd dmg_cut).
 func armor_mult() -> float:
@@ -591,6 +619,37 @@ func has_workbench() -> bool:
 		if b.kind == "workbench":
 			return true
 	return false
+
+func has_building(kind: String) -> bool:
+	for b in buildings:
+		if String(b.kind) == kind:
+			return true
+	return false
+
+# ---------------- catalogue crafting (spec 0008 phase 3) ----------------
+# Execute a catalogue recipe at its placed station: pay the inputs from the open stock, deposit the
+# output. Instant, like the slice's craft_item (work-time bills stay kernel-side for now). Returns
+# value-data {ok, reason, ...} — the ROUTER maps reasons to user-facing text (R10: no new Ukrainian
+# authored here; `label` fields pass through catalogue data).
+func craft_catalog(recipe_id: String) -> Dictionary:
+	if not use_catalog:
+		return {"ok": false, "reason": &"catalog_off"}
+	var rc: Dictionary = CatalogDefs.recipe(recipe_id)
+	if rc.is_empty():
+		return {"ok": false, "reason": &"unknown"}
+	var station := String(rc.get("station", ""))
+	if not has_building(station):
+		return {"ok": false, "reason": &"no_station", "station_label": CatalogDefs.building_label(station)}
+	if not research_ok(rc):
+		return {"ok": false, "reason": &"locked", "research_label": _research_label(rc)}
+	var inputs: Dictionary = rc.get("inputs", {})
+	if not afford(inputs):
+		return {"ok": false, "reason": &"cost", "missing": _cost_str(Catalog.missing_for(cost_keys(inputs), stock))}
+	GameData.pay_cost(stock, cost_keys(inputs))
+	var out: Dictionary = rc.get("output", {})
+	var added := deposit(String(out.get("id", "")), int(out.get("count", 1)))
+	return {"ok": true, "label": String(rc.get("label", recipe_id)), "added": added,
+		"out_icon": CatalogDefs.res_icon(String(out.get("id", "")))}
 
 func craft_item(item_id: String) -> Dictionary:
 	if not GameData.ITEMS.has(item_id):
@@ -803,7 +862,15 @@ func _do_gather(dt: float, step: float) -> void:
 			_flash("Несеш максимум — на склад 📦.")
 			p.action = null
 			return
-		p.carry[info.res] = p.carry.get(info.res, 0) + 1
+		# phase 4 (spec 0008): under the open catalogue, a node yields its catalogue BUNDLE — rocks
+		# occasionally give ore/coal/clay/sand, trees fiber, bushes herbs. Pure function of
+		# (cell, remaining amount): deterministic, and it consumes NO rng stream.
+		var res: String = str(info.res)
+		if use_catalog:
+			var enriched := CatalogDefs.gather_yield(str(node.kind), int(a.cell), int(node.amount))
+			if enriched != "":
+				res = enriched
+		p.carry[res] = p.carry.get(res, 0) + 1
 		node.amount -= 1
 		p.skills.gather = min(20.0, p.skills.gather + 0.2)
 		if node.amount <= 0:
