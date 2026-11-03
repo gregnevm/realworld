@@ -242,6 +242,13 @@ class ChoiceRow extends WidgetBase.Widget:
 		_btn.clip_text = true
 		_btn.pressed.connect(func(): picked.emit(id))
 		add_child(_btn)
+		_btn.minimum_size_changed.connect(_fit)
+		_fit()
+	# a themed Button's minimum height (font + style padding) is known only once the theme reaches it in
+	# the tree; a hard-coded 22px row let the button overflow onto the next VBox child (the «Доступні»
+	# list drawing over the «Черга» header) — so the row tracks the button's own minimum instead
+	func _fit() -> void:
+		custom_minimum_size = Vector2(0, maxf(22.0, _btn.get_combined_minimum_size().y))
 	func bind(vm) -> void:
 		build_once()
 		if not (vm is Dictionary):
@@ -267,6 +274,13 @@ class CatalogSlot extends WidgetBase.Widget:
 		_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_btn.pressed.connect(func(): chosen.emit(item_id))
 		add_child(_btn)
+		_btn.minimum_size_changed.connect(_fit)
+		_fit()
+	# a themed Button's minimum height (font + style padding) is known only once the theme reaches it in
+	# the tree; a hard-coded 22px row let the button overflow onto the next VBox child (the «Доступні»
+	# list drawing over the «Черга» header) — so the row tracks the button's own minimum instead
+	func _fit() -> void:
+		custom_minimum_size = Vector2(0, maxf(22.0, _btn.get_combined_minimum_size().y))
 	func bind(vm) -> void:
 		build_once()
 		if not (vm is Dictionary):
