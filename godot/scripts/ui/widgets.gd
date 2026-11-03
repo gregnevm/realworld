@@ -33,6 +33,11 @@ class StatRow extends WidgetBase.Widget:
 		_value.theme_type_variation = UITheme.V_MONO
 		_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		_value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		# long readouts (condition lines, catalogue labels) trim with an ellipsis inside the dock
+		# instead of pushing the panel wider; the full text stays reachable as the hover tooltip
+		_value.clip_text = true
+		_value.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		_value.mouse_filter = Control.MOUSE_FILTER_PASS
 		hb.add_child(_value)
 	func set_glyph_res(res: String) -> void:
 		build_once()
@@ -49,6 +54,7 @@ class StatRow extends WidgetBase.Widget:
 		build_once()
 		value = str(v)
 		_value.text = value
+		_value.tooltip_text = value if value.length() > 12 else ""
 	func bind(vm) -> void:
 		if vm is Dictionary and vm.has("value"):
 			set_value(vm.value)
