@@ -78,7 +78,9 @@ test("findPath reaches reachable targets, walks toward unreachable ones, null on
 
 test("raid wave size scales with the day and clamps", () => {
   assert.strictEqual(RW.raidWaveSize(1), 2);
-  assert.strictEqual(RW.raidWaveSize(10), 11);
+  assert.strictEqual(RW.raidWaveSize(2), 2);
+  assert.strictEqual(RW.raidWaveSize(4), 3);
+  assert.strictEqual(RW.raidWaveSize(10), 7);
   assert.strictEqual(RW.raidWaveSize(50), 12); // clamped
   assert.ok(RW.raidWaveSize(5) >= RW.raidWaveSize(1));
 });
@@ -328,4 +330,127 @@ test("determinism: the gameplay rng state round-trips through save format", () =
   const restored = RW.mulberry32(0);
   restored.setState(state);                     // resume from the saved state
   assert.deepStrictEqual([restored(), restored(), restored()], seq, "restored stream continues identically");
+});
+
+// ---------------------------------------------------------------------------
+// UX/sim pipeline polish: drag-build runs, door gating, demolish/repair economics,
+// reachable raid spawns, floating text, and the frozen-after-death rule.
+// ---------------------------------------------------------------------------
+function freshGame() {
+  const map = RW.generateMap(50.4501, 30.5234, 56);
+  map.placeName = "Тест";
+  return RW.newGame(map);
+}
+
+test("lineCells draws an inclusive L-shaped run in either direction", () => {
+  assert.deepStrictEqual(RW.lineCells(2, 2, 2, 2), [{ x: 2, y: 2 }]);
+  assert.deepStrictEqual(RW.lineCells(0, 0, 2, 0), [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 }]);
+  const l = RW.lineCells(3, 3, 1, 5);
+  assert.deepStrictEqual(l, [{ x: 3, y: 3 }, { x: 2, y: 3 }, { x: 1, y: 3 }, { x: 1, y: 4 }, { x: 1, y: 5 }]);
+});
+
+test("buildRun places a wall line, stops when the stockpile runs dry, never over nodes/water", () => {
+  const G = freshGame();
+  const sp = G.map.spawn;
+  G.base.stock.stone = 12;            // room for exactly 2 walls at 5 stone each
+  G.selectedBuild = "wall";
+  const placed = RW.buildRun(G, RW.lineCells(sp.x - 2, sp.y - 2, sp.x + 2, sp.y - 2));
+  assert.strictEqual(placed, 2);
+  assert.strictEqual(G.base.stock.stone, 2);
+  assert.strictEqual(G.stats.built, 2);
+  // the crate's own cell can never be built over, quietly or not
+  G.base.stock.stone = 50;
+  const crate = G.buildings.find(b => b.kind === "storage");
+  assert.strictEqual(RW.tryBuild(G, crate.x, crate.y, true), false);
+});
+
+test("a door lets the player through but is a wall to raiders", () => {
+  const G = freshGame();
+  const sp = G.map.spawn, i = (sp.y - 1) * G.map.N + sp.x;
+  G.selectedBuild = "door"; assert.ok(RW.tryBuild(G, sp.x, sp.y - 1));
+  assert.strictEqual(RW.isBlocked(G, i), false, "player path passes a door");
+  assert.strictEqual(RW.isEnemyBlocked(G, i), true, "raiders must smash a door");
+  G.selectedBuild = "wall"; assert.ok(RW.tryBuild(G, sp.x, sp.y + 1));
+  assert.strictEqual(RW.isBlocked(G, (sp.y + 1) * G.map.N + sp.x), true);
+});
+
+test("demolish refunds half the cost, repair is priced by missing hp and needs proximity", () => {
+  const G = freshGame();
+  const sp = G.map.spawn;
+  assert.deepStrictEqual(RW.refundOf({ wood: 18, stone: 4 }), { wood: 9, stone: 2 });
+  assert.deepStrictEqual(RW.refundOf({ wood: 1 }), {});
+  G.selectedBuild = "workbench";
+  assert.ok(RW.tryBuild(G, sp.x + 1, sp.y + 1));
+  const b = G.buildings.find(x => x.kind === "workbench");
+  const wood0 = G.base.stock.wood;
+  // full hp: nothing to repair, nothing charged
+  assert.strictEqual(RW.repair(G, b), false);
+  assert.strictEqual(G.base.stock.wood, wood0);
+  b.hp = 10;
+  const price = RW.repairCostOf(RW.BUILDINGS.workbench, 10);
+  assert.ok(price.wood >= 1 && price.wood <= 6, `repair price scales with damage, got ${JSON.stringify(price)}`);
+  assert.strictEqual(RW.repair(G, b), true);
+  assert.strictEqual(b.hp, RW.BUILDINGS.workbench.hp);
+  assert.strictEqual(G.base.stock.wood, wood0 - price.wood);
+  // too far away → refused, untouched
+  b.hp = 10; G.player.px += 10;
+  assert.strictEqual(RW.repair(G, b), false);
+  assert.strictEqual(b.hp, 10);
+  G.player.px -= 10;
+  G.selected = b;
+  assert.strictEqual(RW.demolish(G, b), true);
+  assert.strictEqual(G.buildings.indexOf(b), -1);
+  assert.strictEqual(G.selected, null, "demolishing the selection clears it");
+  assert.strictEqual(G.base.stock.wood, wood0 - price.wood + 9);
+});
+
+test("raid spawn cells are all reachable from the base over terrain", () => {
+  const G = freshGame();
+  const cells = RW.raidSpawnCells(G);
+  assert.ok(cells.length > 0);
+  const c = RW.baseCenter(G), N = G.map.N;
+  for (const i of cells) {
+    assert.ok(!RW.isTerrainBlocked(G.map.tiles[i]), "spawn cell is walkable");
+    const p = RW.findPath(N, i % N, (i / N) | 0, c.x, c.y, j => RW.isTerrainBlocked(G.map.tiles[j]));
+    assert.ok(p && p.length && p[p.length - 1].x === c.x && p[p.length - 1].y === c.y, "a full path to the base exists");
+  }
+  // the wave itself: forced due, every raider stands on a spawn cell and the pack is staggered
+  G.raid.next = 0; RW.update(G, 0.01);
+  assert.ok(G.enemies.length >= 2);
+  assert.ok(G.enemies.some(e => e.delay > 0), "later raiders trickle in");
+  for (const e of G.enemies) assert.ok(cells.includes(Math.floor(e.py) * N + Math.floor(e.px)));
+});
+
+test("floating text decays, and the sim freezes once the pawn is dead", () => {
+  const G = freshGame();
+  RW.fxText(G, 1, 1, "+1", "#fff");
+  assert.strictEqual(G.fx.length, 1);
+  RW.update(G, 0.5); assert.strictEqual(G.fx.length, 1);
+  RW.update(G, 1.0); assert.strictEqual(G.fx.length, 0);
+  const day = G.time.day, frac = G.time.frac;
+  G.player.hp = 0.001; G.player.hunger = 0;
+  RW.update(G, 1);                       // dies this tick
+  assert.strictEqual(G._dead, true);
+  assert.strictEqual(G.speed, 0);
+  const fracAfterDeath = G.time.frac;
+  RW.update(G, 50);                      // nothing moves behind the death screen
+  assert.strictEqual(G.time.frac, fracAfterDeath);
+  assert.strictEqual(G.time.day, day);
+  assert.ok(frac <= fracAfterDeath);
+  assert.ok(RW.runSummary(G).some(([k]) => k.includes("днів")));
+});
+
+test("save/load round-trips zoom, stats and the log tail", () => {
+  const store = {};
+  global.localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } };
+  const G = freshGame();
+  G.tile = 32; G.stats.kills = 7; G.lastSpeed = 3;
+  for (let i = 0; i < 50; i++) G.log.push({ msg: "m" + i, cls: "", day: 1, t: "00:00" });
+  RW.saveGame(G);
+  const s = JSON.parse(store.realworld_save);
+  assert.strictEqual(s.tile, 32);
+  assert.strictEqual(s.stats.kills, 7);
+  assert.strictEqual(s.log.length, 40, "only the log tail is persisted");
+  assert.deepStrictEqual(RW.saveMeta(), { name: "Тест", day: 1, lat: 50.4501, lon: 30.5234 });
+  delete global.localStorage;
 });

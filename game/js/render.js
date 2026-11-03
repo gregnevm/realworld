@@ -1,21 +1,43 @@
-/* RealWorld — render.js : draws the world to the main canvas */
+/* RealWorld — render.js : draws the world to the main canvas (camera, zoom, day/night, fx) */
 (function (RW) {
   "use strict";
   const T = RW.T;
 
-  const TC = {
+  // terrain palette (also read by the minimap in ui.js — one truth per colour)
+  const TC = RW.TERRAIN_COLORS = {
     0: "#27557e", 1: "#5c7d3c", 2: "#39562a", 3: "#6c7077",
     4: "#3b4148", 5: "#6e5836", 6: "#4f4a42", 7: "#c7b377", 8: "#dde6ee"
   };
 
+  // ---- camera: smooth-follows the player; zoom is the tile size ----
+  RW.ZOOM_MIN = 14; RW.ZOOM_MAX = 48; RW.ZOOM_DEFAULT = 26;
+  RW.setZoom = function (G, tile) {
+    G.tile = RW.clamp(Math.round(tile), RW.ZOOM_MIN, RW.ZOOM_MAX);
+    if (RW.syncZoomUI) RW.syncZoomUI(G);
+  };
+  RW.zoomBy = function (G, steps) { RW.setZoom(G, G.tile + steps * 3); };
   RW.camera = function (G) {
-    const tile = G.tile, p = G.player;
-    return { tile, ox: G.view.w / 2 - p.px * tile, oy: G.view.h / 2 - p.py * tile };
+    const tile = G.tile, c = G.cam || G.player;
+    const cx = c.px != null ? c.px : c.x, cy = c.py != null ? c.py : c.y;
+    return { tile, ox: G.view.w / 2 - cx * tile, oy: G.view.h / 2 - cy * tile };
+  };
+  // called once per frame before drawing: ease the camera toward the player (snaps on big jumps)
+  RW.stepCamera = function (G, dt) {
+    const p = G.player;
+    if (!G.cam) { G.cam = { x: p.px, y: p.py }; return; }
+    const d = RW.dist(G.cam.x, G.cam.y, p.px, p.py);
+    if (d > 12) { G.cam.x = p.px; G.cam.y = p.py; return; }
+    const k = 1 - Math.pow(0.0005, dt);          // frame-rate independent ease
+    G.cam.x += (p.px - G.cam.x) * k; G.cam.y += (p.py - G.cam.y) * k;
   };
   RW.screenToTile = function (G, sx, sy) {
     const c = RW.camera(G);
     const fx = (sx - c.ox) / c.tile, fy = (sy - c.oy) / c.tile;
     return { x: Math.floor(fx), y: Math.floor(fy), fx, fy };
+  };
+  RW.tileToScreen = function (G, x, y) {
+    const c = RW.camera(G);
+    return { x: x * c.tile + c.ox, y: y * c.tile + c.oy };
   };
 
   // smooth sun/darkness from time-of-day fraction (0 = midnight)
@@ -31,6 +53,9 @@
   };
 
   RW.render = function (ctx, G) {
+    const now = performance.now();
+    const dt = G._rt ? Math.min(0.1, (now - G._rt) / 1000) : 0.016; G._rt = now;
+    RW.stepCamera(G, dt);
     const c = RW.camera(G), tile = c.tile, N = G.map.N, tiles = G.map.tiles;
     const w = G.view.w, h = G.view.h;
     ctx.clearRect(0, 0, w, h);
@@ -50,6 +75,9 @@
       // subtle checker so the grid reads
       if ((x + y) & 1) { ctx.fillStyle = "rgba(0,0,0,.05)"; ctx.fillRect(sx, sy, tile + 1, tile + 1); }
     }
+    // map edge: the world ends here
+    ctx.strokeStyle = "rgba(0,0,0,.45)"; ctx.lineWidth = 3;
+    ctx.strokeRect(c.ox, c.oy, N * tile, N * tile);
 
     // resource nodes
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
@@ -64,20 +92,42 @@
       drawBuilding(ctx, b, b.x * tile + c.ox, b.y * tile + c.oy, tile, G);
     });
 
-    // build ghost
+    // selection ring + turret range of the selected building
+    if (G.selected && G.buildings.indexOf(G.selected) >= 0) {
+      const b = G.selected, def = RW.BUILDINGS[b.kind];
+      const sx = b.x * tile + c.ox, sy = b.y * tile + c.oy;
+      if (def.range) drawRange(ctx, sx + tile / 2, sy + tile / 2, def.range * tile, "rgba(93,176,255,.9)");
+      ctx.strokeStyle = "#ffcf5c"; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
+      ctx.strokeRect(sx + 1, sy + 1, tile - 2, tile - 2); ctx.setLineDash([]);
+    }
+
+    // build ghost (single cell, or the whole drag run)
     if (G.selectedBuild && G.hover) {
       const def = RW.BUILDINGS[G.selectedBuild];
-      const ok = RW.buildValid(G, G.hover.x, G.hover.y) && RW.canAfford(G.base.stock, def.cost);
-      const sx = G.hover.x * tile + c.ox, sy = G.hover.y * tile + c.oy;
-      ctx.globalAlpha = 0.55;
-      ctx.fillStyle = ok ? "rgba(90,210,140,.5)" : "rgba(255,90,90,.45)";
-      ctx.fillRect(sx + 1, sy + 1, tile - 2, tile - 2);
-      ctx.globalAlpha = 1;
-      ctx.font = Math.floor(tile * 0.7) + "px serif";
-      ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(def.icon, sx + tile / 2, sy + tile / 2);
-      ctx.strokeStyle = ok ? "#5fd38a" : "#ff6b6b"; ctx.lineWidth = 2;
-      ctx.strokeRect(sx + 1, sy + 1, tile - 2, tile - 2);
+      const cells = (G.drag && def.line) ? RW.lineCells(G.drag.x, G.drag.y, G.hover.x, G.hover.y) : [G.hover];
+      let budget = Object.assign({}, G.base.stock), okAny = false;
+      cells.forEach(cell => {
+        const valid = RW.buildValid(G, cell.x, cell.y);
+        const afford = valid && RW.canAfford(budget, def.cost);
+        if (afford) RW.payCost(budget, def.cost);
+        const ok = valid && afford; okAny = okAny || ok;
+        const sx = cell.x * tile + c.ox, sy = cell.y * tile + c.oy;
+        ctx.globalAlpha = 0.55;
+        ctx.fillStyle = ok ? "rgba(90,210,140,.5)" : "rgba(255,90,90,.45)";
+        ctx.fillRect(sx + 1, sy + 1, tile - 2, tile - 2);
+        ctx.globalAlpha = 1;
+        ctx.font = Math.floor(tile * 0.7) + "px serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(def.icon, sx + tile / 2, sy + tile / 2);
+        ctx.strokeStyle = ok ? "#5fd38a" : "#ff6b6b"; ctx.lineWidth = 2;
+        ctx.strokeRect(sx + 1, sy + 1, tile - 2, tile - 2);
+      });
+      if (def.range) drawRange(ctx, G.hover.x * tile + c.ox + tile / 2, G.hover.y * tile + c.oy + tile / 2, def.range * tile, "rgba(93,176,255,.6)");
+      if (cells.length > 1) {
+        ctx.fillStyle = "#fff"; ctx.font = "bold 12px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+        const last = cells[cells.length - 1];
+        ctx.fillText(`×${cells.length}  ${RW.costStr(mulCost(def.cost, cells.length))}`, last.x * tile + c.ox + tile + 4, last.y * tile + c.oy);
+      }
     }
 
     // move/gather target marker
@@ -103,6 +153,18 @@
     // player
     drawPlayer(ctx, G, G.player.px * tile + c.ox, G.player.py * tile + c.oy, tile);
 
+    // floating text (damage / loot / +1)
+    if (G.fx) G.fx.forEach(f => {
+      const k = f.t / f.dur, a = 1 - k * k;
+      ctx.globalAlpha = RW.clamp(a, 0, 1);
+      ctx.font = "bold " + Math.max(11, tile * 0.5) + "px sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+      const sx = f.x * tile + c.ox, sy = f.y * tile + c.oy - k * tile * 1.2;
+      ctx.lineWidth = 3; ctx.strokeStyle = "rgba(0,0,0,.7)"; ctx.strokeText(f.text, sx, sy);
+      ctx.fillStyle = f.color; ctx.fillText(f.text, sx, sy);
+      ctx.globalAlpha = 1;
+    });
+
     // day/night overlay
     const dark = RW.daylight(G.time.frac);
     if (dark > 0.01) {
@@ -113,7 +175,40 @@
     const fr = G.time.frac;
     const warm = Math.max(0, 0.25 - Math.min(Math.abs(fr - 0.25), Math.abs(fr - 0.75))) * 1.4;
     if (warm > 0.01) { ctx.fillStyle = "rgba(255,140,60," + warm * 0.25 + ")"; ctx.fillRect(0, 0, w, h); }
+
+    // off-screen threat arrows at the viewport edge (design-system §2: "edge threat arrows")
+    drawThreatArrows(ctx, G, c, w, h);
+
+    // player-hurt vignette
+    if (G._hurtT > 0) {
+      ctx.fillStyle = "rgba(255,40,40," + (0.25 * G._hurtT) + ")"; ctx.fillRect(0, 0, w, h);
+    }
   };
+
+  function mulCost(cost, n) { const o = {}; for (const k in cost) o[k] = cost[k] * n; return o; }
+
+  function drawRange(ctx, cx, cy, r, col) {
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = "rgba(93,176,255,.07)"; ctx.fill();
+  }
+
+  function drawThreatArrows(ctx, G, c, w, h) {
+    if (!G.enemies.length) return;
+    const cx = w / 2, cy = h / 2, m = 26;
+    G.enemies.forEach(e => {
+      const sx = e.px * c.tile + c.ox, sy = e.py * c.tile + c.oy;
+      if (sx > m && sx < w - m && sy > m && sy < h - m) return;
+      const dx = sx - cx, dy = sy - cy, ang = Math.atan2(dy, dx);
+      // intersect the ray with the inset viewport rectangle
+      const k = Math.min(Math.abs((w / 2 - m) / (dx || 1e-6)), Math.abs((h / 2 - m) / (dy || 1e-6)));
+      const ax = cx + dx * k, ay = cy + dy * k;
+      ctx.save(); ctx.translate(ax, ay); ctx.rotate(ang);
+      ctx.fillStyle = "rgba(255,80,80,.9)";
+      ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-6, -7); ctx.lineTo(-6, 7); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    });
+  }
 
   function drawNode(ctx, node, sx, sy, tile) {
     const cx = sx + tile / 2, cy = sy + tile / 2, r = tile * 0.36;
@@ -131,6 +226,8 @@
       ctx.fillStyle = "#86d0d6"; ctx.fillRect(cx - r * 0.5, cy - r * 0.2, r, r * 0.4);
       ctx.fillStyle = "#5fa9af"; ctx.fillRect(cx - r * 0.2, cy + r * 0.1, r * 0.6, r * 0.3);
     }
+    // depletion pip: a nearly exhausted node shows a small amber dot
+    if (node.amount <= 3) { ctx.fillStyle = "#ffcf5c"; ctx.beginPath(); ctx.arc(sx + tile - 4, sy + 4, 2.2, 0, 7); ctx.fill(); }
   }
 
   function drawBuilding(ctx, b, sx, sy, tile, G) {
@@ -143,6 +240,10 @@
     } else if (b.kind === "floor") {
       ctx.fillStyle = "#7d756a"; ctx.fillRect(sx + 1, sy + 1, p - 2, p - 2);
       ctx.strokeStyle = "rgba(0,0,0,.2)"; ctx.strokeRect(sx + 2, sy + 2, p - 4, p - 4);
+    } else if (b.kind === "door") {
+      ctx.fillStyle = "#8a8f97"; ctx.fillRect(sx + 1, sy + 1, p - 2, p - 2);
+      ctx.fillStyle = "#8c6239"; ctx.fillRect(sx + p * 0.2, sy + p * 0.12, p * 0.6, p * 0.76);
+      ctx.fillStyle = "#e0b070"; ctx.beginPath(); ctx.arc(sx + p * 0.68, cy, Math.max(1.5, p * 0.06), 0, 7); ctx.fill();
     } else {
       // generic: tinted pad + icon
       ctx.fillStyle = "rgba(20,26,34,.55)"; ctx.fillRect(sx + 2, sy + 2, p - 4, p - 4);
@@ -195,9 +296,13 @@
       ctx.strokeStyle = "#5db0ff"; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(sx, sy, r + 5, -Math.PI / 2, -Math.PI / 2 + frac * 2 * Math.PI); ctx.stroke();
     }
-    // carry pip
+    // carry pip + fullness
     const carried = RW.carryTotal(p);
-    if (carried > 0) { ctx.fillStyle = "#fff"; ctx.font = (tile * 0.34) + "px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "bottom"; ctx.fillText("🎒", sx, sy - r - 2); }
+    if (carried > 0) {
+      ctx.fillStyle = carried >= p.carryCap ? "#ffcf5c" : "#fff";
+      ctx.font = (tile * 0.34) + "px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+      ctx.fillText("🎒" + (carried >= p.carryCap ? "!" : ""), sx, sy - r - 2);
+    }
   }
 
 })(window.RW);
