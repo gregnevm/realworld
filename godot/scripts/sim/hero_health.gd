@@ -188,11 +188,16 @@ static func death_cause(tracker) -> String:
 	return ""
 
 # Value-data inspect lines for the HUD (worst first, capped) + the downed flag.
+const CONDITION_SHOW_MIN := 0.05
 static func condition_lines(s, cap: int = 4) -> Array:
 	if s.health == null:
 		return []
 	var rows: Array = []
 	for h in s.health.hediffs:
+		# 0..1-scale condition hediffs are born at ~0 and tick up: below the readout floor they are
+		# noise on the Vitals line («переохолодження 0%»), not a state the player can act on yet
+		if _is_condition(h) and float(h.severity) < CONDITION_SHOW_MIN:
+			continue
 		rows.append([clampf(float(h.severity), 0.0, 1.0), String(h.inspect())])
 	rows.sort_custom(func(a, b): return float(a[0]) > float(b[0]))
 	var out: Array = []

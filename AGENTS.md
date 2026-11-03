@@ -20,6 +20,7 @@
 ## Архітектура
 - Гра — єдиний глобальний неймспейс **`RW`**, розкладений по файлах у `game/js/`, які підключаються **у фіксованому порядку** в `game/index.html`: `util → worldgen → entities → catalog_data → progression → render → logistics → ui → input → game`. `game.js` стартує на `DOMContentLoaded`.
 - **Прогресія у веб-зрізі:** `G.research = RW.Progression(RW.CATALOG)` — той самий tech-DAG, що і в Godot (`catalog.json`); дослідні столи генерують прогрес у `RW.update`; будівлі з `research:`-гейтом заблоковані до розблокування (клік по локу планує весь шлях). Після зміни `catalog.json` — `node tools/sync-catalog.mjs` (CI-тест ловить розсинхрон).
+- **UX-граматика веб-зрізу (ui.js/input.js/render.js):** ЛКМ = наказ (move/gather/attack) або build; у build-режимі для `line:true`-дефів drag = L-подібний ран (`RW.lineCells` → `RW.buildRun`, ghost із підсумком вартості); клік по своїй будівлі = `G.selected` → картка (`RW.repair` поруч за `repairCostOf`, `RW.demolish` повертає `refundOf` = 50%); hover → інспектор (`RW.updateInspect`); мінімапа кешує шар terrain по `G.mapDirty` (ставиться при place/remove/depletion/OSM); камера `G.cam` плавно їде за пішаком, зум = `G.tile` (`RW.setZoom`, персистується); `RW.setSpeed` — єдиний сетер швидкості (UI синкається через `RW.syncSpeedUI`); `RW.fxText` — плаваючий текст (+1 ресурс, урон, лут; не персистується); після смерті `RW.update` заморожує світ, `RW.showDeath` показує `RW.runSummary(G)`. Двері: `blocksEnemies` — пішак проходить, рейдери ламають (`RW.isEnemyBlocked`). Рейд-спавн — лише з `RW.raidSpawnCells` (BFS-досяжність від бази по terrain: хвиля за річкою ніколи не прийде і не зависне), пак прибуває зі зсувом `e.delay`, застряглий рейдер відступає через 25 с.
 - **Сідований геймплей-RNG (веб):** `G.rng = RW.mulberry32(hashSeed(lat,lon) ^ 0x5EED)` — рейди/лут/засідки/OSM-ноди детерміновані від координат; жодного `Math.random` у sim-шляхах; стан RNG персистується в сейві (`rngState`, `getState/setState`).
 - Цикл: `requestAnimationFrame` → `RW.update(G, dt)` (симуляція) + `RW.render(ctx, G)`. Уся ігрова модель — в об'єкті `G` (`RW.G`).
 - World-gen: `lat/lon` → детермінований seed (`mulberry32`) → процедурна карта; за потреби зверху накладається реальна геометрія OSM (`RW.overlayOSM`).
@@ -38,17 +39,18 @@ realworld/
       entities.js      дані: ресурси, будівлі (з research-гейтами), ноди, рейдери
       catalog_data.js  ЗГЕНЕРОВАНИЙ зріз godot/content/catalog.json (node tools/sync-catalog.mjs)
       progression.js   RW.Progression — JS-дзеркало kernel/progression.gd (дерево досліджень)
-      render.js        малювання канвасу, камера, день/ніч
+      render.js        малювання канвасу, камера (плавне стеження + зум), день/ніч, FX-текст, стрілки загроз
       logistics.js     конвої між реальними регіонами
-      ui.js            DOM-HUD, меню, спавн-екран, світова карта
-      input.js         миша/клавіатура/тач
+      ui.js            DOM-HUD, build bar, інспектор/картка вибору, мінімапа, модалки (меню/журнал/смерть), спавн із прев'ю
+      input.js         граматика вводу: клік/drag-build/вибір, колесо-зум, pinch, хоткеї
       game.js          стан, симуляція, бій, рейди, цикл, save/load
   godot/               порт у Godot 4.7 — форвардний рушій (деталі в розділі «Godot-порт»)
     scripts/kernel/       механічний кернел (spec 0003) + дерево контенту (catalog.gd)
     content/catalog.json  335 def; валідовано catalog.gd ↔ tests/catalog.test.js
     tests/                headless-сьюти Godot (run_*.gd)
   GDD_BOOK/            інтерактивний GDD; правда — gdd.json
-  tests/               Node-тести (node --test): sim-ядро, catalog, progression
+  tests/               Node-тести (node --test): sim-ядро (вкл. drag-build/двері/ремонт/рейд-спавн/смерть), catalog, progression
+  tools/               sync-catalog.mjs · lint.mjs (контракт no-build) · smoke.mjs (Playwright-прохід гри, CI job browser-smoke)
   specs/               специфікації фіч (0001…0008)
   docs/                довідники: catalog.md, mechanics-status.md, ux/
   .github/workflows/   CI: ci.yml (Node) + godot.yml (Godot headless)
@@ -90,7 +92,7 @@ realworld/
 ## Команди
 - **Запуск гри (dev):** `cd game && python -m http.server 8765` → http://localhost:8765
 - **Запуск GDD:** `python "C:\Users\gregn\.claude\skills\gdd_build\scripts\serve.py" "O:\realworld\GDD_BOOK"`
-- **Тести:** `npm test` (Node `node --test` — детерміноване sim-ядро + валідація `catalog.json`/пайплайну прогресії); headless-сьюти Godot — `test.cmd` у корені (перелік — у розділі «Godot-порт» вище). Обидва набори ганяються в CI (`.github/workflows/ci.yml` + `godot.yml`).
+- **Тести:** `npm test` (Node `node --test` — детерміноване sim-ядро + валідація `catalog.json`/пайплайну прогресії); `npm run lint` (tools/lint.mjs: порядок скриптів = контракт, strict-IIFE, без ES-модулів, без `Math.random` у sim-файлах); `npm run smoke` (tools/smoke.mjs: Playwright + Chromium — спавн → drag-build → вибір/демонтаж → модалки → дослідження → рейд → смерть → reload/continue; падає на будь-якому console.error; у CI — job `browser-smoke` з артефактом скриншотів); headless-сьюти Godot — `test.cmd` у корені (перелік — у розділі «Godot-порт» вище). Обидва набори ганяються в CI (`.github/workflows/ci.yml` + `godot.yml`).
 - **Білд/деплой:** білду немає; статичний хостинг (GitHub Pages / Railway / itch.io).
 
 ## Ключові рішення (ADR-лайт)
@@ -103,6 +105,6 @@ realworld/
 ## Правила для агента
 - Перед зміною — звірся з цим файлом і структурою; не вигадуй конвенції.
 - Зміни тримай у скоупі задачі; не тягни неузгоджені залежності.
-- **Верифікація:** прев'ю-скриншот у цьому середовищі зламаний — драйв через `preview_eval` (старт гри, `G.speed=0`, цикл `RW.update(G,dt)`, читай стан); кадр знімай через `canvas.toDataURL` (див. memory `browser-game-canvas-screenshot`).
+- **Верифікація:** веб-зріз — `npm run smoke` (або власний Playwright-скрипт за його зразком: старт гри, `G.speed=0`, цикл `RW.update(G,dt)`, читай стан, `page.screenshot`); у середовищах без Playwright — `preview_eval` + `canvas.toDataURL` (див. memory `browser-game-canvas-screenshot`). Godot-HUD — `xvfb-run -a Godot --path godot res://newhud.tscn -- newhud shot` → `godot/newhud_shot.png`.
 - Секрети/ключі — ніколи в код.
 - Великі рефактори/міграції (особливо перехід на клієнт-сервер для Фази 1) — спершу ADR + спека й узгодження, не одразу код.

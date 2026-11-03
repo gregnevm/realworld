@@ -52,6 +52,7 @@
       phase: "out", t: 0, dur: oneWay, dist: Math.round(dist), ambushed: false
     };
     G.convoys.push(convoy);
+    if (G.stats) G.stats.convoys++;
     RW.log(G, `🚚 Конвой #${convoy.id} вирушив до ${hub.name} (${convoy.dist} км) з ${sendAmt} ${RW.RES[sendRes].icon}.`, "good");
     return { ok: true };
   };

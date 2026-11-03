@@ -5,6 +5,9 @@
   "description": "Survival-MMORPG on real-world (GPS/OSM) maps — Phase 0 prototype",
   "scripts": {
     "start": "python -m http.server 8765 --directory game",
-    "test": "node --test \"tests/**/*.test.js\""
+    "test": "node --test \"tests/**/*.test.js\"",
+    "lint": "node tools/lint.mjs",
+    "smoke": "node tools/smoke.mjs",
+    "sync-catalog": "node tools/sync-catalog.mjs"
   }
 }

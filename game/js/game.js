@@ -35,12 +35,26 @@
     const b = G.bgrid.get(i);
     return !!(b && RW.BUILDINGS[b.kind].blocks);
   };
+  // what a raider cannot walk through (and therefore smashes): walls AND doors
+  RW.isEnemyBlocked = function (G, i) {
+    if (RW.isTerrainBlocked(G.map.tiles[i])) return true;
+    const b = G.bgrid.get(i);
+    return !!(b && (RW.BUILDINGS[b.kind].blocks || RW.BUILDINGS[b.kind].blocksEnemies));
+  };
+
+  // ---------- floating combat/loot text (pure data; render.js draws it, never persisted) ----------
+  RW.fxText = function (G, x, y, text, color) {
+    if (!G.fx) return;
+    G.fx.push({ x, y, text, color: color || "#fff", t: 0, dur: 1.1 });
+    if (G.fx.length > 80) G.fx.splice(0, G.fx.length - 80);
+  };
 
   // ---------- building ----------
   function placeBuilding(G, kind, x, y, hp) {
     const def = RW.BUILDINGS[kind];
     const b = { kind, x, y, hp: hp != null ? hp : def.hp, cool: 0, aim: 0 };
     G.buildings.push(b); G.bgrid.set(idx(G, x, y), b);
+    G.mapDirty = true;
     return b;
   }
   RW.buildValid = function (G, x, y) {
@@ -51,26 +65,97 @@
     if (G.map.nodes.has(idx(G, x, y))) return false;
     return true;
   };
-  RW.tryBuild = function (G, x, y) {
+  // `quiet` = part of a drag-run: invalid cells are skipped silently, only the money message surfaces once
+  RW.tryBuild = function (G, x, y, quiet) {
     const def = RW.BUILDINGS[G.selectedBuild];
+    if (!def) return false;
     if (def.research && G.research && !G.research.gateOk(def.research)) {
       const planned = RW.planResearchPath(G.research, def.research);
       RW.flash(G, `🔒 ${def.name}: потрібне дослідження «${G.research.labelOf(def.research)}»` + (planned.length ? " — шлях заплановано" : ""));
       if (planned.length) RW.log(G, "🔬 У чергу досліджень: " + planned.map(id => G.research.labelOf(id)).join(" → "), "");
-      return;
+      return false;
     }
-    if (!RW.buildValid(G, x, y)) { RW.flash(G, "Тут не можна будувати."); return; }
-    if (!RW.canAfford(G.base.stock, def.cost)) { RW.flash(G, "Бракує ресурсів: " + RW.costStr(def.cost)); return; }
+    if (!RW.buildValid(G, x, y)) { if (!quiet) RW.flash(G, "Тут не можна будувати."); return false; }
+    if (!RW.canAfford(G.base.stock, def.cost)) {
+      const miss = RW.missingFor(G.base.stock, def.cost).map(k => RW.RES[k].icon + RW.RES[k].label).join(", ");
+      RW.flash(G, "Бракує: " + miss + " (треба " + RW.costStr(def.cost) + ")");
+      return false;
+    }
     RW.payCost(G.base.stock, def.cost);
     placeBuilding(G, G.selectedBuild, x, y);
+    G.stats.built++;
     RW.syncBuildBar(G);
+    return true;
   };
-  RW.cancelBuild = function (G) { G.selectedBuild = null; RW.syncBuildBar(G); RW.setTicker(G, ""); };
-  RW.flash = function (G, msg) { RW.setTicker(G, "⚠ " + msg); clearTimeout(RW._ft); RW._ft = setTimeout(() => RW.setTicker(G, ""), 2200); };
+  // drag-to-build: an L-shaped run of cells from a to b (horizontal first), inclusive
+  RW.lineCells = function (ax, ay, bx, by) {
+    const out = [];
+    const sx = bx >= ax ? 1 : -1, sy = by >= ay ? 1 : -1;
+    for (let x = ax; x !== bx + sx; x += sx) out.push({ x, y: ay });
+    for (let y = ay + sy; y !== by + sy; y += sy) out.push({ x: bx, y });
+    return out;
+  };
+  RW.buildRun = function (G, cells) {
+    let placed = 0;
+    for (const c of cells) {
+      if (!RW.canAfford(G.base.stock, RW.BUILDINGS[G.selectedBuild].cost)) break;
+      if (RW.tryBuild(G, c.x, c.y, true)) placed++;
+    }
+    return placed;
+  };
+  RW.cancelBuild = function (G) { G.selectedBuild = null; G.drag = null; RW.syncBuildBar(G); RW.setTicker(G, ""); };
+
+  // ---------- selection / demolish / repair ----------
+  RW.selectAt = function (G, x, y) {
+    const b = inB(G, x, y) ? G.bgrid.get(idx(G, x, y)) : null;
+    G.selected = b || null;
+    return G.selected;
+  };
+  RW.demolish = function (G, b) {
+    if (!b || G.buildings.indexOf(b) < 0) return false;
+    const def = RW.BUILDINGS[b.kind];
+    const refund = RW.refundOf(def.cost);
+    removeBuilding(G, b);
+    for (const k in refund) RW.deposit(G, k, refund[k]);
+    RW.fxText(G, b.x + 0.5, b.y + 0.5, "✕ " + def.name, "#ffcf5c");
+    RW.log(G, `🔨 ${def.name} розібрано, повернуто ${RW.costStr(refund) || "нічого"}.`, "");
+    RW.syncBuildBar(G);
+    return true;
+  };
+  RW.repair = function (G, b) {
+    if (!b || G.buildings.indexOf(b) < 0) return false;
+    const def = RW.BUILDINGS[b.kind];
+    if (b.hp >= def.hp) { RW.flash(G, def.name + " ціла."); return false; }
+    if (RW.dist(G.player.px, G.player.py, b.x + 0.5, b.y + 0.5) > 2.6) { RW.flash(G, "Підійди ближче, щоб полагодити."); return false; }
+    const cost = RW.repairCostOf(def, b.hp);
+    if (!RW.canAfford(G.base.stock, cost)) { RW.flash(G, "На ремонт бракує: " + RW.costStr(cost)); return false; }
+    RW.payCost(G.base.stock, cost);
+    b.hp = def.hp;
+    RW.fxText(G, b.x + 0.5, b.y + 0.5, "🔧 полагоджено", "#5fd38a");
+    RW.syncBuildBar(G);
+    return true;
+  };
+
+  // ---------- speed / pause (single setter so every HUD readout stays in sync) ----------
+  RW.SPEEDS = [1, 2, 3];
+  RW.setSpeed = function (G, s) {
+    if (s > 0) G.lastSpeed = s;
+    G.speed = s;
+    if (RW.syncSpeedUI) RW.syncSpeedUI(G);
+  };
+  RW.togglePause = function (G) { RW.setSpeed(G, G.speed > 0 ? 0 : (G.lastSpeed || 1)); };
+  RW.cycleSpeed = function (G) {
+    const cur = RW.SPEEDS.indexOf(G.speed);
+    RW.setSpeed(G, RW.SPEEDS[(cur + 1) % RW.SPEEDS.length]);
+  };
+  RW.flash = function (G, msg) { RW.setTicker(G, "⚠ " + msg, "warn"); clearTimeout(RW._ft); RW._ft = setTimeout(() => RW.setTicker(G, ""), 2200); };
+  RW.flashOk = function (G, msg) { RW.setTicker(G, "✓ " + msg, "good"); clearTimeout(RW._ft); RW._ft = setTimeout(() => RW.setTicker(G, ""), 1800); };
 
   function removeBuilding(G, b) {
     const i = G.buildings.indexOf(b); if (i >= 0) G.buildings.splice(i, 1);
     G.bgrid.delete(idx(G, b.x, b.y));
+    if (G.selected === b) G.selected = null;
+    G.mapDirty = true;
   }
 
   // ---------- orders ----------
@@ -107,8 +192,9 @@
       time: { frac: 0.28, day: 1, dayLen: 150 },
       raid: { timer: 0, next: 95, active: false, warned: false, wave: 0 },
       convoys: [], regions: [], convoySeq: 0,
-      selectedBuild: null, hover: null, speed: 1, speedIdx: 0,
-      craftTimer: 0, growTimer: 0, saveTimer: 0, log: []
+      selectedBuild: null, hover: null, keys: {}, speed: 1, lastSpeed: 1, selected: null, drag: null,
+      craftTimer: 0, growTimer: 0, saveTimer: 0, log: [], fx: [], mapDirty: true,
+      stats: { gathered: 0, kills: 0, raids: 0, built: 0, convoys: 0, damage: 0 }
     };
     // research pipeline over the shared content catalog (same tree the Godot kernel walks)
     G.research = RW.newProgression ? RW.newProgression() : null;
@@ -206,6 +292,7 @@
 
   // ---------- simulation ----------
   RW.update = function (G, dt) {
+    if (G._dead) return;   // the run is over: the world freezes behind the death screen
     // time of day
     G.time.frac += dt / G.time.dayLen;
     while (G.time.frac >= 1) { G.time.frac -= 1; G.time.day++; RW.log(G, "🌅 Новий день: " + G.time.day, ""); }
@@ -219,8 +306,10 @@
     updateTurrets(G, dt);
     RW.updateConvoys(G, dt);
 
-    // shots decay
+    // shots + floating text decay
     for (let i = G.shots.length - 1; i >= 0; i--) { G.shots[i].t -= dt; if (G.shots[i].t <= 0) G.shots.splice(i, 1); }
+    if (G.fx) for (let i = G.fx.length - 1; i >= 0; i--) { G.fx[i].t += dt; if (G.fx[i].t >= G.fx[i].dur) G.fx.splice(i, 1); }
+    if (G._hurtT > 0) G._hurtT = Math.max(0, G._hurtT - dt * 2.5);
 
     // autosave
     G.saveTimer -= dt;
@@ -254,6 +343,11 @@
     if (p.hunger > 45 && p.rest > 25 && p.hp < 100) p.hp = Math.min(100, p.hp + 0.7 * dt);
     p.hp = RW.clamp(p.hp, 0, 100);
     if (p.hp <= 0 && !G._dead) { onDeath(G); return; }
+    // one-shot need warnings (re-armed once the need recovers)
+    if (p.hunger < 20 && !G._hungerWarn) { G._hungerWarn = true; RW.log(G, "🍖 Голод! Стань біля складу з їжею або збери ягоди 🫐.", "warn"); }
+    else if (p.hunger > 40) G._hungerWarn = false;
+    if (p.rest < 15 && !G._restWarn) { G._restWarn = true; RW.log(G, "💤 Виснаження! Постав ліжко 🛏 і стань поруч, щоб поспати.", "warn"); }
+    else if (p.rest > 40) G._restWarn = false;
 
     // auto eat near storage
     if (p.hunger < 55 && p.eatCd <= 0 && (G.base.stock.food || 0) >= 1 && nearStorage(G, 2.2)) {
@@ -308,8 +402,10 @@
         if (RW.carryTotal(p) >= p.carryCap) { RW.flash(G, "Несеш максимум — віднеси на склад 📦."); p.action = null; return; }
         p.carry[info.res] = (p.carry[info.res] || 0) + 1;
         node.amount -= 1;
+        G.stats.gathered++;
+        RW.fxText(G, a.nx + 0.5, a.ny + 0.2, "+1 " + RW.RES[info.res].icon, "#e7edf3");
         p.skills.gather = Math.min(20, p.skills.gather + 0.2);
-        if (node.amount <= 0) { G.map.nodes.delete(a.cell); p.action = null; }
+        if (node.amount <= 0) { G.map.nodes.delete(a.cell); G.mapDirty = true; p.action = null; }
       }
     } else if (a.type === "attack") {
       const e = a.target;
@@ -405,6 +501,7 @@
         r.active = false; r.warned = false;
         r.next = 78 + G.rng() * 46;
         r.timer = 0;
+        G.stats.raids++;
         RW.raidBanner("");
         RW.log(G, "✅ Рейд відбито! Готуйся до наступного.", "good");
       }
@@ -420,19 +517,46 @@
       spawnWave(G);
     }
   }
+  // Cells a raider can walk to the base from (terrain only — raiders smash buildings). A wave that
+  // spawns across a river would never arrive and the raid would never end, so spawn points are
+  // drawn from this set: the map rim of the base's own landmass, falling back to the farthest
+  // reachable cells when that landmass never touches the rim (island base).
+  RW.raidSpawnCells = function (G) {
+    const N = G.map.N, c = RW.baseCenter(G);
+    const seen = new Uint8Array(N * N), dist = new Int32Array(N * N);
+    const start = idx(G, RW.clamp(c.x, 0, N - 1), RW.clamp(c.y, 0, N - 1));
+    const q = [start]; seen[start] = 1;
+    const rim = [], all = [];
+    for (let h = 0; h < q.length; h++) {
+      const i = q[h], x = i % N, y = (i / N) | 0;
+      if (i !== start) { all.push(i); if (x <= 1 || y <= 1 || x >= N - 2 || y >= N - 2) rim.push(i); }
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= N || ny >= N) continue;
+        const ni = ny * N + nx;
+        if (seen[ni] || RW.isTerrainBlocked(G.map.tiles[ni])) continue;
+        seen[ni] = 1; dist[ni] = dist[i] + 1; q.push(ni);
+      }
+    }
+    if (rim.length) return rim;
+    all.sort((a, b) => dist[b] - dist[a]);
+    return all.slice(0, Math.max(1, all.length >> 3));
+  };
   function spawnWave(G) {
     const r = G.raid; r.active = true; r.wave++;
     const n = RW.raidWaveSize(G.time.day);
-    const N = G.map.N, edge = Math.floor(G.rng() * 4);
+    const N = G.map.N;
+    const cells = RW.raidSpawnCells(G);
+    if (!cells.length) { r.active = false; return; }   // boxed-in base: nothing can come
+    // one entry side per wave: pick an anchor, then cluster the pack around it
+    const anchor = cells[Math.floor(G.rng() * cells.length)];
+    const ax = anchor % N, ay = (anchor / N) | 0;
+    const near = cells.filter(i => Math.abs(i % N - ax) + Math.abs(((i / N) | 0) - ay) <= 6);
     for (let i = 0; i < n; i++) {
-      let x, y;
-      const o = 1 + Math.floor(G.rng() * 3);
-      if (edge === 0) { x = o; y = 2 + Math.floor(G.rng() * (N - 4)); }
-      else if (edge === 1) { x = N - 1 - o; y = 2 + Math.floor(G.rng() * (N - 4)); }
-      else if (edge === 2) { x = 2 + Math.floor(G.rng() * (N - 4)); y = o; }
-      else { x = 2 + Math.floor(G.rng() * (N - 4)); y = N - 1 - o; }
-      if (RW.isTerrainBlocked(G.map.tiles[idx(G, x, y)])) { i--; continue; }
-      G.enemies.push(RW.makeRaider(x + 0.5, y + 0.5, G.time.day));
+      const cell = near[Math.floor(G.rng() * near.length)];
+      const e = RW.makeRaider(cell % N + 0.5, ((cell / N) | 0) + 0.5, G.time.day);
+      e.delay = i * 1.5;   // the pack trickles in, so the fight is a sequence, not a pile-on
+      G.enemies.push(e);
     }
     RW.raidBanner("⚔ РЕЙД! " + n + " рейдерів");
     RW.log(G, `⚔ Рейд #${r.wave}: ${n} рейдерів атакують базу!`, "bad");
@@ -443,10 +567,18 @@
     const center = RW.baseCenter(G);
     for (let k = G.enemies.length - 1; k >= 0; k--) {
       const e = G.enemies[k];
+      if (e.delay > 0) { e.delay -= dt; continue; }   // still marching in from beyond the map edge
       e.atkCd = Math.max(0, e.atkCd - dt);
       e.hitFlash = Math.max(0, e.hitFlash - dt);
       const step = e.speed * dt;
       const dToP = RW.dist(e.px, e.py, p.px, p.py);
+      // a raider that is neither moving nor fighting for a long while is cut off (terrain changed
+      // under it, or a path the planner cannot find) — it gives up rather than pinning the raid open
+      if (e._lx === e.px && e._ly === e.py && e.atkCd <= 0) {
+        e.stuck = (e.stuck || 0) + dt;
+        if (e.stuck > 25) { G.enemies.splice(k, 1); RW.log(G, "🏃 Рейдер не знайшов шляху і відступив.", ""); continue; }
+      } else e.stuck = 0;
+      e._lx = e.px; e._ly = e.py;
 
       // spike traps bite whoever stands on them (and wear out doing it)
       const tb = G.bgrid.get(idx(G, Math.floor(e.px), Math.floor(e.py)));
@@ -460,7 +592,11 @@
       // 1. attack player if adjacent
       if (dToP < 1.25) {
         e.face = Math.atan2(p.py - e.py, p.px - e.px);
-        if (e.atkCd <= 0) { p.hp = RW.clamp(p.hp - e.dmg, 0, 100); e.atkCd = 1.1; if (p.hp <= 0 && !G._dead) onDeath(G); }
+        if (e.atkCd <= 0) {
+          p.hp = RW.clamp(p.hp - e.dmg, 0, 100); e.atkCd = 1.1; G.stats.damage += e.dmg; G._hurtT = 1;
+          RW.fxText(G, p.px, p.py - 0.4, "-" + Math.round(e.dmg), "#ff6b6b");
+          if (p.hp <= 0 && !G._dead) onDeath(G);
+        }
         continue;
       }
       // 2. attack a storage if adjacent (steal)
@@ -480,7 +616,7 @@
       if (e.path && e.path.length) {
         const nx = e.path[0];
         const b = G.bgrid.get(idx(G, nx.x, nx.y));
-        if (b && RW.BUILDINGS[b.kind].blocks) {
+        if (b && (RW.BUILDINGS[b.kind].blocks || RW.BUILDINGS[b.kind].blocksEnemies)) {
           e.face = Math.atan2(nx.y + 0.5 - e.py, nx.x + 0.5 - e.px);
           if (e.atkCd <= 0) { damageBuilding(G, b, e.dmg); e.atkCd = 1.0; }
         } else {
@@ -513,7 +649,11 @@
     if (steal && b.kind === "storage") {
       // raiders skim resources as they smash the crate
       const keys = RW.RES_ORDER.filter(k => (G.base.stock[k] || 0) > 0);
-      if (keys.length) { const k = keys[Math.floor(G.rng() * keys.length)]; const lost = Math.min(G.base.stock[k], 1 + Math.floor(G.rng() * 2)); G.base.stock[k] -= lost; }
+      if (keys.length) {
+        const k = keys[Math.floor(G.rng() * keys.length)]; const lost = Math.min(G.base.stock[k], 1 + Math.floor(G.rng() * 2));
+        G.base.stock[k] -= lost;
+        RW.fxText(G, b.x + 0.5, b.y + 0.1, "-" + lost + " " + RW.RES[k].icon, "#ff6b6b");
+      }
     }
     if (b.hp <= 0) {
       removeBuilding(G, b);
@@ -522,25 +662,51 @@
   }
   function damageEnemy(G, e, amt) {
     e.hp -= amt; e.hitFlash = 0.12;
+    if (amt >= 1) RW.fxText(G, e.px, e.py - 0.5, "-" + Math.round(amt), "#ffd9a0");
     if (e.hp <= 0 && !e.dead) {
       e.dead = true;
       const i = G.enemies.indexOf(e); if (i >= 0) G.enemies.splice(i, 1);
-      RW.deposit(G, "scrap", 2 + Math.floor(G.rng() * 2));
-      if (G.rng() < 0.25) RW.deposit(G, "components", 1);
-      if (G.rng() < 0.4) RW.deposit(G, "food", 1);
+      G.stats.kills++;
+      const loot = [];
+      const sc = 2 + Math.floor(G.rng() * 2); RW.deposit(G, "scrap", sc); loot.push(sc + RW.RES.scrap.icon);
+      if (G.rng() < 0.25) { RW.deposit(G, "components", 1); loot.push("1" + RW.RES.components.icon); }
+      if (G.rng() < 0.4) { RW.deposit(G, "food", 1); loot.push("1" + RW.RES.food.icon); }
+      RW.fxText(G, e.px, e.py - 0.9, "☠ +" + loot.join(" "), "#5fd38a");
+      if (G.raid.active) RW.raidBanner("⚔ РЕЙД! лишилось " + G.enemies.length);
     }
   }
 
   function onDeath(G) {
     G._dead = true; G.speed = 0;
     RW.raidBanner("");
-    RW.log(G, "☠ Твій персонаж загинув. У повноцінній MMO це втрата спорядження та респ; тут — рестарт.", "bad");
-    RW.setTicker(G, "☠ Кінець. Онови сторінку, щоб почати знову (або 'Продовжити' з останнього збереження).");
-    setTimeout(() => { try { localStorage.removeItem("realworld_save"); } catch (e) { } }, 200);
+    RW.log(G, "☠ Твій персонаж загинув. У повноцінній MMO це втрата спорядження та респ; тут — нова висадка.", "bad");
+    RW.setTicker(G, "");
+    try { localStorage.removeItem("realworld_save"); } catch (e) { }
+    if (RW.showDeath) RW.showDeath(G);
   }
+  // one line per stat for the death screen / pause menu
+  RW.runSummary = function (G) {
+    const s = G.stats || {}, r = G.research ? G.research.summary() : null;
+    return [
+      ["🕓 Прожито днів", G.time.day],
+      ["⚔ Відбито рейдів", s.raids || 0],
+      ["☠ Убито рейдерів", s.kills || 0],
+      ["🪵 Зібрано ресурсів", s.gathered || 0],
+      ["🏗 Збудовано", s.built || 0],
+      ["🚚 Конвоїв", s.convoys || 0],
+      ["🔬 Досліджено", r ? `${r.unlocked}/${r.total}` : "—"]
+    ];
+  };
 
   // ---------- persistence ----------
   RW.hasSave = function () { try { return !!localStorage.getItem("realworld_save"); } catch (e) { return false; } };
+  // cheap peek for the spawn screen's "continue" button (name + day), null when there is no save
+  RW.saveMeta = function () {
+    try {
+      const s = JSON.parse(localStorage.getItem("realworld_save"));
+      return s ? { name: s.name || "Поселення", day: (s.time && s.time.day) || 1, lat: s.lat, lon: s.lon } : null;
+    } catch (e) { return null; }
+  };
   RW.saveGame = function (G) {
     if (G._dead) return;
     try {
@@ -554,7 +720,9 @@
         stock: G.base.stock, time: G.time, raid: G.raid,
         convoys: G.convoys, convoySeq: G.convoySeq, regions: G.regions,
         research: G.research ? G.research.toDict() : null,
-        rngState: G.rng && G.rng.getState ? G.rng.getState() : null
+        rngState: G.rng && G.rng.getState ? G.rng.getState() : null,
+        stats: G.stats, tile: G.tile, lastSpeed: G.lastSpeed,
+        log: (G.log || []).slice(-40)
       };
       localStorage.setItem("realworld_save", JSON.stringify(s));
     } catch (e) { /* quota or serialization issue — ignore */ }
@@ -574,6 +742,10 @@
     G.convoys = s.convoys || []; G.convoySeq = s.convoySeq || 0;
     G.regions = s.regions || [];
     if (s.research && G.research) G.research.fromDict(s.research);
+    if (s.stats) Object.assign(G.stats, s.stats);
+    if (s.tile) G.tile = RW.clamp(s.tile, RW.ZOOM_MIN || 14, RW.ZOOM_MAX || 48);
+    if (s.lastSpeed) G.lastSpeed = s.lastSpeed;
+    if (s.log) G.log = s.log.slice();
     // resume the gameplay rng exactly where the save left it (old saves: fresh seed from coords)
     if (s.rngState != null && G.rng && G.rng.setState) G.rng.setState(s.rngState);
     RW.beginGame(G, true);
@@ -581,5 +753,8 @@
 
   // ---------- bootstrap ----------
   window.addEventListener("DOMContentLoaded", () => { RW.initSpawnUI(); });
+  // never lose the last seconds of play: flush the save when the tab goes away
+  window.addEventListener("beforeunload", () => { if (RW.G) RW.saveGame(RW.G); });
+  window.addEventListener("visibilitychange", () => { if (RW.G && document.hidden) RW.saveGame(RW.G); });
 
 })(window.RW);

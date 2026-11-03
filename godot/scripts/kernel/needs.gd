@@ -106,7 +106,7 @@ class Hediff_Malnutrition extends Health.Hediff:
 		return severity <= 0.0
 
 	func inspect() -> String:
-		return "виснаження: тяж.%.2f" % severity
+		return "виснаження %d%%" % int(round(100.0 * severity))
 
 # Sleep deprivation. Hammers consciousness hard enough that at the severity cap the hero drops
 # (HealthTracker.downed) — a collapse where you stand, not a death sentence.
@@ -125,7 +125,7 @@ class Hediff_Exhaustion extends Health.Hediff:
 		return severity <= 0.0   # exact zero — see Hediff_Malnutrition.gone()
 
 	func inspect() -> String:
-		return "недосип: тяж.%.2f" % severity
+		return "недосип %d%%" % int(round(100.0 * severity))
 
 # The single deprivation authority: grow/recede both hediffs on a HealthTracker from the current
 # need levels (0..1). Mirrors gear.gd's update_comfort shape so hosts drive both the same way.
