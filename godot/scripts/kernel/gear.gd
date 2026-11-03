@@ -241,7 +241,7 @@ class Hediff_Hypothermia extends Health.Hediff:
 		return severity <= 0.0
 
 	func inspect() -> String:
-		return "переохолодження: тяж.%.2f" % severity
+		return "переохолодження %d%%" % int(round(100.0 * severity))
 
 class Hediff_Heatstroke extends Health.Hediff:
 	func _init(p_part = null) -> void:
@@ -258,7 +258,7 @@ class Hediff_Heatstroke extends Health.Hediff:
 		return severity <= 0.0   # exact zero — see Hediff_Hypothermia.gone()
 
 	func inspect() -> String:
-		return "тепловий удар: тяж.%.2f" % severity
+		return "тепловий удар %d%%" % int(round(100.0 * severity))
 
 # The single comfort authority: given a felt temperature, add/update the right hediff on a HealthTracker
 # (and recede/clear the wrong one). Used by ComfortSystem and directly by tests.

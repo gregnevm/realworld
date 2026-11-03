@@ -12,8 +12,6 @@ const UITheme = preload("res://scripts/ui/theme.gd")
 const GameData = preload("res://scripts/data.gd")
 const Fmt = preload("res://scripts/ui/format.gd")
 
-# Height of a clickable list row (ChoiceRow/CatalogSlot): themed Button = 2×6px margins + a 13px font.
-const ROW_H := 27
 
 # ---- StatRow (.stock .r): glyph · label · right-aligned mono value (Stock / Equipment / Agents) ----
 class StatRow extends WidgetBase.Widget:
@@ -36,6 +34,11 @@ class StatRow extends WidgetBase.Widget:
 		_value.theme_type_variation = UITheme.V_MONO
 		_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		_value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		# long readouts (condition lines, catalogue labels) trim with an ellipsis inside the dock
+		# instead of pushing the panel wider; the full text stays reachable as the hover tooltip
+		_value.clip_text = true
+		_value.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		_value.mouse_filter = Control.MOUSE_FILTER_PASS
 		hb.add_child(_value)
 	func set_glyph_res(res: String) -> void:
 		build_once()
@@ -52,6 +55,7 @@ class StatRow extends WidgetBase.Widget:
 		build_once()
 		value = str(v)
 		_value.text = value
+		_value.tooltip_text = value if value.length() > 12 else ""
 	func bind(vm) -> void:
 		if vm is Dictionary and vm.has("value"):
 			set_value(vm.value)
@@ -232,16 +236,20 @@ class ChoiceRow extends WidgetBase.Widget:
 	var _btn: Button
 	signal picked(id: StringName)
 	func _build() -> void:
-		# the themed Button (6px content margins) is ~29px tall at the default font: a 22px row let
-		# consecutive rows overlap each other AND the next header — size the row to the button
-		custom_minimum_size = Vector2(0, ROW_H)
 		_btn = Button.new()
-		_btn.add_theme_font_size_override("font_size", 13)
+		_btn.add_theme_font_size_override("font_size", 13)   # compact rows: the LEFT dock is tall
 		_btn.set_anchors_preset(Control.PRESET_FULL_RECT)
 		_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_btn.clip_text = true
 		_btn.pressed.connect(func(): picked.emit(id))
 		add_child(_btn)
+		_btn.minimum_size_changed.connect(_fit)
+		_fit()
+	# a themed Button's minimum height (font + style padding) is known only once the theme reaches it in
+	# the tree; a hard-coded 22px row let the button overflow onto the next VBox child (the «Доступні»
+	# list drawing over the «Черга» header) — so the row tracks the button's own minimum instead
+	func _fit() -> void:
+		custom_minimum_size = Vector2(0, maxf(22.0, _btn.get_combined_minimum_size().y))
 	func bind(vm) -> void:
 		build_once()
 		if not (vm is Dictionary):
@@ -261,13 +269,19 @@ class CatalogSlot extends WidgetBase.Widget:
 	var _btn: Button
 	signal chosen(id: StringName)
 	func _build() -> void:
-		custom_minimum_size = Vector2(0, ROW_H)   # same overlap fix as ChoiceRow
 		_btn = Button.new()
 		_btn.add_theme_font_size_override("font_size", 13)
 		_btn.set_anchors_preset(Control.PRESET_FULL_RECT)
 		_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_btn.pressed.connect(func(): chosen.emit(item_id))
 		add_child(_btn)
+		_btn.minimum_size_changed.connect(_fit)
+		_fit()
+	# a themed Button's minimum height (font + style padding) is known only once the theme reaches it in
+	# the tree; a hard-coded 22px row let the button overflow onto the next VBox child (the «Доступні»
+	# list drawing over the «Черга» header) — so the row tracks the button's own minimum instead
+	func _fit() -> void:
+		custom_minimum_size = Vector2(0, maxf(22.0, _btn.get_combined_minimum_size().y))
 	func bind(vm) -> void:
 		build_once()
 		if not (vm is Dictionary):

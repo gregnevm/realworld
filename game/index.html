@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<meta name="theme-color" content="#0e1116" />
 <title>RealWorld — vertical slice</title>
 <link rel="stylesheet" href="styles.css" />
 </head>
@@ -12,30 +13,38 @@
 <div id="spawn" class="screen">
   <div class="spawn-card">
     <h1>RealWorld<span class="ver">vertical slice</span></h1>
-    <p class="tag">Survival-MMORPG на справжній географії. Один персонаж. Карта зі справжніх GPS-координат.</p>
+    <p class="tag">Survival-MMORPG на справжній географії. Один персонаж. Карта зі справжніх GPS-координат — координати і є seed світу.</p>
 
-    <div class="spawn-row">
-      <label>Обери реальну локацію спавну</label>
-      <div id="presets" class="presets"></div>
-    </div>
-
-    <div class="spawn-row coords">
+    <div class="spawn-grid">
       <div>
-        <label>Широта (lat)</label>
-        <input id="lat" type="number" step="0.0001" value="50.4501" />
-      </div>
-      <div>
-        <label>Довгота (lon)</label>
-        <input id="lon" type="number" step="0.0001" value="30.5234" />
-      </div>
-      <button id="gpsBtn" class="ghost">📍 Мій GPS</button>
-    </div>
+        <div class="spawn-row">
+          <label>Обери реальну локацію спавну</label>
+          <div id="presets" class="presets"></div>
+        </div>
 
-    <label class="chk"><input id="useOsm" type="checkbox" checked /> Тягнути справжню географію з OpenStreetMap (Overpass)</label>
+        <div class="spawn-row coords">
+          <div>
+            <label for="lat">Широта (lat)</label>
+            <input id="lat" type="number" step="0.0001" value="50.4501" />
+          </div>
+          <div>
+            <label for="lon">Довгота (lon)</label>
+            <input id="lon" type="number" step="0.0001" value="30.5234" />
+          </div>
+          <button id="gpsBtn" class="ghost" type="button">📍 Мій GPS</button>
+        </div>
+
+        <label class="chk"><input id="useOsm" type="checkbox" checked /> Тягнути справжню географію з OpenStreetMap (Overpass)</label>
+      </div>
+      <div class="preview">
+        <canvas id="previewCv" width="168" height="168" aria-label="Прев'ю карти"></canvas>
+        <p id="previewInfo" class="preview-info"></p>
+      </div>
+    </div>
 
     <div class="spawn-actions">
-      <button id="spawnBtn" class="primary">Висадитись ▸</button>
-      <button id="continueBtn" class="ghost" style="display:none">Продовжити збереження</button>
+      <button id="spawnBtn" class="primary" type="button">Висадитись ▸</button>
+      <button id="continueBtn" class="ghost" type="button" style="display:none">▶ Продовжити</button>
     </div>
     <p id="spawnStatus" class="status"></p>
     <p class="fine">Реальна гра — persistent MMO. Це одиночний вертикальний зріз (Фаза 0 з GDD): доводимо, що «real-map survival з логістикою» — це весело.</p>
@@ -44,46 +53,67 @@
 
 <!-- ============ GAME ============ -->
 <canvas id="cv"></canvas>
+<div id="pauseVeil" class="pause-veil hidden"><span>⏸ ПАУЗА</span><small>Пробіл — продовжити</small></div>
 
-<!-- top-left needs -->
+<!-- top-left: needs + clock -->
 <div id="hud" class="hud hidden">
   <div class="needs">
-    <div class="need"><span>❤ HP</span><div class="bar"><i id="barHp"></i></div></div>
-    <div class="need"><span>🍖 Голод</span><div class="bar"><i id="barFood"></i></div></div>
-    <div class="need"><span>💤 Відпочинок</span><div class="bar"><i id="barRest"></i></div></div>
+    <div class="need" title="Здоров'я. Відновлюється, коли ситий і відпочилий."><span>❤ HP</span><div class="bar"><i id="barHp"></i></div><em class="val">100</em></div>
+    <div class="need" title="Голод. Стань біля складу з їжею — поїси автоматично."><span>🍖 Голод</span><div class="bar"><i id="barFood"></i></div><em class="val">82</em></div>
+    <div class="need" title="Відпочинок. Поспи в ліжку 🛏."><span>💤 Відпочинок</span><div class="bar"><i id="barRest"></i></div><em class="val">92</em></div>
   </div>
-  <div class="clock"><span id="clockDay">День 1</span> · <span id="clockTime">06:00</span> <span id="clockPhase"></span></div>
-  <div class="carry">Несе: <span id="carryTxt">0 / 30</span></div>
-  <div class="carry">🔬 <span id="resTxt">0/41</span></div>
+  <div class="chips">
+    <div class="chip clock"><span id="clockDay">День 1</span> · <span id="clockTime">06:00</span> <span id="clockPhase"></span></div>
+    <div id="carryChip" class="chip" title="Несеш / місткість рюкзака. Здається на складі автоматично.">🎒 <span id="carryTxt">0 / 30</span></div>
+    <div id="resChip" class="chip" title="Дослідження (R)">🔬 <span id="resTxt">0/41</span></div>
+  </div>
 </div>
 
-<!-- top-right stockpile -->
+<!-- top-right: stockpile + minimap -->
 <div id="stock" class="stock hidden"></div>
+<div id="minimapWrap" class="minimap-wrap hidden" title="Мінімапа. Клік — іти туди.">
+  <canvas id="minimap" width="140" height="140"></canvas>
+</div>
 
 <!-- raid banner -->
-<div id="raidBanner" class="raid-banner hidden"></div>
+<div id="raidBanner" class="raid-banner hidden" role="status"></div>
 
-<!-- bottom build bar -->
-<div id="buildbar" class="buildbar hidden"></div>
+<!-- hover inspect -->
+<div id="inspect" class="inspect hidden"></div>
+
+<!-- bottom stack: selection card → ticker → build bar -->
+<div id="bottom" class="bottom hidden">
+  <div id="selCard" class="sel-card hidden"></div>
+  <div id="ticker" class="ticker hidden" role="status"></div>
+  <div id="buildbar" class="buildbar"></div>
+</div>
 
 <!-- bottom-right buttons -->
 <div id="sidebtns" class="sidebtns hidden">
-  <button id="worldBtn" title="Світова карта / логістика">🗺</button>
-  <button id="researchBtn" title="Дослідження (R)">🔬</button>
-  <button id="helpBtn" title="Як грати">❔</button>
-  <button id="speedBtn" title="Швидкість">▸ 1×</button>
+  <div class="btn-col">
+    <button id="worldBtn" title="Світова карта / логістика [M]" aria-label="Логістика">🗺</button>
+    <button id="researchBtn" title="Дослідження [R]" aria-label="Дослідження">🔬</button>
+    <button id="logBtn" title="Журнал подій [L]" aria-label="Журнал">📜</button>
+    <button id="helpBtn" title="Як грати [H]" aria-label="Довідка">❔</button>
+    <button id="menuBtn" title="Меню [Esc]" aria-label="Меню">☰</button>
+  </div>
+  <div class="btn-row">
+    <div id="speedCtl" class="seg" title="Швидкість [Пробіл — пауза, Tab — цикл]">
+      <button data-s="0" aria-label="Пауза">⏸</button><button data-s="1">1×</button><button data-s="2">2×</button><button data-s="3">3×</button>
+    </div>
+    <div class="seg" title="Масштаб [колесо, + / −]">
+      <button id="zoomOut" aria-label="Віддалити">−</button><span id="zoomTxt" class="zoom-txt">100%</span><button id="zoomIn" aria-label="Наблизити">+</button>
+    </div>
+  </div>
 </div>
 
-<!-- message log -->
-<div id="log" class="log hidden"></div>
-
-<!-- selection / action readout -->
-<div id="ticker" class="ticker hidden"></div>
+<!-- message log toasts -->
+<div id="log" class="log hidden" aria-live="polite"></div>
 
 <!-- ============ WORLD MAP / LOGISTICS MODAL ============ -->
 <div id="worldModal" class="modal hidden">
   <div class="modal-card">
-    <div class="modal-head"><h2>🗺 Світова карта — логістика конвоїв</h2><button id="worldClose" class="x">✕</button></div>
+    <div class="modal-head"><h2>🗺 Світова карта — логістика конвоїв</h2><button class="x" data-close title="Закрити [Esc]">✕</button></div>
     <p class="modal-sub">Регіон-тайли справжньої Землі. Відстань між реальними локаціями визначає час конвою. Маршрути перехоплюють — частину вантажу можуть відбити.</p>
     <canvas id="worldcv" width="640" height="360"></canvas>
     <div id="convoyPanel" class="convoy-panel"></div>
@@ -94,7 +124,7 @@
 <!-- ============ RESEARCH MODAL ============ -->
 <div id="researchModal" class="modal hidden">
   <div class="modal-card">
-    <div class="modal-head"><h2>🔬 Дослідження</h2><button id="researchClose" class="x">✕</button></div>
+    <div class="modal-head"><h2>🔬 Дослідження</h2><button class="x" data-close title="Закрити [Esc]">✕</button></div>
     <p class="modal-sub">Справжнє дерево технологій гри (спільний <code>catalog.json</code> з Godot-ядром): 41 проєкт від неоліту до космічного корабля. Постав <b>🔬 дослідний стіл</b> — він генерує прогрес. Клік по проєкту — в чергу; заблоковані будівлі в нижній панелі самі планують свій шлях досліджень.</p>
     <div id="researchActive"></div>
     <div id="researchQueue"></div>
@@ -102,19 +132,62 @@
   </div>
 </div>
 
+<!-- ============ EVENT LOG MODAL ============ -->
+<div id="logModal" class="modal hidden">
+  <div class="modal-card narrow">
+    <div class="modal-head"><h2>📜 Журнал подій</h2><button class="x" data-close title="Закрити [Esc]">✕</button></div>
+    <div id="logList" class="log-list"></div>
+  </div>
+</div>
+
+<!-- ============ PAUSE MENU ============ -->
+<div id="menuModal" class="modal hidden">
+  <div class="modal-card narrow">
+    <div class="modal-head"><h2>☰ Меню</h2><button class="x" data-close title="Закрити [Esc]">✕</button></div>
+    <p id="menuPlace" class="modal-sub"></p>
+    <div id="menuStats" class="stats"></div>
+    <div class="menu-actions">
+      <button id="menuResume" class="primary" type="button">▶ Продовжити</button>
+      <button id="menuSave" class="ghost" type="button">💾 Зберегти</button>
+      <button id="menuHelp" class="ghost" type="button">❔ Довідка</button>
+      <button id="menuNew" class="ghost danger" type="button">🪂 Нова висадка</button>
+    </div>
+    <p class="fine">Гра зберігається автоматично кожні 12 с і при закритті вкладки.</p>
+  </div>
+</div>
+
+<!-- ============ DEATH MODAL ============ -->
+<div id="deathModal" class="modal hidden">
+  <div class="modal-card narrow death">
+    <div class="modal-head"><h2>☠ Персонаж загинув</h2></div>
+    <p class="modal-sub">У повноцінній MMO це втрата спорядження і респавн у капсулі. У зрізі — нова висадка з чистого аркуша.</p>
+    <div id="deathStats" class="stats"></div>
+    <div class="menu-actions">
+      <button id="deathNew" class="primary" type="button">🪂 Нова висадка</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ HELP MODAL ============ -->
 <div id="helpModal" class="modal hidden">
   <div class="modal-card">
-    <div class="modal-head"><h2>❔ Як грати</h2><button id="helpClose" class="x">✕</button></div>
+    <div class="modal-head"><h2>❔ Як грати</h2><button class="x" data-close title="Закрити [Esc]">✕</button></div>
     <div class="help-body">
-      <p><b>Рух:</b> клік по землі — персонаж піде туди (обходить воду/стіни). Або <b>WASD</b>.</p>
-      <p><b>Добування:</b> клікни по дереву 🌲, каменю 🪨, кущу 🫐 чи руїні — персонаж підійде і збере ресурс. Несе обмежено — віднеси на <b>склад</b> (склад поповнюється сам, коли стоїш поруч).</p>
-      <p><b>Будівництво:</b> вибери об'єкт у нижній панелі → клікни по клітинці. Ресурси беруться зі складу. <b>Стіни</b> й <b>турелі</b> захищають від рейдів.</p>
-      <p><b>Автоматизація:</b> постав <b>верстак</b> — він безперервно (tick-time) переробляє дерево → дошки, навіть поки ти зайнятий іншим (рецепт відкривається дослідженням «Столярство»).</p>
+      <p><b>Рух:</b> клік по землі — персонаж піде туди (обходить воду/стіни). Або <b>WASD</b>. Клік по мінімапі — іти в той район.</p>
+      <p><b>Добування:</b> клікни по дереву 🌲, каменю 🪨, кущу 🫐 чи руїні — персонаж підійде і збере ресурс. Несе обмежено — віднеси на <b>склад</b> (склад поповнюється сам, коли стоїш поруч). Наведи курсор на будь-що — побачиш, що це і скільки лишилось.</p>
+      <p><b>Будівництво:</b> вибери об'єкт у нижній панелі (або <b>1–0</b>) → клікни по клітинці. Стіни, двері, підлогу, грядки й пастки можна <b>тягнути лінією</b> (затисни ЛКМ і веди). Ресурси беруться зі складу. <b>Стіни</b> й <b>турелі</b> захищають від рейдів; <b>двері</b> пропускають тебе, але не рейдерів.</p>
+      <p><b>Своя будівля:</b> клік — вибрати: видно HP, <b>F</b> — полагодити (поруч, за частину ціни), <b>Del</b> — розібрати (повертає половину).</p>
+      <p><b>Автоматизація:</b> постав <b>верстак</b> — він безперервно переробляє дерево → дошки, навіть поки ти зайнятий іншим (рецепт відкривається дослідженням «Столярство»).</p>
       <p><b>Дослідження 🔬 (R):</b> постав <b>дослідний стіл</b> — він генерує прогрес по дереву технологій (41 проєкт, спільний з Godot-версією). Нові будівлі (полиця, грядка, турель, пастка…) відкриваються дослідженнями; клік по заблокованій кнопці внизу сам планує весь шлях до неї.</p>
       <p><b>Їжа/сон:</b> голод і відпочинок падають з часом. Стань біля складу з їжею — поїси. Поспи в <b>ліжку</b>, щоб відновити відпочинок.</p>
-      <p><b>Рейди:</b> періодично з краю карти приходять рейдери (у повноцінній MMO — інші гравці). Вони ламають базу й б'ють тебе. Тримай оборону: стіни, турелі, бій (клік по ворогу).</p>
-      <p><b>Логістика 🗺:</b> відправляй конвої між реальними локаціями — везеш ресурс, повертаєш торговий товар. Реальна відстань = час у дорозі. Бувають засідки.</p>
+      <p><b>Рейди:</b> періодично з краю карти приходять рейдери (у повноцінній MMO — інші гравці). Червоні стрілки на краю екрана показують, звідки. Вони ламають базу й б'ють тебе. Тримай оборону: стіни, турелі, бій (клік по ворогу).</p>
+      <p><b>Логістика 🗺 (M):</b> відправляй конвої між реальними локаціями — везеш ресурс, повертаєш торговий товар. Реальна відстань = час у дорозі. Бувають засідки.</p>
+      <table class="keys">
+        <tr><td><kbd>ЛКМ</kbd></td><td>наказ / будувати</td><td><kbd>ПКМ</kbd> <kbd>Esc</kbd></td><td>скасувати / зняти вибір / меню</td></tr>
+        <tr><td><kbd>1</kbd>–<kbd>0</kbd></td><td>слоти будівництва</td><td><kbd>Пробіл</kbd> <kbd>Tab</kbd></td><td>пауза / швидкість</td></tr>
+        <tr><td><kbd>Колесо</kbd> <kbd>+</kbd> <kbd>−</kbd></td><td>масштаб</td><td><kbd>M</kbd> <kbd>R</kbd> <kbd>L</kbd> <kbd>H</kbd></td><td>логістика / дослідження / журнал / довідка</td></tr>
+        <tr><td><kbd>F</kbd> <kbd>Del</kbd></td><td>полагодити / розібрати вибране</td><td><kbd>WASD</kbd></td><td>ручний рух</td></tr>
+      </table>
     </div>
   </div>
 </div>

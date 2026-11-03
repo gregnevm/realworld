@@ -15,6 +15,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Lint the no-build web slice (script order contract, strict IIFEs, no Math.random in sim)
+        run: node tools/lint.mjs
       - name: Run simulation tests
         run: node --test "tests/**/*.test.js"
       - name: Secret smell test
@@ -23,3 +25,26 @@ jobs:
               --include="*.js" --include="*.json" --include="*.html" game tests; then
             echo "::error::Possible hard-coded secret detected"; exit 1
           fi
+
+  # Real-browser playthrough of game/ (spawn → drag-build → research → raid → death → reload).
+  # Playwright is a dev-only tool here (no runtime npm deps); Chromium is cached between runs.
+  browser-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Playwright + Chromium
+        run: |
+          npm install --no-save playwright@1.49.1
+          npx playwright install --with-deps chromium
+      - name: Headless playthrough
+        run: node tools/smoke.mjs --out build/smoke
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-smoke-screenshots
+          path: build/smoke
+          retention-days: 7
