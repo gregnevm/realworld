@@ -38,12 +38,15 @@ static func try_launch_capsule(s, lat: float, lon: float, place_name: String) ->
 	s._log("🚀 Капсула запущена → %s (%d км)." % [place_name, int(chk.km)], "good")
 	return {"ok": true, "lat": lat, "lon": lon, "name": place_name, "km": chk.km}
 
-static func add_invite(s, inv: Dictionary) -> void:
+# `quiet`: the caller announces a batch itself (the landing summarises its seeded invites in one line
+# instead of three feed cards burying the cold-start hint).
+static func add_invite(s, inv: Dictionary, quiet: bool = false) -> void:
 	for e in s.invites:
 		if e.id == inv.id:
 			return
 	s.invites.append(inv)
-	s._log("✉ Інвайт від %s (%s) → %s." % [inv.get("inviter", "?"), inv.get("clan", "—"), inv.get("name", "?")])
+	if not quiet:
+		s._log("✉ Інвайт від %s (%s) → %s." % [inv.get("inviter", "?"), inv.get("clan", "—"), inv.get("name", "?")])
 
 static func accept_invite(s, id: String) -> Dictionary:
 	var inv: Variant = null

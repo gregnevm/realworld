@@ -15,6 +15,7 @@ const KernelHealth = preload("res://scripts/kernel/health.gd")
 const KernelBalance = preload("res://scripts/kernel/balance.gd")
 const CatalogDefs = preload("res://scripts/catalog_defs.gd")
 const SimDirector = preload("res://scripts/sim/director.gd")
+const HeroHealth = preload("res://scripts/sim/hero_health.gd")
 
 
 func _init() -> void:
@@ -60,6 +61,11 @@ func _init() -> void:
 	_t_farming_live()
 	_t_director_live()
 	_t_polish_live()
+	_t_playable_opening()
+	_t_auto_haul()
+	_t_goals_chain()
+	_t_save_continue()
+	_t_death_epitaph()
 	_t_no_global_rng()
 	_t_static_typing()
 	_t_stock_seam()
@@ -794,7 +800,8 @@ func _t_cold_exposure() -> void:
 	ok(hint, "cold spawn logs the fire-first onboarding hint")
 	var node := {"kind": "tree", "amount": 5}
 	var warm_time: float = s.gather_time(node)
-	for i in 60:
+	# 60 s (0.4 game-day): onset is paced (HeroHealth.EXPOSURE_PACE) so a new player has time to act
+	for i in 120:
 		s.update(0.5)
 		s.player.hunger = 100.0
 		s.player.rest = 100.0
@@ -1683,6 +1690,231 @@ func _t_director_live() -> void:
 	for sim_x in [t1, t2, s, rich, poor]:
 		sim_x.dispose_farm()
 		sim_x.dispose_power()
+
+# ---------------- грабельність: чесний холодний старт (pace + сезон + пільговий період режисера) ----------------
+func _hypo_of(s) -> float:
+	for h in s.health.hediffs:
+		if h is KernelGear.Hediff_Hypothermia:
+			return float(h.severity)
+	return 0.0
+
+func _t_playable_opening() -> void:
+	# 1) a Kyiv day-1 idler still freezes (the cold has teeth) — but not before the player can act:
+	# the raw kernel curve killed in ~0.8 game-days (≈115 s) on every preset
+	var s = _flat_sim(1)
+	s.time.frac = 0.28
+	var t := 0.0
+	while not s.dead and t < 600.0:
+		s.update(0.5)
+		s.player.hunger = 100.0
+		s.player.rest = 100.0
+		t += 0.5
+	var days: float = t / float(s.time.day_len)
+	ok(s.dead and days >= 1.5 and days <= 3.0, "Kyiv winter idler freezes in 1.5–3 game-days, not seconds (%.2f д)" % days)
+	ok(int(HeroHealth.EXPOSURE_PACE * 100.0) < 100, "exposure onset is paced below the raw kernel curve (×%.2f)" % HeroHealth.EXPOSURE_PACE)
+	# 2) the taught answer works: a 1-cell room + a campfire holds a Kyiv winter for 3 full days
+	var r = _flat_sim(1)
+	r.time.frac = 0.28
+	for w in [Vector2i(3, 4), Vector2i(5, 4), Vector2i(4, 3)]:
+		r._place_building("wall", w.x, w.y, -1)
+	r._place_building("door", 4, 5, -1)
+	r._place_building("campfire", 6, 4, -1)
+	r.player.px = 4.5
+	r.player.py = 4.5
+	ok(r.is_indoor(4, 4), "the 1-cell room is enclosed")
+	var peak := 0.0
+	for i in 900:   # 450 s == 3 game-days
+		r.update(0.5)
+		r.player.hunger = 100.0
+		r.player.rest = 100.0
+		peak = maxf(peak, _hypo_of(r))
+	ok(not r.dead and peak < 0.3, "room + campfire holds a Kyiv winter for 3 days (peak hypothermia %.2f)" % peak)
+	# 3) the calendar reads right: day 1 is the coldest point of the year — «зима», not «осінь»
+	var c = _flat_sim(1)
+	var labels := []
+	for d in [1, 100, 200, 300]:
+		c.time.day = d
+		labels.append(c.season_name())
+	ok(labels == ["зима", "весна", "літо", "осінь"], "season labels follow the cold curve (%s)" % ", ".join(labels))
+	c.map.lat = -33.9
+	c.time.day = 1
+	ok(c.season_name() == "літо", "southern hemisphere: day 1 is summer")
+	# 4) the storyteller's grace: a raid rolled before day 5 is dropped, from day 5 it arms
+	var g = _flat_sim(1)
+	g.balance = KernelBalance.Balance.new()
+	g.balance.category_weight[KernelBalance.CAT_THREAT_BIG] = 1.0e6   # rolls every tick
+	for k in g.balance.category_weight:
+		if k != KernelBalance.CAT_THREAT_BIG:
+			g.balance.category_weight[k] = 0.0
+	for i in 40:
+		SimDirector.update(g, 0.5)
+	ok(not bool(g.raid.warned) and float(g.raid.next) >= 1.0e11, "no raid can be announced inside the day-1..4 grace")
+	g.time.day = SimDirector.GRACE_DAYS["raid"]
+	var guard := 0
+	while not bool(g.raid.warned) and guard < 200:   # MTB floor 0.01 d -> ~20%/tick: arms within a few
+		SimDirector.update(g, 0.5)
+		guard += 1
+	ok(bool(g.raid.warned), "from the grace day on, the director arms raids as before (%d ticks)" % guard)
+	for sim_x in [s, r, c, g]:
+		sim_x.dispose_farm()
+		sim_x.dispose_power()
+
+# ---------------- грабельність: цикл збору замикається сам (авто-перенесення на склад) ----------------
+func _t_auto_haul() -> void:
+	# ONE click on a 40-unit tree: chop 30 (full hands) -> haul home -> come back -> finish -> deliver
+	var s = _flat_sim()
+	var tree_cell := 8 * 16 + 12
+	s.map.nodes[tree_cell] = {"kind": "tree", "amount": 40}
+	var wood0: int = s.res_amount("wood")
+	s.order_gather(12, 8)
+	var hauled := false
+	var guard := 0
+	while guard < 3000 and (s.map.nodes.has(tree_cell) or s.player.action != null):
+		s.update(0.1)
+		s.player.hunger = 100.0
+		s.player.rest = 100.0
+		if s.player.action != null and String(s.player.action.type) == "haul":
+			hauled = true
+		guard += 1
+	ok(hauled, "full hands switch the pawn into a haul trip instead of stopping")
+	ok(not s.map.nodes.has(tree_cell), "the pawn came back and finished the tree on its own")
+	ok(s.res_amount("wood") == wood0 + 40 and s.carry_total() == 0, "all 40 logs reached the stock with one order (%d)" % (s.res_amount("wood") - wood0))
+	# a dry node hands over to its nearest same-kind neighbour (the grove keeps being worked)
+	var g = _flat_sim()
+	g.map.nodes[8 * 16 + 12] = {"kind": "rock", "amount": 3}
+	g.map.nodes[10 * 16 + 13] = {"kind": "rock", "amount": 3}
+	g.map.nodes[2 * 16 + 2] = {"kind": "tree", "amount": 3}   # different kind: never auto-picked
+	var stone0: int = g.res_amount("stone")
+	g.order_gather(12, 8)
+	guard = 0
+	while guard < 2000 and (g.map.nodes.has(10 * 16 + 13) or g.player.action != null):
+		g.update(0.1)
+		g.player.hunger = 100.0
+		g.player.rest = 100.0
+		guard += 1
+	ok(not g.map.nodes.has(10 * 16 + 13) and g.res_amount("stone") == stone0 + 6, "a depleted rock hands over to the next rock nearby (+%d)" % (g.res_amount("stone") - stone0))
+	ok(g.map.nodes.has(2 * 16 + 2), "auto-continue never switches the resource kind")
+	# a FULL storage keeps the load in the pawn's hands (nothing silently 'lost'), and says why
+	var f = _flat_sim()
+	f.map.nodes[8 * 16 + 12] = {"kind": "tree", "amount": 40}
+	f.stock[f.res_key("stone")] = int(f.res_amount("stone")) + (f.storage_cap() - f.stock_total())
+	f.order_gather(12, 8)
+	guard = 0
+	while guard < 1500 and f.carry_total() < int(f.player.carry_cap):
+		f.update(0.1)
+		f.player.hunger = 100.0
+		f.player.rest = 100.0
+		guard += 1
+	for i in 200:
+		f.update(0.1)
+		f.player.hunger = 100.0
+		f.player.rest = 100.0
+	var lost_log := false
+	for m in f.messages:
+		if "втрачено" in String(m.text):
+			lost_log = true
+	ok(f.carry_total() == int(f.player.carry_cap) and not lost_log, "full storage: the load stays in hand, no false 'lost' log")
+	ok(f.player.action == null and "Склад повний" in String(f.flash_msg), "full storage: the haul stops with a build-more-storage hint")
+	for sim_x in [s, g, f]:
+		sim_x.dispose_farm()
+		sim_x.dispose_power()
+
+# ---------------- грабельність: ланцюг цілей онбордингу (липкий, лише спостерігає) ----------------
+func _t_goals_chain() -> void:
+	var sess = SessionScript.new()
+	sess.autosave = false
+	sess.start(50.4501, 30.5234, "Київ")
+	var sim = sess.sim
+	var h0 := Persistence.world_hash(sim)
+	sess.tick_goals(1.0)
+	ok(sess.goals_done.is_empty() and String(sess.goals_view().current.id) == "fire", "a fresh landing opens on «light a fire»")
+	ok(Persistence.world_hash(sim) == h0, "goals only OBSERVE: ticking them leaves the world hash untouched")
+	var c := Vector2i(int(sim.player.px), int(sim.player.py))
+	var placed := Vector2i(-1, -1)
+	for d in [Vector2i(-2, 0), Vector2i(0, 2), Vector2i(0, -2), Vector2i(2, 2), Vector2i(-2, -2)]:
+		if placed.x < 0 and sim.build_valid(c.x + d.x, c.y + d.y):
+			sim.try_build("campfire", c.x + d.x, c.y + d.y)
+			placed = c + d
+	sess.tick_goals(1.0)
+	ok(sess.goals_done.has("fire"), "building a campfire completes the fire goal")
+	var toast := false
+	for m in sim.messages:
+		if "Ціль виконано" in String(m.text) and "далі" in String(m.text):
+			toast = true
+	ok(toast, "completion toasts the feed with the NEXT goal")
+	sim.demolish(placed.x, placed.y)
+	sess.tick_goals(1.0)
+	ok(sess.goals_done.has("fire"), "completion is sticky (the fire may burn down, the lesson stays learned)")
+	ok(String(sess.goals_view().current.id) == "gather", "the panel moves on to the next open goal")
+	sim._place_building("bed", 2, 2, -1)
+	sess.tick_goals(1.0)
+	ok(sess.goals_done.has("bed") and String(sess.goals_view().current.id) == "gather", "goals complete out of order without skipping the current one")
+	sim.time.day = 6
+	sess.tick_goals(1.0)
+	ok(sess.goals_done.has("survive"), "reaching day 6 completes «survive 5 days»")
+	var v: Dictionary = sess.goals_view()
+	ok(int(v.total) == 10 and int(v.done) == sess.goals_done.size() and String(v.next) != "", "goals view is value data: done/total/next")
+	sim.dispose_farm()
+	sim.dispose_power()
+
+# ---------------- грабельність: сейв -> «Продовжити» повертає ТОЙ САМИЙ світ ----------------
+func _t_save_continue() -> void:
+	var path := "user://test_continue_save.json"
+	var a = SessionScript.new()
+	a.autosave = false
+	a.start(50.4501, 30.5234, "Київ")
+	var sim = a.sim   # the LIVE director runs on both sides: its cursor rides the runtime record
+	var c := Vector2i(int(sim.player.px), int(sim.player.py))
+	for d in [Vector2i(-2, 0), Vector2i(0, 2), Vector2i(2, 2)]:
+		if sim.build_valid(c.x + d.x, c.y + d.y):
+			sim.try_build("campfire", c.x + d.x, c.y + d.y)
+			break
+	a.enqueue_research("carpentry")
+	for i in 120:
+		sim.update(0.25)
+		a.tick_research(0.25)
+	a.tick_goals(1.0)
+	ok(a.save_game(path), "save_game writes the session file")
+	ok(not SessionScript.save_meta(path).is_empty() and int(SessionScript.save_meta(path).day) == int(sim.time.day),
+		"save_meta peeks place/day for the «Продовжити» button")
+	var b = SessionScript.new()
+	b.autosave = false
+	ok(b.restore_game(path), "restore_game rebuilds a session from the file")
+	ok(Persistence.world_hash(b.sim) == Persistence.world_hash(sim), "continue lands byte-identical (world_hash: region + runtime)")
+	ok(b.progression.to_dict() == a.progression.to_dict(), "the research pipeline survives (queue, active, progress)")
+	ok(b.goals_done == a.goals_done and b.goals_done.has("fire"), "onboarding goals survive")
+	ok(String(b.home.name) == "Київ" and b.has_home, "the clan home survives (respawn target)")
+	ok(int(b.sim.capsule.charges) == int(sim.capsule.charges) and b.sim.invites.size() == sim.invites.size(), "capsule charges + invites survive")
+	ok(b.sim.social != null and not (b.sim.social as Dictionary).is_empty(), "the social graph is rebuilt from the home coordinate")
+	# both continue identically: the same commands from here keep the hashes equal
+	for s2 in [sim, b.sim]:
+		for i in 40:
+			s2.update(0.25)
+	ok(Persistence.world_hash(b.sim) == Persistence.world_hash(sim), "original and continued worlds stay in lockstep afterwards")
+	var none = SessionScript.new()
+	ok(not none.restore_game("user://no_such_save.json") and none.sim == null, "a missing save restores nothing (spawn screen stays)")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	for s3 in [sim, b.sim]:
+		s3.dispose_farm()
+		s3.dispose_power()
+
+# ---------------- грабельність: смерть, яку можна прочитати ----------------
+func _t_death_epitaph() -> void:
+	var s = _flat_sim(1)
+	s.time.frac = 0.28
+	var guard := 0
+	while not s.dead and guard < 1200:
+		s.update(0.5)
+		s.player.hunger = 100.0
+		s.player.rest = 100.0
+		guard += 1
+	ok(s.dead and String(s.last_death.get("cause", "")) == "замерз", "the death records its cause for the death screen")
+	ok(int(s.last_death.born) == 1 and int(s.last_death.day) >= 2, "…and the pawn's lifespan (born day 1, died day %d)" % int(s.last_death.day))
+	ok(int(s.player.born) == 1, "a pawn carries the day it arrived")
+	s.respawn_new_pawn()
+	ok(int(s.player.born) == int(s.time.day), "a respawned rookie is born today")
+	s.dispose_farm()
+	s.dispose_power()
 
 # ---------------- шліфування: медицина/medbed live + справжні набої турелей ----------------
 func _t_polish_live() -> void:

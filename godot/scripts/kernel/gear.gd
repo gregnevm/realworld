@@ -266,9 +266,13 @@ class Hediff_Heatstroke extends Health.Hediff:
 #   temp_c     : float                 ambient °C.
 #   insulation : float                 equipped warmth °C (raises felt temp; from EquipModel.total_insulation).
 #   dday       : float                 elapsed game-days.
+#   gain_scale : float                 host pacing of the ONSET only (default 1.0 = the kernel curve).
+#                                      A host whose game-day is short (the live sim's day is 150 s) slows
+#                                      the exposure clock here; recovery stays at its kernel speed, so
+#                                      warming up remains the fast half of the asymmetry.
 # Felt temp = ambient + insulation warmth (warmth only helps against cold; it also nudges felt temp up
 # toward heatstroke when already hot, exactly like wearing a parka in summer — the model is symmetric).
-static func update_comfort(tracker, temp_c: float, insulation: float, dday: float) -> void:
+static func update_comfort(tracker, temp_c: float, insulation: float, dday: float, gain_scale: float = 1.0) -> void:
 	if tracker == null:
 		return
 	var felt: float = temp_c + insulation
@@ -281,7 +285,7 @@ static func update_comfort(tracker, temp_c: float, insulation: float, dday: floa
 		if hypo == null:
 			hypo = Hediff_Hypothermia.new(torso)
 			tracker.hediffs.append(hypo)
-		hypo.severity = clampf(hypo.severity + COMFORT_GAIN_PER_C_DAY * past * dday, 0.0, 1.0)
+		hypo.severity = clampf(hypo.severity + COMFORT_GAIN_PER_C_DAY * gain_scale * past * dday, 0.0, 1.0)
 		if heat != null:
 			heat.severity = maxf(0.0, heat.severity - COMFORT_RECOVER_PER_DAY * dday)
 	elif felt > COMFORT_MAX_C:
@@ -289,7 +293,7 @@ static func update_comfort(tracker, temp_c: float, insulation: float, dday: floa
 		if heat == null:
 			heat = Hediff_Heatstroke.new(torso)
 			tracker.hediffs.append(heat)
-		heat.severity = clampf(heat.severity + COMFORT_GAIN_PER_C_DAY * past2 * dday, 0.0, 1.0)
+		heat.severity = clampf(heat.severity + COMFORT_GAIN_PER_C_DAY * gain_scale * past2 * dday, 0.0, 1.0)
 		if hypo != null:
 			hypo.severity = maxf(0.0, hypo.severity - COMFORT_RECOVER_PER_DAY * dday)
 	else:

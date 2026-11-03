@@ -40,6 +40,9 @@ var regions: Array = []
 var convoy_seq := 0
 var craft_timer := 0.0
 var dead := false
+# The last death's value-data epitaph {cause, day, born} for the death screen (view memory like
+# health_alerts — not save/hash state; overwritten by the next death).
+var last_death: Dictionary = {}
 # Located hero health (kernel/health.gd tracker; driven by sim/hero_health.gd). player.hp is a
 # DERIVED readout of it; the tracker is what saves, travels and gets hit.
 var health: Variant = null
@@ -107,12 +110,13 @@ func _default_player(sp: Vector2i) -> Dictionary:
 		"eat_cd": 0.0, "atk_cd": 0.0, "dep_cd": 0.0,
 		"skills": {"gather": 0.0, "combat": 0.0},
 		"equipped": {"tool": "", "weapon": ""}, "items": [],
+		"born": int(time.day),   # the day this pawn arrived (death screen: «прожив N днів»)
 	}
 
 func _default_capsule() -> Dictionary:
 	return {"charges": GameData.CAPSULE_DAILY_CHARGES, "radius_km": GameData.CAPSULE_BASE_RADIUS_KM, "last_day": int(time.day)}
 
-func new_game(m: Dictionary) -> void:
+func new_game(m: Dictionary, hint: bool = true) -> void:
 	map = m
 	n = m.n
 	var sp: Vector2i = m.spawn
@@ -132,6 +136,12 @@ func new_game(m: Dictionary) -> void:
 	_init_regions()
 	_env_init()
 	HeroHealth.reset(self)
+	if hint:
+		HeroHealth.spawn_hint(self)
+
+# The climate onboarding line (also re-issued by the session AFTER its landing log, so the most
+# urgent card sits lowest in the feed, next to where the player is looking).
+func spawn_hint() -> void:
 	HeroHealth.spawn_hint(self)
 
 # Arrive in a NEW region by capsule: your pawn + full personal inventory, but no base/stock here.
@@ -164,7 +174,7 @@ func _reset_local_threats() -> void:
 	banner = ""
 
 # The pawn's portable inventory + condition (what a capsule carries).
-const PAWN_FIELDS := ["carry", "carry_cap", "skills", "equipped", "items", "hp", "hunger", "rest"]
+const PAWN_FIELDS := ["carry", "carry_cap", "skills", "equipped", "items", "hp", "hunger", "rest", "born"]
 
 func extract_pawn() -> Dictionary:
 	return {
@@ -174,6 +184,7 @@ func extract_pawn() -> Dictionary:
 		"equipped": (player.equipped as Dictionary).duplicate(true),
 		"items": (player.items as Array).duplicate(true),
 		"hp": float(player.hp), "hunger": float(player.hunger), "rest": float(player.rest),
+		"born": int(player.get("born", int(time.day))),
 		"health": health_dict(),
 	}
 
@@ -345,12 +356,14 @@ func storage_cap() -> int:
 			c += int(def.capacity)
 	return c
 
-func deposit(res: String, amt: int) -> int:
+# `quiet`: the caller keeps the remainder (the pawn's own carry) and says so itself — only drops from
+# OUTSIDE (loot, cargo, convoys, refunds) truly lose the overflow, so only they log the loss.
+func deposit(res: String, amt: int, quiet: bool = false) -> int:
 	var room: int = max(0, storage_cap() - stock_total())
 	var add: int = min(amt, room)
 	var k := res_key(res)
 	stock[k] = stock.get(k, 0) + add
-	if add < amt:
+	if add < amt and not quiet:
 		_log("⚠ Склад переповнений — частину втрачено.", "warn")
 	return add
 
@@ -910,9 +923,12 @@ func _update_player(dt: float) -> void:
 	if carry_total() > 0 and p.dep_cd <= 0 and _near_storage(1.8):
 		for k in p.carry.keys():
 			if p.carry[k] > 0:
-				var a := deposit(k, p.carry[k])
+				var a := deposit(k, p.carry[k], true)
 				p.carry[k] -= a
 		p.dep_cd = 0.4
+		if carry_total() > 0:
+			# nothing is lost — the load stays in the pawn's hands; the flash re-arms, never spams
+			_flash("📦 Склад повний — збудуй ще один склад (4).")
 	var step := 3.4 * HeroHealth.move_mult(self) * dt   # wounded legs / blood loss / freezing slow you
 	if move_input.length() > 0.1:
 		p.action = null
@@ -939,6 +955,8 @@ func _update_player(dt: float) -> void:
 				p.action = null
 		"gather":
 			_do_gather(dt, step)
+		"haul":
+			_do_haul(step)
 		"attack":
 			_do_attack(dt, step)
 
@@ -961,8 +979,7 @@ func _do_gather(dt: float, step: float) -> void:
 	if a.t >= a.dur:
 		a.t = 0.0
 		if carry_total() >= p.carry_cap:
-			_flash("Несеш максимум — на склад 📦.")
-			p.action = null
+			_start_haul(int(a.cell), String(node.kind))   # full hands: carry the load home, come back
 			return
 		# phase 4 (spec 0008): under the open catalogue, a node yields its catalogue BUNDLE — rocks
 		# occasionally give ore/coal/clay/sand, trees fiber, bushes herbs. Pure function of
@@ -978,6 +995,87 @@ func _do_gather(dt: float, step: float) -> void:
 		if node.amount <= 0:
 			map.nodes.erase(a.cell)
 			p.action = null
+			_continue_gather(int(a.cell), String(node.kind))
+
+# ---------------- auto-haul: the gather loop closes itself ----------------
+# One click on a tree used to mean: chop 30, stop, walk the load home by hand, click the tree again.
+# Now full hands walk the load to the nearest storage (the ordinary auto-deposit unloads it there) and
+# come back to the SAME node; a node that runs dry hands over to its nearest same-kind neighbour.
+# Pure functions of state (paths, dict order, explicit tie-breaks) — twins and rejoiners agree.
+const HAUL_RESUME_RADIUS := 7   # Euclidean tiles: «keep chopping this grove», not «wander the map»
+
+func _start_haul(cell: int, kind: String) -> void:
+	var st: Variant = _nearest_storage()
+	if st == null:
+		_flash("Несеш максимум — збудуй склад (4).")
+		player.action = null
+		return
+	var path := compute_path(int(player.px), int(player.py), int(st.x), int(st.y))
+	player.action = {"type": "haul", "path": path, "cell": int(st.y) * n + int(st.x),
+		"resume": {"cell": cell, "kind": kind}}
+
+func _do_haul(step: float) -> void:
+	var p: Dictionary = player
+	var a: Dictionary = p.action
+	if carry_total() == 0:
+		# unloaded (the auto-deposit fired within reach of the storage): back to work
+		var res: Dictionary = a.get("resume", {})
+		var cell := int(res.get("cell", -1))
+		p.action = null
+		if cell >= 0 and map.nodes.has(cell):
+			order_gather(cell % n, cell / n)
+		else:
+			_continue_gather(cell, String(res.get("kind", "")))
+		return
+	if _follow_path(p, a.path, step):
+		if not _near_storage(1.8):
+			_flash("Склад недосяжний — віднеси вантаж сам.")
+			p.action = null
+		elif storage_cap() - stock_total() <= 0:
+			p.action = null   # full storage: the deposit flash already names the fix
+		# else: standing at the storage — the next deposit tick (dep_cd) unloads the hands
+
+# A node ran dry (or a haul came back to an empty cell): keep working the same kind nearby, or carry
+# what is in hand home when the grove is done. Silent no-op when there is nothing left to do.
+func _continue_gather(cell: int, kind: String) -> void:
+	var next := _nearest_node_of_kind(cell, kind, HAUL_RESUME_RADIUS)
+	if next >= 0:
+		if carry_total() >= int(player.carry_cap):
+			_start_haul(next, kind)
+		else:
+			order_gather(next % n, next / n)
+	elif carry_total() > 0 and kind != "":
+		_start_haul(-1, "")   # the grove is done: deliver the last load and stand by the storage
+
+func _nearest_node_of_kind(cell: int, kind: String, radius: int) -> int:
+	if cell < 0 or kind == "":
+		return -1
+	var cx := cell % n
+	var cy := cell / n
+	var best := -1
+	var bd := radius * radius + 1
+	for k in map.nodes:
+		if String(map.nodes[k].kind) != kind:
+			continue
+		var dx: int = int(k) % n - cx
+		var dy: int = int(k) / n - cy
+		var d := dx * dx + dy * dy
+		if d < bd or (d == bd and int(k) < best):
+			bd = d
+			best = int(k)
+	return best
+
+func _nearest_storage() -> Variant:
+	var best: Variant = null
+	var bd := INF
+	for b in buildings:
+		if String(b.kind) != "storage":
+			continue
+		var d := _dist(player.px, player.py, b.x + 0.5, b.y + 0.5)
+		if d < bd:
+			bd = d
+			best = b
+	return best
 
 func _do_attack(dt: float, step: float) -> void:
 	var p: Dictionary = player
@@ -1078,8 +1176,8 @@ func capsule_can_reach(lat: float, lon: float) -> Dictionary:
 func try_launch_capsule(lat: float, lon: float, place_name: String) -> Dictionary:
 	return WorldMeta.try_launch_capsule(self, lat, lon, place_name)
 
-func add_invite(inv: Dictionary) -> void:
-	WorldMeta.add_invite(self, inv)
+func add_invite(inv: Dictionary, quiet: bool = false) -> void:
+	WorldMeta.add_invite(self, inv, quiet)
 
 func accept_invite(id: String) -> Dictionary:
 	return WorldMeta.accept_invite(self, id)
@@ -1102,9 +1200,11 @@ func _update_convoys(dt: float) -> void:
 	WorldMeta.update_convoys(self, dt)
 
 # ---------------- presentation helpers ----------------
+const NIGHT_ALPHA_MAX := 0.46   # darkest night tint (the view's ambient-night pass reads the same const)
+
 func daylight() -> float:
 	# night-overlay alpha from the REAL daylight curve: high latitude gets long winter nights.
-	return clampf(0.46 * (1.0 - daylight_level()), 0.0, 0.46)
+	return clampf(NIGHT_ALPHA_MAX * (1.0 - daylight_level()), 0.0, NIGHT_ALPHA_MAX)
 
 func phase_name() -> String:
 	var f: float = time.frac

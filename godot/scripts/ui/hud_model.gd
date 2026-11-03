@@ -15,6 +15,8 @@ const Gear = preload("res://scripts/kernel/gear.gd")
 const HeroHealth = preload("res://scripts/sim/hero_health.gd")
 const CatalogDefs = preload("res://scripts/catalog_defs.gd")
 const Director = preload("res://scripts/sim/director.gd")
+const SimScript = preload("res://scripts/sim.gd")   # physics CONSTS only (light radii, emitter reach)
+const WorldInputScript = preload("res://scripts/ui/world_input.gd")   # placement grammar (paintable runs)
 
 # session: the SessionScript (has .sim). world/ctx: the same shapes the kernel consumes (built by HudRoot).
 # balance: a Balance director constructed ONCE by HudRoot and reused (never new() per frame).
@@ -28,12 +30,18 @@ static func snapshot(session, world: Dictionary, ctx: Dictionary, balance) -> Di
 		"dead":      bool(sim.dead),
 		"region":    _region_slice(sim, session),
 		"clock":     _clock_slice(sim),
-		"env":       _env_slice(ctx),
+		"env":       _env_slice(sim, ctx),
+		"light":     _light_slice(sim),
+		"heat":      _heat_slice(sim),
+		"inspect":   _inspect_slice(sim, ctx),
+		"speed":     float(ctx.get("speed", 1.0)),
+		"goals":     _goals_slice(session),
+		"death":     _death_slice(sim),
 		"vitals":    _vitals_slice(p, sim),
 		"stats":     _stats_slice(sim),
 		"stock":     _stock_slice(sim),
 		"power":     _power_slice(sim),
-		"build":     _build_slice(sim),
+		"build":     _build_slice(sim, String(ctx.get("selected_build", ""))),
 		"threat":    _threat_slice(world, ctx, balance),
 		"equipment": _equipment_slice(sim),
 		"raid":      _raid_slice(sim),
@@ -227,15 +235,70 @@ static func _clock_slice(sim) -> Dictionary:
 		"hhmm": Fmt.hhmm(f),
 		"phase": Fmt.phase_enum(f),
 		"daylight": float(sim.daylight()),
+		"season": String(sim.season_name()) if sim.has_method("season_name") else "",
 	}
 
-# --- environment (from the kernel ctx a TemperatureSystem/WeatherSystem writes; defaults until wired) ---
-static func _env_slice(ctx: Dictionary) -> Dictionary:
+# --- environment: the REAL region climate at the hero (top bar 🌡/⛅ + T overlay). Live sims answer
+# from their own getters; lean fakes fall back to the kernel-ctx shape (defaults until wired). ---
+static func _env_slice(sim, ctx: Dictionary) -> Dictionary:
+	if sim != null and sim.has_method("ambient_temp_c"):
+		var hx: int = int(sim.player.px)
+		var hy: int = int(sim.player.py)
+		return {
+			"temp_c": float(sim.ambient_temp_c()),     # outdoor air (the climate the region has)
+			"weather": StringName(sim.weather),
+			"light": float(sim.light_at(hx, hy)),
+			"indoor": bool(sim.is_indoor(hx, hy)),
+			"anomaly_c": float(sim.temp_offset),
+		}
 	return {
 		"temp_c": float(ctx.get("temp_c", 15.0)),
 		"weather": StringName(ctx.get("weather", &"clear")),
 		"light": float(ctx.get("light", 1.0)),
 		"indoor": bool(ctx.get("indoor", false)),
+		"anomaly_c": 0.0,
+	}
+
+# --- light: what the ambient-night pass and the L overlay draw (value data: ambient level + every
+# ACTIVE light emitter with its radius — the same inputs sim.light_at() folds, so the night the
+# player SEES is the night the work-speed penalty USES). ---
+static func _light_slice(sim) -> Dictionary:
+	if sim == null or not sim.has_method("daylight_level"):
+		return {"ambient": 1.0, "sources": [], "threshold": 0.35, "night_max": SimScript.NIGHT_ALPHA_MAX}
+	var src: Array = []
+	for b in sim.buildings:
+		if bool(sim.building_def(String(b.kind)).get("extra", {}).get("light", false)) and sim.device_active(b):
+			src.append({"x": int(b.x), "y": int(b.y), "r": float(SimScript.LIGHT_RADIUS.get(String(b.kind), 3.0))})
+	return {
+		"ambient": float(sim.daylight_level()),
+		"sources": src,
+		"threshold": float(SimScript.DARK_LIGHT_THRESHOLD),
+		"night_max": float(SimScript.NIGHT_ALPHA_MAX),
+	}
+
+# --- heat map inputs for the T overlay: outdoor °C + indoor cells + ACTIVE heat emitters (the same
+# fold as sim.temp_at, so the map can never disagree with what the body feels). ---
+static func _heat_slice(sim) -> Dictionary:
+	if sim == null or not sim.has_method("ambient_temp_c"):
+		return {"available": false}
+	var emitters: Array = []
+	for b in sim.buildings:
+		var heat := float(sim.building_def(String(b.kind)).get("extra", {}).get("heat", 0.0))
+		if heat > 0.0 and sim.device_active(b):
+			emitters.append({"x": int(b.x), "y": int(b.y), "heat": heat})
+	var indoor: Array = (sim.indoor as Dictionary).keys()
+	indoor.sort()
+	return {
+		"available": true,
+		"n": int(sim.n),
+		"ambient": float(sim.ambient_temp_c()),
+		"emitters": emitters,
+		"indoor": indoor,
+		"radius": int(SimScript.EMITTER_RADIUS),
+		"setpoint": float(SimScript.INDOOR_SETPOINT_C),
+		"insulation": float(SimScript.INDOOR_INSULATION),
+		"comfort_min": float(Gear.COMFORT_MIN_C),
+		"comfort_max": float(Gear.COMFORT_MAX_C),
 	}
 
 # --- vitals (need bars carry an urgency ENUM, not a color — R11) ---
@@ -263,11 +326,17 @@ static func _vitals_slice(p: Dictionary, sim) -> Dictionary:
 		],
 		"sleeping": bool(p.get("sleeping", false)),
 		"downed": bool(tracker.downed) if tracker != null else false,
-		"conditions": HeroHealth.condition_lines(sim) if tracker != null else [],
+		"conditions": _condition_texts(sim) if tracker != null else [],
 		"felt_c": felt,
 		"comfort": Fmt.comfort_enum(felt, Gear.COMFORT_MIN_C, Gear.COMFORT_MAX_C),
 		"carry": {"cur": int(sim.carry_total()), "cap": int(p.get("carry_cap", 0))},
 	}
+
+static func _condition_texts(sim) -> Array:
+	var out: Array = []
+	for row in HeroHealth.condition_rows(sim):
+		out.append(Fmt.condition_text(row))
+	return out
 
 # --- stats: ONE-TRUTH-PER-NUMBER (R5). value = legacy getter; explain = placeholder of the same shape
 # so the swap to StatWorker.value(ctx)/.explain(ctx) (spec 0003 §8) needs no widget change. ---
@@ -340,7 +409,9 @@ static func _power_slice(sim) -> Dictionary:
 	}
 
 # --- build palette (afford flag per building; locked = research-ворота ще не відкриті, spec 0007) ---
-static func _build_slice(sim) -> Dictionary:
+# `selected` mirrors the armed ghost (view state handed in through ctx) so the bar's pressed look
+# follows the keyboard digits too — one truth for "what am I placing".
+static func _build_slice(sim, selected: String = "") -> Dictionary:
 	var slots := []
 	var unlocked: Variant = sim.get("research_unlocked")
 	for i in GameData.BUILD_ORDER.size():
@@ -353,8 +424,10 @@ static func _build_slice(sim) -> Dictionary:
 			"locked": _research_locked(def, unlocked),
 			"cost": _cost_line("b:" + key, def.cost),
 			"hotkey": "1234567890".substr(i, 1) if i < 10 else "",
+			"selected": key == selected,
+			"tip": Fmt.building_blurb(key, def, int(SimScript.EMITTER_RADIUS)),
 		})
-	return {"slots": slots}
+	return {"slots": slots, "selected": selected}
 
 # true, коли def має ворота досліджень і вони ще не відкриті (мапа з сима; ключі String/StringName)
 static func _research_locked(def: Dictionary, unlocked: Variant) -> bool:
@@ -454,3 +527,158 @@ static func _raid_slice(sim) -> Dictionary:
 	elif bool(r.get("warned", false)):
 		state = &"incoming"
 	return {"state": state, "wave": int(r.get("wave", 0)), "count": (sim.enemies as Array).size()}
+
+# --- inspect (design-system §5 «inspect = hover»): what is under the cursor, as value data. The
+# hovered cell, the cursor's world position and the armed ghost are VIEW state the entry scene hands
+# in through ctx (hover / hover_world / selected_build); without a hover the slice is hidden. ---
+const INSPECT_HIDDEN := {"shown": false}
+
+static func _inspect_slice(sim, ctx: Dictionary) -> Dictionary:
+	if sim == null or not sim.has_method("building_def") or not ctx.has("hover"):
+		return INSPECT_HIDDEN
+	var t: Vector2i = ctx.hover
+	var n: int = int(sim.n)
+	if t.x < 0 or t.y < 0 or t.x >= n or t.y >= n:
+		return INSPECT_HIDDEN
+	var cell: int = t.y * n + t.x
+	var sel := String(ctx.get("selected_build", ""))
+	if sel != "":
+		return _inspect_ghost(sim, sel, t, cell)
+	var hw: Vector2 = ctx.get("hover_world", Vector2(t.x + 0.5, t.y + 0.5))
+	for e in sim.enemies:
+		if Vector2(float(e.px), float(e.py)).distance_to(hw) < 0.7:
+			return _inspect_enemy(e)
+	if sim.map.nodes.has(cell):
+		return _inspect_node(sim, sim.map.nodes[cell], t)
+	if sim.bgrid.has(cell):
+		return _inspect_building(sim, sim.bgrid[cell])
+	return _inspect_ground(sim, t, cell)
+
+static func _inspect_enemy(e: Dictionary) -> Dictionary:
+	var bot: bool = String(e.get("kind", "raider")) == "bot"
+	return {"shown": true, "state": &"crit",
+		"title": "🤖 Патрульний робот" if bot else "⚔ Рейдер",
+		"lines": ["❤ %d/%d" % [int(ceil(float(e.hp))), int(float(e.maxhp))],
+			"розібраний дає ⚙ брухт і 🔩 компоненти" if bot else "б'є сильно — бийся біля турелей і шипів"],
+		"hint": "ЛКМ — атакувати"}
+
+static func _inspect_node(sim, node: Dictionary, t: Vector2i) -> Dictionary:
+	var kind := String(node.kind)
+	var info: Dictionary = GameData.NODEINFO.get(kind, {})
+	var res := String(info.get("res", ""))
+	var gives: String = "%s %s" % [String(GameData.RES[res].icon), String(GameData.RES[res].label)] if GameData.RES.has(res) else res
+	if bool(sim.get("use_catalog") == true) and kind == "rock":
+		gives += " (+руда, вугілля, глина)"
+	var lines: Array = ["залишилось %d · дає %s" % [int(node.amount), gives],
+		"≈%.1f с за одиницю" % float(sim.gather_time(node))]
+	if float(sim.light_at(t.x, t.y)) < float(SimScript.DARK_LIGHT_THRESHOLD):
+		lines.append("🌙 темно — робота повільніша (смолоскип: клавіша 0)")
+	return {"shown": true, "state": &"good", "title": Fmt.node_title(kind), "lines": lines,
+		"hint": "ЛКМ — %s · повну торбу пішак сам віднесе на склад" % Fmt.node_verb(kind)}
+
+static func _inspect_building(sim, b: Dictionary) -> Dictionary:
+	var kind := String(b.kind)
+	var def: Dictionary = sim.building_def(kind)
+	var title: String = String(def.get("name", CatalogDefs.building_label(kind)))
+	var lines: Array = ["❤ %d/%d" % [int(ceil(float(b.hp))), int(float(def.get("hp", 50.0)))]]
+	var blurb := Fmt.building_blurb(kind, def, int(SimScript.EMITTER_RADIUS))
+	if blurb != "":
+		lines.append(blurb)
+	if bool(def.get("grow", false)):
+		var crop := String(b.get("crop", ""))
+		lines.append("🌱 %s · ріст %d%%" % [CatalogDefs.res_label(crop) if crop != "" else "мішана",
+			int(round(clampf(float(b.get("growth", 0.0)), 0.0, 1.0) * 100.0))])
+	if int(def.get("ammo_max", 0)) > 0:
+		lines.append("🔫 набої %d/%d" % [int(b.get("ammo", 0)), int(def.ammo_max)])
+	if b.has("fuel"):
+		lines.append("⛽ пальне %d" % int(b.fuel))
+	if not bool(sim.device_active(b)):
+		lines.append("🔌 без живлення — не працює")
+	var hint := "ПКМ — розібрати (повертає ½ ціни)"
+	if kind == "storage" and _count_kind(sim, "storage") <= 1:
+		hint = "єдиний склад — не розібрати"
+	elif bool(def.get("grow", false)):
+		hint = "ЛКМ — змінити культуру · " + hint
+	return {"shown": true, "state": &"info", "title": title, "lines": lines, "hint": hint}
+
+static func _inspect_ground(sim, t: Vector2i, cell: int) -> Dictionary:
+	var tile: int = int(sim.map.tiles[cell])
+	var name: String = Fmt.terrain_title(String(WorldGen.TERRAIN_NAME[tile]) if tile < WorldGen.TERRAIN_NAME.size() else "")
+	var indoor: bool = bool(sim.is_indoor(t.x, t.y))
+	var tc: float = float(sim.temp_at(t.x, t.y))
+	var lines: Array = ["🌡 %s %s" % [Fmt.temp(tc), "· 🏠 у приміщенні" if indoor else "· надворі"]]
+	var light: float = float(sim.light_at(t.x, t.y))
+	lines.append(("🌙 темно — робота повільніша" if light < float(SimScript.DARK_LIGHT_THRESHOLD) else "💡 світло %d%%" % int(round(light * 100.0))))
+	var blocked: bool = WorldGen.is_terrain_blocked(tile)
+	return {"shown": true, "state": &"info", "title": name, "lines": lines,
+		"hint": "непрохідно" if blocked else "ЛКМ — іти сюди"}
+
+static func _inspect_ghost(sim, kind: String, t: Vector2i, cell: int) -> Dictionary:
+	var def: Dictionary = sim.building_def(kind)
+	if def.is_empty():
+		return INSPECT_HIDDEN
+	var cost: Dictionary = def.get("cost", {})
+	var lines: Array = ["ціна: %s" % GameData.cost_str(cost) if not bool(sim.get("use_catalog") == true) else "ціна: %s" % _catalog_cost(sim, cost)]
+	var blurb := Fmt.building_blurb(kind, def, int(SimScript.EMITTER_RADIUS))
+	if blurb != "":
+		lines.append(blurb)
+	var why := _ghost_refusal(sim, kind, def, t, cell)
+	lines.append(("✖ " + why) if why != "" else "✔ можна ставити")
+	var hint := "ЛКМ — поставити · ПКМ/Esc — скасувати"
+	if WorldInputScript.WorldInput.paintable(kind, def):
+		hint = "ЛКМ — поставити (затисни й веди — ряд) · ПКМ/Esc — скасувати"
+	return {"shown": true, "state": (&"crit" if why != "" else &"good"), "title": "🏗 " + String(def.get("name", kind)),
+		"lines": lines, "hint": hint}
+
+# The FIRST reason a ghost cannot land here ("" == it can) — the same order try_build checks, so the
+# tooltip predicts the click exactly instead of a generic «тут не можна».
+static func _ghost_refusal(sim, kind: String, def: Dictionary, t: Vector2i, cell: int) -> String:
+	var tile: int = int(sim.map.tiles[cell])
+	if tile == WorldGen.WATER:
+		return "вода — тут не збудуєш"
+	if tile == WorldGen.ROCK:
+		return "скеля — тут не збудуєш"
+	if sim.bgrid.has(cell):
+		return "зайнято: %s" % String(sim.building_def(String(sim.bgrid[cell].kind)).get("name", "будівля"))
+	if sim.map.nodes.has(cell):
+		return "тут ресурс — спершу добудь його"
+	if not bool(sim.research_ok(def)):
+		var need := String(def.get("research", ""))
+		return "🔒 потрібне дослідження: %s" % String(GameData.RESEARCH_LABEL.get(need, CatalogDefs.research_label(need)))
+	if not bool(sim.afford(def.get("cost", {}))):
+		var have: Dictionary = {}
+		for k in def.cost:
+			have[k] = int(sim.res_amount(k))
+		var miss: Dictionary = Fmt.shortfall(def.cost, have)
+		return "бракує: %s" % (GameData.cost_str(miss) if not bool(sim.get("use_catalog") == true) else _catalog_cost(sim, miss))
+	if not sim.build_valid(t.x, t.y):
+		return "тут не можна будувати"
+	return ""
+
+static func _catalog_cost(_sim, cost: Dictionary) -> String:
+	var parts: Array = []
+	for k in cost:
+		parts.append("%s%d" % [CatalogDefs.res_icon(str(k)), int(cost[k])])
+	return " ".join(parts)
+
+static func _count_kind(sim, kind: String) -> int:
+	var c := 0
+	for b in sim.buildings:
+		if String(b.kind) == kind:
+			c += 1
+	return c
+
+# --- goals (onboarding tracker, session-owned; {available:false} on fakes / before a session) ---
+static func _goals_slice(session) -> Dictionary:
+	if session == null or not session.has_method("goals_view"):
+		return {"available": false}
+	return session.goals_view()
+
+# --- death (the death screen's value data: cause + how long this pawn lived) ---
+static func _death_slice(sim) -> Dictionary:
+	var ld: Variant = sim.get("last_death")
+	if not (ld is Dictionary) or (ld as Dictionary).is_empty():
+		return {"cause": "", "day": int(sim.time.day), "lived": 0}
+	var d: Dictionary = ld
+	return {"cause": String(d.get("cause", "")), "day": int(d.get("day", 0)),
+		"lived": maxi(0, int(d.get("day", 0)) - int(d.get("born", int(d.get("day", 0)))) + 1)}

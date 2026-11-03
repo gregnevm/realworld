@@ -16,7 +16,11 @@ const GameData = preload("res://scripts/data.gd")
 # --- spawn: the world-address picker -----------------------------------------------------------
 class SpawnScreen extends Control:
 	signal spawn_chosen(lat: float, lon: float, place_name: String)
+	signal continue_chosen
 
+	# {place, day, dead} of a save on disk (set by the entry scene BEFORE the screen enters the tree);
+	# non-empty -> a «▶ Продовжити» button heads the screen. Empty -> the screen is unchanged.
+	var continue_meta: Dictionary = {}
 	var _lat_edit: LineEdit
 	var _lon_edit: LineEdit
 	var _status: Label
@@ -37,12 +41,18 @@ class SpawnScreen extends Control:
 		add_child(scroll)
 		var center := CenterContainer.new()
 		center.set_anchors_preset(Control.PRESET_FULL_RECT)
-		center.custom_minimum_size = Vector2(0, 720)
+		# a ScrollContainer only widens a child that asks to EXPAND — without it the column hugged
+		# the left edge instead of centering
+		center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		scroll.add_child(center)
 		var box := VBoxContainer.new()
 		box.custom_minimum_size = Vector2(460, 0)
-		box.add_theme_constant_override("separation", 8)
+		box.add_theme_constant_override("separation", 6)
 		center.add_child(box)
+		var pad := Control.new()
+		pad.custom_minimum_size = Vector2(0, 8)
+		box.add_child(pad)
 
 		var title := Label.new()
 		title.text = "RealWorld"
@@ -59,6 +69,20 @@ class SpawnScreen extends Control:
 		note.add_theme_font_size_override("font_size", 13)
 		note.add_theme_color_override("font_color", Tokens.GOOD)
 		box.add_child(note)
+
+		if not continue_meta.is_empty():
+			var cont := Button.new()
+			cont.text = "▶  Продовжити: %s · день %d%s" % [String(continue_meta.get("place", "")),
+				int(continue_meta.get("day", 1)), " (☠ пішак загинув)" if bool(continue_meta.get("dead", false)) else ""]
+			cont.custom_minimum_size = Vector2(0, 44)
+			cont.add_theme_font_size_override("font_size", 17)
+			cont.pressed.connect(func() -> void: continue_chosen.emit())
+			box.add_child(cont)
+			var warn := Label.new()
+			warn.text = "Нова висадка нижче почне інший світ і перезапише це збереження."
+			warn.add_theme_font_size_override("font_size", 12)
+			warn.add_theme_color_override("font_color", Tokens.MUT)
+			box.add_child(warn)
 
 		box.add_child(_section("Пресети"))
 		for pr in GameData.SPAWN_PRESETS:
@@ -97,7 +121,7 @@ class SpawnScreen extends Control:
 		box.add_child(demo)
 
 		var hint := Label.new()
-		hint.text = "Керування: ЛКМ — іти/добувати/атакувати · ПКМ — розібрати · колесо — зум · WASD · 1–0 будувати · Space швидкість/пауза · Esc скасувати · H — довідка з усіма клавішами"   # gdlint: ignore=max-line-length
+		hint.text = "Керування: ЛКМ — іти/добувати/атакувати · ПКМ — розібрати · колесо — зум · WASD · 1–0 будувати (затисни — ряд) · Space пауза · +/− швидкість · Esc скасувати · J — цілі · H — довідка"   # gdlint: ignore=max-line-length
 		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		hint.add_theme_color_override("font_color", Tokens.MUT)
 		box.add_child(hint)
@@ -149,6 +173,35 @@ class SpawnScreen extends Control:
 class DeathScreen extends Control:
 	signal respawn_chosen
 
+	var _epitaph: Label
+	var cause := ""
+
+	# The death's value data (HudModel death slice): WHY and HOW LONG — a death you can read is a
+	# lesson; a bare «ти загинув» after a silent freeze was the opening's worst moment.
+	func bind(vm: Dictionary) -> void:
+		if _epitaph == null:
+			return
+		cause = String(vm.get("cause", ""))
+		var lived: int = int(vm.get("lived", 0))
+		var lines: Array = []
+		if cause != "":
+			lines.append("Причина: %s." % cause)
+		if lived > 0:
+			lines.append("Прожито днів: %d (до дня %d)." % [lived, int(vm.get("day", 0))])
+		lines.append(_lesson(cause))
+		_epitaph.text = "\n".join(lines)
+
+	static func _lesson(c: String) -> String:
+		if "замерз" in c:
+			return "Порада: багаття (9) + стіни (1) з дверима (2) навколо — у приміщенні тепло тримається."
+		if "голод" in c:
+			return "Порада: збирай ягоди з кущів і тримай їжу на складі — біля складу пішак їсть сам."
+		if "тепловий" in c:
+			return "Порада: у спеку ховайся в приміщенні, не стій біля вогню."
+		if "кров" in c or "рани" in c:
+			return "Порада: бийся біля турелей і шипів, а рани лікуй сном у ліжку."
+		return "Порада: тримай тепло, їжу й сон — і будуй оборону до 5-го дня."
+
 	func _ready() -> void:
 		# та сама CanvasLayer-гоча, що й у SpawnScreen: явний розмір замість FULL_RECT
 		set_anchors_preset(Control.PRESET_TOP_LEFT)
@@ -173,11 +226,17 @@ class DeathScreen extends Control:
 		t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vb.add_child(t)
 		var s := Label.new()
-		s.text = "Одне життя, глибока симуляція. Ти втратив усе нажите й самого героя.\nНова пішка прибуде в поселення — з нуля, без прокачки."   # gdlint: ignore=max-line-length
+		s.text = "Одне життя, глибока симуляція. Героя й усе, що він ніс, втрачено.\nПоселення лишається: нова пішка прибуде туди — з нуля, без прокачки."   # gdlint: ignore=max-line-length
 		s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		s.custom_minimum_size = Vector2(460, 0)
 		vb.add_child(s)
+		_epitaph = Label.new()
+		_epitaph.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_epitaph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_epitaph.custom_minimum_size = Vector2(460, 0)
+		_epitaph.add_theme_color_override("font_color", Tokens.WARN)
+		vb.add_child(_epitaph)
 		var b := Button.new()
 		b.text = "🧬  Респавн — нова пішка"
 		b.custom_minimum_size = Vector2(260, 48)

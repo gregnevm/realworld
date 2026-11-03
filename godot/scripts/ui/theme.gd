@@ -15,6 +15,8 @@ const V_PANEL   := &"RwPanel"      # dock panel surface
 const V_MODAL   := &"RwModal"      # centered modal surface
 const V_BAR     := &"RwBar"        # need-bar track / raised chip
 const V_MONO    := &"MonoValue"    # right-aligned numeric Label
+const V_CARD    := &"RwCard"       # translucent feed/flash/banner card over the world
+const V_TIP     := &"RwTip"        # hover-inspect tooltip (amber edge: «this is about the cursor»)
 
 static func build() -> Theme:
 	install_emoji_fallback()
@@ -32,6 +34,12 @@ static func build() -> Theme:
 	# Modal surface (replaces _sb_panel / _mk_modal).
 	t.set_type_variation(V_MODAL, &"PanelContainer")
 	t.set_stylebox("panel", V_MODAL, _sb(Color(Tokens.PANEL.r, Tokens.PANEL.g, Tokens.PANEL.b, 0.97), Tokens.LINE2, Tokens.R, 14))
+
+	# Feedback cards over the world: readable on snow AND water (opaque-ish ink panel).
+	t.set_type_variation(V_CARD, &"PanelContainer")
+	t.set_stylebox("panel", V_CARD, _sb(Color(Tokens.PANEL.r, Tokens.PANEL.g, Tokens.PANEL.b, 0.9), Tokens.LINE2, 6, 6))
+	t.set_type_variation(V_TIP, &"PanelContainer")
+	t.set_stylebox("panel", V_TIP, _sb(Color(Tokens.PANEL2.r, Tokens.PANEL2.g, Tokens.PANEL2.b, 0.96), Tokens.AMBER, 6, 8))
 
 	# Need-bar track (raised inset).
 	t.set_type_variation(V_BAR, &"PanelContainer")
