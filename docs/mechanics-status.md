@@ -1,6 +1,6 @@
 # Mechanics catalogue — status tracker
 
-> Snapshot: **2026-07-05**, last verified against code **2026-07-29**. Purpose: make the
+> Snapshot: **2026-07-05**, last verified against code **2026-11-03**. Purpose: make the
 > *infrastructure-vs-content* gap visible — the kernel is deep (~880 headless asserts across the
 > Godot suites + 56 Node) but not every designed mechanic is yet wired into a playable slice. This
 > is the at-a-glance «what is real vs only designed» view that complements `GDD_BOOK/gdd.json`
@@ -234,6 +234,21 @@ nets are spatial. One region = one implicit net. HUD: a `power` slice + `PowerPa
 Covered by `_t_power_live` (shedding order, battery buffering, day/night solar, refuel economy,
 fuel/charge persistence, twin hashes); the shipped flag-OFF slice pays zero cost and stays
 byte-identical.
+
+**Update (2026-11-03, the playability pass — «грабельність»):** the deep sim was mute in the
+default scene: the feed/flash/banner widgets existed only in tests, the top bar showed no clock,
+day, season, weather or temperature (`snap.env` was hard-wired to 15°C), night was invisible unless
+L was pressed, and every spawn preset froze an idle pawn in 86–229 real seconds with no visible
+reason. This pass makes the slice teach and answer: the design-system §2 frame (top bar, mounted
+feedback channels, content-sized scrolling docks) and §5 grammar (hover inspect with the first
+refusal reason, drag = build run, Space = pause) are live; an onboarding goal chain (`goals.gd`,
+10 goals, sticky, observation-only) walks the opening; the gather loop hauls itself (full hands →
+storage → back → next node); night is always drawn per tile with light pools (L = work-light map,
+T = the real heat map — both pinned equal to `sim.light_at`/`temp_at`); exposure onset is paced
+(`EXPOSURE_PACE` 0.4 — idle Kyiv-winter death ~1.9 game-days instead of ~0.8, room + fire holds);
+the director gets a real grace (`GRACE_DAYS`: raids from day 5); the season labels are fixed
+(day 1 = winter, not autumn); the game saves and continues (`session.save_game/restore_game`,
+lockstep-exact via full-precision JSON); and death names its cause, lifespan and a lesson.
 
 ## How to read this
 
