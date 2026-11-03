@@ -32,6 +32,12 @@ const RAID_WARN_LEAD := 12.0
 # survival/building is the game, combat is spice). Kernel MTB 2.4 days at ×0.25 ≈ one raid per
 # ~10 game-days; the MTB curve still owns timing and threat points still size the wave that lands.
 const THREAT_BIG_WEIGHT := 0.25
+# Grace period (playability): the MTB roll has no memory, so a fresh base could be raided on day 1
+# (~7%/day) while its player is still learning to light a fire. The live storyteller keeps rolling
+# from tick 1 — the draws (and so the stream cadence / twin hashes) are untouched — but a payload
+# rolled before its grace day is DROPPED, like the no-substrate incidents. Forced incidents (apply())
+# bypass it. Day 5 ≈ 10 real minutes of building before the first raid can even be announced.
+const GRACE_DAYS := {"raid": 5, "disease": 3, "cold_snap": 3}
 
 # The Balance `world` dict for a LIVE sim — the one sim-side builder (hud_model delegates here for
 # real sims, so the HUD readout and the live pacing can never disagree on the numbers).
@@ -67,6 +73,8 @@ static func update(s, dt: float) -> void:
 	var dday: float = dt / maxf(1.0, float(s.time.day_len))
 	var fired: Array = s.balance.tick(world_of(s), _ctx_of(s, dday), s.director_rng)
 	for payload in fired:
+		if int(s.time.day) < int(GRACE_DAYS.get(str(payload.get("incident", "")), 0)):
+			continue   # rolled inside the grace window: dropped, not deferred (no hidden queue state)
 		apply(s, payload)
 
 # Enact one incident payload (public so tests can force incidents without rigging the stream).

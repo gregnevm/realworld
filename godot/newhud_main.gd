@@ -23,8 +23,6 @@ const UITheme = preload("res://scripts/ui/theme.gd")
 const GameData = preload("res://scripts/data.gd")
 const WorldInputScript = preload("res://scripts/ui/world_input.gd")
 const Lifecycle = preload("res://scripts/ui/lifecycle.gd")
-const Tokens = preload("res://scripts/ui/tokens.gd")
-const Fmt = preload("res://scripts/ui/format.gd")
 const ViewGeom = preload("res://scripts/ui/view_geom.gd")
 const TILE := ViewGeom.TILE
 
@@ -42,14 +40,15 @@ var router: InputController.InputController
 var winput: WorldInputScript.WorldInput
 var spawn_screen: Lifecycle.SpawnScreen
 var death_screen: Lifecycle.DeathScreen
-var region_label: Label
-var speed_label: Label
-var chrome_bar: HBoxContainer
 var shot_mode := false
 var _t := 0.0
 var _built := false
 var _shot := false
-var _region_key := ""   # "name|seed" останнього відформатованого лейбла — не форматуємо щокадру
+# Autosave (continue): every AUTOSAVE_EVERY real seconds, at each new game day and on quit. Cheap —
+# one JSON write of the session; the store already holds every visited region.
+const AUTOSAVE_EVERY := 30.0
+var _autosave_t := 0.0
+var _saved_day := -1
 
 func _ready() -> void:
 	UITheme.install_emoji_fallback()       # web has no system emoji font — icons were boxes without it
@@ -77,6 +76,9 @@ func _ready() -> void:
 	router.bind(&"select_build", func(_s, a: Dictionary) -> void:
 		var kind := String(a.kind)
 		view.selected_build = "" if String(view.selected_build) == kind else kind)
+	# time speed is VIEW state too (the sim only ever sees scaled dt): the top-bar chips land here
+	router.bind(&"set_speed", func(_s, a: Dictionary) -> void:
+		winput.apply_speed(&"set", float(a.get("mult", 1.0))))
 	Mechanics.register_all(preg, oreg)     # mechanics register themselves — no controller edit (R4)
 	overlay_host.oreg = oreg
 
@@ -92,7 +94,6 @@ func _ready() -> void:
 	# ONE connection per panel — a second connect would double-dispatch every intent.
 	for p in preg.panels:
 		p.intent.connect(_route_intent)
-	_build_chrome()
 
 	# --- world input adapter (clicks/keys -> verbs; inert until session exists) ---
 	winput = WorldInputScript.WorldInput.new()
@@ -101,25 +102,29 @@ func _ready() -> void:
 	winput.cam = cam
 	winput.preg = preg
 	winput.oreg = oreg
-	winput.speed_changed.connect(_on_speed_changed)
 	add_child(winput)
 
 	# --- lifecycle layer: spawn screen now, death screen when needed ---
 	var life := CanvasLayer.new()
 	life.layer = 20
 	add_child(life)
+	shot_mode = "newhud" in OS.get_cmdline_user_args() and "shot" in OS.get_cmdline_user_args()
 	spawn_screen = Lifecycle.SpawnScreen.new()
 	spawn_screen.theme = ui_theme
+	if not shot_mode:
+		spawn_screen.continue_meta = SessionScript.save_meta()
 	spawn_screen.spawn_chosen.connect(_start_game)
+	spawn_screen.continue_chosen.connect(_continue_game)
 	life.add_child(spawn_screen)
 	death_screen = Lifecycle.DeathScreen.new()
 	death_screen.theme = ui_theme
 	death_screen.visible = false
-	death_screen.respawn_chosen.connect(func() -> void: router.dispatch(&"respawn", {}, session))
+	death_screen.respawn_chosen.connect(func() -> void:
+		router.dispatch(&"respawn", {}, session)
+		_autosave())
 	life.add_child(death_screen)
 
-	if "newhud" in OS.get_cmdline_user_args() and "shot" in OS.get_cmdline_user_args():
-		shot_mode = true
+	if shot_mode:
 		_start_game(50.4501, 30.5234, "Київ")
 
 # The spawn screen (or shot mode) picked a world address — boot the real session on it.
@@ -127,44 +132,40 @@ func _start_game(lat: float, lon: float, place_name: String) -> void:
 	if session != null:
 		return   # уже в грі (пізній GPS-callback чи повторний сигнал): другий бут ремонтував би панелі
 	session = SessionScript.new()
+	session.autosave = not shot_mode
 	session.start(lat, lon, place_name)
+	_enter_session()
+	_autosave()   # a new landing claims the save slot at once (the spawn screen warned about it)
+
+# The spawn screen's «▶ Продовжити»: rebuild the whole session from the save file.
+func _continue_game() -> void:
+	if session != null:
+		return
+	var s := SessionScript.new()
+	if not s.restore_game():
+		return   # unreadable save: the screen stays (presets still work)
+	session = s
+	_enter_session()
+
+func _enter_session() -> void:
 	view.sim = session.sim
 	winput.session = session
 	hud_root.setup(session, balance, bus, preg, oreg)
 	hud_root.mount()
 	spawn_screen.visible = false
 	hud_layer.visible = true
+	_saved_day = int(session.sim.time.day)
 
-# Controller-owned chrome: the shareable world address + the time multiplier. Values bind from the
-# snapshot's region slice (R5/R8) in _process; mechanics never appear here (R4 spirit).
-func _build_chrome() -> void:
-	var top := HBoxContainer.new()
-	# CanvasLayer-гоча (див. hud_root/lifecycle): TOP_WIDE під CanvasLayer колапсує в нульову ширину,
-	# і ALIGNMENT_CENTER тулить лейбли в лівий кут — пінимо TOP_LEFT і розміряємо явно (re-fit на resize)
-	top.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	top.alignment = BoxContainer.ALIGNMENT_CENTER
-	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top.add_theme_constant_override("separation", 14)
-	hud_layer.add_child(top)
-	chrome_bar = top
-	_fit_chrome()
-	get_viewport().size_changed.connect(_fit_chrome)
-	region_label = Label.new()
-	region_label.add_theme_color_override("font_color", Tokens.ACCENT)
-	region_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top.add_child(region_label)
-	speed_label = Label.new()
-	speed_label.add_theme_color_override("font_color", Tokens.MUT)
-	speed_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	speed_label.text = "×1"
-	top.add_child(speed_label)
+func _autosave() -> void:
+	if session == null or shot_mode or not session.autosave:
+		return
+	session.save_game()
+	_autosave_t = 0.0
+	_saved_day = int(session.sim.time.day)
 
-func _fit_chrome() -> void:
-	chrome_bar.position = Vector2.ZERO
-	chrome_bar.size = Vector2(get_viewport().get_visible_rect().size.x, 28)
-
-func _on_speed_changed(mult: float) -> void:
-	speed_label.text = "⏸ пауза" if mult == 0.0 else "×%d" % int(mult)
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_autosave()   # quitting keeps the world (the web build relies on the timed saves)
 
 # A panel emitted an intent (e.g. the ResearchPanel's enqueue_research); dispatch it through the router.
 func _route_intent(verb: StringName, args: Dictionary) -> void:
@@ -178,20 +179,23 @@ func _process(dt: float) -> void:
 	if sdt > 0.0 and not session.sim.dead:
 		session.sim.update(sdt)
 		session.tick_research(sdt)    # research benches fund the tech pipeline each frame
+	session.tick_goals(dt)            # onboarding goals observe the world (real time, ~2×/s)
 	CatalogSim.shared().tick(sdt)     # advance the forward-engine catalogue model
 	cam.global_position = Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE)
 	view.queue_redraw()
+	# VIEW state for this frame's snapshot (hud_root runs after us: parent before child)
+	hud_root.view_ctx = {"hover": view.hover, "hover_world": winput.hover_world(),
+		"in_world": winput.mouse_in_world and not session.sim.dead,
+		"selected_build": String(view.selected_build), "speed": winput.speed}
 	overlay_host.map_n = int(session.sim.n)   # keep in lockstep with the live region (survives travel)
 	overlay_host.snap = hud_root.last_snap
 	overlay_host.queue_redraw()
 	death_screen.visible = session.sim.dead
-	var reg: Dictionary = hud_root.last_snap.get("region", {})
-	if not reg.is_empty():
-		var rk := "%s|%d" % [String(reg.name), int(reg.seed)]
-		if rk != _region_key:   # адреса міняється лише на travel/respawn — не форматуємо щокадру
-			_region_key = rk
-			region_label.text = "%s · seed %s" % [Fmt.region_line(String(reg.name), float(reg.lat), float(reg.lon)),
-				Fmt.seed_hex(int(reg.seed))]
+	if session.sim.dead:
+		death_screen.bind(hud_root.last_snap.get("death", {}))
+	_autosave_t += dt
+	if _autosave_t >= AUTOSAVE_EVERY or int(session.sim.time.day) != _saved_day:
+		_autosave()
 	if shot_mode:
 		_shot_step(dt)
 

@@ -90,12 +90,14 @@ class VitalsPanel extends PanelBase.Base:
 		var bars: Array = v.bars
 		for i in mini(_bars.size(), bars.size()):
 			_bars[i].bind(bars[i])
-		_felt.set_value("%d°C %s" % [int(round(float(v.get("felt_c", 20.0)))), Fmt.comfort_icon(StringName(v.get("comfort", &"ok")))])
+			_bars[i].tooltip_text = "%s: %d%%" % [String(bars[i].get("label", "")), int(bars[i].get("pct", 0))]
+		_felt.set_value("%s %s" % [Fmt.temp(float(v.get("felt_c", 20.0))), Fmt.comfort_icon(StringName(v.get("comfort", &"ok")))])
 		var conds: Array = v.get("conditions", [])
 		var state_line: String = "😵 непритомний" if bool(v.get("downed", false)) else ("✔ здоровий" if conds.is_empty() else String(conds[0]))
 		if not conds.is_empty() and bool(v.get("downed", false)):
 			state_line += " · " + String(conds[0])
 		_state.set_value(state_line)
+		_state.tooltip_text = "\n".join(conds) if not conds.is_empty() else "Жодних уражень"
 		var carry: Dictionary = v.carry
 		_carry.set_value("%d/%d" % [int(carry.cur), int(carry.cap)])
 
@@ -206,7 +208,13 @@ class ResearchPanel extends PanelBase.Base:
 	var _rows: Array = []      # ChoiceRow pool (researchable options), built ONCE (R2)
 	var _qrows: Array = []     # StatRow pool (the queue)
 	func _init() -> void:
-		panel_id = &"research"; dock = PanelBase.DOCK_LEFT; priority = 20; default_open = true
+		panel_id = &"research"; dock = PanelBase.DOCK_LEFT; priority = 20; default_open = false
+		reveal_once = true   # pips into view with the first research bench (design-system §2)
+	func wants_reveal(vm) -> bool:
+		if not (vm is Dictionary) or not vm.has("research"):
+			return false
+		var r: Dictionary = vm.research
+		return bool(r.get("wired", false)) and (float(r.get("rate", 0.0)) > 0.0 or int(r.get("unlocked", 0)) > 0)
 	func _build() -> void:
 		rebuild_count += 1
 		var vb := VBoxContainer.new()
@@ -306,15 +314,9 @@ class BuildBarPanel extends PanelBase.Base:
 			hb.add_child(btn)
 			_btns.append(btn)
 			_keys.append("")
-	# LOCAL radio: arming slot i visually un-presses the rest; clicking the armed slot again disarms.
-	# Either way the SAME intent fires — the router toggles view.selected_build (the actual truth).
-	# NOTE: the pressed look is purely local, so digits 1..0 armed via the keyboard router won't sync
-	# the bar's visuals — acceptable for now.
+	# The SAME intent the digit keys fire — the router toggles view.selected_build (the one truth),
+	# and the next bind() re-reads it from vm.build.slots[].selected, so mouse and keyboard can't drift.
 	func _on_slot(i: int) -> void:
-		if _btns[i].button_pressed:
-			for j in _btns.size():
-				if j != i:
-					_btns[j].button_pressed = false
 		emit_intent(&"select_build", {"kind": String(_keys[i])})
 	func bind(vm) -> void:
 		rebind_count += 1
@@ -330,6 +332,8 @@ class BuildBarPanel extends PanelBase.Base:
 				var name := ("🔒 " + String(s.get("name", ""))) if locked else String(s.get("name", ""))
 				_btns[i].text = "%s %s\n%s" % [String(s.get("hotkey", "")), name, String(s.get("cost", ""))]
 				_btns[i].disabled = locked   # замок дерева досліджень: слот видно (ціль!), тиснути — ні
+				_btns[i].set_pressed_no_signal(bool(s.get("selected", false)))
+				_btns[i].tooltip_text = String(s.get("tip", ""))
 				_btns[i].modulate = Tokens.WHITE if (bool(s.get("afford", false)) and not locked) else Tokens.DIMMED
 				_btns[i].visible = true
 			else:
@@ -400,3 +404,139 @@ class GearPanel extends PanelBase.Base:
 			_crafts[i].disabled = not afford
 			_crafts[i].modulate = Tokens.WHITE if afford else Tokens.DIMMED
 			_equips[i].disabled = not bool(rw.get("owned", false))
+
+# ---- TopBarPanel (TOP dock) — design-system §2 TOP BAR: 🕓 day/clock · ☀/🌙 phase · season ·
+# ⛅ weather · 🌡 outdoor °C · 📍 region — plus the time chips (⏸ ×1 ×2 ×3). Reads vm.clock/env/
+# region/speed (value data); a chip click emits set_speed (view state, bound by the entry scene). ----
+class TopBarPanel extends PanelBase.Base:
+	const CHIPS := [0.0, 1.0, 2.0, 3.0]
+	var _clock: Label
+	var _season: Label
+	var _weather: Label
+	var _temp: Label
+	var _region: Label
+	var _chips: Array = []
+	func _init() -> void:
+		panel_id = &"top_bar"; dock = PanelBase.DOCK_TOP; priority = 0; default_open = true
+	func _build() -> void:
+		rebuild_count += 1
+		var hb := HBoxContainer.new()
+		hb.add_theme_constant_override("separation", 12)
+		add_child(hb)
+		_clock = _cell(hb, "Час доби й номер дня. Доба — 2.5 хв на ×1.")
+		_season = _cell(hb, "Сезон за справжньою широтою регіону.")
+		_weather = _cell(hb, "Погода регіону (сніг/дощ — вогкість; мороз — різке похолодання).")
+		_temp = _cell(hb, "Температура надворі. Що відчуває тіло — у панелі «Життєві»; карта тепла — T.")
+		_region = _cell(hb, "")
+		_region.add_theme_color_override("font_color", Tokens.ACCENT)
+		var chips := HBoxContainer.new()
+		chips.add_theme_constant_override("separation", 2)
+		hb.add_child(chips)
+		for m in CHIPS:
+			var b := Button.new()
+			b.toggle_mode = true
+			b.focus_mode = Control.FOCUS_NONE   # Space must stay the pause key, not «press focused chip»
+			b.text = "⏸" if m == 0.0 else "×%d" % int(m)
+			b.tooltip_text = "Пауза (Space)" if m == 0.0 else "Швидкість ×%d (+/−)" % int(m)
+			b.add_theme_font_size_override("font_size", 12)
+			b.pressed.connect(_on_chip.bind(m))
+			chips.add_child(b)
+			_chips.append(b)
+	func _cell(parent: Control, tip: String) -> Label:
+		var l := Label.new()
+		l.tooltip_text = tip
+		l.mouse_filter = Control.MOUSE_FILTER_PASS
+		parent.add_child(l)
+		return l
+	func _on_chip(mult: float) -> void:
+		emit_intent(&"set_speed", {"mult": mult})
+	func bind(vm) -> void:
+		rebind_count += 1
+		build_once()
+		if not (vm is Dictionary) or not vm.has("clock"):
+			return
+		var c: Dictionary = vm.clock
+		var phase: StringName = StringName(c.get("phase", &"day"))
+		_clock.text = "%s День %d · %s" % [Fmt.phase_icon(phase), int(c.get("day", 1)), String(c.get("hhmm", ""))]
+		var season := String(c.get("season", ""))
+		_season.text = "%s %s" % [Fmt.season_icon(season), season] if season != "" else ""
+		_season.visible = season != ""
+		var env: Dictionary = vm.get("env", {})
+		_weather.text = Fmt.weather_label(StringName(env.get("weather", &"clear")))
+		var t: float = float(env.get("temp_c", 15.0))
+		var anomaly: float = float(env.get("anomaly_c", 0.0))
+		_temp.text = "🌡 %s%s" % [Fmt.temp(t), " ⚠" if anomaly < 0.0 else ""]
+		var heat: Dictionary = vm.get("heat", {})
+		var lo: float = float(heat.get("comfort_min", 12.0))
+		var hi: float = float(heat.get("comfort_max", 30.0))
+		_temp.add_theme_color_override("font_color", Tokens.TEAL if t < lo else (Tokens.CRIT if t > hi else Tokens.INK))
+		var reg: Dictionary = vm.get("region", {})
+		if not reg.is_empty():
+			_region.text = "📍 %s" % String(reg.get("name", ""))
+			_region.tooltip_text = "%s · seed %s — координати = seed світу: ними можна ділитися" % [
+				Fmt.region_line(String(reg.get("name", "")), float(reg.get("lat", 0.0)), float(reg.get("lon", 0.0))),
+				Fmt.seed_hex(int(reg.get("seed", 0)))]
+		var speed: float = float(vm.get("speed", 1.0))
+		for i in _chips.size():
+			_chips[i].set_pressed_no_signal(is_equal_approx(float(CHIPS[i]), speed))
+
+# ---- GoalsPanel (LEFT dock, J) — the onboarding chain made visible: the current goal, HOW to do it
+# (keys named), its live progress and what comes next. Reads vm.goals (session goals_view, R8). ----
+class GoalsPanel extends PanelBase.Base:
+	var _count: Widgets.H2Header
+	var _title: Label
+	var _hint: Label
+	var _bar: Widgets.NeedBar
+	var _next: Label
+	func _init() -> void:
+		panel_id = &"goals"; dock = PanelBase.DOCK_LEFT; priority = 15; hotkey = KEY_J; default_open = true
+	func _build() -> void:
+		rebuild_count += 1
+		var vb := VBoxContainer.new()
+		vb.add_theme_constant_override("separation", 4)
+		add_child(vb)
+		_count = Widgets.H2Header.new()
+		vb.add_child(_count); _count.set_header("Цілі", "0/0")
+		_title = Label.new()
+		_title.add_theme_font_size_override("font_size", 14)
+		_title.add_theme_color_override("font_color", Tokens.AMBER)
+		vb.add_child(_title)
+		_hint = Label.new()
+		_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_hint.custom_minimum_size = Vector2(210, 0)
+		_hint.add_theme_font_size_override("font_size", 12)
+		_hint.add_theme_color_override("font_color", Tokens.INK)
+		vb.add_child(_hint)
+		_bar = Widgets.NeedBar.new()
+		vb.add_child(_bar)
+		_next = Label.new()
+		_next.add_theme_font_size_override("font_size", 11)
+		_next.add_theme_color_override("font_color", Tokens.DIM)
+		_next.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_next.custom_minimum_size = Vector2(210, 0)
+		vb.add_child(_next)
+	func bind(vm) -> void:
+		rebind_count += 1
+		build_once()
+		if not (vm is Dictionary) or not vm.has("goals"):
+			return
+		var g: Dictionary = vm.goals
+		if not bool(g.get("available", false)):
+			visible = false
+			return
+		_count.set_header("Цілі", "%d/%d" % [int(g.get("done", 0)), int(g.get("total", 0))])
+		if bool(g.get("all_done", false)):
+			_title.text = "🏁 Базу закладено!"
+			_hint.text = "Далі — вільна гра: досліджуй (N/U), торгуй конвоями (M), подорожуй капсулою (V), запроси друзів (O)."
+			_bar.visible = false
+			_next.visible = false
+			return
+		var cur: Dictionary = g.get("current", {})
+		_title.text = String(cur.get("title", ""))
+		_hint.text = String(cur.get("hint", ""))
+		var pct: int = int(round(float(cur.get("pct", 0.0)) * 100.0))
+		_bar.visible = true
+		_bar.bind({"icon": "◎", "pct": pct, "state": &"good" if pct >= 100 else &"warn"})
+		var nxt := String(g.get("next", ""))
+		_next.text = ("далі: " + nxt) if nxt != "" else ""
+		_next.visible = nxt != ""

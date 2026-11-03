@@ -54,8 +54,9 @@ class ClimateModel_Deterministic extends ClimateProvider:
 		var rising: bool = ahead >= here
 		if here >= 0.0:
 			return 2 if not rising else 1   # high & falling = summer, high & rising = late spring
-		return 0 if not rising else 3   # low & rising = winter easing, low & falling = autumn
-		# (a coarse but stable mapping; exact solstice math is not needed for gameplay)
+		return 3 if not rising else 0   # low & falling = autumn, low & rising = winter easing
+		# (a coarse but stable mapping; exact solstice math is not needed for gameplay). The low half
+		# used to be inverted — day 1, the coldest point of the year, was labelled «осінь».
 
 	func daylight(lat: float, day: int, frac: float) -> float:
 		# Longer summer days / shorter winter days, exaggerated toward the poles.

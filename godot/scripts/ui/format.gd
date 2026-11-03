@@ -95,3 +95,106 @@ static func gather_explain_placeholder(t: float) -> String:
 # --- feed category (delegates the color to Tokens.category; here only the label if needed) ---
 static func short_hash(h: String) -> String:
 	return h.substr(0, 8) if h.length() >= 8 else "—"
+
+# --- weather / season / temperature (enum -> icon+label at ONE site, R11) ---
+static func weather_label(w: StringName) -> String:
+	match w:
+		&"rain": return "🌧 дощ"
+		&"snow": return "🌨 сніг"
+		&"fog": return "🌫 туман"
+		&"cold_snap": return "🥶 мороз"
+		_: return "🌤 ясно"
+
+static func season_icon(season: String) -> String:
+	match season:
+		"зима": return "❄"
+		"весна": return "🌱"
+		"літо": return "☀"
+		"осінь": return "🍂"
+		_: return "◌"
+
+# Rounded °C with a real minus sign (a hyphen reads as a dash in the tabular mono font).
+static func temp(t: float) -> String:
+	var r: int = int(round(t))
+	return ("−%d°C" % -r) if r < 0 else ("%d°C" % r)
+
+# Speed chip text (×N or pause) — the same words the top bar and the help sheet use.
+static func speed_label(mult: float) -> String:
+	return "⏸ пауза" if mult <= 0.0 else "×%d" % int(mult)
+
+# --- inspect vocabulary (design-system §5 «inspect = hover») ---
+static func node_title(kind: String) -> String:
+	match kind:
+		"tree": return "🌲 Дерево"
+		"rock": return "🪨 Скеля"
+		"bush": return "🫐 Кущ"
+		"scrap": return "⚙ Руїни Старого світу"
+		_: return kind
+
+static func node_verb(kind: String) -> String:
+	match kind:
+		"tree": return "рубати"
+		"rock": return "добувати камінь"
+		"bush": return "збирати ягоди"
+		"scrap": return "розбирати брухт"
+		_: return "добувати"
+
+static func terrain_title(name: String) -> String:
+	return name.substr(0, 1).to_upper() + name.substr(1) if name != "" else "Земля"
+
+# What a building DOES, derived from its def CAPABILITIES (the trap_dps/extra.heat pattern): a new
+# def carrying the same capability reads right without editing this function.
+static func building_blurb(kind: String, def: Dictionary, heat_radius: int = 6) -> String:
+	var parts: Array = []
+	var extra: Dictionary = def.get("extra", {})
+	if kind.begins_with("door"):
+		parts.append("прохід — кімната лишається замкненою")
+	elif kind == "wall" or kind.ends_with("_wall"):
+		parts.append("замикає кімнату — всередині тепліше")
+	if def.has("capacity"):
+		parts.append("+%d місця; тут пішак здає вантаж і їсть" % int(def.capacity))
+	if bool(def.get("craft", false)):
+		parts.append("сам робить дошки з дерева; крафт спорядження (I)")
+	if bool(def.get("bed", false)):
+		parts.append("сон відновлює сили й лікує рани")
+	if float(def.get("research_rate", 0.0)) > 0.0:
+		parts.append("дає очки досліджень")
+	if float(extra.get("heat", 0.0)) > 0.0:
+		parts.append("гріє +%d°C на %d клітин" % [int(extra.heat), heat_radius])
+	if bool(extra.get("light", false)):
+		parts.append("світить уночі")
+	if float(def.get("trap_dps", 0.0)) > 0.0:
+		parts.append("ранить ворогів на проході")
+	if float(def.get("range", 0.0)) > 0.0:
+		parts.append("стріляє по ворогах (радіус %.0f)" % float(def.range))
+	if bool(def.get("grow", false)):
+		parts.append("грядка: клік — обрати культуру")
+	return " · ".join(parts)
+
+# Missing materials for a cost against a stock map ({} when affordable). Value-in, value-out.
+static func shortfall(cost: Dictionary, have: Dictionary) -> Dictionary:
+	var out: Dictionary = {}
+	for k in cost:
+		var need: int = int(cost[k]) - int(have.get(k, 0))
+		if need > 0:
+			out[k] = need
+	return out
+
+# One condition row (HeroHealth.condition_rows value data) -> icon + label + percent (R11: never a
+# bare colour; the old line read «переохолодження: тяж.0.44»).
+static func condition_text(row: Dictionary) -> String:
+	var pct: int = int(round(float(row.get("sev", 0.0)) * 100.0))
+	var label := String(row.get("label", ""))
+	var part := String(row.get("part", ""))
+	match String(row.get("kind", "")):
+		"hypothermia": return "❄ переохолодження %d%%" % pct
+		"heatstroke": return "🥵 перегрів %d%%" % pct
+		"malnutrition": return "🍖 виснаження %d%%" % pct
+		"exhaustion": return "💤 недосип %d%%" % pct
+		"disease": return "🦠 %s %d%% · імунітет %d%%" % [label, pct, int(round(float(row.get("extra", 0.0)) * 100.0))]
+		"injury":
+			var inf: float = float(row.get("extra", 0.0))
+			return "🩹 %s: %s %d%%%s" % [label, part, pct, (" · інфекція %d%%" % int(round(inf * 100.0))) if inf >= 0.1 else ""]
+		"scar": return "〰 шрам: %s" % part
+		"implant": return "🦾 %s: %s" % [label, part]
+	return "%s %d%%" % [label, pct]

@@ -7,7 +7,12 @@
 extends Node2D
 
 const ViewGeom = preload("res://scripts/ui/view_geom.gd")
+const Overlays = preload("res://scripts/ui/overlays.gd")
 const TILE := ViewGeom.TILE
+
+# The always-on atmosphere pass (not a registry overlay — it owns no hotkey): the night, with light
+# pools around every active light source. Drawn first so a radio overlay reads on top of it.
+var night: Variant = Overlays.NightShade.new()
 
 var oreg: Variant                 # OverlayRegistry
 var snap: Dictionary = {}         # latest HudModel snapshot (env/clock the overlays read; R12)
@@ -23,5 +28,6 @@ func _draw() -> void:
 		cull = ViewGeom.cull_rect(cam.get_screen_center_position(), cam.zoom, get_viewport_rect().size, map_n, TILE)
 	else:
 		cull = ViewGeom.full_rect(map_n)
+	night.draw_overlay(self, snap, cull)
 	for o in oreg.active_and_markers():
 		o.draw_overlay(self, snap, cull)

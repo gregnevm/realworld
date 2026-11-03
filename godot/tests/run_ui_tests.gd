@@ -31,6 +31,8 @@ const Mechanics = preload("res://scripts/ui/mechanics.gd")
 const Sim = preload("res://scripts/sim.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
 const CatalogDefs = preload("res://scripts/catalog_defs.gd")
+const HudRootScript = preload("res://scripts/ui/hud_root.gd")
+const SessionScript = preload("res://scripts/session.gd")
 
 
 func _init() -> void:
@@ -60,6 +62,11 @@ func _init() -> void:
 	_t_hotkey_contract()
 	_t_bus_no_dangling()
 	_t_world_input_grammar()
+	_t_playability_grammar()
+	_t_inspect_slice()
+	_t_feedback_mounted()
+	_t_frame_panels()
+	_t_one_truth_overlays()
 	_t_rule_tripwires()
 	# release the process-shared forward-engine model: its placed Things carry comp back-references
 	# (RefCounted cycles) that would otherwise show up as ObjectDB leaks at exit
@@ -615,6 +622,168 @@ func _t_world_input_grammar() -> void:
 	ok(WI.build_slot_for_key(KEY_1) == 0 and WI.build_slot_for_key(KEY_9) == 8
 		and WI.build_slot_for_key(KEY_0) == 9 and WI.build_slot_for_key(KEY_SPACE) == -1,
 		"digit keys map to build-bar slots (1..9,0)")
+
+# ================= грабельність (playability) — the frame the player actually reads =================
+# A flat 16×16 grass sim (Kyiv coordinates) for slices that need the real sim API.
+func _live_sim(day: int = 195) -> Variant:
+	var nn := 16
+	var tiles := PackedByteArray()
+	tiles.resize(nn * nn)
+	tiles.fill(WorldGen.GRASS)
+	var s = Sim.new()
+	s.new_game({"n": nn, "tiles": tiles, "nodes": {}, "spawn": Vector2i(8, 8), "lat": 50.4501, "lon": 30.5234})
+	s.time.day = day
+	s.time.frac = 0.5
+	s.patrol.next = 1e9
+	return s
+
+# ---- the input grammar the player's hands learn: pause, speed, painting runs ----
+func _t_playability_grammar() -> void:
+	var WI := WorldInput.WorldInput
+	var r: Dictionary = WI.next_speed(1.0, 1.0, &"toggle_pause")
+	ok(float(r.speed) == 0.0 and float(r.last) == 1.0, "Space pauses in ONE press (the old cycle needed three)")
+	r = WI.next_speed(0.0, 2.0, &"toggle_pause")
+	ok(float(r.speed) == 2.0, "Space resumes at the speed you paused from (×2)")
+	ok(float(WI.next_speed(1.0, 1.0, &"faster").speed) == 2.0 and float(WI.next_speed(3.0, 3.0, &"faster").speed) == 3.0,
+		"+ steps up and clamps at ×3")
+	ok(float(WI.next_speed(2.0, 2.0, &"slower").speed) == 1.0 and float(WI.next_speed(1.0, 1.0, &"slower").speed) == 1.0,
+		"− steps down and never pauses by accident")
+	ok(float(WI.next_speed(0.0, 2.0, &"faster").speed) == 3.0, "+ while paused resumes one step faster")
+	r = WI.next_speed(1.0, 1.0, &"set", 0.0)
+	ok(float(r.speed) == 0.0 and float(r.last) == 1.0, "the ⏸ chip pauses and remembers the running speed")
+	ok(WI.paintable("wall") and WI.paintable("floor") and WI.paintable("stone_wall") and WI.paintable("power_conduit"),
+		"walls/floors/cables paint as runs (§5 drag = build run)")
+	ok(not WI.paintable("workbench") and not WI.paintable("bed") and WI.paintable("bed", {"paint": true}),
+		"single objects stay one-click unless a def opts in")
+	var run: Array = WI.line_cells(Vector2i(0, 0), Vector2i(4, 0))
+	ok(run.size() == 5 and run[0] == Vector2i(0, 0) and run[4] == Vector2i(4, 0), "a straight drag paints every cell of the run")
+	var diag: Array = WI.line_cells(Vector2i(0, 0), Vector2i(2, 2))
+	var four_conn := true
+	for i in range(1, diag.size()):
+		var d: Vector2i = diag[i] - diag[i - 1]
+		if absi(d.x) + absi(d.y) != 1:
+			four_conn = false
+	ok(four_conn and diag[diag.size() - 1] == Vector2i(2, 2), "a diagonal drag stays 4-connected (no corner gap leaks room air)")
+
+# ---- inspect = hover: the tooltip predicts the click ----
+func _t_inspect_slice() -> void:
+	var s = _live_sim()
+	s.map.nodes[3 * 16 + 3] = {"kind": "tree", "amount": 12}
+	var vm: Dictionary = HudModel._inspect_slice(s, {"hover": Vector2i(3, 3)})
+	ok(bool(vm.shown) and "Дерево" in String(vm.title) and "12" in String(vm.lines[0]) and "ЛКМ" in String(vm.hint),
+		"hovering a tree names it, its yield and the click")
+	vm = HudModel._inspect_slice(s, {})
+	ok(not bool(vm.shown), "no hover in ctx -> hidden tooltip")
+	var bot: Dictionary = GameData.make_patrol_bot(10.5, 3.5, 1)
+	s.enemies.append(bot)
+	vm = HudModel._inspect_slice(s, {"hover": Vector2i(10, 3), "hover_world": Vector2(10.5, 3.4)})
+	ok("робот" in String(vm.title) and "атакувати" in String(vm.hint), "hovering an enemy offers the attack")
+	s.enemies.clear()
+	s.map.tiles[5 * 16 + 5] = WorldGen.WATER
+	vm = HudModel._inspect_slice(s, {"hover": Vector2i(5, 5), "selected_build": "wall"})
+	ok(StringName(vm.state) == &"crit" and "вода" in " ".join(vm.lines), "a ghost over water says WHY it can't land")
+	s.stock[s.res_key("stone")] = 0
+	vm = HudModel._inspect_slice(s, {"hover": Vector2i(6, 6), "selected_build": "wall"})
+	ok("бракує" in " ".join(vm.lines), "a ghost you can't afford names the shortfall")
+	s.stock[s.res_key("stone")] = 30
+	vm = HudModel._inspect_slice(s, {"hover": Vector2i(6, 6), "selected_build": "wall"})
+	ok(StringName(vm.state) == &"good" and "затисни" in String(vm.hint), "a valid wall ghost is green and teaches the drag")
+	vm = HudModel._inspect_slice(s, {"hover": Vector2i(9, 8)})   # the starting storage
+	ok("розібрати" in String(vm.hint) or "єдиний склад" in String(vm.hint), "hovering a building explains deconstruction")
+	vm = HudModel._inspect_slice(s, {"hover": Vector2i(1, 12)})
+	ok("°C" in String(vm.lines[0]) and "іти" in String(vm.hint), "bare ground reads its temperature and the walk order")
+	s.dispose_farm()
+	s.dispose_power()
+
+# ---- the §2.7 channels are MOUNTED in the playable frame (they used to exist only in tests) ----
+func _t_feedback_mounted() -> void:
+	var hr = HudRootScript.new()
+	var bus = FeedbackBus.FeedbackBus.new()
+	var preg = PanelReg.PanelRegistry.new()
+	hr.setup(_fake_session(), Balance.Balance.new(), bus, preg, null)
+	hr.mount()
+	hr.mount()   # idempotent: a second mount must not double-subscribe
+	ok(hr.feed_w != null and hr.flash_w != null and hr.banner_w != null and hr.tip_w != null, "HudRoot mounts feed/flash/banner/tooltip")
+	ok(bus.feed.get_connections().size() == 1 and bus.flash.get_connections().size() == 1 and bus.banner.get_connections().size() == 1,
+		"each channel subscribed exactly once")
+	for i in 8:
+		bus.feed.emit({"cls": "good", "text": "подія %d" % i})
+	var vis: Array = hr.feed_w.visible_texts()
+	ok(vis.size() == Widgets.FeedWidget.POOL and String(vis[vis.size() - 1]) == "подія 7", "the feed keeps a fixed pool, newest last")
+	bus.flash.emit({"params": {"text": "Бракує: 🪨5"}})
+	ok(hr.flash_w.text == "Бракує: 🪨5" and hr.flash_w.visible, "a refusal reaches the player as a flash")
+	bus.banner.emit({"status": &"raid_incoming", "params": {"text": "⚠ НАБЛИЖАЄТЬСЯ РЕЙД"}})
+	ok(hr.banner_w.visible and hr.banner_w.status == &"raid_incoming", "the raid banner shows with its urgency")
+	hr.free()
+	ok(bus.feed.get_connections().size() == 0, "freeing the HUD leaves no dangling feed subscriber")
+
+# ---- top bar / goals / build bar / research reveal bound from a REAL session snapshot ----
+func _t_frame_panels() -> void:
+	var sess = SessionScript.new()
+	sess.autosave = false
+	sess.start(50.4501, 30.5234, "Київ")
+	var snap: Dictionary = HudModel.snapshot(sess, HudModel.world_of(sess.sim), {"day": 1, "speed": 2.0, "selected_build": "wall"}, Balance.Balance.new())
+	ok(String(snap.clock.season) == "зима" and float(snap.env.temp_c) < 0.0, "the snapshot carries the real season + outdoor °C (env was hardwired to 15°C)")
+	var top = Panels.TopBarPanel.new()
+	top.bind(snap)
+	ok("День 1" in top._clock.text and "−" in top._temp.text and "Київ" in top._region.text, "top bar: day/clock, °C with a real minus, region")
+	ok(top._chips[2].button_pressed and not top._chips[1].button_pressed, "top bar chips follow the live speed (×2)")
+	var goals = Panels.GoalsPanel.new()
+	goals.bind(snap)
+	ok("багаття" in goals._title.text and "9" in goals._hint.text, "goals panel opens on «light a fire» and names the key")
+	var bar = Panels.BuildBarPanel.new()
+	bar.bind(snap)
+	ok(bar._btns[0].button_pressed and not bar._btns[1].button_pressed, "build bar pressed state mirrors the armed ghost (digits sync)")
+	var research = Panels.ResearchPanel.new()
+	var preg = PanelReg.PanelRegistry.new()
+	preg.register(research)
+	research.visible = research.default_open
+	preg.bind_visible(snap)
+	ok(not research.visible, "research panel waits for its first bench (design-system §2 first relevance)")
+	sess.sim._place_building("research_bench", 3, 3, -1)
+	snap = HudModel.snapshot(sess, HudModel.world_of(sess.sim), {"day": 1}, Balance.Balance.new())
+	preg.bind_visible(snap)
+	ok(research.visible and research.revealed, "…and pips into view once a bench works")
+	research.visible = false
+	preg.bind_visible(snap)
+	ok(not research.visible, "after the reveal the player owns its visibility (no re-pop)")
+	for pnl in [top, goals, bar, research]:
+		pnl.free()
+	sess.sim.dispose_farm()
+	sess.sim.dispose_power()
+
+# ---- one truth: the night the player SEES == the light the work penalty USES; the heat map == temp_at ----
+func _t_one_truth_overlays() -> void:
+	var s = _live_sim()
+	s.time.frac = 0.95   # deep night
+	s._place_building("torch", 4, 4, -1)
+	s._place_building("campfire", 11, 11, -1)
+	for w in [Vector2i(1, 2), Vector2i(3, 2), Vector2i(2, 1)]:
+		s._place_building("wall", w.x, w.y, -1)
+	s._place_building("door", 2, 3, -1)
+	var snap: Dictionary = HudModel.snapshot(_session_of(s), HudModel.world_of(s), {"day": 195}, null)
+	var lt: Dictionary = snap.light
+	var heat: Dictionary = snap.heat
+	var indoor: Dictionary = {}
+	for c in heat.indoor:
+		indoor[int(c)] = true
+	var light_ok := true
+	var heat_ok := true
+	for y in 16:
+		for x in 16:
+			if absf(Overlays.Lit.tile_light(float(lt.ambient), lt.sources, x, y) - s.light_at(x, y)) > 0.001:
+				light_ok = false
+			if absf(Overlays.TemperatureOverlay.tile_temp(heat, indoor, x, y, 16) - s.temp_at(x, y)) > 0.001:
+				heat_ok = false
+	ok(light_ok and lt.sources.size() == 2, "night shade light == sim.light_at on every tile (torch + campfire pools)")
+	ok(heat_ok and indoor.has(2 * 16 + 2), "heat map == sim.temp_at on every tile (room buffering + emitters)")
+	s.dispose_farm()
+	s.dispose_power()
+
+func _session_of(sim) -> Variant:
+	var fs := _FakeSession.new()
+	fs.sim = sim
+	return fs
 
 # ---------------- Rule tripwires: R1/R3/R4/R7/R9/R10 as literal grep tests (the spec's whole point) ----------------
 func _t_rule_tripwires() -> void:

@@ -25,7 +25,12 @@ class PanelRegistry extends RefCounted:
 
 	func bind_visible(snap: Dictionary) -> void:      # the view's tick_all: skip hidden panels
 		for p in panels:
-			if is_instance_valid(p) and p.visible:
+			if not is_instance_valid(p):
+				continue
+			if not p.visible and p.reveal_once and not p.revealed and p.wants_reveal(snap):
+				p.visible = true                         # first relevance: pip into view, once
+				p.revealed = true
+			if p.visible:
 				p.bind(snap)
 
 	func toggle(id: StringName) -> void:              # show/hide ONLY — never rebuild (R2)

@@ -34,6 +34,12 @@ const PART_WEIGHTS := [
 # Alert thresholds: a condition toasts once at onset and once more when it turns severe.
 const ALERT_ONSET := 0.15
 const ALERT_SEVERE := 0.5
+# Exposure pacing (playability): the kernel comfort curve is per GAME-DAY, and the live game-day is
+# only 150 s — at the raw curve an unprepared pawn froze in 86–229 real seconds on EVERY spawn preset
+# (Kyiv day 1 ≈ 115 s), before a new player could read the feed. 0.4 slows only the ONSET (recovery
+# keeps the kernel's fast warm-up): idle death in deep winter now takes ~1.3–2 game-days (Reykjavik
+# → Kyiv), enough to light a fire and wall a room. Shelter + heat is still the only real answer.
+const EXPOSURE_PACE := 0.4
 
 # ---------------- lifecycle ----------------
 static func ensure(s) -> void:
@@ -54,7 +60,7 @@ static func update(s, dt: float) -> void:
 	# 1) empty needs become located conditions (starvation kills; sleeplessness collapses)
 	Needs.update_deprivation(tracker, float(p.hunger) / 100.0, float(p.rest) / 100.0, dday)
 	# 2) the region's real climate bites: felt °C = tile temp (indoor buffering + emitters) + gear
-	Gear.update_comfort(tracker, s.hero_temp_c(), s.hero_insulation_c(), dday)
+	Gear.update_comfort(tracker, s.hero_temp_c(), s.hero_insulation_c(), dday, EXPOSURE_PACE)
 	# 3) injuries heal/bleed/fester, blood moves, downed recomputes
 	tracker.tick({"dday": dday})
 	Gear.resolve_to_scar(tracker)
@@ -81,6 +87,7 @@ static func update(s, dt: float) -> void:
 	var cause: String = death_cause(tracker)
 	if cause != "" and not s.dead:
 		p.hp = 0.0
+		_epitaph(s, cause)
 		s._log("☠ Причина смерті: %s." % cause, "bad")
 		s._on_death()
 		return
@@ -116,6 +123,7 @@ static func damage(s, amt: float, label: String = "удар") -> void:
 	var cause: String = death_cause(s.health)
 	if cause != "" and not s.dead:
 		s.player.hp = 0.0
+		_epitaph(s, cause)
 		s._log("☠ Причина смерті: %s." % cause, "bad")
 		s._on_death()
 		return
@@ -204,6 +212,44 @@ static func condition_lines(s, cap: int = 4) -> Array:
 	for i in mini(cap, rows.size()):
 		out.append(String(rows[i][1]))
 	return out
+
+# Value-data rows for the HUD (worst first, capped): a kind tag + the kernel label + a 0..1 urgency
+# the view renders as icon + label + percent (R11). Injuries normalise by the part's max hp.
+static func condition_rows(s, cap: int = 4) -> Array:
+	if s.health == null:
+		return []
+	var rows: Array = []
+	for h in s.health.hediffs:
+		if _is_condition(h) and float(h.severity) < CONDITION_SHOW_MIN:
+			continue   # the same readout floor as condition_lines: below it, noise — not a state
+		var kind := "condition"
+		var urgency: float = clampf(float(h.severity), 0.0, 1.0)
+		var part_label: String = String(h.part.label) if h.part != null else ""
+		var extra := 0.0
+		if h is Gear.Hediff_Hypothermia:
+			kind = "hypothermia"
+		elif h is Gear.Hediff_Heatstroke:
+			kind = "heatstroke"
+		elif h is Needs.Hediff_Malnutrition:
+			kind = "malnutrition"
+		elif h is Needs.Hediff_Exhaustion:
+			kind = "exhaustion"
+		elif h is Gear.Hediff_Scar:
+			kind = "scar"
+			urgency = 0.0
+		elif h is Gear.Hediff_Implant:
+			kind = "implant"
+			urgency = 0.0
+		elif h is Health.Hediff_Disease:
+			kind = "disease"
+			extra = float(h.immunity)
+		elif h is Health.Hediff_Injury:
+			kind = "injury"
+			urgency = clampf(float(h.severity) / maxf(1.0, float(h.part.max_hp) if h.part != null else 30.0), 0.0, 1.0)
+			extra = float(h.infection)
+		rows.append({"kind": kind, "label": String(h.label), "part": part_label, "sev": urgency, "extra": extra})
+	rows.sort_custom(func(a, b): return float(a.sev) > float(b.sev))
+	return rows.slice(0, cap)
 
 # ---------------- serialization (save / travel / rejoin) ----------------
 # Value-dict of the whole tracker. Typed by a `t` tag per hediff; scar_watch travels as part keys so
@@ -316,11 +362,15 @@ static func _cap_list(names: Array) -> Array:
 static func spawn_hint(s) -> void:
 	var felt: float = s.hero_felt_c()
 	if felt < Gear.COMFORT_MIN_C:
-		s._log("❄ Тут холодно (%.0f°C). Багаття, стіни й обігрівачі тримають тепло." % felt, "warn")
+		s._log("❄ Тут холодно (%.0f°C): розпали багаття (9), а тоді обнеси клітинку стінами (1) з дверима (2) — у приміщенні тепло тримається." % felt, "warn")   # gdlint: ignore=max-line-length
 	elif felt > Gear.COMFORT_MAX_C:
 		s._log("🥵 Тут спекотно (%.0f°C). Приміщення дає прохолоду." % felt, "warn")
 
 # ---------------- internals ----------------
+# The death screen's value data: what ended the pawn, when, and since when it lived.
+static func _epitaph(s, cause: String) -> void:
+	s.last_death = {"cause": cause, "day": int(s.time.day), "born": int(s.player.get("born", int(s.time.day)))}
+
 # 0.0 == no bed near; else the best nearby bed's tend-quality multiplier (a plain bed is 1.0, the
 # catalogue medical beds carry medbed_mult > 1 through the def seam).
 static func _bed_mult(s) -> float:

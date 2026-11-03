@@ -1,9 +1,9 @@
 # RealWorld — ui/overlays.gd : concrete world overlays (spec 0005 §2.8), all inner classes.
 #
-# Each `extends OverlayBase.Overlay`. The first, LightOverlay, reimplements main.gd's night_rect
-# darkening as a world-space overlay in the newhud OverlayHost (main.gd's own night_rect stays live
-# until Batch 7). Colors come ONLY from Tokens (R3): Tokens.with_alpha keeps the Color() literal in
-# tokens.gd. draw_overlay reads the snapshot (snap.clock.daylight), never a climate provider (R12).
+# Each `extends OverlayBase.Overlay`. NightShade is the always-on ambient night (main.gd's night_rect,
+# now per tile with light pools); L and T are the §3 radio overlays (work-light map, heat map).
+# Colors come ONLY from Tokens (R3): Tokens.with_alpha keeps the Color() literal in tokens.gd.
+# draw_overlay reads the snapshot (snap.light / snap.heat value data), never a climate provider (R12).
 extends RefCounted
 
 const OverlayBase = preload("res://scripts/ui/overlay.gd")
@@ -11,46 +11,132 @@ const Tokens = preload("res://scripts/ui/tokens.gd")
 const ViewGeom = preload("res://scripts/ui/view_geom.gd")
 const TILE := ViewGeom.TILE
 
-# ---- L · Light / night (design-system §3 hotkey L) ----
+# ---- Ambient night (ALWAYS on — not a toggle). Every visible tile darkens by its OWN light level, so
+# campfires, torches and lamps carve warm pools out of the dark: the night the player SEES is the
+# same fold sim.light_at() feeds the work-speed penalty (snap.light = ambient + ACTIVE sources, value
+# data). The OverlayHost draws it before any radio overlay; it is deliberately NOT registered — an
+# always-on atmosphere layer owns no hotkey (the §3 L overlay is the analytic light map below). ----
+class NightShade extends OverlayBase.Overlay:
+	func _init() -> void:
+		overlay_id = &"night"
+		radio = false
+	func draw_overlay(host: CanvasItem, snap: Dictionary, cull: Dictionary) -> void:
+		var lt: Dictionary = snap.get("light", {})
+		var ambient: float = float(lt.get("ambient", 1.0))
+		if ambient >= 0.999:
+			return
+		var night_max: float = float(lt.get("night_max", 0.46))
+		var sources: Array = lt.get("sources", [])
+		var x0: int = int(cull.get("x0", 0))
+		var x1: int = int(cull.get("x1", 0))
+		var base_a: float = snappedf(night_max * (1.0 - ambient), 1.0 / 64.0)
+		for y in range(int(cull.get("y0", 0)), int(cull.get("y1", 0)) + 1):
+			# only the sources whose reach touches this row matter; a row nobody lights is ONE rect
+			var near: Array = []
+			for src in sources:
+				if absi(int(src.y) - y) <= int(ceil(float(src.r))):
+					near.append(src)
+			if near.is_empty():
+				if base_a > 0.0:
+					host.draw_rect(Rect2(x0 * TILE, y * TILE, (x1 - x0 + 1) * TILE, TILE), Tokens.with_alpha(Tokens.NIGHT, base_a))
+				continue
+			# run-length merge equal shades along the row: one rect per run, not one per tile
+			var run_x := x0
+			var run_a := -1.0
+			var run_w := 0.0
+			for x in range(x0, x1 + 2):
+				var a := -2.0
+				var warm := 0.0
+				if x <= x1:
+					var light: float = Lit.tile_light(ambient, near, x, y)
+					a = snappedf(night_max * (1.0 - light), 1.0 / 64.0)
+					warm = snappedf(maxf(0.0, light - ambient) * 0.12, 1.0 / 64.0)
+				if a != run_a or warm != run_w:
+					if run_a > 0.0:
+						host.draw_rect(Rect2(run_x * TILE, y * TILE, (x - run_x) * TILE, TILE), Tokens.with_alpha(Tokens.NIGHT, run_a))
+					if run_w > 0.0:
+						host.draw_rect(Rect2(run_x * TILE, y * TILE, (x - run_x) * TILE, TILE), Tokens.with_alpha(Tokens.AMBER, run_w))
+					run_x = x
+					run_a = a
+					run_w = warm
+
+# Shared light math (sim.light_at parity: Manhattan distance, linear falloff to the source radius).
+class Lit extends RefCounted:
+	static func tile_light(ambient: float, sources: Array, x: int, y: int) -> float:
+		var light := ambient
+		for src in sources:
+			var r: float = float(src.r)
+			var d := float(absi(int(src.x) - x) + absi(int(src.y) - y))
+			if d <= r:
+				light = maxf(light, clampf(1.0 - d / r, 0.0, 1.0))
+		return clampf(light, 0.0, 1.0)
+
+# ---- L · Light (design-system §3 hotkey L) — the WORK-light map: tiles too dark to work at full
+# speed get a cold hatch, every light source shows its reach. Ambient darkness is always drawn by the
+# NightShade above; this layer answers «where can I work tonight?». ----
 class LightOverlay extends OverlayBase.Overlay:
 	func _init() -> void:
 		overlay_id = &"light"
 		hotkey = KEY_L
 		radio = true
 		legend_rows = [
-			{"icon": "🌙", "label": "темрява · −робота"},
-			{"icon": "💡", "label": "лампа — коло світла"},
+			{"icon": "🌙", "label": "темно · робота до +50% довше"},
+			{"icon": "💡", "label": "коло світла (вогонь, смолоскип, лампа)"},
 		]
 	func draw_overlay(host: CanvasItem, snap: Dictionary, cull: Dictionary) -> void:
-		var clock: Dictionary = snap.get("clock", {})
-		var dark: float = float(clock.get("daylight", 0.0))   # 0..0.46 ambient darkening (sim.daylight)
-		if dark <= 0.0:
-			return
-		var x0: int = int(cull.get("x0", 0))
-		var y0: int = int(cull.get("y0", 0))
-		var x1: int = int(cull.get("x1", 0))
-		var y1: int = int(cull.get("y1", 0))
-		var rect := Rect2(x0 * TILE, y0 * TILE, (x1 - x0 + 1) * TILE, (y1 - y0 + 1) * TILE)
-		host.draw_rect(rect, Tokens.with_alpha(Tokens.NIGHT, dark))
+		var lt: Dictionary = snap.get("light", {})
+		var ambient: float = float(lt.get("ambient", 1.0))
+		var threshold: float = float(lt.get("threshold", 0.35))
+		var sources: Array = lt.get("sources", [])
+		for y in range(int(cull.get("y0", 0)), int(cull.get("y1", 0)) + 1):
+			for x in range(int(cull.get("x0", 0)), int(cull.get("x1", 0)) + 1):
+				if Lit.tile_light(ambient, sources, x, y) < threshold:
+					var p := Vector2(x * TILE, y * TILE)
+					host.draw_line(p + Vector2(4, TILE - 4), p + Vector2(TILE - 4, 4), Tokens.with_alpha(Tokens.TEAL, 0.35), 1.0)
+		for src in sources:
+			var c := Vector2((int(src.x) + 0.5) * TILE, (int(src.y) + 0.5) * TILE)
+			host.draw_arc(c, float(src.r) * TILE, 0.0, TAU, 40, Tokens.with_alpha(Tokens.AMBER, 0.7), 2.0)
 
-# ---- T · Temperature (design-system §3 hotkey T) — heat-map placeholder reading snap.env.temp_c ----
+# ---- T · Temperature (design-system §3 hotkey T) — the REAL heat map: outdoor °C, indoor buffering
+# toward the setpoint and every active emitter's reach (snap.heat — the same fold as sim.temp_at, so
+# the map never disagrees with what the body feels). Blue = below comfort, green = in band, red = hot. ----
 class TemperatureOverlay extends OverlayBase.Overlay:
 	func _init() -> void:
 		overlay_id = &"temperature"
 		hotkey = KEY_T
 		radio = true
 		legend_rows = [
-			{"icon": "🟦", "label": "холод"},
-			{"icon": "🟥", "label": "жар"},
+			{"icon": "🟦", "label": "холодно (нижче 12°C, без одягу)"},
+			{"icon": "🟩", "label": "комфорт 12–30°C"},
+			{"icon": "🟥", "label": "спека (понад 30°C)"},
 		]
+	static func tile_temp(heat: Dictionary, indoor: Dictionary, x: int, y: int, n: int) -> float:
+		var t: float = float(heat.get("ambient", 15.0))
+		if indoor.has(y * n + x):
+			t += (float(heat.get("setpoint", 21.0)) - t) * float(heat.get("insulation", 0.6))
+		var reach: int = int(heat.get("radius", 6))
+		for e in heat.get("emitters", []):
+			if absi(int(e.x) - x) + absi(int(e.y) - y) <= reach:
+				t += float(e.heat)
+		return t
 	func draw_overlay(host: CanvasItem, snap: Dictionary, cull: Dictionary) -> void:
-		var env: Dictionary = snap.get("env", {})
-		var t: float = float(env.get("temp_c", 15.0))
-		if t >= 8.0 and t <= 26.0:
-			return   # in comfort band -> nothing to tint (band is legible by absence)
-		var tint: Color = Tokens.with_alpha(Tokens.TEAL if t < 8.0 else Tokens.CRIT, 0.18)
-		var x0: int = int(cull.get("x0", 0))
-		var y0: int = int(cull.get("y0", 0))
-		var x1: int = int(cull.get("x1", 0))
-		var y1: int = int(cull.get("y1", 0))
-		host.draw_rect(Rect2(x0 * TILE, y0 * TILE, (x1 - x0 + 1) * TILE, (y1 - y0 + 1) * TILE), tint)
+		var heat: Dictionary = snap.get("heat", {})
+		if not bool(heat.get("available", false)):
+			return
+		var lo: float = float(heat.get("comfort_min", 12.0))
+		var hi: float = float(heat.get("comfort_max", 30.0))
+		var n: int = int(heat.get("n", 0))
+		var indoor: Dictionary = {}
+		for c in heat.get("indoor", []):
+			indoor[int(c)] = true
+		for y in range(int(cull.get("y0", 0)), int(cull.get("y1", 0)) + 1):
+			for x in range(int(cull.get("x0", 0)), int(cull.get("x1", 0)) + 1):
+				var t := tile_temp(heat, indoor, x, y, n)
+				var col: Color
+				if t < lo:
+					col = Tokens.with_alpha(Tokens.TEAL, clampf(0.12 + (lo - t) / 40.0, 0.12, 0.5))
+				elif t > hi:
+					col = Tokens.with_alpha(Tokens.CRIT, clampf(0.12 + (t - hi) / 30.0, 0.12, 0.5))
+				else:
+					col = Tokens.with_alpha(Tokens.GOOD, 0.16)
+				host.draw_rect(Rect2(x * TILE, y * TILE, TILE, TILE), col)

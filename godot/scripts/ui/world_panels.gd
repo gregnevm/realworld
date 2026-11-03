@@ -274,7 +274,7 @@ class SocialPanel extends PanelBase.Base:
 
 # ---- HelpPanel (RIGHT dock, H) — the static controls sheet; bind() has nothing to mutate ----
 class HelpPanel extends PanelBase.Base:
-	const CONTROLS := "ЛКМ — іти/добувати/атакувати\nПКМ — розібрати будівлю\nколесо — зум · WASD — рух\n1–0 — будувати · Esc — скасувати\nSpace — швидкість/пауза\nL — світло · T — температура\nB/C/N — каталог (демо) · U — техно · Y — ери\nI — спорядження · M — логістика\nV — капсула · O — соціальне · H — довідка"   # gdlint: ignore=max-line-length
+	const CONTROLS := "ЛКМ — іти/добувати/атакувати\nнаведи курсор — що це і що зробить клік\nПКМ — розібрати будівлю (½ ціни назад)\nколесо — зум · WASD — рух\n1–0 — будувати · затисни ЛКМ — ряд стін\nEsc — скасувати · J — цілі\nSpace — пауза · +/− — швидкість\nL — світло (де темно працювати)\nT — тепло (де холодно/комфорт)\nB/C/N — каталог · U — техно · Y — ери\nI — спорядження · E — енергія · M — логістика\nV — капсула · O — соціальне · H — довідка\nГра зберігається сама: «Продовжити» на старті"   # gdlint: ignore=max-line-length
 	var _body: Label
 	func _init() -> void:
 		panel_id = &"help"; dock = PanelBase.DOCK_RIGHT; priority = 90; hotkey = KEY_H; default_open = false

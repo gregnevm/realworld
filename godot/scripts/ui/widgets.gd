@@ -12,6 +12,7 @@ const UITheme = preload("res://scripts/ui/theme.gd")
 const GameData = preload("res://scripts/data.gd")
 const Fmt = preload("res://scripts/ui/format.gd")
 
+
 # ---- StatRow (.stock .r): glyph · label · right-aligned mono value (Stock / Equipment / Agents) ----
 class StatRow extends WidgetBase.Widget:
 	var _glyph: Label
@@ -235,8 +236,8 @@ class ChoiceRow extends WidgetBase.Widget:
 	var _btn: Button
 	signal picked(id: StringName)
 	func _build() -> void:
-		custom_minimum_size = Vector2(0, 22)
 		_btn = Button.new()
+		_btn.add_theme_font_size_override("font_size", 13)   # compact rows: the LEFT dock is tall
 		_btn.set_anchors_preset(Control.PRESET_FULL_RECT)
 		_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_btn.clip_text = true
@@ -268,8 +269,8 @@ class CatalogSlot extends WidgetBase.Widget:
 	var _btn: Button
 	signal chosen(id: StringName)
 	func _build() -> void:
-		custom_minimum_size = Vector2(0, 22)
 		_btn = Button.new()
+		_btn.add_theme_font_size_override("font_size", 13)
 		_btn.set_anchors_preset(Control.PRESET_FULL_RECT)
 		_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_btn.pressed.connect(func(): chosen.emit(item_id))
@@ -333,75 +334,231 @@ class LegendBox extends WidgetBase.Widget:
 			_list.add_child(lbl)
 
 # ---- Feedback subscribers: connect ONCE, disconnect in _exit_tree (R8 / §2.7 cycle-leak guard) ----
+# A card over the world: translucent ink panel + category stripe + wrapped text. Plain containers, so
+# the card's height follows its text (a fixed-height Control would let two-line messages overlap).
+class CardKit extends RefCounted:
+	static func make(width: float, font_size: int = 13) -> Dictionary:
+		var pc := PanelContainer.new()
+		pc.theme_type_variation = UITheme.V_CARD
+		pc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var hb := HBoxContainer.new()
+		hb.add_theme_constant_override("separation", 6)
+		hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pc.add_child(hb)
+		var stripe := ColorRect.new()
+		stripe.custom_minimum_size = Vector2(3, 0)
+		stripe.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hb.add_child(stripe)
+		var lbl := Label.new()
+		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		lbl.custom_minimum_size = Vector2(width, 0)
+		lbl.add_theme_font_size_override("font_size", font_size)
+		hb.add_child(lbl)
+		return {"panel": pc, "stripe": stripe, "label": lbl}
+
 class BannerWidget extends WidgetBase.Widget:
 	var _bus: Variant
-	var _label: Label
+	var _card: Dictionary = {}
+	var status: StringName = &"none"
 	func _build() -> void:
-		_label = Label.new()
-		_label.set_anchors_preset(Control.PRESET_FULL_RECT)
-		_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_label.add_theme_color_override("font_color", Tokens.CRIT)
-		add_child(_label)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_card = CardKit.make(0.0)
+		var lbl: Label = _card.label
+		lbl.autowrap_mode = TextServer.AUTOWRAP_OFF
+		lbl.add_theme_font_size_override("font_size", 17)
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		add_child(_card.panel)
+		visible = false
 	func subscribe(bus) -> void:
 		build_once()
 		_bus = bus
 		bus.banner.connect(_on_banner)
 	func _on_banner(evt: Dictionary) -> void:
-		_label.text = String(evt.get("params", {}).get("text", ""))
-		visible = _label.text != ""
+		var text := String(evt.get("params", {}).get("text", ""))
+		status = StringName(evt.get("status", &"none"))
+		_card.label.text = text
+		# R11: the banner text already carries its icon; the color echoes the urgency
+		var col: Color = Tokens.CRIT if status == &"raid_active" else (Tokens.WARN if status == &"raid_incoming" else Tokens.TEAL)
+		_card.label.add_theme_color_override("font_color", col)
+		_card.stripe.color = col
+		visible = text != ""
 	func _exit_tree() -> void:
 		if _bus != null and _bus.banner.is_connected(_on_banner):
 			_bus.banner.disconnect(_on_banner)
 
 class FlashWidget extends WidgetBase.Widget:
+	const HOLD := 2.2
 	var _bus: Variant
-	var _label: Label
+	var _card: Dictionary = {}
 	var _t := 0.0
+	var text := ""
 	func _build() -> void:
-		_label = Label.new()
-		_label.set_anchors_preset(Control.PRESET_FULL_RECT)
-		_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_label.add_theme_color_override("font_color", Tokens.WARN)
-		add_child(_label)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_card = CardKit.make(0.0)
+		var lbl: Label = _card.label
+		lbl.autowrap_mode = TextServer.AUTOWRAP_OFF
+		lbl.add_theme_font_size_override("font_size", 15)
+		lbl.add_theme_color_override("font_color", Tokens.WARN)
+		_card.stripe.color = Tokens.WARN
+		add_child(_card.panel)
+		visible = false
 		set_process(true)
 	func subscribe(bus) -> void:
 		build_once()
 		_bus = bus
 		bus.flash.connect(_on_flash)
 	func _on_flash(evt: Dictionary) -> void:
-		_label.text = String(evt.get("params", {}).get("text", ""))
-		_t = 2.2
+		text = String(evt.get("params", {}).get("text", ""))
+		_card.label.text = text
+		_t = HOLD
+		modulate = Tokens.WHITE
+		visible = text != ""
 	func _process(dt: float) -> void:
 		if _t > 0.0:
 			_t = maxf(0.0, _t - dt)
+			if _t < 0.5:
+				modulate = Tokens.with_alpha(Tokens.WHITE, _t / 0.5)   # a short fade, not a pop
 			if _t == 0.0:
-				_label.text = ""
+				visible = false
 	func _exit_tree() -> void:
 		if _bus != null and _bus.flash.is_connected(_on_flash):
 			_bus.flash.disconnect(_on_flash)
 
+# The event feed (design-system §2 «event feed ▸ toasts / scrolling log», bottom-right): a FIXED pool
+# of cards (R2 — never add/free per message); the newest message sits lowest, older ones rise and
+# fade, then hide. Text is the sim's own feed (R10: drained by the bus, never read here directly).
 class FeedWidget extends WidgetBase.Widget:
+	const POOL := 5            # sized to sit under the default RIGHT dock (Stock + Balance) at 720p
+	const FADE_AT := 18.0      # seconds a card stays fully opaque
+	const GONE_AT := 30.0      # …then fades out by this age
+	const WIDTH := 290.0
+	const MAX_H := 250.0       # never climb into the RIGHT dock above: the oldest cards give way
 	var _bus: Variant
 	var _list: VBoxContainer
-	var _max := 8
+	var _cards: Array = []     # pool of {panel, stripe, label}, built ONCE
+	var _items: Array = []     # newest LAST: {cls, text, age}
 	func _build() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_list = VBoxContainer.new()
-		_list.set_anchors_preset(Control.PRESET_FULL_RECT)
 		_list.add_theme_constant_override("separation", 4)
+		_list.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# grow up-left from this widget's (bottom-right) anchor point
+		_list.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT, false)
+		_list.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+		_list.grow_vertical = Control.GROW_DIRECTION_BEGIN
 		add_child(_list)
+		for i in POOL:
+			var c: Dictionary = CardKit.make(WIDTH, 12)
+			_list.add_child(c.panel)
+			c.panel.visible = false
+			_cards.append(c)
+		set_process(true)
 	func subscribe(bus) -> void:
 		build_once()
 		_bus = bus
 		bus.feed.connect(_on_feed)
 	func _on_feed(evt: Dictionary) -> void:
-		var c := Card.new()
-		_list.add_child(c)
-		_list.move_child(c, 0)
-		c.set_card(String(evt.get("cls", "")), String(evt.get("text", "")))
-		while _list.get_child_count() > _max:
-			var old := _list.get_child(_list.get_child_count() - 1)
-			_list.remove_child(old)
-			old.queue_free()
+		_items.append({"cls": String(evt.get("cls", "")), "text": String(evt.get("text", "")), "age": 0.0})
+		while _items.size() > POOL:
+			_items.remove_at(0)
+		_rebind()
+	func visible_texts() -> Array:
+		var out: Array = []
+		for it in _items:
+			if float(it.age) < GONE_AT:
+				out.append(String(it.text))
+		return out
+	func _process(dt: float) -> void:
+		if _items.is_empty():
+			return
+		for it in _items:
+			it.age = float(it.age) + dt
+		while not _items.is_empty() and float(_items[0].age) >= GONE_AT:
+			_items.remove_at(0)
+		_rebind()
+	func _rebind() -> void:
+		# pool slot i shows item i (oldest on top, newest lowest — next to the action the player took);
+		# walking newest-first, a card that would push the stack past MAX_H hides with all older ones
+		var used := 0.0
+		for i in range(_cards.size() - 1, -1, -1):
+			var c: Dictionary = _cards[i]
+			if i >= _items.size():
+				c.panel.visible = false
+				continue
+			var it: Dictionary = _items[i]
+			c.label.text = String(it.text)
+			c.stripe.color = Tokens.category(String(it.cls))
+			var a: float = 1.0 if float(it.age) < FADE_AT else clampf(1.0 - (float(it.age) - FADE_AT) / (GONE_AT - FADE_AT), 0.0, 1.0)
+			c.panel.modulate = Tokens.with_alpha(Tokens.WHITE, a)
+			var h: float = c.panel.get_combined_minimum_size().y + 4.0
+			c.panel.visible = used == 0.0 or used + h <= MAX_H
+			used += h
 	func _exit_tree() -> void:
 		if _bus != null and _bus.feed.is_connected(_on_feed):
 			_bus.feed.disconnect(_on_feed)
+
+# ---- HoverTip (design-system §5 «inspect = hover»): a cursor-following card bound from the
+# snapshot's inspect slice (value data). Fixed pool of line labels (R2); placed via pin_at (R7). ----
+class HoverTip extends WidgetBase.Widget:
+	const LINES := 4
+	var _panel: PanelContainer
+	var _title: Label
+	var _lines: Array = []
+	var _hint: Label
+	var shown := false
+	var title := ""
+	func _build() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_panel = PanelContainer.new()
+		_panel.theme_type_variation = UITheme.V_TIP
+		_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_panel)
+		var vb := VBoxContainer.new()
+		vb.add_theme_constant_override("separation", 2)
+		vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_panel.add_child(vb)
+		_title = Label.new()
+		_title.add_theme_font_size_override("font_size", 14)
+		vb.add_child(_title)
+		for i in LINES:
+			var l := Label.new()
+			l.add_theme_font_size_override("font_size", 12)
+			l.add_theme_color_override("font_color", Tokens.MUT)
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size = Vector2(260, 0)
+			vb.add_child(l)
+			_lines.append(l)
+		_hint = Label.new()
+		_hint.add_theme_font_size_override("font_size", 11)
+		_hint.add_theme_color_override("font_color", Tokens.AMBER)
+		_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_hint.custom_minimum_size = Vector2(260, 0)
+		vb.add_child(_hint)
+		visible = false
+	func bind(vm) -> void:
+		build_once()
+		shown = vm is Dictionary and bool(vm.get("shown", false))
+		visible = shown
+		if not shown:
+			return
+		title = String(vm.get("title", ""))
+		_title.text = title
+		_title.add_theme_color_override("font_color", Tokens.urgency(StringName(vm.get("state", &"info"))))
+		var lines: Array = vm.get("lines", [])
+		for i in _lines.size():
+			_lines[i].visible = i < lines.size()
+			if i < lines.size():
+				_lines[i].text = String(lines[i])
+		_hint.text = String(vm.get("hint", ""))
+		_hint.visible = _hint.text != ""
+	# Follow the cursor, flipping to the other side near the right/bottom edges (never off-screen).
+	func follow(mouse: Vector2, screen: Vector2) -> void:
+		if not shown:
+			return
+		var sz: Vector2 = _panel.get_combined_minimum_size()
+		var p := mouse + Vector2(18, 18)
+		if p.x + sz.x > screen.x - 4.0:
+			p.x = mouse.x - sz.x - 12.0
+		if p.y + sz.y > screen.y - 4.0:
+			p.y = mouse.y - sz.y - 12.0
+		WidgetBase.Widget.pin_at(self, Vector2(maxf(4.0, p.x), maxf(4.0, p.y)))
