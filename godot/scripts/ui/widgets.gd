@@ -290,7 +290,10 @@ class H2Header extends WidgetBase.Widget:
 		for ch in _text:
 			draw_string(f, Vector2(x, 13), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Tokens.INK)
 			x += f.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 1.4   # ~.11em tracking
-		# (the dev-facing english tag — need/stock/tech — is metadata, never drawn for the player)
+		# dev-facing english tags (need/stock/tech) are metadata and never drawn; a COUNT tag («5/10») is
+		# player information and is drawn right-aligned in the display face
+		if _tag != "" and _tag.to_lower() == _tag.to_upper():
+			draw_string(f, Vector2(size.x - 64, 13), _tag, HORIZONTAL_ALIGNMENT_RIGHT, 64, 13, Tokens.AMBER)
 
 # ---- BuildSlot (.slot .sel/.no): number · glyph · selected/locked/affordable state ----
 class BuildSlot extends WidgetBase.Widget:

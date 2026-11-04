@@ -12,26 +12,28 @@ extends RefCounted
 
 const GameData = preload("res://scripts/data.gd")
 
+# Optional "build": the build-palette slot the goal is about — the HUD pulses that slot (contextual guidance:
+# point at the control instead of only describing it). View metadata; checks never read it.
 # Ordered: the panel shows the FIRST incomplete goal, but any goal completes whenever its check is
 # met (out-of-order play is fine — a player who builds the bed first just sees it ticked).
 const GOALS := [
-	{"id": "fire", "title": "🔥 Розпали багаття",
+	{"id": "fire", "build": "campfire", "title": "🔥 Розпали багаття",
 		"hint": "Натисни 9 (Багаття) і клікни біля пішака. Вогонь гріє +4°C на 6 клітин і світить уночі."},
 	{"id": "gather", "title": "🪵 Добудь ресурси",
 		"hint": "Клікни по дереву 🌲 чи скелі 🪨 — пішак добуває сам, а повну торбу несе на склад (S)."},
-	{"id": "shelter", "title": "🏠 Збудуй укриття",
+	{"id": "shelter", "build": "wall", "title": "🏠 Збудуй укриття",
 		"hint": "Обнеси клітинку стінами (1) і дверима (2) та стань усередину: у приміщенні тепло тримається. Затисни ЛКМ — стіна ляже рядом."},
-	{"id": "bed", "title": "🛏 Постав ліжко",
+	{"id": "bed", "build": "bed", "title": "🛏 Постав ліжко",
 		"hint": "Ліжко (6) поруч — пішак сам лягає спати: сон відновлює сили й лікує рани. Найкраще — в укритті."},
-	{"id": "tools", "title": "🛠 Верстак і сокира",
+	{"id": "tools", "build": "workbench", "title": "🛠 Верстак і сокира",
 		"hint": "Верстак (5) сам пиляє дошки. Відкрий спорядження (I) і скрафти сокиру ⚒ — рубаєш у 1.6× швидше."},
 	{"id": "food", "title": "🍖 Запас їжі",
 		"hint": "Збирай ягоди з кущів 🫐: тримай на складі 30+ їжі. Біля складу пішак їсть сам."},
-	{"id": "bench", "title": "🔬 Дослідницький стіл",
+	{"id": "bench", "build": "research_bench", "title": "🔬 Дослідницький стіл",
 		"hint": "Стіл (8) дає очки досліджень: нові будівлі, броня, пастки й турелі."},
 	{"id": "tech", "title": "🔓 Перше відкриття",
 		"hint": "Обери проєкт у панелі «Дослідження» — або зачекай: стіл сам бере найдешевший."},
-	{"id": "defense", "title": "🛡 Оборона",
+	{"id": "defense", "build": "spike_trap", "title": "🛡 Оборона",
 		"hint": "Шипи (Полювання) чи турель (Механіка) біля входу. Рейди можливі з 5-го дня."},
 	{"id": "survive", "title": "🌅 Переживи 5 днів",
 		"hint": "Тепло, їжа, сон. Стрілка часу: Space — пауза, +/− — швидкість."},

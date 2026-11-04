@@ -46,7 +46,7 @@ The living, rendered realization is [`hud.html`](hud.html) — every rule below 
 | resource dots | `--wood --stone --food --scrap --planks --comp` | per-resource, from `RES` |
 
 Type: `--sans` (system-ui) for labels; `--mono` (ui-monospace) for all numbers (tabular-nums). Radius `--r:8px`.
-Panel header `h2`: 10px, `letter-spacing:.16em`, uppercase, `--mut`, with an optional `.tag` (mono) at right.
+Panel header `h2`: 13px Oswald (display face), `letter-spacing:.11em`, uppercase, `--ink`, collapsible chevron at left; a right-aligned tag is drawn only when it is a COUNT («5/10», amber) — dev tags are metadata (2026-11). Body face: Rubik 500.
 
 ---
 

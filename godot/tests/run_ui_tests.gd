@@ -43,6 +43,7 @@ func _init() -> void:
 	_t_art_icons()
 	_t_world_fx()
 	_t_panel_fold()
+	_t_goal_guide()
 	_t_format()
 	_t_view_geom()
 	_t_latlon()
@@ -141,6 +142,20 @@ func _t_panel_fold() -> void:
 	ok(r.collapsed_default and not r._fold_body.visible, "fold: ResearchPanel starts folded")
 	r.free()
 	p.free()
+
+# Contextual onboarding: the build slot the current goal is about pulses (amber tint + scale); other
+# slots stay neutral, and a goal without a build target lights nothing.
+func _t_goal_guide() -> void:
+	var bb = Panels.BuildBarPanel.new()
+	bb.build_once()
+	var slots: Array = [
+		{"key": "wall", "hotkey": "1", "name": "Стіна", "cost": "", "afford": true, "locked": false, "selected": false},
+		{"key": "campfire", "hotkey": "9", "name": "Багаття", "cost": "", "afford": true, "locked": false, "selected": false}]
+	bb.bind({"build": {"slots": slots}, "goals": {"current": {"build": "campfire"}}})
+	ok(bb._btns[1].modulate != Tokens.WHITE and bb._btns[0].modulate == Tokens.WHITE, "goal guide: only the goal's slot is tinted")
+	bb.bind({"build": {"slots": slots}, "goals": {"current": {"build": ""}}})
+	ok(bb._btns[1].modulate == Tokens.WHITE and bb._btns[1].scale == Vector2.ONE, "goal guide: no target → no pulse")
+	bb.free()
 
 func _t_tokens() -> void:
 	ok(Tokens.GOOD == Color("6fae54"), "GOOD reconciled to locked --good (drift fixed from 5fd38a)")

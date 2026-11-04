@@ -326,6 +326,7 @@ class BuildBarPanel extends PanelBase.Base:
 	var _btns: Array = []      # fixed Button pool, one per GameData.BUILD_ORDER entry (R2)
 	var _keys: Array = []      # current build kind per button, refreshed in bind()
 	var _scroll: ScrollContainer   # the palette scrolls sideways when the screen is narrower (phones)
+	var _guide := ""               # build kind the current onboarding goal is about → that slot pulses
 	var _hb: HBoxContainer
 	var _touch_sized := false
 	func _init() -> void:
@@ -374,6 +375,8 @@ class BuildBarPanel extends PanelBase.Base:
 		if not (vm is Dictionary) or not vm.has("build"):
 			return
 		var slots: Array = vm.build.slots
+		var gl: Variant = vm.get("goals", {})
+		_guide = String(((gl as Dictionary).get("current", {}) as Dictionary).get("build", "")) if gl is Dictionary else ""
 		for i in _btns.size():
 			if i < slots.size():
 				var s: Dictionary = slots[i]
@@ -385,7 +388,15 @@ class BuildBarPanel extends PanelBase.Base:
 				_btns[i].disabled = locked   # замок дерева досліджень: слот видно (ціль!), тиснути — ні
 				_btns[i].set_pressed_no_signal(bool(s.get("selected", false)))
 				_btns[i].tooltip_text = String(s.get("tip", ""))
-				_btns[i].modulate = Tokens.WHITE if (bool(s.get("afford", false)) and not locked) else Tokens.DIMMED
+				var base_mod: Color = Tokens.WHITE if (bool(s.get("afford", false)) and not locked) else Tokens.DIMMED
+				if _keys[i] == _guide and not locked and not bool(s.get("selected", false)):
+					# onboarding pulse: the slot the current goal needs breathes amber (shape+motion, not colour alone)
+					var k: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
+					base_mod = base_mod.lerp(Tokens.AMBER, 0.45 * k)
+					_btns[i].scale = Vector2.ONE * (1.0 + 0.04 * k)
+				elif _btns[i].scale != Vector2.ONE and not _btns[i].is_hovered():
+					_btns[i].scale = Vector2.ONE
+				_btns[i].modulate = base_mod
 				_btns[i].visible = true
 			else:
 				_btns[i].visible = false

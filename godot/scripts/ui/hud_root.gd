@@ -60,6 +60,8 @@ func set_compact(on: bool) -> void:
 	dock_bottom_gap = 76.0 if on else DOCK_BOTTOM_GAP
 	if feed_w != null:
 		feed_w.set_compact(on)
+		# the phone build bar is taller (finger slots + scrollbar): the feed must clear it, never cover a slot
+		WidgetBase.Widget.pin_bottom_right(feed_w, 14.0, 112.0 if on else 74.0)
 
 func _build_zones() -> void:
 	_left_scroll = _dock_scroll()
@@ -130,6 +132,7 @@ func mount() -> void:
 	_mount_feedback()
 	if compact:
 		feed_w.set_compact(true)
+		WidgetBase.Widget.pin_bottom_right(feed_w, 14.0, 112.0)
 
 func _starts_open(p) -> bool:
 	if compact and int(p.compact_open) >= 0:

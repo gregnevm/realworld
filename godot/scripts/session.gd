@@ -180,7 +180,7 @@ func goals_view() -> Dictionary:
 	if cur.is_empty():
 		return view
 	var id := String(cur.id)
-	view["current"] = {"id": id, "title": String(cur.title), "hint": String(cur.hint),
+	view["current"] = {"id": id, "title": String(cur.title), "hint": String(cur.hint), "build": String(cur.get("build", "")),
 		"pct": Goals.progress(id, sim, self) if sim != null else 0.0}
 	var after := ""
 	var seen := false
