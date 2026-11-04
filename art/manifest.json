@@ -11,32 +11,33 @@
    "label": "actor_hero",
    "size": 128,
    "status": "approved",
-   "hash": "bbbeb011",
-   "approved": "v2"
+   "hash": "66e1a170",
+   "approved": "v3"
   },
   {
    "id": "actor_patrol_robot",
    "kind": "actor",
-   "subject": "an old-world autonomous patrol robot, quadruped chassis, weathered, one cracked sensor eye, still functional and hostile",
+   "subject": "an original AI-era autonomous patrol machine still enforcing its pre-collapse protocol: weathered multi-legged chassis, moss in its joints, one cold teal sensor eye scanning, hostile",
    "tier": 6,
    "src": "extra/actor_patrol_robot",
    "label": "actor_patrol_robot",
    "size": 128,
    "status": "approved",
-   "hash": "17c44df4",
-   "approved": "v1"
+   "hash": "ca6aae88",
+   "approved": "v4",
+   "notes": "sensor eye glows but casts NO beam or scan cone"
   },
   {
    "id": "actor_raider",
    "kind": "actor",
-   "subject": "a hostile clan raider with mismatched scrap armor, painted mask, crude spear",
+   "subject": "a hostile clan raider with mismatched armor cut from machine plating, painted mask, crude spear",
    "tier": 2,
    "src": "extra/actor_raider",
    "label": "actor_raider",
    "size": 128,
    "status": "approved",
-   "hash": "65db58e0",
-   "approved": "v1"
+   "hash": "36b2db28",
+   "approved": "v3"
   },
   {
    "id": "bld_advanced_fabrication_bench",
@@ -157,9 +158,9 @@
    "subject": "campfire — a production structure built by survivors",
    "size": 128,
    "status": "approved",
-   "hash": "f57711c5",
+   "hash": "3817f3d0",
    "notes": "small low flames inside the stone ring, NO smoke plume and no glow halo — smoke/light are drawn by the engine",
-   "approved": "v3"
+   "approved": "v5"
   },
   {
    "id": "bld_chair",
@@ -830,8 +831,8 @@
    "subject": "turret — a defense structure built by survivors",
    "size": 128,
    "status": "approved",
-   "hash": "e0103901",
-   "approved": "v1"
+   "hash": "78e58d0e",
+   "approved": "v2"
   },
   {
    "id": "bld_uranium_slug_turret",
@@ -852,8 +853,8 @@
    "subject": "wall — a structure structure built by survivors",
    "size": 128,
    "status": "approved",
-   "hash": "94144e83",
-   "approved": "v1"
+   "hash": "0478598e",
+   "approved": "v2"
   },
   {
    "id": "bld_warehouse",
@@ -914,8 +915,8 @@
    "subject": "workbench — a production structure built by survivors",
    "size": 128,
    "status": "approved",
-   "hash": "fab48208",
-   "approved": "v1"
+   "hash": "b6fe81e5",
+   "approved": "v2"
   },
   {
    "id": "item_archotech_arm",
@@ -1556,8 +1557,9 @@
    "subject": "stone axe (tool)",
    "size": 128,
    "status": "approved",
-   "hash": "c7d5aaee",
-   "approved": "v0"
+   "hash": "05b37606",
+   "approved": "v5",
+   "notes": "just the axe — no berries, no leaves, nothing else in frame"
   },
   {
    "id": "item_stone_pick",
@@ -1648,18 +1650,20 @@
    "label": "node_rock",
    "size": 128,
    "status": "approved",
-   "hash": "bec742e2",
-   "approved": "v2"
+   "hash": "fbc43717",
+   "approved": "v3"
   },
   {
    "id": "node_scrap",
    "kind": "sprite",
-   "subject": "a heap of old-world scrap: rusted car panels, wires, broken electronics",
+   "subject": "the wreck of a fallen AI machine half-sunk in the ground — rusted armor plates, torn cables, dead sensor cluster — a salvage site for scrap and components",
    "tier": 4,
    "src": "extra/node_scrap",
    "label": "node_scrap",
    "size": 128,
-   "status": "todo"
+   "status": "approved",
+   "hash": "02607186",
+   "approved": "v0"
   },
   {
    "id": "node_tree",
@@ -1670,8 +1674,8 @@
    "label": "node_tree",
    "size": 128,
    "status": "approved",
-   "hash": "2991e172",
-   "approved": "v0"
+   "hash": "dec7a6a5",
+   "approved": "v2"
   },
   {
    "id": "ref_ground",
@@ -1688,14 +1692,14 @@
   {
    "id": "ref_world",
    "kind": "ref",
-   "subject": "survivors' world props: a stone axe, a campfire, a wooden wall segment, a crate of scrap, a hide tent, a rusted patrol robot, a survivor in patched layered clothes, a steel turret, a berry bush",
+   "subject": "AI post-apocalypse props: a stone axe, a campfire, a wooden wall segment, a crate of machine scrap, a hide tent, a rusted machine patrol robot with one cold sensor eye, a survivor in patched layered clothes, a steel turret built from machine parts, a berry bush",
    "tier": 4,
    "src": "extra/ref_world",
    "label": "ref_world",
    "size": 0,
    "status": "approved",
    "hash": "43a6c4c5",
-   "approved": "v2"
+   "approved": "v0"
   },
   {
    "id": "res_advanced_component",
@@ -2446,8 +2450,8 @@
    "subject": "wood — a stack or bundle of this raw/processed material",
    "size": 128,
    "status": "approved",
-   "hash": "6dbc15b4",
-   "approved": "v0"
+   "hash": "db48527b",
+   "approved": "v2"
   },
   {
    "id": "res_wool",
@@ -2918,8 +2922,8 @@
    "subject": "temperate meadow grass, patchy, a few small weeds",
    "size": 64,
    "status": "approved",
-   "hash": "b878c1d4",
-   "approved": "v1"
+   "hash": "3067295a",
+   "approved": "v2"
   },
   {
    "id": "tile_road",
@@ -2947,9 +2951,11 @@
    "src": "terrain/6",
    "label": "ruins",
    "tier": 0,
-   "subject": "rubble of collapsed concrete buildings, broken bricks, rebar",
+   "subject": "rubble of collapsed concrete buildings, broken bricks, rebar, scattered dead circuit boards and cable",
    "size": 64,
-   "status": "todo"
+   "status": "approved",
+   "hash": "16669792",
+   "approved": "v0"
   },
   {
    "id": "tile_sand",

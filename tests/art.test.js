@@ -55,7 +55,7 @@ test("prompt = style bible + kind frame + era + subject, never mentions other ga
   const p = composePrompt(style, { id: "item_stone_axe", kind: "icon", tier: 0, subject: "stone axe (tool)", label: "Кам'яна сокира" });
   assert.ok(p.startsWith("STYLE GUIDE (instructions only"));
   assert.doesNotMatch(p, /ART BIBLE/, "bible title leaks into images as lettering");
-  assert.match(p, /WORLD: decades after a collapse/);
+  assert.match(p, /WORLD: an AI post-apocalypse/, "lore anchor (2026-11-04: the world is an AI post-apocalypse)");
   assert.match(p, /FRAME: One inventory icon/);
   assert.ok(p.includes(eraOf(0)));
   assert.match(p, /SUBJECT: stone axe/);

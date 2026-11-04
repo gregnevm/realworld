@@ -1,21 +1,21 @@
 {
  "id": "node_rock",
  "kind": "sprite",
- "variant": 2,
+ "variant": 3,
  "model": "gemini-2.5-flash-image",
- "hash": "bec742e2",
+ "hash": "fbc43717",
  "refs": [
   "ref_ground.png",
   "ref_world.png"
  ],
  "usage": {
-  "promptTokenCount": 1111,
+  "promptTokenCount": 1219,
   "candidatesTokenCount": 1290,
-  "totalTokenCount": 2401,
+  "totalTokenCount": 2509,
   "promptTokensDetails": [
    {
     "modality": "TEXT",
-    "tokenCount": 595
+    "tokenCount": 703
    },
    {
     "modality": "IMAGE",
@@ -30,6 +30,6 @@
   ],
   "serviceTier": "standard"
  },
- "approved_from": "v2",
- "prompt_chars": 2481
+ "approved_from": "v3",
+ "prompt_chars": 3048
 }

@@ -66,6 +66,12 @@ export function classify429(body) {
 // ---------------------------------------------------------------- kinds (the conceptual frame)
 // Every kind fixes camera, background, framing and target size — the subject never repeats these.
 // `key: true` = drawn on flat magenta and chroma-keyed to alpha by tools/art/post.py.
+// Object kinds are composited over a chroma key, so anything TRANSLUCENT (smoke, scan beams, glow halos)
+// mixes with the key and cannot be recovered — observed twice in the first live batches (campfire smoke,
+// patrol-robot scan beam). The engine draws FX; sprites stay opaque. Refs also leaked props into subjects
+// (berries from the ref sheet next to a stone axe), hence the "only this object" clause.
+const SOLO = " Only this one subject: do not add props, plants or items from the reference images. Fully opaque art: no translucent effects — no smoke, steam, beams, scan rays, glow halos, auras or sparks (the game engine draws those).";
+
 export const KINDS = {
   ref: {
     size: 0, key: false, aspect: "1:1",
@@ -73,15 +79,15 @@ export const KINDS = {
   },
   sprite: {
     size: 128, key: true, aspect: "1:1",
-    frame: "One game sprite of a placeable object seen from a top-down three-quarter view (camera ~60° above the ground). Centered, the whole object visible with a small margin, sitting on the ground plane. Background: a technical chroma-key that is NOT part of the art and is EXEMPT from the muted palette — exactly pure saturated magenta #FF00FF (RGB 255,0,255), perfectly flat, no vignette, no gradient, no floor, no cast shadow on it.",
+    frame: "One game sprite of a placeable object seen from a top-down three-quarter view (camera ~60° above the ground). Centered, the whole object visible with a small margin, sitting on the ground plane. Background: a technical chroma-key that is NOT part of the art and is EXEMPT from the muted palette — exactly pure saturated magenta #FF00FF (RGB 255,0,255), perfectly flat, no vignette, no gradient, no floor, no cast shadow on it." + SOLO,
   },
   actor: {
     size: 128, key: true, aspect: "1:1",
-    frame: "One character sprite seen from a top-down three-quarter view, standing, facing down-right, full body visible, readable silhouette. Background: a technical chroma-key that is NOT part of the art and is EXEMPT from the muted palette — exactly pure saturated magenta #FF00FF (RGB 255,0,255), perfectly flat, no vignette, no gradient, no floor, no cast shadow on it.",
+    frame: "One character sprite seen from a top-down three-quarter view, standing, facing down-right, full body visible, readable silhouette. Background: a technical chroma-key that is NOT part of the art and is EXEMPT from the muted palette — exactly pure saturated magenta #FF00FF (RGB 255,0,255), perfectly flat, no vignette, no gradient, no floor, no cast shadow on it." + SOLO,
   },
   icon: {
     size: 128, key: true, aspect: "1:1",
-    frame: "One inventory icon of a single object, slight three-quarter angle, centered, filling ~80% of the frame, bold clear silhouette readable at 32 px. Background: a technical chroma-key that is NOT part of the art and is EXEMPT from the muted palette — exactly pure saturated magenta #FF00FF (RGB 255,0,255), perfectly flat, no vignette, no gradient, no glow, no frame, no shadow on it.",
+    frame: "One inventory icon of a single object, slight three-quarter angle, centered, filling ~80% of the frame, bold clear silhouette readable at 32 px. Background: a technical chroma-key that is NOT part of the art and is EXEMPT from the muted palette — exactly pure saturated magenta #FF00FF (RGB 255,0,255), perfectly flat, no vignette, no gradient, no glow, no frame, no shadow on it." + SOLO,
   },
   tile: {
     size: 64, key: false, aspect: "1:1",
@@ -89,7 +95,7 @@ export const KINDS = {
   },
   ui: {
     size: 64, key: true, aspect: "1:1",
-    frame: "One flat UI pictogram for a game HUD button, simple geometric shapes, 2–3 tones, centered, generous padding, readable at 20 px. Background: a technical chroma-key that is NOT part of the art and is EXEMPT from the muted palette — exactly pure saturated magenta #FF00FF (RGB 255,0,255), perfectly flat, no vignette, no gradient, no cast shadow on it.",
+    frame: "One flat UI pictogram for a game HUD button, simple geometric shapes, 2–3 tones, centered, generous padding, readable at 20 px. Background: a technical chroma-key that is NOT part of the art and is EXEMPT from the muted palette — exactly pure saturated magenta #FF00FF (RGB 255,0,255), perfectly flat, no vignette, no gradient, no cast shadow on it." + SOLO,
   },
 };
 
@@ -99,9 +105,9 @@ export function eraOf(tier) {
   const t = Number(tier) || 0;
   if (t <= 1) return "primitive survivor craft: hand-made from wood, stone, bone, hide, plant fiber; lashings and rough edges";
   if (t <= 3) return "pre-industrial rebuild: forged iron, fired brick, rope, planks, simple mechanisms";
-  if (t <= 5) return "salvage-industrial: riveted steel, scavenged old-world machinery, cables, worn paint";
-  if (t <= 7) return "rebuilt high-tech: clean steel and composite panels, small indicator lights, circuitry";
-  return "frontier spacefaring tech: plasteel, sealed composite shells, restrained cyan glow";
+  if (t <= 5) return "salvage-industrial: riveted steel, parts cut from machine carcasses, cables, worn paint";
+  if (t <= 7) return "reverse-engineered machine tech: clean steel and composite panels with salvaged AI circuitry, small cold-teal indicator lights";
+  return "frontier spacefaring tech built by humans from tamed AI-era hardware: plasteel, sealed composite shells, restrained cyan glow";
 }
 
 const humanize = (id) => String(id).replace(/[_-]+/g, " ").trim();
@@ -114,22 +120,22 @@ export const TERRAIN = [
   ["rock", "exposed grey bedrock with cracks and lichen"],
   ["road", "cracked old asphalt road surface with faded paint fragments and weeds in cracks"],
   ["dirt", "bare packed soil with pebbles"],
-  ["ruins", "rubble of collapsed concrete buildings, broken bricks, rebar"],
+  ["ruins", "rubble of collapsed concrete buildings, broken bricks, rebar, scattered dead circuit boards and cable"],
   ["sand", "coarse river sand with small shells and pebbles"],
   ["snow", "trampled old snow with icy patches"],
 ];
 
 // Hand-authored anchors the catalog does not cover. Their subjects are the canon; edit freely.
 export const EXTRA = [
-  { id: "ref_world", kind: "ref", subject: "survivors' world props: a stone axe, a campfire, a wooden wall segment, a crate of scrap, a hide tent, a rusted patrol robot, a survivor in patched layered clothes, a steel turret, a berry bush", tier: 4 },
+  { id: "ref_world", kind: "ref", subject: "AI post-apocalypse props: a stone axe, a campfire, a wooden wall segment, a crate of machine scrap, a hide tent, a rusted machine patrol robot with one cold sensor eye, a survivor in patched layered clothes, a steel turret built from machine parts, a berry bush", tier: 4 },
   { id: "ref_ground", kind: "ref", subject: "ground swatches arranged as a grid: grass, forest floor, water, old asphalt, rubble, snow — each a square swatch seen from above", tier: 2 },
   { id: "actor_hero", kind: "actor", subject: "a lone survivor in patched layered clothing, scarf, backpack with bedroll, improvised tools on belt", tier: 2 },
-  { id: "actor_raider", kind: "actor", subject: "a hostile clan raider with mismatched scrap armor, painted mask, crude spear", tier: 2 },
-  { id: "actor_patrol_robot", kind: "actor", subject: "an old-world autonomous patrol robot, quadruped chassis, weathered, one cracked sensor eye, still functional and hostile", tier: 6 },
+  { id: "actor_raider", kind: "actor", subject: "a hostile clan raider with mismatched armor cut from machine plating, painted mask, crude spear", tier: 2 },
+  { id: "actor_patrol_robot", kind: "actor", subject: "an original AI-era autonomous patrol machine still enforcing its pre-collapse protocol: weathered multi-legged chassis, moss in its joints, one cold teal sensor eye scanning, hostile", tier: 6 },
   { id: "node_tree", kind: "sprite", subject: "a temperate deciduous tree, harvestable for wood", tier: 0 },
   { id: "node_rock", kind: "sprite", subject: "a mineable boulder outcrop with visible ore streaks", tier: 0 },
   { id: "node_bush", kind: "sprite", subject: "a wild berry bush with herbs at its base", tier: 0 },
-  { id: "node_scrap", kind: "sprite", subject: "a heap of old-world scrap: rusted car panels, wires, broken electronics", tier: 4 },
+  { id: "node_scrap", kind: "sprite", subject: "the wreck of a fallen AI machine half-sunk in the ground — rusted armor plates, torn cables, dead sensor cluster — a salvage site for scrap and components", tier: 4 },
 ];
 
 // ---------------------------------------------------------------- manifest

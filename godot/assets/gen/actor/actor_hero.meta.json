@@ -1,21 +1,21 @@
 {
  "id": "actor_hero",
  "kind": "actor",
- "variant": 2,
+ "variant": 3,
  "model": "gemini-2.5-flash-image",
- "hash": "bbbeb011",
+ "hash": "66e1a170",
  "refs": [
   "ref_ground.png",
   "ref_world.png"
  ],
  "usage": {
-  "promptTokenCount": 1096,
+  "promptTokenCount": 1204,
   "candidatesTokenCount": 1290,
-  "totalTokenCount": 2386,
+  "totalTokenCount": 2494,
   "promptTokensDetails": [
    {
     "modality": "TEXT",
-    "tokenCount": 580
+    "tokenCount": 688
    },
    {
     "modality": "IMAGE",
@@ -30,6 +30,6 @@
   ],
   "serviceTier": "standard"
  },
- "approved_from": "v2",
- "prompt_chars": 2443
+ "approved_from": "v3",
+ "prompt_chars": 3010
 }

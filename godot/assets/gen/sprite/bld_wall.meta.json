@@ -1,21 +1,21 @@
 {
  "id": "bld_wall",
  "kind": "sprite",
- "variant": 1,
+ "variant": 2,
  "model": "gemini-2.5-flash-image",
- "hash": "94144e83",
+ "hash": "0478598e",
  "refs": [
   "ref_ground.png",
   "ref_world.png"
  ],
  "usage": {
-  "promptTokenCount": 1087,
+  "promptTokenCount": 1233,
   "candidatesTokenCount": 1290,
-  "totalTokenCount": 2377,
+  "totalTokenCount": 2523,
   "promptTokensDetails": [
    {
     "modality": "TEXT",
-    "tokenCount": 571
+    "tokenCount": 717
    },
    {
     "modality": "IMAGE",
@@ -30,6 +30,6 @@
   ],
   "serviceTier": "standard"
  },
- "approved_from": "v1",
- "prompt_chars": 2388
+ "approved_from": "v2",
+ "prompt_chars": 3080
 }
