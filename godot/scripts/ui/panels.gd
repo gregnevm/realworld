@@ -7,6 +7,7 @@ extends RefCounted
 
 const PanelBase = preload("res://scripts/ui/panel.gd")
 const Widgets = preload("res://scripts/ui/widgets.gd")
+const ArtIcons = preload("res://scripts/ui/art_icons.gd")
 const GameData = preload("res://scripts/data.gd")
 const Tokens = preload("res://scripts/ui/tokens.gd")
 const Fmt = preload("res://scripts/ui/format.gd")
@@ -335,10 +336,27 @@ class BuildBarPanel extends PanelBase.Base:
 			var btn := Button.new()
 			btn.toggle_mode = true
 			btn.add_theme_font_size_override("font_size", 12)
+			btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			btn.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+			btn.expand_icon = true
+			btn.add_theme_constant_override("icon_max_width", 36)
+			btn.add_theme_constant_override("h_separation", 0)
+			btn.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+			btn.resized.connect(func() -> void: btn.pivot_offset = btn.size * 0.5)
+			btn.mouse_entered.connect(_pop.bind(btn, 1.06, 0.10))
+			btn.mouse_exited.connect(_pop.bind(btn, 1.0, 0.12))
+			btn.button_down.connect(_pop.bind(btn, 0.94, 0.06))
+			btn.button_up.connect(_pop.bind(btn, 1.06, 0.08))
 			btn.pressed.connect(_on_slot.bind(i))
 			_hb.add_child(btn)
 			_btns.append(btn)
 			_keys.append("")
+	# Hover/press feedback: short ease-out scale tween (~0.1 s). View-only; a fresh tween kills the previous.
+	func _pop(btn: Button, to: float, dur: float) -> void:
+		if btn.disabled:
+			return
+		var tw := btn.create_tween()
+		tw.tween_property(btn, "scale", Vector2(to, to), dur).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	# The SAME intent the digit keys fire — the router toggles view.selected_build (the one truth),
 	# and the next bind() re-reads it from vm.build.slots[].selected, so mouse and keyboard can't drift.
 	func _on_slot(i: int) -> void:
@@ -356,6 +374,7 @@ class BuildBarPanel extends PanelBase.Base:
 				var locked := bool(s.get("locked", false))
 				var name := ("🔒 " + String(s.get("name", ""))) if locked else String(s.get("name", ""))
 				_btns[i].text = "%s %s\n%s" % [String(s.get("hotkey", "")), name, String(s.get("cost", ""))]
+				_btns[i].icon = ArtIcons.building(_keys[i])
 				_btns[i].disabled = locked   # замок дерева досліджень: слот видно (ціль!), тиснути — ні
 				_btns[i].set_pressed_no_signal(bool(s.get("selected", false)))
 				_btns[i].tooltip_text = String(s.get("tip", ""))
@@ -370,7 +389,7 @@ class BuildBarPanel extends PanelBase.Base:
 		if touch != _touch_sized:
 			_touch_sized = touch
 			for b in _btns:
-				b.custom_minimum_size = Vector2(64, 46) if touch else Vector2.ZERO
+				b.custom_minimum_size = Vector2(72, 84) if touch else Vector2(84, 74)
 		var need: Vector2 = _hb.get_combined_minimum_size()
 		var avail: float = maxf(200.0, get_viewport_rect().size.x - 44.0)
 		_scroll.custom_minimum_size = Vector2(minf(need.x, avail), need.y + (10.0 if need.x > avail else 0.0))

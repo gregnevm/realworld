@@ -42,3 +42,26 @@ static func _load(key: String, path: String) -> Texture2D:
 			tex = ImageTexture.create_from_image(img)
 	_cache[key] = tex
 	return tex
+
+# Building sprite (sprite/ then tile/ dir, bld_<kind>) cropped to its opaque content, so a small HUD slot
+# shows the object itself instead of a thumbnail swimming in the generator's transparent margin.
+static var _crops: Dictionary = {}
+
+static func building(kind: String) -> Texture2D:
+	if _crops.has(kind):
+		return _crops[kind]
+	var tex: Texture2D = _load("spr:" + kind, "res://assets/gen/sprite/bld_%s.png" % kind)
+	if tex == null:
+		tex = _load("til:" + kind, "res://assets/gen/tile/bld_%s.png" % kind)
+	var out: Texture2D = tex
+	if tex != null:
+		var img := tex.get_image()
+		if img != null and not img.is_empty() and img.detect_alpha() != Image.ALPHA_NONE:
+			var u := img.get_used_rect()
+			if u.size.x > 0 and u.size.y > 0:
+				var at := AtlasTexture.new()
+				at.atlas = tex
+				at.region = Rect2(u)
+				out = at
+	_crops[kind] = out
+	return out
