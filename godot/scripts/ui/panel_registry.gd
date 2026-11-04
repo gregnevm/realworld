@@ -37,6 +37,13 @@ class PanelRegistry extends RefCounted:
 		var p: Variant = get_panel(id)
 		if p != null:
 			p.visible = not p.visible
+			if p.visible and p.is_inside_tree():   # open = 0.16 s fade + 10 px rise (ease-out), close = instant
+				p.modulate.a = 0.0
+				var y0: float = p.position.y
+				p.position.y = y0 + 10.0
+				var tw: Tween = p.create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+				tw.tween_property(p, "modulate:a", 1.0, 0.16)
+				tw.tween_property(p, "position:y", y0, 0.16)
 
 	func close_all() -> void:
 		for p in panels:

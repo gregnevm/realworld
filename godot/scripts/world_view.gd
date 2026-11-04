@@ -45,6 +45,12 @@ var _last_stock: Dictionary = {}    # res id -> amount last frame
 var _last_hp: Dictionary = {}       # enemy index / "hero" -> hp last frame
 const FX_LIFE := 1.1
 var _rings: Array = []              # order-acknowledge ripples {pos, age}
+var _born: Dictionary = {}          # building cell -> wall-clock time it appeared (placement pop)
+var _seen_b: Dictionary = {}        # building cells seen last frame
+var _b_baseline := false            # first observation = existing base: no pops on load
+var _last_epos: Array = []          # enemy world positions last frame (death poofs)
+var _poofs: Array = []              # {pos, age}
+var shake := 0.0                    # 0..1 camera-shake request (hero hurt); the scene reads & applies it
 var _last_target := -1
 
 func fx_add(text: String, wpos: Vector2, color: Color, icon_id: String = "") -> void:
@@ -76,9 +82,35 @@ func observe_sim(dt: float) -> void:
 	for rg in _rings:
 		rg.age = float(rg.age) + dt
 	_rings = _rings.filter(func(rg) -> bool: return float(rg.age) < 0.45)
+	var now_b: Dictionary = {}
+	for b in sim.buildings:
+		var bc: int = int(b.y) * int(sim.n) + int(b.x)
+		now_b[bc] = true
+		if _b_baseline and not _seen_b.has(bc):
+			_born[bc] = _now()
+	_seen_b = now_b
+	_b_baseline = true
+	var epos: Array = []
+	for e in sim.enemies:
+		epos.append(Vector2(e.px * TILE, e.py * TILE))
+	if epos.size() < _last_epos.size():   # someone fell: poof where an enemy was and none is now
+		for lp in _last_epos:
+			var gone := true
+			for q in epos:
+				if (q as Vector2).distance_to(lp) < TILE * 0.8:
+					gone = false
+					break
+			if gone:
+				_poofs.append({"pos": lp, "age": 0.0})
+	_last_epos = epos
+	for pf in _poofs:
+		pf.age = float(pf.age) + dt
+	_poofs = _poofs.filter(func(pf) -> bool: return float(pf.age) < 0.6)
+	shake = maxf(0.0, shake - dt * 3.0)
 	var hp_now: float = float(sim.player.hp)
 	if _last_hp.has("hero") and hp_now < float(_last_hp.hero) - 0.4:
 		fx_add("-%d" % int(round(float(_last_hp.hero) - hp_now)), hero + Vector2(TILE * 0.5, 0), Color(1.0, 0.42, 0.38))
+		shake = 1.0
 	_last_hp["hero"] = hp_now
 	for ei in sim.enemies.size():
 		var e: Variant = sim.enemies[ei]
@@ -88,6 +120,13 @@ func observe_sim(dt: float) -> void:
 		_last_hp[key] = float(e.hp)
 
 func _draw_fx() -> void:
+	for pf in _poofs:   # enemy down: a burst of 8 grey chunks flying out + a fading ring
+		var t2: float = clampf(float(pf.age) / 0.6, 0.0, 1.0)
+		var e2: float = 1.0 - pow(1.0 - t2, 2.0)
+		for k in 8:
+			var ang: float = TAU * float(k) / 8.0 + 0.4
+			draw_circle(pf.pos + Vector2(cos(ang), sin(ang)) * TILE * 0.9 * e2, TILE * 0.09 * (1.0 - t2), Color(0.62, 0.66, 0.70, 1.0 - t2))
+		draw_arc(pf.pos, TILE * 0.7 * e2, 0, TAU, 24, Color(0.86, 0.9, 0.95, 0.6 * (1.0 - t2)), 2.0)
 	for rg in _rings:   # order acknowledged: one fast expanding ring (0.45 s, ease-out)
 		var t: float = clampf(float(rg.age) / 0.45, 0.0, 1.0)
 		var e: float = 1.0 - pow(1.0 - t, 3.0)
@@ -262,7 +301,7 @@ func _draw() -> void:
 			var steps: int = maxi(1, int(seg / (TILE * 0.5)))
 			for k in steps:
 				var q: Vector2 = prev.lerp(wpos, (float(k) + march) / float(steps))
-				draw_circle(q, TILE * 0.06, Color(1, 0.81, 0.36, 0.55 if di % 2 == 0 else 0.3))
+				draw_circle(q, TILE * 0.085, Color(1, 0.81, 0.36, 0.85 if di % 2 == 0 else 0.45))
 				di += 1
 			prev = wpos
 		var pulse: float = 0.5 + 0.5 * sin(_now() * 5.0)
@@ -335,6 +374,9 @@ func _draw_node(node, x: int, y: int) -> void:
 		if kind_s == "tree" or kind_s == "bush":   # wind: slow, per-cell phase so a forest ripples instead of marching
 			var ph: float = float(x * 7 + y * 13)
 			sway = sin(_now() * (1.3 if tall else 1.8) + ph * 0.6) * (0.022 if tall else 0.03)
+		var a: Variant = sim.player.action
+		if a is Dictionary and String(a.get("type", "")) == "gather" and int(a.get("cell", -1)) == y * sim.n + x and float(a.get("dur", 0.0)) > 0.0:
+			sway += sin(_now() * 22.0) * 0.05   # the tool bites: the node jolts in time with the swing
 		draw_sprite_fit(ntex, box, Color.WHITE, false, true, sway)
 		return
 	match node.kind:
@@ -356,6 +398,17 @@ func _draw_building(b) -> void:
 	var p := Vector2(b.x * TILE, b.y * TILE)
 	var c := p + Vector2(TILE, TILE) * 0.5
 	var blocking_wall: bool = String(b.kind) == "wall" or (def.get("blocks", false) and String(b.kind).ends_with("_wall"))
+	var bcell: int = int(b.y) * int(sim.n) + int(b.x)
+	var pop := 1.0                      # placement: ease-out-back scale 0.4 → 1.08 → 1.0 over 0.35 s + dust ring
+	if _born.has(bcell):
+		var ta: float = (_now() - float(_born[bcell])) / 0.35
+		if ta >= 1.0:
+			_born.erase(bcell)
+		else:
+			var c1 := 1.70158
+			var u: float = ta - 1.0
+			pop = 0.4 + 0.6 * (1.0 + (c1 + 1.0) * u * u * u + c1 * u * u)
+			draw_arc(c + Vector2(0, TILE * 0.3), TILE * (0.3 + 0.5 * ta), 0, TAU, 24, Color(0.85, 0.78, 0.62, 0.5 * (1.0 - ta)), 2.0)
 	var btex := building_texture(String(b.kind))
 	if btex != null:
 		var floorlike: bool = String(b.kind) == "floor" or String(b.kind).ends_with("_floor") or String(b.kind) == "grow_zone"
@@ -369,7 +422,7 @@ func _draw_building(b) -> void:
 				var fk: float = 0.5 + 0.5 * sin(_now() * 9.0 + b.x * 3.1 + b.y * 1.7) * sin(_now() * 5.3 + b.y)
 				bt = Color(1.0 + 0.18 * fk, 1.0 + 0.08 * fk, 1.0)
 				draw_circle(c + Vector2(0, -TILE * 0.1), TILE * (0.62 + 0.10 * fk), Color(1.0, 0.62, 0.2, 0.10 + 0.07 * fk))
-			draw_sprite_fit(btex, Rect2(p.x + inset, p.y - TILE * 0.12, TILE - 2 * inset, TILE * 1.08), bt)
+			draw_sprite_fit(btex, Rect2(p.x + inset, p.y - TILE * 0.12, TILE - 2 * inset, TILE * 1.08), bt, false, true, 0.0, Vector2(pop, pop))
 		if float(def.get("range", 0.0)) > 0.0:
 			draw_line(c, c + Vector2(cos(b.aim), sin(b.aim)) * TILE * 0.45, Color.html("2a2f36"), maxf(2.0, TILE * 0.12))
 	elif blocking_wall:

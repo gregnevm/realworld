@@ -115,6 +115,11 @@ func _t_world_fx() -> void:
 	ok(v._fx.size() == 1, "world fx: an idle frame spawns nothing")
 	v.observe_sim(2.0)
 	ok(v._fx.is_empty(), "world fx: texts age out")
+	ok(v._born.is_empty(), "world fx: buildings present at load never pop (baseline)")
+	sim.stock[sim.res_key("wood")] = 200
+	sim.try_build("campfire", 9, 9)
+	v.observe_sim(0.016)
+	ok(v._born.has(9 * nn + 9), "world fx: a newly placed building gets a placement pop")
 	v.free()
 
 # Progressive disclosure: a panel shaped «VBox → header + rows» folds to its header on click; the rows keep

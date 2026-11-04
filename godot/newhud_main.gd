@@ -285,6 +285,9 @@ func _process(dt: float) -> void:
 		cam.global_position = cam_target
 	else:
 		cam.global_position = cam.global_position.lerp(cam_target, 1.0 - exp(-7.0 * dt))
+	# hurt shake: deterministic sine noise (no global RNG — tripwire), decays inside world_view
+	var tsec: float = Time.get_ticks_msec() * 0.001
+	cam.offset = Vector2(sin(tsec * 53.0), cos(tsec * 47.0)) * 5.0 * view.shake * view.shake
 	view.observe_sim(dt)             # floating +N / -N feedback (view-only diff of sim numbers)
 	view.queue_redraw()
 	# VIEW state for this frame's snapshot (hud_root runs after us: parent before child)
@@ -318,7 +321,7 @@ func _demo_step(dt: float) -> void:
 		_demo_leg = leg
 		if _demo_leg == 0:
 			session.sim.time.frac = 0.45   # late morning: the art reads at its best
-		var sim = session.sim
+		var sim: Variant = session.sim
 		var hx: int = int(sim.player.px)
 		var hy: int = int(sim.player.py)
 		if leg % 2 == 0:   # chop the nearest tree (path + swing + «+N» feedback)
@@ -333,7 +336,11 @@ func _demo_step(dt: float) -> void:
 					best = int(key)
 			if best >= 0:
 				sim.order_gather(best % sim.n, best / sim.n)
-		else:              # walk to a reachable open cell a few tiles away
+		else:              # light a campfire next to the hero (placement pop + goal toast), then walk away
+			for o2 in [Vector2i(1, 1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(-1, -1), Vector2i(2, 0)]:
+				if sim.build_valid(hx + o2.x, hy + o2.y):
+					sim.try_build("campfire", hx + o2.x, hy + o2.y)
+					break
 			for r in [5, 4, 6, 3]:
 				var done := false
 				for o in [Vector2i(r, 0), Vector2i(0, r), Vector2i(-r, 0), Vector2i(0, -r)]:
