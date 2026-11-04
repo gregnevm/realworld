@@ -293,6 +293,8 @@ func _shot_step(dt: float) -> void:
 	if not _built and _t > 0.15 and session != null:
 		_built = true
 		_build_demo_base()
+		if "gear" in OS.get_cmdline_user_args():
+			preg.toggle(&"gear")           # `shot gear`: open the loadout panel
 		if "light" in OS.get_cmdline_user_args():
 			oreg.toggle(&"light")          # `shot light`: radio-on the L/Light overlay (default frame = what a player sees)
 		session.sim.time.frac = 0.86       # dusk so daylight darkening is visible

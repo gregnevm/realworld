@@ -42,6 +42,7 @@ func _init() -> void:
 	_t_tokens()
 	_t_art_icons()
 	_t_world_fx()
+	_t_panel_fold()
 	_t_format()
 	_t_view_geom()
 	_t_latlon()
@@ -115,6 +116,26 @@ func _t_world_fx() -> void:
 	v.observe_sim(2.0)
 	ok(v._fx.is_empty(), "world fx: texts age out")
 	v.free()
+
+# Progressive disclosure: a panel shaped «VBox → header + rows» folds to its header on click; the rows keep
+# their own state/refs (nothing rebuilt — R2), and a panel can start folded.
+func _t_panel_fold() -> void:
+	var p = Panels.StockPanel.new()
+	p.build_once()
+	var rb: int = p.rebuild_count
+	var vb: Node = p.get_child(0)
+	var head: Node = vb.get_child(0)
+	ok(bool(head.collapsible) and p._fold_body != null, "fold: header is collapsible and the rows share one body")
+	ok(p._fold_body.visible and vb.get_child_count() == 2, "fold: starts open; VBox is [header, body]")
+	head.set_collapsed(true)
+	ok(not p._fold_body.visible, "fold: collapsing hides the body only")
+	head.set_collapsed(false)
+	ok(p._fold_body.visible and p.rebuild_count == rb, "fold: unfolding restores it without a rebuild (R2)")
+	var r = Panels.ResearchPanel.new()
+	r.build_once()
+	ok(r.collapsed_default and not r._fold_body.visible, "fold: ResearchPanel starts folded")
+	r.free()
+	p.free()
 
 func _t_tokens() -> void:
 	ok(Tokens.GOOD == Color("6fae54"), "GOOD reconciled to locked --good (drift fixed from 5fd38a)")

@@ -226,7 +226,7 @@ class ResearchPanel extends PanelBase.Base:
 	var _rows: Array = []      # ChoiceRow pool (researchable options), built ONCE (R2)
 	var _qrows: Array = []     # StatRow pool (the queue)
 	func _init() -> void:
-		panel_id = &"research"; dock = PanelBase.DOCK_LEFT; priority = 20; default_open = false
+		panel_id = &"research"; dock = PanelBase.DOCK_LEFT; priority = 20; default_open = false; collapsed_default = true   # long & secondary: starts folded, header click unfolds
 		menu_label = "🔬 Дослідження"
 		reveal_once = true   # pips into view with the first research bench (design-system §2)
 	func wants_reveal(vm) -> bool:
@@ -401,6 +401,7 @@ class BuildBarPanel extends PanelBase.Base:
 class GearPanel extends PanelBase.Base:
 	var _rowboxes: Array = []  # fixed HBoxContainer pool, one per GameData.ITEM_ORDER entry (R2)
 	var _labels: Array = []
+	var _icons: Array = []     # TextureRect per row: generated item art (item_<id>), emoji-free
 	var _crafts: Array = []
 	var _equips: Array = []
 	var _ids: Array = []       # current item id per row, refreshed in bind()
@@ -418,6 +419,13 @@ class GearPanel extends PanelBase.Base:
 			var row := HBoxContainer.new()
 			row.add_theme_constant_override("separation", 4)
 			vb.add_child(row)
+			var ic := TextureRect.new()
+			ic.custom_minimum_size = Vector2(30, 30)
+			ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			ic.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+			ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			row.add_child(ic)
 			var lbl := Label.new()
 			lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			lbl.add_theme_font_size_override("font_size", 12)
@@ -431,7 +439,7 @@ class GearPanel extends PanelBase.Base:
 			eb.text = "✋"
 			eb.pressed.connect(_on_equip.bind(i))
 			row.add_child(eb)
-			_rowboxes.append(row); _labels.append(lbl); _crafts.append(cb); _equips.append(eb)
+			_rowboxes.append(row); _labels.append(lbl); _icons.append(ic); _crafts.append(cb); _equips.append(eb)
 			_ids.append("")
 	func _on_craft(i: int) -> void:
 		emit_intent(&"craft", {"id": String(_ids[i])})   # panel emits intent; router calls sim (R9)
@@ -457,6 +465,8 @@ class GearPanel extends PanelBase.Base:
 			elif bool(rw.get("owned", false)):
 				txt += " · є"
 			_labels[i].text = txt
+			_icons[i].texture = ArtIcons.texture("item_" + String(rw.get("id", "")))
+			_icons[i].modulate = Tokens.DIMMED if (locked or not (bool(rw.get("owned", false)) or bool(rw.get("affordable", false)))) else Tokens.WHITE
 			var afford := bool(rw.get("affordable", false)) and not locked
 			_crafts[i].disabled = not afford
 			_crafts[i].modulate = Tokens.WHITE if afford else Tokens.DIMMED

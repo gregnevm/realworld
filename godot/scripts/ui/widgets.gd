@@ -243,11 +243,25 @@ class Card extends WidgetBase.Widget:
 
 # ---- H2Header: the panel h2 with the letter-spacing the locked design wants (§2.4 custom-draw) ----
 class H2Header extends WidgetBase.Widget:
+	signal toggled(collapsed: bool)      # a click on the header folds/unfolds the panel body (progressive disclosure)
 	var _text := ""
 	var _tag := ""
+	var collapsed := false
+	var collapsible := false             # set by the panel base once it has split header from body
 	func _build() -> void:
-		custom_minimum_size = Vector2(0, 16)
+		custom_minimum_size = Vector2(0, 20)
 		draw.connect(_on_draw)
+		gui_input.connect(_on_input)
+	func _on_input(ev: InputEvent) -> void:
+		if collapsible and ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+			set_collapsed(not collapsed)
+	func set_collapsed(v: bool) -> void:
+		collapsed = v
+		queue_redraw()
+		toggled.emit(v)
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_READY or what == NOTIFICATION_ENTER_TREE:
+			mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if collapsible else Control.CURSOR_ARROW
 	func set_header(text: String, tag := "") -> void:
 		build_once()
 		_text = text.to_upper()
@@ -256,6 +270,12 @@ class H2Header extends WidgetBase.Widget:
 	func _on_draw() -> void:
 		var f := ThemeDB.fallback_font
 		var x := 0.0
+		if collapsible:   # chevron: ▾ open / ▸ folded — a shape, not just colour (R11)
+			var cy := 8.0
+			var pts := PackedVector2Array([Vector2(1, cy - 3), Vector2(9, cy - 3), Vector2(5, cy + 3)]) if not collapsed \
+				else PackedVector2Array([Vector2(2, cy - 4), Vector2(2, cy + 4), Vector2(8, cy)])
+			draw_colored_polygon(pts, Tokens.MUT)
+			x = 16.0
 		for ch in _text:
 			draw_string(f, Vector2(x, 11), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Tokens.MUT)
 			x += f.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x + 1.6   # ~.16em tracking

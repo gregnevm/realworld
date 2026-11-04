@@ -39,10 +39,38 @@ class Base extends PanelContainer:
 		theme_type_variation = &"RwPanel"   # == UITheme.V_PANEL
 		build_once()
 
+	var collapsed_default := false     # start folded (long, secondary panels: the player unfolds on demand)
+	var _fold_body: Control = null          # everything under the header, grouped once so a fold is ONE visibility flip
+
 	func build_once() -> void:              # idempotent: a manual test call + a real tree-entry
 		if rebuild_count > 0:               # can never double-fire _build (§5.3 headless note)
 			return
 		_build()
+		_install_fold()
+
+	# Progressive disclosure: when the panel is «VBox → [H2Header, rows…]», move the rows into one body
+	# container and let a click on the header fold it. Rows keep their own visibility flags and node refs
+	# (bind() code is untouched); panels with any other shape are left alone.
+	func _install_fold() -> void:
+		for c in get_children():
+			if not (c is VBoxContainer) or c.get_child_count() < 2:
+				continue
+			var head: Node = c.get_child(0)
+			if not (head is Control) or not head.has_signal("toggled") or not head.has_method("set_collapsed"):
+				continue
+			var body := VBoxContainer.new()
+			body.add_theme_constant_override("separation", int(c.get_theme_constant("separation")))
+			var movers: Array = c.get_children().slice(1)
+			for m in movers:
+				c.remove_child(m)
+				body.add_child(m)
+			c.add_child(body)
+			_fold_body = body
+			head.collapsible = true
+			head.toggled.connect(func(folded: bool) -> void: body.visible = not folded)
+			if collapsed_default:
+				head.set_collapsed(true)
+			return
 
 	func _build() -> void:                  # override: create child Widgets ONCE. Must do rebuild_count += 1.
 		rebuild_count += 1
