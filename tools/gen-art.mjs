@@ -9,7 +9,7 @@
 //   node tools/gen-art.mjs status             counts by kind × status
 //   node tools/gen-art.mjs gen [opts]         generate candidates → art/out/<kind>/<id>/vN.png (+ .raw.png, .meta.json)
 //       --only a,b   --kind icon|sprite|actor|tile|ui|ref   --prefix bld_   --n 1..4   --limit 12   --concurrency 2
-//       --model gemini-2.5-flash-image   --force   --dry (print prompts, no API)   --palette
+//       --model gemini-nano-banana-2.1   --force   --dry (print prompts, no API)   --palette
 //   node tools/gen-art.mjs approve <id>[@vN]  candidate (latest if no @vN) → godot/assets/gen/<kind>/<id>.png (refs → art/refs/)
 //   node tools/gen-art.mjs repost [--only a,b] [--kind k] [--palette]   re-run post.py over saved raws (no API, no spend)
 //
@@ -35,9 +35,11 @@ const REFS = P("art", "refs");
 const OUT = P("art", "out");
 const GEN = P("godot", "assets", "gen");
 const API = "https://generativelanguage.googleapis.com/v1beta";
-// Every approved asset so far was made with this model — switching it shifts the look, so it is a deliberate
-// step (regenerate the anchors + approved set), not a silent default bump. Shutdown 2027-03-15 (Google docs).
-const DEFAULT_MODEL = "gemini-2.5-flash-image";
+// One model for the whole game: switching it shifts the look, so it is a deliberate step (regenerate the anchors +
+// the approved set), never a silent default bump. Migrated 2026-11-04 from gemini-2.5-flash-image (Google shuts it
+// down 2027-03-15 and restricts it for new projects) to Nano Banana 2.1 — anchors and every previously approved
+// asset were regenerated with it, so ALL art ships from one model.
+const DEFAULT_MODEL = "gemini-nano-banana-2.1";
 const SHUT_DOWN = { "gemini-3-pro-image-preview": "gemini-3-pro-image", "gemini-3.1-flash-image-preview": "gemini-3.1-flash-image" };
 
 const die = (msg, code = 1) => { console.error(`✖ ${msg}`); process.exit(code); };

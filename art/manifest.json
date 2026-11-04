@@ -1939,9 +1939,10 @@
    "label": "ref_ground",
    "size": 0,
    "status": "approved",
-   "hash": "fa093883",
+   "hash": "7eeafe09",
    "approved": "v1",
-   "auto": "ground swatches arranged as a grid: grass, forest floor, water, old asphalt, rubble, snow — each a square swatch seen from above"
+   "auto": "ground swatches arranged as a grid: grass, forest floor, water, old asphalt, rubble, snow — each a square swatch seen from above",
+   "notes": "STRICT orthographic top-down: camera looks straight down (90°), every swatch is a perfectly flat square texture seen from directly above, filling its cell edge to edge, like seamless 2D game ground textures. NO isometric or three-quarter view, NO 3D soil blocks, NO side faces or cross-sections, NO perspective, NO drop shadows, NO thick borders between swatches."
   },
   {
    "id": "ref_world",
@@ -1952,7 +1953,7 @@
    "label": "ref_world",
    "size": 0,
    "status": "approved",
-   "hash": "43a6c4c5",
+   "hash": "fb850915",
    "approved": "v0",
    "auto": "AI post-apocalypse props: a stone axe, a campfire, a wooden wall segment, a crate of machine scrap, a hide tent, a rusted machine patrol robot with one cold sensor eye, a survivor in patched layered clothes, a steel turret built from machine parts, a berry bush"
   },
