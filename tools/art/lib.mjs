@@ -60,7 +60,9 @@ export function classify429(body) {
     const rd = d && d.retryDelay && String(d.retryDelay).match(/^([\d.]+)s$/);
     if (rd && retryMs == null) retryMs = Math.round(+rd[1] * 1000);
   }
-  return { fatal: zero, freeTierZero: zero && free, retryMs };
+  const daily = !zero && (/per.?day|PerDay/i.test(msg) ||
+    (err.details || []).some((d) => (d.violations || []).some((v) => /PerDay/i.test(String(v.quotaId || "")))));
+  return { fatal: zero || daily, freeTierZero: zero && free, daily, retryMs };
 }
 
 // ---------------------------------------------------------------- kinds (the conceptual frame)
@@ -112,83 +114,130 @@ export function eraOf(tier) {
 
 const humanize = (id) => String(id).replace(/[_-]+/g, " ").trim();
 
-// Terrain set mirrors world_gen.gd TERRAIN_NAME (index order) — tiles are generated per terrain kind.
+// Terrain set mirrors world_gen.gd TERRAIN_NAME (index order, Ukrainian label) — one tile per terrain kind.
 export const TERRAIN = [
-  ["water", "shallow murky river water, subtle ripples"],
-  ["grass", "temperate meadow grass, patchy, a few small weeds"],
-  ["forest", "forest floor: moss, needles, leaf litter, small roots"],
-  ["rock", "exposed grey bedrock with cracks and lichen"],
-  ["road", "cracked old asphalt road surface with faded paint fragments and weeds in cracks"],
-  ["dirt", "bare packed soil with pebbles"],
-  ["ruins", "rubble of collapsed concrete buildings, broken bricks, rebar, scattered dead circuit boards and cable"],
-  ["sand", "coarse river sand with small shells and pebbles"],
-  ["snow", "trampled old snow with icy patches"],
+  ["water", "вода", "shallow murky river water, subtle ripples"],
+  ["grass", "трава", "temperate meadow grass, patchy, a few small weeds"],
+  ["forest", "ліс", "forest floor: moss, needles, leaf litter, small roots"],
+  ["rock", "скеля", "exposed grey bedrock with cracks and lichen"],
+  ["road", "дорога", "cracked old asphalt road surface with faded paint fragments and weeds in cracks"],
+  ["dirt", "ґрунт", "bare packed soil with pebbles"],
+  ["ruins", "руїни", "rubble of collapsed concrete buildings, broken bricks, rebar, scattered dead circuit boards and cable"],
+  ["sand", "пісок", "coarse river sand with small shells and pebbles"],
+  ["snow", "сніг", "trampled old snow with icy patches"],
 ];
 
-// Hand-authored anchors the catalog does not cover. Their subjects are the canon; edit freely.
+// Hand-authored anchors the catalog does not cover. `tier: null` = timeless (nature, world anchors): no ERA
+// line, so a tree is never told it is "hand-made from bone and hide".
 export const EXTRA = [
-  { id: "ref_world", kind: "ref", subject: "AI post-apocalypse props: a stone axe, a campfire, a wooden wall segment, a crate of machine scrap, a hide tent, a rusted machine patrol robot with one cold sensor eye, a survivor in patched layered clothes, a steel turret built from machine parts, a berry bush", tier: 4 },
-  { id: "ref_ground", kind: "ref", subject: "ground swatches arranged as a grid: grass, forest floor, water, old asphalt, rubble, snow — each a square swatch seen from above", tier: 2 },
+  { id: "ref_world", kind: "ref", subject: "AI post-apocalypse props: a stone axe, a campfire, a wooden wall segment, a crate of machine scrap, a hide tent, a rusted machine patrol robot with one cold sensor eye, a survivor in patched layered clothes, a steel turret built from machine parts, a berry bush", tier: null },
+  { id: "ref_ground", kind: "ref", subject: "ground swatches arranged as a grid: grass, forest floor, water, old asphalt, rubble, snow — each a square swatch seen from above", tier: null },
   { id: "actor_hero", kind: "actor", subject: "a lone survivor in patched layered clothing, scarf, backpack with bedroll, improvised tools on belt", tier: 2 },
   { id: "actor_raider", kind: "actor", subject: "a hostile clan raider with mismatched armor cut from machine plating, painted mask, crude spear", tier: 2 },
   { id: "actor_patrol_robot", kind: "actor", subject: "an original AI-era autonomous patrol machine still enforcing its pre-collapse protocol: weathered multi-legged chassis, moss in its joints, one cold teal sensor eye scanning, hostile", tier: 6 },
-  { id: "node_tree", kind: "sprite", subject: "a temperate deciduous tree, harvestable for wood", tier: 0 },
-  { id: "node_rock", kind: "sprite", subject: "a mineable boulder outcrop with visible ore streaks", tier: 0 },
-  { id: "node_bush", kind: "sprite", subject: "a wild berry bush with herbs at its base", tier: 0 },
-  { id: "node_scrap", kind: "sprite", subject: "the wreck of a fallen AI machine half-sunk in the ground — rusted armor plates, torn cables, dead sensor cluster — a salvage site for scrap and components", tier: 4 },
+  { id: "node_tree", kind: "sprite", subject: "a temperate deciduous tree, harvestable for wood", tier: null },
+  { id: "node_rock", kind: "sprite", subject: "a mineable boulder outcrop with visible ore streaks", tier: null },
+  { id: "node_bush", kind: "sprite", subject: "a wild berry bush with herbs at its base", tier: null },
+  { id: "node_scrap", kind: "sprite", subject: "the wreck of a fallen AI machine half-sunk in the ground — rusted armor plates, torn cables, dead sensor cluster — a salvage site for scrap and components", tier: null },
 ];
 
-// ---------------------------------------------------------------- manifest
-// Fields owned by the CATALOG (re-derived every sync) vs. by HUMANS (never overwritten once present).
-const DERIVED = ["kind", "src", "label", "tier", "size"];
+// The building's role phrased as a noun ("a structure structure" was the old template's output).
+const ROLE = {
+  structure: "a structural piece", production: "a production station", power: "a power installation",
+  storage: "a storage container", comfort: "a piece of furniture", farming: "a farming installation",
+  defense: "a defensive installation", art: "an art piece", utility: "a utility installation", ship: "a spaceship component",
+};
+// Mirrors godot/scripts/ui/world_input.gd paintable(): cell-filling, row-painted pieces.
+const isFloorLike = (id) => id === "floor" || id.endsWith("_floor") || id === "grow_zone";
+const isRowPiece = (id) => id === "wall" || id.endsWith("_wall") || id.endsWith("conduit") || id === "spike_trap";
+const RAW_SOURCES = new Set(["chop", "mine", "gather", "farm", "hunt"]);
 
-function fromCatalog(cat) {
+// The LIVE game (godot/scripts/data.gd) renders a few ids the catalog does not have (food, torch, axe…).
+// Pure text parse of its RES / BUILDINGS / ITEMS dict literals: `"id": {"label"|"name": "…", … "research": "…"}`.
+export function parseDataGd(text) {
+  const block = (name) => {
+    const m = String(text || "").match(new RegExp(`^const ${name} := \\{\\n([\\s\\S]*?)^\\}`, "m"));
+    return m ? m[1] : "";
+  };
+  const rows = (body) => [...body.matchAll(/^\t"([a-z0-9_]+)": \{(.*)\},?\s*$/gm)].map(([, id, rest]) => ({
+    id,
+    label: ((rest.match(/"(?:label|name)": "([^"]+)"/) || [])[1]) || id,
+    research: ((rest.match(/"research": "([a-z0-9_]+)"/) || [])[1]) || "",
+    slot: ((rest.match(/"slot": "([a-z]+)"/) || [])[1]) || "",
+  }));
+  return { resources: rows(block("RES")), buildings: rows(block("BUILDINGS")), items: rows(block("ITEMS")) };
+}
+
+function derive(cat, live) {
   const researchTier = new Map((cat.research || []).map((r) => [r.id, r.tier]));
   const gateTier = (gate) => (gate ? researchTier.get(gate) || 1 : 0);
   const out = [];
-  for (const r of cat.resources || []) {
-    out.push({ id: `res_${r.id}`, kind: "icon", src: `resources/${r.id}`, label: r.label, tier: (r.tier || 0) * 2,
-      subject: `${humanize(r.id)} — a stack or bundle of this raw/processed material` });
-  }
-  for (const i of cat.items || []) {
-    out.push({ id: `item_${i.id}`, kind: "icon", src: `items/${i.id}`, label: i.label, tier: gateTier(i.research),
-      subject: `${humanize(i.id)} (${i.kind}${i.slot && i.slot !== i.kind ? `, worn/used as ${i.slot}` : ""})` });
-  }
-  for (const b of cat.buildings || []) {
-    out.push({ id: `bld_${b.id}`, kind: "sprite", src: `buildings/${b.id}`, label: b.label, tier: gateTier(b.research),
-      subject: `${humanize(b.id)} — a ${b.category} structure built by survivors` });
-  }
+  const resRow = (r, src) => {
+    const raw = (r.sources || []).length > 0 && r.sources.every((x) => RAW_SOURCES.has(x));
+    return { id: `res_${r.id}`, kind: "icon", src, label: r.label, tier: raw ? null : (r.tier || 0) * 2,
+      subject: raw ? `raw ${humanize(r.id)} as freshly gathered — a small pile or bundle` : `${humanize(r.id)} — a neat stack of this processed material` };
+  };
+  const bldRow = (b, src) => {
+    const floor = isFloorLike(b.id);
+    const role = ROLE[b.category] || "a building";
+    const shape = floor ? "seen as the surface it covers" : isRowPiece(b.id) ? "a single 1×1 grid-cell segment designed to repeat in a row" : "built by survivors";
+    return { id: `bld_${b.id}`, kind: floor ? "tile" : "sprite", src, label: b.label, tier: gateTier(b.research),
+      subject: `${humanize(b.id)} — ${role}, ${shape}` };
+  };
+  const itemRow = (i, src) => ({ id: `item_${i.id}`, kind: "icon", src, label: i.label, tier: gateTier(i.research),
+    subject: `${humanize(i.id)} (${i.kind || i.slot}${i.slot && i.slot !== (i.kind || i.slot) ? `, worn/used as ${i.slot}` : ""})` });
+
+  for (const r of cat.resources || []) out.push(resRow(r, `resources/${r.id}`));
+  for (const i of cat.items || []) out.push(itemRow(i, `items/${i.id}`));
+  for (const b of cat.buildings || []) out.push(bldRow(b, `buildings/${b.id}`));
   for (const r of cat.research || []) {
     out.push({ id: `rsch_${r.id}`, kind: "icon", src: `research/${r.id}`, label: r.label, tier: r.tier,
       subject: `emblem for the technology "${humanize(r.id)}": one symbolic object that embodies it` });
   }
-  TERRAIN.forEach(([id, subject], idx) => out.push({ id: `tile_${id}`, kind: "tile", src: `terrain/${idx}`, label: id, tier: 0, subject }));
+  // live-only ids (data.gd) — catalogue rows win where both exist (one art id per game id)
+  const have = new Set(out.map((a) => a.id));
+  if (live) {
+    for (const r of live.resources || []) if (!have.has(`res_${r.id}`)) out.push({ ...resRow({ ...r, sources: r.id === "food" ? ["gather"] : [] }, `live/resources/${r.id}`) });
+    for (const b of live.buildings || []) if (!have.has(`bld_${b.id}`)) out.push(bldRow({ ...b, category: "utility" }, `live/buildings/${b.id}`));
+    for (const i of live.items || []) if (!have.has(`item_${i.id}`)) out.push(itemRow({ ...i, kind: i.slot }, `live/items/${i.id}`));
+  }
+  TERRAIN.forEach(([id, ua, subject], idx) => out.push({ id: `tile_${id}`, kind: "tile", src: `terrain/${idx}`, label: ua, tier: null, subject }));
   for (const e of EXTRA) out.push({ ...e, src: `extra/${e.id}`, label: e.id });
   return out;
 }
 
-// existing: previous manifest object (or null). Returns a NEW manifest; pure + idempotent:
-// buildManifest(cat, buildManifest(cat, m)) deep-equals buildManifest(cat, m).
-export function buildManifest(cat, existing) {
+// ---------------------------------------------------------------- manifest
+// CATALOG-owned fields are re-derived every sync. `subject` is human-owned ONCE edited: each row remembers
+// the template text it was generated from (`auto`); while subject === auto the row follows template fixes,
+// the moment a human edits subject it is frozen. Rows with `manual: true` (hand-added, e.g. ui_*) are never
+// orphaned. A def removed from the catalog keeps its row (and approved art) flagged `orphan`.
+const DERIVED = ["kind", "src", "label", "tier", "size"];
+
+// existing: previous manifest (or null); live: parseDataGd(data.gd) (or null). Pure + idempotent.
+export function buildManifest(cat, existing, live = null) {
   const prev = new Map(((existing && existing.assets) || []).map((a) => [a.id, a]));
   const seen = new Set();
   const assets = [];
-  for (const d of fromCatalog(cat)) {
+  for (const d of derive(cat, live)) {
     seen.add(d.id);
     d.size = KINDS[d.kind].size;
     const p = prev.get(d.id);
-    if (!p) { assets.push({ ...d, status: "todo" }); continue; }
+    if (!p) { assets.push({ ...d, auto: d.subject, status: "todo" }); continue; }
     const merged = { ...p };
     for (const k of DERIVED) merged[k] = d[k];
-    if (merged.subject == null) merged.subject = d.subject;
+    const followsTemplate = p.subject == null || p.auto == null || p.subject === p.auto;
+    if (followsTemplate) merged.subject = d.subject;
+    merged.auto = d.subject;
     if (merged.status == null) merged.status = "todo";
     delete merged.orphan;
     assets.push(merged);
   }
-  // A def removed from the catalog keeps its row (and approved art) but is flagged — never silently dropped.
-  for (const [id, p] of prev) if (!seen.has(id)) assets.push({ ...p, orphan: true });
+  for (const [id, p] of prev) {
+    if (seen.has(id)) continue;
+    assets.push(p.manual === true ? { ...p } : { ...p, orphan: true });
+  }
   assets.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  return { version: 1, note: "Generated by `node tools/gen-art.mjs sync` from godot/content/catalog.json. Edit subject/status/notes freely — sync never overwrites them.", assets };
+  return { version: 1, note: "Generated by `node tools/gen-art.mjs sync` from godot/content/catalog.json + godot/scripts/data.gd. Edit subject/status/notes freely — an edited subject is never overwritten; add your own rows with \"manual\": true.", assets };
 }
 
 // ---------------------------------------------------------------- prompt
@@ -203,7 +252,7 @@ export function composePrompt(style, asset) {
     bible,
     "",
     `FRAME: ${kind.frame}`,
-    `ERA: ${eraOf(asset.tier)}`,
+    asset.tier == null ? "" : `ERA: ${eraOf(asset.tier)}`,
     `SUBJECT: ${asset.subject}`,
     asset.label && asset.label !== asset.id ? `(In-game name, Ukrainian: «${asset.label}».)` : "",
     asset.notes ? `ART DIRECTION NOTES: ${asset.notes}` : "",
@@ -220,8 +269,11 @@ export function promptHash(prompt, model, refsSig = "") {
 }
 
 // ---------------------------------------------------------------- selection
-// opts: { only?: string[], kind?: string, prefix?: string, force?: boolean, limit?: number }
-// Default run touches only status "todo"; "draft" needs --force or --only; "approved" needs --only AND --force.
+export const DEFAULT_LIMIT = 12;
+// opts: { only?, kind?, prefix?, force?, limit?, hasCandidates?(asset) }
+// Default run touches only "todo"; "draft" needs --force or --only; "approved" needs --only AND --force.
+// A "draft" whose candidates are gone (art/out/ is gitignored → fresh checkout) counts as "todo" again.
+// An invalid/absent limit falls back to DEFAULT_LIMIT — never to "everything" (spend cap).
 export function selectAssets(manifest, opts = {}) {
   const only = opts.only && opts.only.length ? new Set(opts.only) : null;
   const picked = [];
@@ -231,10 +283,11 @@ export function selectAssets(manifest, opts = {}) {
     if (opts.kind && a.kind !== opts.kind) continue;
     if (opts.prefix && !a.id.startsWith(opts.prefix)) continue;
     if (a.status === "approved" && !(only && opts.force)) continue;
-    if (a.status === "draft" && !(only || opts.force)) continue;
+    const staleDraft = a.status === "draft" && opts.hasCandidates && !opts.hasCandidates(a);
+    if (a.status === "draft" && !staleDraft && !(only || opts.force)) continue;
     picked.push(a);
   }
-  const limit = Number.isFinite(opts.limit) && opts.limit > 0 ? opts.limit : picked.length;
+  const limit = Number.isInteger(opts.limit) && opts.limit > 0 ? opts.limit : DEFAULT_LIMIT;
   return { picked: picked.slice(0, limit), dropped: Math.max(0, picked.length - limit) };
 }
 

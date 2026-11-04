@@ -39,8 +39,10 @@ const { KEY_SCAN_RE: KEY_RE } = await import("./art/lib.mjs"); // one definition
 for (const f of tracked) {
   const abs = path.join(root, f);
   let st; try { st = fs.statSync(abs); } catch { continue; }
-  if (!st.isFile() || st.size > 2_000_000) continue;
-  if (KEY_RE.test(fs.readFileSync(abs, "latin1"))) problems.push(`${f} contains a Google API key (AIza…/AQ.…) — move it to .env.local`);
+  if (!st.isFile()) continue;
+  // no size cap (a cap is a bypass); NULs stripped so UTF-16 text files are caught too
+  const text = fs.readFileSync(abs, "latin1");
+  if (KEY_RE.test(text) || KEY_RE.test(text.replace(/\0/g, ""))) problems.push(`${f} contains a Google API key (AIza…/AQ.…) — move it to .env.local`);
 }
 try { execFileSync("git", ["check-ignore", "-q", ".env.local"], { cwd: root }); }
 catch { problems.push(".env.local is not gitignored — the Gemini key would be committable"); }
