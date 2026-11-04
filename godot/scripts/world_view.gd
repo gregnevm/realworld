@@ -29,6 +29,10 @@ var _crop_cache := {}   # path-less: Texture2D instance id → opaque Rect2i (ge
 # Ground is muted (lower value contrast, slight desaturation) so objects/actors — kept at full strength — pop.
 const GROUND_TINT := Color(0.80, 0.82, 0.82, 1.0)
 const SHADOW := Color(0, 0, 0, 0.30)
+# Value plan (see "Reducing Visual Confusion"): ground has a SMALL light/dark range, objects & actors are the
+# highest-contrast things on screen. FLATTEN lifts the ground blacks; OUTLINE is a dark silhouette rim.
+const GROUND_FLATTEN := Color(0.20, 0.22, 0.21, 0.22)
+const OUTLINE := Color(0.04, 0.05, 0.06, 0.85)
 var _tile_tex: Array = []
 
 func _ready() -> void:
@@ -72,7 +76,7 @@ func content_rect(tex: Texture2D) -> Rect2:
 	return r
 
 # Draw `tex` cropped to its content, fitted into `box` (aspect kept), bottom-centred on the box.
-func draw_sprite_fit(tex: Texture2D, box: Rect2, tint: Color = Color.WHITE, flip_x: bool = false) -> void:
+func draw_sprite_fit(tex: Texture2D, box: Rect2, tint: Color = Color.WHITE, flip_x: bool = false, outline: bool = true) -> void:
 	var src := content_rect(tex)
 	var sc := minf(box.size.x / src.size.x, box.size.y / src.size.y)
 	var sz := src.size * sc
@@ -80,6 +84,10 @@ func draw_sprite_fit(tex: Texture2D, box: Rect2, tint: Color = Color.WHITE, flip
 	var dst := Rect2(pos, sz)
 	if flip_x:
 		dst = Rect2(Vector2(dst.end.x, dst.position.y), Vector2(-sz.x, sz.y))
+	if outline:
+		var o := maxf(1.0, TILE * 0.045)
+		for d in [Vector2(o, 0), Vector2(-o, 0), Vector2(0, o), Vector2(0, -o)]:
+			draw_texture_rect_region(tex, Rect2(dst.position + d, dst.size), src, OUTLINE)
 	draw_texture_rect_region(tex, dst, src, tint)
 
 # Soft elliptical contact shadow (cheap ambient occlusion) under an object standing at `foot`.
@@ -121,6 +129,7 @@ func _draw() -> void:
 				draw_rect(tr, terrain_colors[tiles[i]])
 				if (x + y) % 2 == 1:
 					draw_rect(tr, Color(0, 0, 0, 0.05))
+	draw_rect(Rect2(x0 * TILE, y0 * TILE, (x1 - x0 + 1) * TILE, (y1 - y0 + 1) * TILE), GROUND_FLATTEN)
 	# painter's order (row-major = top to bottom) so tall sprites overlap the tile behind them correctly
 	var node_keys: Array = sim.map.nodes.keys()
 	node_keys.sort()
