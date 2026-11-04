@@ -56,6 +56,33 @@ class Chrome extends RefCounted:
 		r.set_anchors_preset(Control.PRESET_FULL_RECT)
 		host.add_child(r)
 
+	# Cinematic vignette over the WORLD (under the HUD): a soft radial darkening toward the screen edges
+	# focuses the eye on the centre (where the hero is) and frames the map like a scene, not a spreadsheet.
+	static func add_vignette(host: Node) -> TextureRect:
+		var g := Gradient.new()
+		g.set_color(0, Tokens.with_alpha(Tokens.BG, 0.0))
+		g.set_color(1, Tokens.with_alpha(Tokens.BG, 0.55))
+		g.add_point(0.62, Tokens.with_alpha(Tokens.BG, 0.0))
+		var gt := GradientTexture2D.new()
+		gt.gradient = g
+		gt.fill = GradientTexture2D.FILL_RADIAL
+		gt.fill_from = Vector2(0.5, 0.5)
+		gt.fill_to = Vector2(1.08, 1.08)
+		gt.width = 256
+		gt.height = 256
+		var r := TextureRect.new()
+		r.texture = gt
+		r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		r.stretch_mode = TextureRect.STRETCH_SCALE
+		r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		r.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		host.add_child(r)
+		var fit := func() -> void: r.size = r.get_viewport_rect().size
+		if r.is_inside_tree():   # the entry scene adds the layer in _ready, so this is the live path
+			fit.call()
+			r.get_viewport().size_changed.connect(fit)
+		return r
+
 	# Staggered arrival: each child fades in and rises 14 px, 70 ms apart (ease-out cubic, 0.45 s).
 	static func stagger_in(items: Array) -> void:
 		var i := 0

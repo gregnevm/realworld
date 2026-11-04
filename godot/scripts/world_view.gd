@@ -27,7 +27,7 @@ const HIT_FLASH := Color(1.7, 1.7, 1.7, 1.0)
 var _tex_cache := {}
 var _crop_cache := {}   # path-less: Texture2D instance id → opaque Rect2i (generated sprites carry ~20% transparent padding)
 # Ground is muted (lower value contrast, slight desaturation) so objects/actors — kept at full strength — pop.
-const GROUND_TINT := Color(0.80, 0.82, 0.82, 1.0)
+const GROUND_TINT := Color(0.88, 0.90, 0.89, 1.0)
 const SHADOW := Color(0, 0, 0, 0.30)
 # Value plan (see "Reducing Visual Confusion"): ground has a SMALL light/dark range, objects & actors are the
 # highest-contrast things on screen. FLATTEN lifts the ground blacks; OUTLINE is a dark silhouette rim.
@@ -44,6 +44,8 @@ var _fx: Array = []                 # {text, pos(world), age, color, icon}
 var _last_stock: Dictionary = {}    # res id -> amount last frame
 var _last_hp: Dictionary = {}       # enemy index / "hero" -> hp last frame
 const FX_LIFE := 1.1
+var _rings: Array = []              # order-acknowledge ripples {pos, age}
+var _last_target := -1
 
 func fx_add(text: String, wpos: Vector2, color: Color, icon_id: String = "") -> void:
 	if _fx.size() > 24:
@@ -67,6 +69,13 @@ func observe_sim(dt: float) -> void:
 				fx_add("+%d" % d, hero + Vector2(0, -TILE * 0.45 * k), Color(1.0, 0.95, 0.8), "res_" + String(res))
 				k += 1
 		_last_stock[res] = now_amt
+	var tgt: int = int(sim.player.action.get("cell", -1)) if sim.player.action is Dictionary else -1
+	if tgt >= 0 and tgt != _last_target:
+		_rings.append({"pos": Vector2((tgt % sim.n + 0.5) * TILE, (int(tgt / sim.n) + 0.5) * TILE), "age": 0.0})
+	_last_target = tgt
+	for rg in _rings:
+		rg.age = float(rg.age) + dt
+	_rings = _rings.filter(func(rg) -> bool: return float(rg.age) < 0.45)
 	var hp_now: float = float(sim.player.hp)
 	if _last_hp.has("hero") and hp_now < float(_last_hp.hero) - 0.4:
 		fx_add("-%d" % int(round(float(_last_hp.hero) - hp_now)), hero + Vector2(TILE * 0.5, 0), Color(1.0, 0.42, 0.38))
@@ -79,6 +88,10 @@ func observe_sim(dt: float) -> void:
 		_last_hp[key] = float(e.hp)
 
 func _draw_fx() -> void:
+	for rg in _rings:   # order acknowledged: one fast expanding ring (0.45 s, ease-out)
+		var t: float = clampf(float(rg.age) / 0.45, 0.0, 1.0)
+		var e: float = 1.0 - pow(1.0 - t, 3.0)
+		draw_arc(rg.pos, TILE * (0.2 + 0.7 * e), 0, TAU, 32, Color(1, 0.86, 0.5, 0.9 * (1.0 - t)), 3.0 * (1.0 - t) + 1.0)
 	for f in _fx:
 		var t: float = clampf(float(f.age) / FX_LIFE, 0.0, 1.0)
 		var rise: float = 1.0 - pow(1.0 - t, 2.0)                 # ease-out: quick lift, soft settle
@@ -234,10 +247,27 @@ func _draw() -> void:
 		_draw_node(sim.map.nodes[key], nx, ny)
 	for b in sim.buildings:
 		_draw_building(b)
-	# move / gather target marker (parity with JS renderer)
+	# order feedback: a marching dotted path to the target + a pulsing ring on it (RTS/colony-sim grammar —
+	# the player always sees WHERE the pawn is going and that the click registered)
 	if sim.player.action != null and sim.player.action.has("cell") and int(sim.player.action.cell) >= 0:
 		var cell: int = sim.player.action.cell
-		draw_rect(Rect2((cell % n) * TILE + 2, int(cell / n) * TILE + 2, TILE - 4, TILE - 4), Color(1, 0.81, 0.36, 0.9), false, 2.0)
+		var tc := Vector2((cell % n + 0.5) * TILE, (int(cell / n) + 0.5) * TILE)
+		var path: Array = sim.player.action.get("path", []) if sim.player.action.get("path") is Array else []
+		var prev := Vector2(sim.player.px * TILE, sim.player.py * TILE)
+		var march: float = fmod(_now() * 1.6, 1.0)
+		var di := 0
+		for wp in path:
+			var wpos := Vector2((float(wp.x) + 0.5) * TILE, (float(wp.y) + 0.5) * TILE) if wp is Vector2i or wp is Vector2 else tc
+			var seg: float = prev.distance_to(wpos)
+			var steps: int = maxi(1, int(seg / (TILE * 0.5)))
+			for k in steps:
+				var q: Vector2 = prev.lerp(wpos, (float(k) + march) / float(steps))
+				draw_circle(q, TILE * 0.06, Color(1, 0.81, 0.36, 0.55 if di % 2 == 0 else 0.3))
+				di += 1
+			prev = wpos
+		var pulse: float = 0.5 + 0.5 * sin(_now() * 5.0)
+		draw_arc(tc, TILE * (0.30 + 0.06 * pulse), 0, TAU, 28, Color(1, 0.81, 0.36, 0.95), 2.0)
+		draw_arc(tc, TILE * (0.44 + 0.10 * pulse), 0, TAU, 28, Color(1, 0.81, 0.36, 0.35 * (1.0 - pulse)), 2.0)
 	if selected_build == REMOVE_TOOL and sim._in(hover.x, hover.y):
 		var own: bool = sim.bgrid.has(hover.y * n + hover.x)
 		var rr := Rect2(hover.x * TILE + 3, hover.y * TILE + 3, TILE - 6, TILE - 6)
@@ -397,7 +427,10 @@ func _draw_player() -> void:
 	var p: Dictionary = sim.player
 	var c := Vector2(p.px * TILE, p.py * TILE)
 	var r := TILE * 0.34
-	draw_circle(c + Vector2(0, r * 0.7), r * 0.9, Color(0, 0, 0, 0.3))
+	# «this is you»: a thin amber ground ring under the hero, slowly breathing (readable at a glance among actors)
+	draw_set_transform(c + Vector2(0, TILE * 0.36), 0.0, Vector2(1.0, 0.42))
+	draw_arc(Vector2.ZERO, TILE * (0.46 + 0.02 * sin(_now() * 2.0)), 0, TAU, 32, Color(0.88, 0.69, 0.44, 0.75), 2.5)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	var htex := art_texture("actor", "actor_hero")
 	if htex != null:
 		var working: bool = p.action != null and String(p.action.get("type", "")) == "gather"

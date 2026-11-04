@@ -103,6 +103,12 @@ func _ready() -> void:
 	Mechanics.register_all(preg, oreg)     # mechanics register themselves — no controller edit (R4)
 	overlay_host.oreg = oreg
 
+	# --- vignette between world and HUD (frames the scene; never eats input) ---
+	var vig_layer := CanvasLayer.new()
+	vig_layer.layer = 5
+	add_child(vig_layer)
+	Lifecycle.Chrome.add_vignette(vig_layer)
+
 	# --- HUD layer (hidden until a world is chosen) ---
 	hud_layer = CanvasLayer.new()
 	hud_layer.layer = 10
@@ -272,7 +278,13 @@ func _process(dt: float) -> void:
 		session.tick_research(sdt)    # research benches fund the tech pipeline each frame
 	session.tick_goals(dt)            # onboarding goals observe the world (real time, ~2×/s)
 	CatalogSim.shared().tick(sdt)     # advance the forward-engine catalogue model
-	cam.global_position = Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE)
+	# camera eases after the hero (exp. smoothing, frame-rate independent) instead of hard-locking to it;
+	# a jump (spawn/travel/respawn) larger than half a screen snaps
+	var cam_target := Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE)
+	if cam.global_position.distance_to(cam_target) > 600.0:
+		cam.global_position = cam_target
+	else:
+		cam.global_position = cam.global_position.lerp(cam_target, 1.0 - exp(-7.0 * dt))
 	view.observe_sim(dt)             # floating +N / -N feedback (view-only diff of sim numbers)
 	view.queue_redraw()
 	# VIEW state for this frame's snapshot (hud_root runs after us: parent before child)
@@ -301,15 +313,40 @@ func _demo_step(dt: float) -> void:
 			_start_game(50.4501, 30.5234, "Київ")
 			_build_demo_base()
 		return
-	var leg: int = int((_demo_t - 3.0) / 2.6)
+	var leg: int = int((_demo_t - 3.0) / 4.0)
 	if leg != _demo_leg:
 		_demo_leg = leg
-		var sx: int = int(session.sim.player.px)
-		var sy: int = int(session.sim.player.py)
-		var offs := [Vector2i(5, 1), Vector2i(5, 5), Vector2i(-2, 5), Vector2i(-3, -1)]
-		var o: Vector2i = offs[leg % offs.size()]
-		session.sim.order_move(clampi(sx + o.x, 1, session.sim.n - 2), clampi(sy + o.y, 1, session.sim.n - 2))
-	if _demo_t > 15.0:
+		if _demo_leg == 0:
+			session.sim.time.frac = 0.45   # late morning: the art reads at its best
+		var sim = session.sim
+		var hx: int = int(sim.player.px)
+		var hy: int = int(sim.player.py)
+		if leg % 2 == 0:   # chop the nearest tree (path + swing + «+N» feedback)
+			var best := -1
+			var bd := 1 << 30
+			for key in sim.map.nodes:
+				if String(sim.map.nodes[key].kind) != "tree":
+					continue
+				var d: int = absi(int(key) % sim.n - hx) + absi(int(key) / sim.n - hy)
+				if d > 2 and d < bd:
+					bd = d
+					best = int(key)
+			if best >= 0:
+				sim.order_gather(best % sim.n, best / sim.n)
+		else:              # walk to a reachable open cell a few tiles away
+			for r in [5, 4, 6, 3]:
+				var done := false
+				for o in [Vector2i(r, 0), Vector2i(0, r), Vector2i(-r, 0), Vector2i(0, -r)]:
+					var tx: int = clampi(hx + o.x, 1, sim.n - 2)
+					var ty: int = clampi(hy + o.y, 1, sim.n - 2)
+					sim.order_move(tx, ty)
+					var a: Variant = sim.player.action
+					if a is Dictionary and (a.get("path", []) as Array).size() > 0:
+						done = true
+						break
+				if done:
+					break
+	if _demo_t > 19.0:
 		get_tree().quit()
 
 # --- dev screenshot: build a base, toggle the Light overlay, capture the new HUD, quit ---
