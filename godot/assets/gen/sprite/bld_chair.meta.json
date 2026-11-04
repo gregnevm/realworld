@@ -1,0 +1,36 @@
+{
+ "id": "bld_chair",
+ "kind": "sprite",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "e7f45daa",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3010,
+  "candidatesTokenCount": 1535,
+  "totalTokenCount": 5374,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 770
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 829,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3304
+}

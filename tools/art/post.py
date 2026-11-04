@@ -35,7 +35,9 @@ RIM_LO, RIM_HI = 28.0, 120.0  # RGB distance → alpha ramp on the anti-aliased 
 TINT_PX, TINT_TOL = 24, 0.15  # despill band width / chroma reach (palette red & violet sit at ≥0.2)
 SPILL_PX, SPILL_CD = 40, 0.34  # pink-excess un-mix: band width (px at ~1024 raw) / chroma reach (hue-shifted magenta shadows reach 0.27)
 SPILL_BALANCE = 0.22  # magenta spill has r≈b: |r-b| ≤ this·max(r,b). Violet accents (#b58cff, b≫r) fail it and stay untouched
-SPILL_EDGE_PX, SPILL_SHADOW_T = 6, 0.25  # beyond this from lit bg, bg share ≥ T is cast shadow, not an anti-aliased edge
+SPILL_EDGE_PX, SPILL_SHADOW_T = 6, 0.25  # beyond this from background, bg share ≥ T is cast shadow, not an anti-aliased edge
+SPILL_NEAR_PX = 8  # within this of the background the r≈b gate is dropped (warm anti-aliased edges, e.g. flames)
+FLAT_STD, FLAT_WIN = 6.0, 2  # a pink region whose 5×5 grey std is below this is a flat cast shadow, not painted detail
 SPILL_MIN_T, SPILL_KILL_T = 0.03, 0.92  # ignore noise below this bg share; at/above the second the pixel is bg
 SPILL_MIN_BG_EXCESS = 100.0  # only when the key really is pink (min(r,b)-g of the bg); else the older passes run alone
 
@@ -66,6 +68,20 @@ def dilate(mask, px):
         g[:, :-1] |= m[:, 1:]
         m = g
     return m
+
+
+def local_std(g, r=FLAT_WIN):
+    """Per-pixel std of the grey image over a (2r+1)² window (numpy only, edge-padded)."""
+    pad = np.pad(g, r, mode="edge")
+    m1 = np.zeros_like(g)
+    m2 = np.zeros_like(g)
+    for dy in range(2 * r + 1):
+        for dx in range(2 * r + 1):
+            w = pad[dy:dy + g.shape[0], dx:dx + g.shape[1]]
+            m1 += w
+            m2 += w * w
+    n = float((2 * r + 1) ** 2)
+    return np.sqrt(np.maximum(m2 / n - (m1 / n) ** 2, 0.0))
 
 
 def chroma_key(img):
@@ -107,14 +123,25 @@ def chroma_key(img):
     # Pink-excess un-mix (Nano Banana 2.1 paints a TRUE magenta key). The RGB-distance rim above under-estimates
     # coverage for a DARK outline blended over magenta (e.g. 50/50 → (134,12,136), distance > RIM_HI → "opaque"),
     # which leaves a violet halo and whiskers. A non-pink subject colour has ~0 excess min(r,b)-g, so the excess
-    # of a mixed pixel is exactly its background share t: alpha = 1-t, colour = (c - t·bg)/(1-t). Applied only
-    # in a band around the keyed area, only near the bg chroma and only where r≈b, so real violet/red details stay untouched.
+    # of a mixed pixel is exactly its background share t: alpha = 1-t, colour = (c - t·bg)/(1-t).
+    #   • FLAT pink regions (local texture std < FLAT_STD) with t ≥ SPILL_SHADOW_T are the model's cast shadow in a
+    #     darker hue-shifted magenta — incl. enclosed pockets between legs/spikes far from any lit background. They
+    #     become the same soft black shadow as the family shadow.
+    #   • Everything within SPILL_PX of (lit ∪ flat-pink) is un-mixed. Away from the very edge only r≈b pixels
+    #     qualify (violet accents #b58cff, b≫r, stay untouched); within SPILL_NEAR_PX the balance gate is dropped,
+    #     because anti-aliased edges of warm subjects (flames: orange over magenta → r≫b) are not r≈b.
     exc_bg = min(float(bg[0]), float(bg[2])) - float(bg[1])
     if exc_bg > SPILL_MIN_BG_EXCESS:
         balanced = np.abs(rgb[..., 0] - rgb[..., 2]) <= SPILL_BALANCE * np.maximum(rgb[..., 0], rgb[..., 2])
-        band = dilate(lit, SPILL_PX) & ~family & (cd < SPILL_CD) & balanced
         excess = np.minimum(rgb[..., 0], rgb[..., 2]) - rgb[..., 1]
         t = np.clip(excess / exc_bg, 0.0, 1.0)
+        near = (cd < SPILL_CD) & ~family
+        flat = near & balanced & (t >= SPILL_SHADOW_T) & (local_std(rgb.mean(axis=-1)) < FLAT_STD)
+        if flat.any():
+            out[flat, :3] = 0.0
+            out[flat, 3] = np.minimum(out[flat, 3], np.clip(t[flat] * 0.6, 0.0, SHADOW_MAX) * 255.0)
+        zone = lit | flat
+        band = (dilate(zone, SPILL_PX) & balanced | dilate(zone, SPILL_NEAR_PX)) & near & ~flat
         fix = band & (t >= SPILL_MIN_T)
         if fix.any():
             tt = t[fix][:, None]
@@ -123,10 +150,8 @@ def chroma_key(img):
             alpha = np.where(tt[:, 0] >= SPILL_KILL_T, 0.0, 255.0 * (1.0 - tt[:, 0]))
             out[fix, :3] = unmixed
             out[fix, 3] = np.minimum(out[fix, 3], alpha)
-        # A strongly pink pixel FAR from any lit background can't be an anti-aliased edge: it is the model's
-        # cast shadow painted in a darker, hue-shifted magenta (cd 0.10–0.20, so the family test misses it).
-        # Same treatment as the family shadow: black, soft alpha.
-        deep = band & ~dilate(lit, SPILL_EDGE_PX) & (t >= SPILL_SHADOW_T)
+        # A strongly pink textured pixel FAR from any background can't be an anti-aliased edge either.
+        deep = (dilate(zone, SPILL_PX) & balanced) & near & ~dilate(zone, SPILL_EDGE_PX) & (t >= SPILL_SHADOW_T) & ~flat
         if deep.any():
             out[deep, :3] = 0.0
             out[deep, 3] = np.minimum(out[deep, 3], np.clip(t[deep] * 0.6, 0.0, SHADOW_MAX) * 255.0)

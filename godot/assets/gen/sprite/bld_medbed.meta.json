@@ -1,0 +1,36 @@
+{
+ "id": "bld_medbed",
+ "kind": "sprite",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "d8c6fa85",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3006,
+  "candidatesTokenCount": 1568,
+  "totalTokenCount": 5382,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 766
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 808,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3295
+}

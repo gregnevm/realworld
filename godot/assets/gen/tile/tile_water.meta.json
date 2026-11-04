@@ -1,0 +1,36 @@
+{
+ "id": "tile_water",
+ "kind": "tile",
+ "variant": 3,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "10daf67c",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2947,
+  "candidatesTokenCount": 1460,
+  "totalTokenCount": 4543,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 707
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 136,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v3",
+ "prompt_chars": 3139
+}

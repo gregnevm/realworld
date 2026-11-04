@@ -1,0 +1,36 @@
+{
+ "id": "bld_wood_generator",
+ "kind": "sprite",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "96636b21",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3007,
+  "candidatesTokenCount": 1550,
+  "totalTokenCount": 5864,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 767
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 1307,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3309
+}

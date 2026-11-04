@@ -1,0 +1,36 @@
+{
+ "id": "bld_brazier",
+ "kind": "sprite",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "4bc5fa0d",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3011,
+  "candidatesTokenCount": 1516,
+  "totalTokenCount": 5411,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 771
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 884,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3306
+}

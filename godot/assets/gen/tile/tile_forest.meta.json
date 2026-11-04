@@ -1,0 +1,36 @@
+{
+ "id": "tile_forest",
+ "kind": "tile",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "562711d3",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2913,
+  "candidatesTokenCount": 1505,
+  "totalTokenCount": 4778,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 673
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 360,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 2963
+}

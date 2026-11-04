@@ -1,0 +1,36 @@
+{
+ "id": "bld_door",
+ "kind": "sprite",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "17ac9a87",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3008,
+  "candidatesTokenCount": 1572,
+  "totalTokenCount": 5467,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 768
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 887,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3299
+}

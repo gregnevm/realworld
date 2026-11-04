@@ -1,0 +1,36 @@
+{
+ "id": "bld_stone_floor",
+ "kind": "tile",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "b38bc8ac",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2945,
+  "candidatesTokenCount": 1487,
+  "totalTokenCount": 5559,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 705
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 1127,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3094
+}

@@ -1,0 +1,35 @@
+{
+ "id": "bld_spike_trap",
+ "kind": "sprite",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "5b4a911c",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3022,
+  "candidatesTokenCount": 1670,
+  "totalTokenCount": 4692,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 782
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3383
+}

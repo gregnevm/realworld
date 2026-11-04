@@ -1,0 +1,36 @@
+{
+ "id": "bld_grow_zone",
+ "kind": "tile",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "1f18c50b",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2942,
+  "candidatesTokenCount": 1572,
+  "totalTokenCount": 4971,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 702
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 457,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3087
+}

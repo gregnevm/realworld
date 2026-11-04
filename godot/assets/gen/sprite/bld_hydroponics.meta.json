@@ -1,0 +1,35 @@
+{
+ "id": "bld_hydroponics",
+ "kind": "sprite",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "c6e3f8fd",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3005,
+  "candidatesTokenCount": 1727,
+  "totalTokenCount": 4732,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 765
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3300
+}
