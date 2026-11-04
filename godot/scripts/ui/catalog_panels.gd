@@ -22,6 +22,7 @@ class TechPanel extends PanelBase.Base:
 
 	func _init() -> void:
 		panel_id = &"tech"
+		menu_label = "🧪 Техно"; compact_open = 0
 		dock = PanelBase.DOCK_RIGHT
 		priority = 30
 		hotkey = KEY_U   # was T — the TemperatureOverlay owns the LOCKED §3 key T now that hotkeys are live
@@ -83,6 +84,7 @@ class ResearchTiersPanel extends PanelBase.Base:
 
 	func _init() -> void:
 		panel_id = &"research_tiers"
+		menu_label = "📜 Ери"; compact_open = 0
 		dock = PanelBase.DOCK_RIGHT
 		priority = 40
 		hotkey = KEY_Y
@@ -184,15 +186,18 @@ class ActionBrowser extends PanelBase.Base:
 class BuildBrowser extends ActionBrowser:
 	func _init() -> void:
 		panel_id = &"build_browser"; dock = PanelBase.DOCK_LEFT; priority = 50; hotkey = KEY_B; default_open = false
+		menu_label = "🏗 Каталог будівель"; compact_open = 0
 		_verb = &"cat_build"; _slice = "build_actions"; _title = "Каталог · Будувати"
 
 class CraftBrowser extends ActionBrowser:
 	func _init() -> void:
 		panel_id = &"craft_browser"; dock = PanelBase.DOCK_LEFT; priority = 60; hotkey = KEY_C; default_open = false
+		menu_label = "⚒ Каталог крафту"; compact_open = 0
 		_verb = &"cat_craft"; _slice = "craft_actions"; _title = "Каталог · Крафт"
 
 class ResearchBrowser extends ActionBrowser:
 	func _init() -> void:
 		# N («наука») — R is the LOCKED §3 Roof-overlay key (design-system: fixed, do not reassign)
 		panel_id = &"research_browser"; dock = PanelBase.DOCK_LEFT; priority = 70; hotkey = KEY_N; default_open = false
+		menu_label = "📚 Каталог досліджень"; compact_open = 0
 		_verb = &"cat_research"; _slice = "research_actions"; _title = "Каталог · Дослідити"

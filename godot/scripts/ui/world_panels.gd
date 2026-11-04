@@ -22,6 +22,7 @@ class LogisticsPanel extends PanelBase.Base:
 	var _convoy_labels: Array = []
 	func _init() -> void:
 		panel_id = &"logistics_bay"; dock = PanelBase.DOCK_RIGHT; priority = 60; hotkey = KEY_M; default_open = false
+		menu_label = "🚚 Логістика"; compact_open = 0
 	func _build() -> void:
 		rebuild_count += 1
 		var vb := VBoxContainer.new()
@@ -110,6 +111,7 @@ class CapsulePanel extends PanelBase.Base:
 	var _invite_ids: Array = []     # per-slot invite id refreshed in bind; read by the ONE-time handler
 	func _init() -> void:
 		panel_id = &"capsule_bay"; dock = PanelBase.DOCK_RIGHT; priority = 70; hotkey = KEY_V; default_open = false
+		menu_label = "🚀 Капсула"; compact_open = 0
 	func _build() -> void:
 		rebuild_count += 1
 		var vb := VBoxContainer.new()
@@ -199,6 +201,7 @@ class SocialPanel extends PanelBase.Base:
 	var _friend_args: Array = []    # per-slot fly-intent args refreshed in bind
 	func _init() -> void:
 		panel_id = &"social_web"; dock = PanelBase.DOCK_RIGHT; priority = 80; hotkey = KEY_O; default_open = false
+		menu_label = "🛡 Соціальне"; compact_open = 0
 	func _build() -> void:
 		rebuild_count += 1
 		var vb := VBoxContainer.new()
@@ -275,9 +278,12 @@ class SocialPanel extends PanelBase.Base:
 # ---- HelpPanel (RIGHT dock, H) — the static controls sheet; bind() has nothing to mutate ----
 class HelpPanel extends PanelBase.Base:
 	const CONTROLS := "ЛКМ — іти/добувати/атакувати\nнаведи курсор — що це і що зробить клік\nПКМ — розібрати будівлю (½ ціни назад)\nколесо — зум · WASD — рух\n1–0 — будувати · затисни ЛКМ — ряд стін\nEsc — скасувати · J — цілі\nSpace — пауза · +/− — швидкість\nL — світло (де темно працювати)\nT — тепло (де холодно/комфорт)\nB/C/N — каталог · U — техно · Y — ери\nI — спорядження · E — енергія · M — логістика\nV — капсула · O — соціальне · H — довідка\nГра зберігається сама: «Продовжити» на старті"   # gdlint: ignore=max-line-length
+	const TOUCH_CONTROLS := "Тап — іти / добувати / атакувати / будувати\nутримай палець — що це (підказка)\nдва пальці — зум (або − / + угорі)\nвибери будівлю внизу й веди пальцем — ряд\n✖ — скасувати · 🗑 — розібрати (½ ціни)\n⏸ ×1 ×2 ×3 — час · ☰ — панелі й оверлеї\n«Назад» — закрити меню / інструмент\nГра зберігається сама: «Продовжити» на старті"   # gdlint: ignore=max-line-length
 	var _body: Label
+	var _touch := false
 	func _init() -> void:
 		panel_id = &"help"; dock = PanelBase.DOCK_RIGHT; priority = 90; hotkey = KEY_H; default_open = false
+		menu_label = "❔ Довідка"; compact_open = 0
 	func _build() -> void:
 		rebuild_count += 1
 		var vb := VBoxContainer.new()
@@ -289,6 +295,10 @@ class HelpPanel extends PanelBase.Base:
 		_body.text = CONTROLS
 		_body.add_theme_color_override("font_color", Tokens.MUT)
 		vb.add_child(_body)
-	func bind(_vm) -> void:
+	func bind(vm) -> void:
 		rebind_count += 1
 		build_once()
+		var touch: bool = vm is Dictionary and bool((vm.get("ui", {}) as Dictionary).get("touch", false))
+		if touch != _touch:
+			_touch = touch
+			_body.text = TOUCH_CONTROLS if touch else CONTROLS

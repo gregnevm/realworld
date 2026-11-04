@@ -149,6 +149,94 @@ jobs:
           path: godot/build/web
           if-no-files-found: error
 
+  # Phone build: the same game as an installable APK (arm64, landscape, touch frame — see
+  # newhud_main.gd _setup_touch). GitHub's ubuntu runners ship the Android SDK (platform-tools +
+  # build-tools/apksigner) and JDK 17, so Godot's own export + signing runs as on a dev machine.
+  # Signing: a repository secret ANDROID_RELEASE_KEYSTORE_B64 (+ _USER/_PASSWORD) gives stable
+  # update-in-place releases; without it a CI keystore is generated once and CACHED, so successive
+  # artifacts still install over each other.
+  godot-android-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Godot 4.7
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
+          unzip -q Godot_v4.7-stable_linux.x86_64.zip
+          mv Godot_v4.7-stable_linux.x86_64 godot-bin
+          chmod +x godot-bin
+      - name: Cache Android export templates
+        id: android-templates
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/godot/export_templates/4.7.stable
+          key: godot-export-templates-4.7-stable-android
+      - name: Fetch Android export templates (cache miss)
+        if: steps.android-templates.outputs.cache-hit != 'true'
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_export_templates.tpz
+          mkdir -p ~/.local/share/godot/export_templates/4.7.stable
+          unzip -j -q Godot_v4.7-stable_export_templates.tpz "templates/android_debug.apk" "templates/android_release.apk" \
+            "templates/version.txt" -d ~/.local/share/godot/export_templates/4.7.stable
+          rm Godot_v4.7-stable_export_templates.tpz
+      - name: Cache the CI signing keystore
+        uses: actions/cache@v4
+        with:
+          path: ~/.android-ci
+          key: realworld-android-ci-keystore-v1
+      - name: Signing keys + editor settings
+        env:
+          RELEASE_KS_B64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_B64 }}
+          RELEASE_KS_USER: ${{ secrets.ANDROID_RELEASE_KEYSTORE_USER }}
+          RELEASE_KS_PASS: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+        run: |
+          mkdir -p ~/.android-ci ~/.config/godot
+          JDK="${JAVA_HOME_17_X64:-$JAVA_HOME}"
+          KT="$JDK/bin/keytool"
+          if [ ! -f ~/.android-ci/debug.keystore ]; then
+            "$KT" -genkeypair -keystore ~/.android-ci/debug.keystore -storetype PKCS12 -storepass android \
+              -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          if [ -n "$RELEASE_KS_B64" ]; then
+            echo "$RELEASE_KS_B64" | base64 -d > ~/.android-ci/release.keystore
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=$RELEASE_KS_USER" >> "$GITHUB_ENV"
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=$RELEASE_KS_PASS" >> "$GITHUB_ENV"
+          else
+            if [ ! -f ~/.android-ci/release.keystore ]; then
+              "$KT" -genkeypair -keystore ~/.android-ci/release.keystore -storetype PKCS12 -storepass realworld-ci \
+                -alias realworld -keypass realworld-ci -keyalg RSA -keysize 3072 -validity 18250 -dname "CN=RealWorld CI,O=SSD,C=UA"
+            fi
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=realworld" >> "$GITHUB_ENV"
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=realworld-ci" >> "$GITHUB_ENV"
+          fi
+          echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$HOME/.android-ci/release.keystore" >> "$GITHUB_ENV"
+          printf '%s\n' '[gd_resource type="EditorSettings" format=3]' '' '[resource]' \
+            "export/android/android_sdk_path = \"$ANDROID_HOME\"" \
+            "export/android/java_sdk_path = \"$JDK\"" \
+            "export/android/debug_keystore = \"$HOME/.android-ci/debug.keystore\"" \
+            'export/android/debug_keystore_user = "androiddebugkey"' \
+            'export/android/debug_keystore_pass = "android"' > ~/.config/godot/editor_settings-4.7.tres
+      - name: Export Android APK
+        run: |
+          mkdir -p godot/build/android
+          ./godot-bin --headless --path godot --import
+          ./godot-bin --headless --path godot --export-release "Android" build/android/RealWorld.apk
+      # gate on the artifact itself (the exporter can exit 0 on a soft failure): present + signed v2
+      - name: Verify APK
+        run: |
+          APK=godot/build/android/RealWorld.apk
+          test -s "$APK"
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" verify --verbose "$APK" | tee verify.txt
+          grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" verify.txt
+          ls -la "$APK"
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: godot/build/android/RealWorld.apk
+          if-no-files-found: error
+
   gdlint:
     runs-on: ubuntu-latest
     steps:

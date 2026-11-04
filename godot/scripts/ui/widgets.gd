@@ -433,6 +433,8 @@ class FeedWidget extends WidgetBase.Widget:
 	const GONE_AT := 30.0      # …then fades out by this age
 	const WIDTH := 290.0
 	const MAX_H := 250.0       # never climb into the RIGHT dock above: the oldest cards give way
+	var _max_cards := POOL     # compact (phones): fewer, narrower cards — the map needs the room
+	var _max_h := MAX_H
 	var _bus: Variant
 	var _list: VBoxContainer
 	var _cards: Array = []     # pool of {panel, stripe, label}, built ONCE
@@ -457,6 +459,12 @@ class FeedWidget extends WidgetBase.Widget:
 		build_once()
 		_bus = bus
 		bus.feed.connect(_on_feed)
+	func set_compact(on: bool) -> void:
+		build_once()
+		_max_cards = 3 if on else POOL
+		_max_h = 140.0 if on else MAX_H
+		for c in _cards:
+			c.label.custom_minimum_size = Vector2(230.0 if on else WIDTH, 0)
 	func _on_feed(evt: Dictionary) -> void:
 		_items.append({"cls": String(evt.get("cls", "")), "text": String(evt.get("text", "")), "age": 0.0})
 		while _items.size() > POOL:
@@ -491,7 +499,8 @@ class FeedWidget extends WidgetBase.Widget:
 			var a: float = 1.0 if float(it.age) < FADE_AT else clampf(1.0 - (float(it.age) - FADE_AT) / (GONE_AT - FADE_AT), 0.0, 1.0)
 			c.panel.modulate = Tokens.with_alpha(Tokens.WHITE, a)
 			var h: float = c.panel.get_combined_minimum_size().y + 4.0
-			c.panel.visible = used == 0.0 or used + h <= MAX_H
+			var rank: int = _items.size() - 1 - i              # 0 = newest
+			c.panel.visible = rank < _max_cards and (used == 0.0 or used + h <= _max_h)
 			used += h
 	func _exit_tree() -> void:
 		if _bus != null and _bus.feed.is_connected(_on_feed):
@@ -552,13 +561,77 @@ class HoverTip extends WidgetBase.Widget:
 		_hint.text = String(vm.get("hint", ""))
 		_hint.visible = _hint.text != ""
 	# Follow the cursor, flipping to the other side near the right/bottom edges (never off-screen).
-	func follow(mouse: Vector2, screen: Vector2) -> void:
+	func follow(mouse: Vector2, screen: Vector2, touch: bool = false) -> void:
 		if not shown:
 			return
 		var sz: Vector2 = _panel.get_combined_minimum_size()
 		var p := mouse + Vector2(18, 18)
+		if touch:
+			p = mouse + Vector2(-sz.x * 0.5, -sz.y - 44.0)   # above the finger, which hides what's under it
+			if p.y < 4.0:
+				p.y = mouse.y + 44.0
 		if p.x + sz.x > screen.x - 4.0:
 			p.x = mouse.x - sz.x - 12.0
 		if p.y + sz.y > screen.y - 4.0:
 			p.y = mouse.y - sz.y - 12.0
 		WidgetBase.Widget.pin_at(self, Vector2(maxf(4.0, p.x), maxf(4.0, p.y)))
+
+# ---- PanelMenu (touch ☰): every panel/overlay toggle as a finger-sized button grid — the phone's
+# stand-in for the hotkeys. Built ONCE from the registries' own metadata (menu_label); it only emits
+# chosen(kind, id) — the entry scene flips the registry, never this widget (R9 spirit). ----
+class PanelMenu extends WidgetBase.Widget:
+	signal chosen(kind: StringName, id: StringName)
+	signal closed
+	var _grid: GridContainer
+	var _btns: Dictionary = {}   # "kind:id" -> Button
+	func _build() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var pc := PanelContainer.new()
+		pc.theme_type_variation = UITheme.V_MODAL
+		pc.set_anchors_preset(Control.PRESET_CENTER)
+		pc.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		pc.grow_vertical = Control.GROW_DIRECTION_BOTH
+		add_child(pc)
+		var vb := VBoxContainer.new()
+		vb.add_theme_constant_override("separation", 8)
+		pc.add_child(vb)
+		var head := HBoxContainer.new()
+		vb.add_child(head)
+		var title := Label.new()
+		title.text = "Панелі та оверлеї"
+		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		title.add_theme_color_override("font_color", Tokens.AMBER)
+		head.add_child(title)
+		var x := Button.new()
+		x.text = "✖"
+		x.custom_minimum_size = Vector2(44, 38)
+		x.focus_mode = Control.FOCUS_NONE
+		x.pressed.connect(func() -> void: closed.emit())
+		head.add_child(x)
+		_grid = GridContainer.new()
+		_grid.columns = 3
+		_grid.add_theme_constant_override("h_separation", 6)
+		_grid.add_theme_constant_override("v_separation", 6)
+		vb.add_child(_grid)
+	# entries: [{kind: &"panel"|&"overlay", id, label}] — called once by the entry scene
+	func setup(entries: Array) -> void:
+		build_once()
+		for e in entries:
+			var b := Button.new()
+			b.toggle_mode = true
+			b.text = String(e.label)
+			b.custom_minimum_size = Vector2(170, 42)
+			b.focus_mode = Control.FOCUS_NONE
+			b.pressed.connect(func() -> void: chosen.emit(StringName(e.kind), StringName(e.id)))
+			_grid.add_child(b)
+			_btns["%s:%s" % [String(e.kind), String(e.id)]] = b
+	# states: "kind:id" -> bool (is that panel/overlay showing right now)
+	func bind(states) -> void:
+		build_once()
+		if not (states is Dictionary):
+			return
+		for k in _btns:
+			_btns[k].set_pressed_no_signal(bool(states.get(k, false)))
+	func entry_count() -> int:
+		return _btns.size()
+

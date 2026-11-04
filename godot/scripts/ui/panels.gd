@@ -19,6 +19,7 @@ class StockPanel extends PanelBase.Base:
 	var _total: Widgets.StatRow
 	func _init() -> void:
 		panel_id = &"stock"; dock = PanelBase.DOCK_RIGHT; priority = 10; default_open = true
+		menu_label = "📦 Склад"; compact_open = 1
 	func _build() -> void:
 		rebuild_count += 1
 		var vb := VBoxContainer.new()
@@ -59,11 +60,14 @@ class StockPanel extends PanelBase.Base:
 # ---- VitalsPanel (LEFT dock) — hero need bars (HP/hunger/rest/blood) + located-health readout ----
 class VitalsPanel extends PanelBase.Base:
 	var _bars: Array = []          # NeedBar instances, in bar order
+	var _bar_grid: GridContainer   # 1 column on desktop, 2×2 on a phone (same bars, no rebuild — R2)
+	var _touch := false
 	var _felt: Widgets.StatRow     # felt °C + comfort enum icon (R11: icon+число, не лише колір)
 	var _state: Widgets.StatRow    # worst hediff inspect line / здоровий / непритомний
 	var _carry: Widgets.StatRow
 	func _init() -> void:
 		panel_id = &"vitals"; dock = PanelBase.DOCK_LEFT; priority = 10; default_open = true
+		menu_label = "❤ Життєві"; compact_open = 1
 	func _build() -> void:
 		rebuild_count += 1
 		var vb := VBoxContainer.new()
@@ -71,9 +75,15 @@ class VitalsPanel extends PanelBase.Base:
 		add_child(vb)
 		var head := Widgets.H2Header.new()
 		vb.add_child(head); head.set_header("Життєві", "need")
+		_bar_grid = GridContainer.new()
+		_bar_grid.columns = 1
+		_bar_grid.add_theme_constant_override("h_separation", 10)
+		_bar_grid.add_theme_constant_override("v_separation", 5)
+		vb.add_child(_bar_grid)
 		for i in 4:
 			var bar := Widgets.NeedBar.new()
-			vb.add_child(bar)
+			bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			_bar_grid.add_child(bar)
 			_bars.append(bar)
 		_felt = Widgets.StatRow.new()
 		vb.add_child(_felt); _felt.set_row("🌡", "Відчуття", "—")
@@ -100,6 +110,11 @@ class VitalsPanel extends PanelBase.Base:
 		_state.tooltip_text = "\n".join(conds) if not conds.is_empty() else "Жодних уражень"
 		var carry: Dictionary = v.carry
 		_carry.set_value("%d/%d" % [int(carry.cur), int(carry.cap)])
+		var touch := bool((vm.get("ui", {}) as Dictionary).get("touch", false))
+		if touch != _touch:
+			_touch = touch
+			_bar_grid.columns = 2 if touch else 1   # a phone's dock is short: bars pair up
+			_carry.visible = not touch             # the haul loop runs itself; the bar is spare
 
 # ---- PowerPanel (RIGHT dock) — the grid readout (Batch 8c): supply/draw/battery + brownout state ----
 class PowerPanel extends PanelBase.Base:
@@ -109,6 +124,7 @@ class PowerPanel extends PanelBase.Base:
 	var _state: Widgets.StatRow
 	func _init() -> void:
 		panel_id = &"power"; dock = PanelBase.DOCK_RIGHT; priority = 15; hotkey = KEY_E; default_open = false
+		menu_label = "⚡ Енергія"; compact_open = 0
 	func _build() -> void:
 		rebuild_count += 1
 		var vb := VBoxContainer.new()
@@ -146,6 +162,7 @@ class BalancePanel extends PanelBase.Base:
 	var _hint: Widgets.StatRow
 	func _init() -> void:
 		panel_id = &"balance"; dock = PanelBase.DOCK_RIGHT; priority = 20; default_open = true
+		menu_label = "⚖ Загроза"; compact_open = 0
 	func _build() -> void:
 		rebuild_count += 1
 		var vb := VBoxContainer.new()
@@ -209,6 +226,7 @@ class ResearchPanel extends PanelBase.Base:
 	var _qrows: Array = []     # StatRow pool (the queue)
 	func _init() -> void:
 		panel_id = &"research"; dock = PanelBase.DOCK_LEFT; priority = 20; default_open = false
+		menu_label = "🔬 Дослідження"
 		reveal_once = true   # pips into view with the first research bench (design-system §2)
 	func wants_reveal(vm) -> bool:
 		if not (vm is Dictionary) or not vm.has("research"):
@@ -299,19 +317,26 @@ class ResearchPanel extends PanelBase.Base:
 class BuildBarPanel extends PanelBase.Base:
 	var _btns: Array = []      # fixed Button pool, one per GameData.BUILD_ORDER entry (R2)
 	var _keys: Array = []      # current build kind per button, refreshed in bind()
+	var _scroll: ScrollContainer   # the palette scrolls sideways when the screen is narrower (phones)
+	var _hb: HBoxContainer
+	var _touch_sized := false
 	func _init() -> void:
 		panel_id = &"build_bar"; dock = PanelBase.DOCK_BAR; priority = 10; default_open = true
 	func _build() -> void:
 		rebuild_count += 1
-		var hb := HBoxContainer.new()
-		hb.add_theme_constant_override("separation", 4)
-		add_child(hb)
+		_scroll = ScrollContainer.new()
+		_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+		_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		add_child(_scroll)
+		_hb = HBoxContainer.new()
+		_hb.add_theme_constant_override("separation", 4)
+		_scroll.add_child(_hb)
 		for i in GameData.BUILD_ORDER.size():
 			var btn := Button.new()
 			btn.toggle_mode = true
 			btn.add_theme_font_size_override("font_size", 12)
 			btn.pressed.connect(_on_slot.bind(i))
-			hb.add_child(btn)
+			_hb.add_child(btn)
 			_btns.append(btn)
 			_keys.append("")
 	# The SAME intent the digit keys fire — the router toggles view.selected_build (the one truth),
@@ -338,6 +363,17 @@ class BuildBarPanel extends PanelBase.Base:
 				_btns[i].visible = true
 			else:
 				_btns[i].visible = false
+		_fit(bool((vm.get("ui", {}) as Dictionary).get("touch", false)))
+
+	# Finger-sized slots on touch; the palette never runs off a narrow screen — it scrolls instead.
+	func _fit(touch: bool) -> void:
+		if touch != _touch_sized:
+			_touch_sized = touch
+			for b in _btns:
+				b.custom_minimum_size = Vector2(64, 46) if touch else Vector2.ZERO
+		var need: Vector2 = _hb.get_combined_minimum_size()
+		var avail: float = maxf(200.0, get_viewport_rect().size.x - 44.0)
+		_scroll.custom_minimum_size = Vector2(minf(need.x, avail), need.y + (10.0 if need.x > avail else 0.0))
 
 # ---- GearPanel (LEFT dock) — craft + equip loadout (spec 0001 parity): one FIXED row per
 # GameData.ITEM_ORDER entry (R2), each row = status Label + "⚒" craft + "✋" equip buttons.
@@ -350,6 +386,7 @@ class GearPanel extends PanelBase.Base:
 	var _ids: Array = []       # current item id per row, refreshed in bind()
 	func _init() -> void:
 		panel_id = &"gear"; dock = PanelBase.DOCK_LEFT; priority = 80; hotkey = KEY_I; default_open = false
+		menu_label = "🎒 Спорядження"; compact_open = 0
 	func _build() -> void:
 		rebuild_count += 1
 		var vb := VBoxContainer.new()
@@ -410,12 +447,19 @@ class GearPanel extends PanelBase.Base:
 # region/speed (value data); a chip click emits set_speed (view state, bound by the entry scene). ----
 class TopBarPanel extends PanelBase.Base:
 	const CHIPS := [0.0, 1.0, 2.0, 3.0]
+	# touch tools (phones have no keyboard / right button / wheel): ☰ panels menu · ✖ cancel ·
+	# 🗑 remove tool · zoom out/in. Built once, shown only when vm.ui.touch (R2).
+	const TOOLS := [["☰", &"toggle_menu", "Панелі та оверлеї"], ["✖", &"cancel_tool", "Скасувати"],
+		["🗑", &"remove_tool", "Розібрати: торкнись своєї будівлі"], ["−", &"zoom_out", "Віддалити"], ["+", &"zoom_in", "Наблизити"]]
 	var _clock: Label
 	var _season: Label
 	var _weather: Label
 	var _temp: Label
 	var _region: Label
 	var _chips: Array = []
+	var _tools: Array = []
+	var _tool_box: HBoxContainer
+	var _touch := false
 	func _init() -> void:
 		panel_id = &"top_bar"; dock = PanelBase.DOCK_TOP; priority = 0; default_open = true
 	func _build() -> void:
@@ -442,6 +486,20 @@ class TopBarPanel extends PanelBase.Base:
 			b.pressed.connect(_on_chip.bind(m))
 			chips.add_child(b)
 			_chips.append(b)
+		_tool_box = HBoxContainer.new()
+		_tool_box.add_theme_constant_override("separation", 2)
+		_tool_box.visible = false
+		hb.add_child(_tool_box)
+		for t in TOOLS:
+			var tb := Button.new()
+			tb.text = String(t[0])
+			tb.tooltip_text = String(t[2])
+			tb.focus_mode = Control.FOCUS_NONE
+			tb.custom_minimum_size = Vector2(40, 36)
+			tb.toggle_mode = StringName(t[1]) == &"remove_tool" or StringName(t[1]) == &"toggle_menu"
+			tb.pressed.connect(emit_intent.bind(StringName(t[1]), {}))
+			_tool_box.add_child(tb)
+			_tools.append(tb)
 	func _cell(parent: Control, tip: String) -> Label:
 		var l := Label.new()
 		l.tooltip_text = tip
@@ -460,7 +518,7 @@ class TopBarPanel extends PanelBase.Base:
 		_clock.text = "%s День %d · %s" % [Fmt.phase_icon(phase), int(c.get("day", 1)), String(c.get("hhmm", ""))]
 		var season := String(c.get("season", ""))
 		_season.text = "%s %s" % [Fmt.season_icon(season), season] if season != "" else ""
-		_season.visible = season != ""
+		_season.visible = season != "" and not _touch
 		var env: Dictionary = vm.get("env", {})
 		_weather.text = Fmt.weather_label(StringName(env.get("weather", &"clear")))
 		var t: float = float(env.get("temp_c", 15.0))
@@ -479,6 +537,18 @@ class TopBarPanel extends PanelBase.Base:
 		var speed: float = float(vm.get("speed", 1.0))
 		for i in _chips.size():
 			_chips[i].set_pressed_no_signal(is_equal_approx(float(CHIPS[i]), speed))
+		var ui: Dictionary = vm.get("ui", {})
+		var touch := bool(ui.get("touch", false))
+		if touch != _touch:
+			_touch = touch
+			_tool_box.visible = touch
+			_season.visible = not touch and _season.text != ""   # a phone's top strip keeps the essentials
+			_region.visible = not touch
+			for chip in _chips:
+				chip.custom_minimum_size = Vector2(40, 36) if touch else Vector2.ZERO
+		if touch:
+			_tools[0].set_pressed_no_signal(bool(ui.get("menu", false)))
+			_tools[2].set_pressed_no_signal(bool(ui.get("remove", false)))
 
 # ---- GoalsPanel (LEFT dock, J) — the onboarding chain made visible: the current goal, HOW to do it
 # (keys named), its live progress and what comes next. Reads vm.goals (session goals_view, R8). ----
@@ -490,6 +560,7 @@ class GoalsPanel extends PanelBase.Base:
 	var _next: Label
 	func _init() -> void:
 		panel_id = &"goals"; dock = PanelBase.DOCK_LEFT; priority = 15; hotkey = KEY_J; default_open = true
+		menu_label = "🎯 Цілі"; compact_open = 1
 	func _build() -> void:
 		rebuild_count += 1
 		var vb := VBoxContainer.new()
@@ -533,7 +604,8 @@ class GoalsPanel extends PanelBase.Base:
 			return
 		var cur: Dictionary = g.get("current", {})
 		_title.text = String(cur.get("title", ""))
-		_hint.text = String(cur.get("hint", ""))
+		var touch := bool((vm.get("ui", {}) as Dictionary).get("touch", false))
+		_hint.text = Fmt.touchify(String(cur.get("hint", ""))) if touch else String(cur.get("hint", ""))
 		var pct: int = int(round(float(cur.get("pct", 0.0)) * 100.0))
 		_bar.visible = true
 		_bar.bind({"icon": "◎", "pct": pct, "state": &"good" if pct >= 100 else &"warn"})

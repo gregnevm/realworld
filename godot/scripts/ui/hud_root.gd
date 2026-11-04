@@ -47,6 +47,19 @@ func _fit_viewport() -> void:
 const DOCK_BOTTOM_GAP := 84.0          # keep docks clear of the BAR dock (build palette)
 var _left_scroll: ScrollContainer
 var _right_scroll: ScrollContainer
+# Compact frame (phones, set by the entry scene before mount): the side docks start BELOW the top
+# strip (a 950x430 logical screen has no room to share it), panels honour their compact_open default
+# and the feed shrinks. Desktop keeps the authored layout.
+var compact := false
+var dock_top := 10.0
+var dock_bottom_gap := DOCK_BOTTOM_GAP
+
+func set_compact(on: bool) -> void:
+	compact = on
+	dock_top = 52.0 if on else 10.0
+	dock_bottom_gap = 76.0 if on else DOCK_BOTTOM_GAP
+	if feed_w != null:
+		feed_w.set_compact(on)
 
 func _build_zones() -> void:
 	_left_scroll = _dock_scroll()
@@ -86,7 +99,7 @@ func _dock_scroll() -> ScrollContainer:
 
 # Size each dock to its content, capped above the build bar (a scrollbar appears past the cap).
 func _fit_docks() -> void:
-	var cap: float = maxf(120.0, size.y - DOCK_BOTTOM_GAP)
+	var cap: float = maxf(120.0, size.y - dock_bottom_gap - dock_top + 10.0)
 	_fit_one(_left_scroll, false, cap)
 	_fit_one(_right_scroll, true, cap)
 
@@ -94,7 +107,7 @@ func _fit_one(sc: ScrollContainer, right_edge: bool, cap: float) -> void:
 	var box: Control = sc.get_child(0)
 	var need: Vector2 = box.get_combined_minimum_size()
 	var w: float = maxf(box.custom_minimum_size.x, need.x) + (10.0 if need.y > cap else 0.0)   # + scrollbar
-	sc.position = Vector2((size.x - 12.0 - w) if right_edge else 12.0, 10.0)
+	sc.position = Vector2((size.x - 12.0 - w) if right_edge else 12.0, dock_top)
 	sc.size = Vector2(w, minf(need.y, cap))
 
 func setup(p_session, p_balance, p_bus, p_registry, p_overlays = null) -> void:
@@ -113,8 +126,15 @@ func mount() -> void:
 		var d: int = int(p.dock)
 		if _docks.has(d):
 			_docks[d].add_child(p)
-			p.visible = bool(p.default_open)   # hotkey'd panels start hidden; registry.toggle flips them
+			p.visible = _starts_open(p)        # hotkey'd panels start hidden; registry.toggle flips them
 	_mount_feedback()
+	if compact:
+		feed_w.set_compact(true)
+
+func _starts_open(p) -> bool:
+	if compact and int(p.compact_open) >= 0:
+		return int(p.compact_open) == 1
+	return bool(p.default_open)
 
 # Banner under the top bar, flash in the upper-middle (where the eye is after a map click), the
 # feed bottom-right above the bar, the tooltip at the cursor (design-system §2 + §5).
@@ -157,4 +177,5 @@ func refresh(dt: float) -> void:
 	registry.bind_visible(snap)
 	if tip_w != null:
 		tip_w.bind(snap.get("inspect", {}) if bool(view_ctx.get("in_world", false)) else {})
-		tip_w.follow(get_viewport().get_mouse_position(), size)
+		var at: Vector2 = view_ctx.get("pointer", get_viewport().get_mouse_position())
+		tip_w.follow(at, size, bool(view_ctx.get("touch", false)))
