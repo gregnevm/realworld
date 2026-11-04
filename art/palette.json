@@ -1,0 +1,13 @@
+{
+ "note": "Shared art palette. Seeds: godot/scripts/ui/tokens.gd (§1 tokens, RES, TERRAIN) + world_gen.gd TERRAIN_COLOR, extended to 4-step ramps (shadow → base → light → highlight) so cel-shading has room. post.py snaps sprite/actor/tile renders to these colors (no dither). Icons/UI keep full color (read at small size). Change deliberately: every approved asset was snapped to this list.",
+ "colors": [
+  "#0e1216", "#151b21", "#1b232b", "#26313b", "#33414d", "#54636f", "#7c8b97", "#c9d4dc", "#e7edf3",
+  "#1a2a1a", "#20321f", "#2f5133", "#39562a", "#5c7d3c", "#6fae54", "#93c46e", "#b8d98f",
+  "#3a2a1c", "#4a4036", "#6e5836", "#8a6a3e", "#c08a4a", "#d9a866", "#e0b070", "#f0d29a",
+  "#3b4148", "#4f4a42", "#6c7077", "#9aa3ab", "#b9c0c6", "#c7b377", "#dde6ee",
+  "#18263a", "#27557e", "#2b3f5c", "#3f6f96", "#86d0d6", "#b6e6ea",
+  "#4a1c1a", "#7a2a26", "#b23b34", "#e06a5a", "#f09a88",
+  "#3a2a5a", "#6a4fa8", "#b58cff", "#d6bcff",
+  "#5a4a1a", "#a07a2a", "#ffcf5c"
+ ]
+}

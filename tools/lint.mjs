@@ -2,7 +2,9 @@
 //   • every game/js module parses (node --check) and is a classic script (no import/export);
 //   • game/index.html loads exactly the modules on disk, in the contract order from AGENTS.md;
 //   • every module wraps itself in a "use strict" IIFE over the RW namespace;
-//   • no Math.random in sim paths (determinism: only the seeded G.rng / worldgen rng may roll).
+//   • no Math.random in sim paths (determinism: only the seeded G.rng / worldgen rng may roll);
+//   • secret-scan: no Google API key (AIza…/AQ.…) in any tracked file, and .env.local stays gitignored
+//     (tools/gen-art.mjs keeps the one-day Gemini key there).
 import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
@@ -30,5 +32,20 @@ for (const name of ORDER) {
   if (["game", "logistics", "entities", "worldgen", "progression", "util"].includes(name) && /Math\.random/.test(src))
     problems.push(`${name}.js calls Math.random — sim paths must use the seeded rng`);
 }
+// secret-scan over everything git tracks or would track (cached + untracked-not-ignored)
+const tracked = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: root })
+  .toString().split("\0").filter(Boolean);
+const { KEY_SCAN_RE: KEY_RE } = await import("./art/lib.mjs"); // one definition of "what a Google key looks like"
+for (const f of tracked) {
+  const abs = path.join(root, f);
+  let st; try { st = fs.statSync(abs); } catch { continue; }
+  if (!st.isFile()) continue;
+  // no size cap (a cap is a bypass); NULs stripped so UTF-16 text files are caught too
+  const text = fs.readFileSync(abs, "latin1");
+  if (KEY_RE.test(text) || KEY_RE.test(text.replace(/\0/g, ""))) problems.push(`${f} contains a Google API key (AIza…/AQ.…) — move it to .env.local`);
+}
+try { execFileSync("git", ["check-ignore", "-q", ".env.local"], { cwd: root }); }
+catch { problems.push(".env.local is not gitignored — the Gemini key would be committable"); }
+
 if (problems.length) { console.error("LINT FAILED:\n - " + problems.join("\n - ")); process.exit(1); }
-console.log(`lint ok: ${ORDER.length} modules, contract order intact`);
+console.log(`lint ok: ${ORDER.length} modules, contract order intact, ${tracked.length} files secret-scanned`);

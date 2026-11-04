@@ -1,0 +1,35 @@
+{
+ "id": "bld_turret",
+ "kind": "sprite",
+ "variant": 2,
+ "model": "gemini-2.5-flash-image",
+ "hash": "78e58d0e",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 1225,
+  "candidatesTokenCount": 1290,
+  "totalTokenCount": 2515,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 709
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 516
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1290
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v2",
+ "prompt_chars": 3059
+}

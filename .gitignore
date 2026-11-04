@@ -15,12 +15,18 @@ Thumbs.db
 desktop.ini
 *.swp
 
-# local-only
+# local-only (.env.local holds the one-day GEMINI_API_KEY — tools/gen-art.mjs key)
 .env
 .env.*
+
+# gen-art candidates (only approved assets under godot/assets/gen/ and art/refs/ are committed)
+art/out/
 
 # Godot (engine import cache + generated captures; engine binary lives outside repo)
 godot/.godot/
 godot/*_shot*.png
 godot/*.import
 godot/android/build/
+
+# python bytecode (tools/art/post.py)
+__pycache__/

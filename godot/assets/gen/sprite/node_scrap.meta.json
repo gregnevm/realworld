@@ -1,0 +1,35 @@
+{
+ "id": "node_scrap",
+ "kind": "sprite",
+ "variant": 0,
+ "model": "gemini-2.5-flash-image",
+ "hash": "02607186",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 1237,
+  "candidatesTokenCount": 1290,
+  "totalTokenCount": 2527,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 721
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 516
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1290
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3135
+}

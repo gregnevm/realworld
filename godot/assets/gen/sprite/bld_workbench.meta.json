@@ -1,0 +1,35 @@
+{
+ "id": "bld_workbench",
+ "kind": "sprite",
+ "variant": 2,
+ "model": "gemini-2.5-flash-image",
+ "hash": "b6fe81e5",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 1233,
+  "candidatesTokenCount": 1290,
+  "totalTokenCount": 2523,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 717
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 516
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1290
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v2",
+ "prompt_chars": 3088
+}

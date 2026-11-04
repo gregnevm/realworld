@@ -1,0 +1,35 @@
+{
+ "id": "item_stone_axe",
+ "kind": "icon",
+ "variant": 5,
+ "model": "gemini-2.5-flash-image",
+ "hash": "05b37606",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 1294,
+  "candidatesTokenCount": 1290,
+  "totalTokenCount": 2584,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 778
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 516
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1290
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v5",
+ "prompt_chars": 3314
+}
