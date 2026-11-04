@@ -35,12 +35,14 @@ var bench_announced := false   # one-time «стіл працює» toast (the R
 # Onboarding goals (goals.gd): account-level and STICKY — a goal done stays done across travel,
 # respawn and save/continue. Pure observation of sim state: never steers the sim, never hashed.
 var goals_done: Dictionary = {}   # goal id -> true
+var use_inventory := false        # spec 0009: set by the entry scene BEFORE start(); tests keep the stock path
 var _goal_t := 0.0
 
 func start(lat: float, lon: float, place_name: String) -> void:
 	var m := WorldGen.generate_map(lat, lon, MAP_N)
 	m["place_name"] = place_name
 	sim = Sim.new()
+	sim.use_inventory = use_inventory   # spec 0009: the playable scene opts new games into the personal inventory
 	sim.new_game(m, false)   # the session issues the climate hint itself, after the landing lines
 	progression = Progression.new(Catalog.load_json())
 	store = Persistence.store_new()
@@ -180,7 +182,10 @@ func goals_view() -> Dictionary:
 	if cur.is_empty():
 		return view
 	var id := String(cur.id)
-	view["current"] = {"id": id, "title": String(cur.title), "hint": String(cur.hint), "build": String(cur.get("build", "")),
+	var hint := String(cur.hint)
+	if sim != null and sim.get("use_inventory") == true and Goals.INV_HINT.has(id):
+		hint = String(Goals.INV_HINT[id])   # inventory world: the how-to speaks hotbar/backpack, not the build palette
+	view["current"] = {"id": id, "title": String(cur.title), "hint": hint, "build": String(cur.get("build", "")),
 		"pct": Goals.progress(id, sim, self) if sim != null else 0.0}
 	var after := ""
 	var seen := false

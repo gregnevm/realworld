@@ -4,6 +4,8 @@
 # mutator (R9). This is the data replacement for main.gd's _unhandled_input/_handle_click switch.
 extends RefCounted
 
+const InventoryMod = preload("res://scripts/sim/inventory.gd")
+
 # Install the standard grammar. `session` has `.sim` and `.travel_to(lat,lon,name)`.
 # Mutators that return {ok, msg} get their failure flashed (main.gd parity): the router is the ONE
 # place allowed to route a refusal into the sim's flash channel the FeedbackBus drains (R9+R10) —
@@ -24,6 +26,23 @@ static func install(ic) -> void:
 			s.sim._flash("🌱 Культура: " + what))
 	ic.bind(&"deconstruct",  func(s, a):
 		var r: Dictionary = s.sim.demolish(int(a.x), int(a.y))
+		if not r.ok: s.sim._flash(String(r.get("msg", ""))))
+	# spec 0009 — personal inventory
+	ic.bind(&"set_hand",     func(s, a): InventoryMod.set_hand(s.sim, int(a.i)))
+	ic.bind(&"inv_move",     func(s, a): InventoryMod.move(s.sim, int(a.a), int(a.b)))
+	ic.bind(&"craft_building", func(s, a):
+		var r: Dictionary = InventoryMod.craft_building(s.sim, String(a.kind))
+		if not r.ok: s.sim._flash(String(r.get("msg", ""))))
+	ic.bind(&"inv_sort",     func(s, _a): InventoryMod.sort_backpack(s.sim))
+	ic.bind(&"inv_split",    func(s, a):
+		if not InventoryMod.split(s.sim, int(a.i)): s.sim._flash("Нема куди розділити (потрібен вільний слот і стак ≥ 2)."))
+	ic.bind(&"inv_drop",     func(s, a):
+		if InventoryMod.drop(s.sim, int(a.i)): s.sim._flash("Викинуто — торба лежить поруч (підбереш, відійшовши й повернувшись)."))
+	ic.bind(&"stash_all",    func(s, _a):
+		var r: Dictionary = InventoryMod.stash_all(s.sim)
+		s.sim._flash(String(r.get("msg", ""))))
+	ic.bind(&"take_storage", func(s, a):
+		var r: Dictionary = InventoryMod.take_from_storage(s.sim, String(a.res), int(a.n))
 		if not r.ok: s.sim._flash(String(r.get("msg", ""))))
 	ic.bind(&"repair",       func(s, a):
 		var r: Dictionary = s.sim.repair(int(a.x), int(a.y))

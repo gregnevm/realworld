@@ -65,7 +65,7 @@ static func _body_hash(record: Dictionary) -> String:
 	return content_hash(body)
 
 # ---------------- serialize a live region (diff + save) ----------------
-const PLAYER_FIELDS := ["px", "py", "face", "hp", "hunger", "rest", "carry", "carry_cap", "sleeping", "skills", "equipped", "items", "born"]
+const PLAYER_FIELDS := ["px", "py", "face", "hp", "hunger", "rest", "carry", "carry_cap", "sleeping", "skills", "equipped", "items", "born", "inv", "hand"]
 
 static func serialize_region(sim) -> Dictionary:
 	var m: Dictionary = sim.map
@@ -109,6 +109,10 @@ static func serialize_region(sim) -> Dictionary:
 	# OSM regions: terrain was externally overlaid and is not reproducible from seed -> save it.
 	if rec.source == "osm":
 		rec["tiles_b64"] = Marshalls.raw_to_base64(m.tiles)
+	# spec 0009: the personal-inventory world carries its flag + death bags (only then — OFF records unchanged)
+	if sim.get("use_inventory") == true:
+		rec["use_inventory"] = true
+		rec["bags"] = (sim.bags as Array).duplicate(true)
 	return rec
 
 static func _pick(src: Dictionary, fields: Array) -> Dictionary:

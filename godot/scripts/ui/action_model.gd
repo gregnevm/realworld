@@ -189,6 +189,25 @@ static func options(sim, t: Dictionary, build_kind: String = "") -> Array:
 # ---- quick slots -----------------------------------------------------------------------------------
 # A slot is {type: &"tool"|&"weapon"|&"build"|&"repair"|&"hands", id, glyph, label}. Picking one switches
 # the mode automatically (axe → Gather, weapon → Fight, building → Build, hammer → Repair).
+# spec 0009 inventory world: the quick bar IS the hotbar (inv slots 0..7). Buildings → Build (place what
+# you hold), tools → Gather, weapons → Fight, resources/empty hand → Gather with bare hands.
+static func slots_from_inventory(sim) -> Array:
+	var out: Array = []
+	for i in mini(8, (sim.player.inv as Array).size()):
+		var sl: Dictionary = sim.player.inv[i]
+		var id := String(sl.id)
+		if id == "":
+			out.append({"type": &"hands", "id": "", "n": 0, "label": "Порожньо", "glyph": ""})
+		elif id.begins_with("bld:"):
+			var kind := id.substr(4)
+			out.append({"type": &"build", "id": kind, "n": int(sl.n), "label": String(sim.building_def(kind).get("name", kind)), "glyph": "🔨"})
+		elif GameData.ITEMS.has(id):
+			var t: StringName = &"weapon" if String(GameData.ITEMS[id].slot) == "weapon" else &"tool"
+			out.append({"type": t, "id": id, "n": 1, "label": String(GameData.ITEMS[id].name), "glyph": "⚔" if t == &"weapon" else "⛏"})
+		else:
+			out.append({"type": &"res", "id": id, "n": int(sl.n), "label": String(GameData.RES.get(id, {}).get("label", id)), "glyph": "•"})
+	return out
+
 static func mode_for_slot(slot: Dictionary) -> StringName:
 	match StringName(slot.get("type", &"hands")):
 		&"weapon": return &"fight"

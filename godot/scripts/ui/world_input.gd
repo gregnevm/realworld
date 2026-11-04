@@ -293,6 +293,10 @@ class WorldInput extends Node:
 	# Digits arm the ghost through the SAME select_build verb the BuildBar clicks use — one owner
 	# for the toggle semantics (the entry scene binds it), so keyboard and mouse can never drift.
 	func _select_build(i: int) -> void:
+		if session.sim.get("use_inventory") == true:   # spec 0009: digits pick the hand slot (hotbar 1–8)
+			if i < 8:
+				router.dispatch(&"set_hand", {"i": i}, session)
+			return
 		if i < GameData.BUILD_ORDER.size():
 			router.dispatch(&"select_build", {"kind": GameData.BUILD_ORDER[i]}, session)
 
