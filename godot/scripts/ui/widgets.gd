@@ -60,7 +60,7 @@ class StatRow extends WidgetBase.Widget:
 	func set_row(glyph: String, label: String, val: String, icon_id: String = "") -> void:
 		build_once()
 		_glyph.text = glyph
-		_show_icon(ArtIcons.res(icon_id) if icon_id != "" else null)
+		_show_icon(ArtIcons.res(icon_id) if icon_id != "" else ArtIcons.for_glyph(glyph))
 		_label.text = label
 		set_value(val)
 	# Art icon when we have one (glyph hidden), emoji glyph otherwise (R11 fallback).
@@ -83,11 +83,15 @@ class NeedBar extends WidgetBase.Widget:
 	var value := ""
 	var state: StringName = &"good"
 	var _pct := 0.0
+	var _shown := -1.0             # eased fill actually drawn (ease-out toward _pct; snaps on first bind)
+	var _pulse := 0.0
 	var _icon: Label
+	var _art: TextureRect
 	var _value: Label
 	var _track: Control
 	func _build() -> void:
-		custom_minimum_size = Vector2(0, 18)
+		custom_minimum_size = Vector2(0, 22)
+		set_process(true)
 		var hb := HBoxContainer.new()
 		hb.set_anchors_preset(Control.PRESET_FULL_RECT)
 		hb.add_theme_constant_override("separation", 8)
@@ -95,6 +99,15 @@ class NeedBar extends WidgetBase.Widget:
 		_icon = Label.new()
 		_icon.custom_minimum_size = Vector2(20, 0)
 		hb.add_child(_icon)
+		_art = TextureRect.new()
+		_art.custom_minimum_size = Vector2(22, 22)
+		_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		_art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_art.pivot_offset = Vector2(11, 11)
+		_art.visible = false
+		hb.add_child(_art)
 		_track = Control.new()
 		_track.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_track.custom_minimum_size = Vector2(0, 10)
@@ -109,7 +122,26 @@ class NeedBar extends WidgetBase.Widget:
 		var w: float = _track.size.x
 		var h: float = _track.size.y
 		_track.draw_rect(Rect2(0, 0, w, h), Tokens.PANEL2)
-		_track.draw_rect(Rect2(0, 0, w * clampf(_pct / 100.0, 0, 1), h), Tokens.urgency(state))
+		var fill: Color = Tokens.urgency(state)
+		if state == &"crit":
+			fill = fill.lerp(Tokens.PANEL2, 0.35 * _pulse)   # slow blink: urgency is felt, not only coloured (R11)
+		_track.draw_rect(Rect2(0, 0, w * clampf((_shown if _shown >= 0.0 else _pct) / 100.0, 0, 1), h), fill)
+	# Ease-out fill (~250 ms feel) + critical pulse. View-only time: no sim state, no RNG.
+	func _process(delta: float) -> void:
+		if _shown < 0.0:
+			return
+		var moving: bool = absf(_shown - _pct) > 0.05
+		if moving:
+			_shown = lerpf(_shown, _pct, 1.0 - exp(-12.0 * delta))
+		if state == &"crit":
+			_pulse = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
+			if _art != null and _art.visible:
+				var sc: float = 1.0 + 0.08 * _pulse
+				_art.scale = Vector2(sc, sc)
+		elif _art != null and _art.scale != Vector2.ONE:
+			_art.scale = Vector2.ONE
+		if (moving or state == &"crit") and _track != null:
+			_track.queue_redraw()
 	func bind(vm) -> void:
 		build_once()
 		if not (vm is Dictionary):
@@ -118,7 +150,13 @@ class NeedBar extends WidgetBase.Widget:
 		_pct = float(vm.get("pct", 0))
 		state = StringName(vm.get("state", &"good"))
 		value = str(int(_pct))
+		if _shown < 0.0:
+			_shown = _pct
 		_icon.text = icon
+		var tex: Texture2D = ArtIcons.for_glyph(icon)
+		_art.texture = tex
+		_art.visible = tex != null
+		_icon.visible = tex == null
 		_value.text = value
 		_value.add_theme_color_override("font_color", Tokens.urgency(state))
 		if _track != null:

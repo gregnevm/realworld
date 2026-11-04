@@ -11,9 +11,27 @@ static var _cache: Dictionary = {}
 static func texture(id: String) -> Texture2D:
 	if id == "":
 		return null
-	if _cache.has(id):
-		return _cache[id]
-	var path := "%s%s.png" % [DIR, id]
+	return _load(id, "%s%s.png" % [DIR, id])
+
+# Resource icon by catalogue/live resource id (res_<id>).
+static func res(res_id: String) -> Texture2D:
+	return texture("res_" + res_id)
+
+# HUD-icon art (assets/gen/ui). Emoji glyphs the panels already use map to bespoke art, so a panel
+# keeps passing its emoji (R11 fallback) and gets the generated icon for free when one exists.
+const UI_DIR := "res://assets/gen/ui/"
+const GLYPH_ART := {"❤": "ui_hp", "🍖": "ui_food", "😴": "ui_rest", "🩸": "ui_blood", "🌡": "ui_temp",
+	"🎒": "ui_carry", "⚔": "ui_threat", "💰": "ui_wealth", "🔬": "ui_research", "◎": "ui_goal"}
+
+static func ui(id: String) -> Texture2D:
+	return _load("ui:" + id, "%s%s.png" % [UI_DIR, id])
+
+static func for_glyph(glyph: String) -> Texture2D:
+	return ui(String(GLYPH_ART[glyph])) if GLYPH_ART.has(glyph) else null
+
+static func _load(key: String, path: String) -> Texture2D:
+	if _cache.has(key):
+		return _cache[key]
 	var tex: Texture2D = null
 	if ResourceLoader.exists(path):
 		tex = load(path) as Texture2D
@@ -22,9 +40,5 @@ static func texture(id: String) -> Texture2D:
 		if img != null and not img.is_empty():
 			img.generate_mipmaps()
 			tex = ImageTexture.create_from_image(img)
-	_cache[id] = tex
+	_cache[key] = tex
 	return tex
-
-# Resource icon by catalogue/live resource id (res_<id>).
-static func res(res_id: String) -> Texture2D:
-	return texture("res_" + res_id)

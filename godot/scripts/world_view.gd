@@ -33,6 +33,22 @@ const SHADOW := Color(0, 0, 0, 0.30)
 # highest-contrast things on screen. FLATTEN lifts the ground blacks; OUTLINE is a dark silhouette rim.
 const GROUND_FLATTEN := Color(0.20, 0.22, 0.21, 0.22)
 const OUTLINE := Color(0.04, 0.05, 0.06, 0.85)
+# Animation is VIEW-ONLY (wall-clock + per-pawn motion deltas): it never reads or writes sim state/RNG.
+const LIGHT_KINDS := ["campfire", "torch", "torch_lamp", "lamp", "standing_lamp", "brazier"]
+var _last_pos: Dictionary = {}     # instance id -> Vector2 (previous frame world pos) → walking detection
+var _gait: Dictionary = {}         # instance id -> accumulated walk phase
+
+func _now() -> float:
+	return Time.get_ticks_msec() * 0.001
+
+# Walk phase for a pawn: advances with distance travelled, 0 amplitude when standing still.
+func _gait_of(key: int, pos: Vector2) -> Vector2:   # x = phase, y = moving (0..1)
+	var last: Vector2 = _last_pos.get(key, pos)
+	var d: float = pos.distance_to(last)
+	_last_pos[key] = pos
+	var ph: float = float(_gait.get(key, 0.0)) + d * 0.9
+	_gait[key] = ph
+	return Vector2(ph, clampf(d * 40.0, 0.0, 1.0))
 var _tile_tex: Array = []
 
 func _ready() -> void:
@@ -76,7 +92,7 @@ func content_rect(tex: Texture2D) -> Rect2:
 	return r
 
 # Draw `tex` cropped to its content, fitted into `box` (aspect kept), bottom-centred on the box.
-func draw_sprite_fit(tex: Texture2D, box: Rect2, tint: Color = Color.WHITE, flip_x: bool = false, outline: bool = true) -> void:
+func draw_sprite_fit(tex: Texture2D, box: Rect2, tint: Color = Color.WHITE, flip_x: bool = false, outline: bool = true, rot: float = 0.0, squash: Vector2 = Vector2.ONE) -> void:
 	var src := content_rect(tex)
 	var sc := minf(box.size.x / src.size.x, box.size.y / src.size.y)
 	var sz := src.size * sc
@@ -84,11 +100,17 @@ func draw_sprite_fit(tex: Texture2D, box: Rect2, tint: Color = Color.WHITE, flip
 	var dst := Rect2(pos, sz)
 	if flip_x:
 		dst = Rect2(Vector2(dst.end.x, dst.position.y), Vector2(-sz.x, sz.y))
+	var animated: bool = rot != 0.0 or squash != Vector2.ONE
+	if animated:   # pivot = bottom-centre (feet / trunk base): sway, squash & stretch keep the sprite planted
+		var pv := Vector2(dst.position.x + dst.size.x * 0.5, box.end.y)
+		draw_set_transform_matrix(Transform2D(rot, squash, 0.0, pv) * Transform2D(0.0, Vector2.ONE, 0.0, -pv))
 	if outline:
 		var o := maxf(1.0, TILE * 0.045)
 		for d in [Vector2(o, 0), Vector2(-o, 0), Vector2(0, o), Vector2(0, -o)]:
 			draw_texture_rect_region(tex, Rect2(dst.position + d, dst.size), src, OUTLINE)
 	draw_texture_rect_region(tex, dst, src, tint)
+	if animated:
+		draw_set_transform_matrix(Transform2D.IDENTITY)
 
 # Soft elliptical contact shadow (cheap ambient occlusion) under an object standing at `foot`.
 func draw_contact_shadow(foot: Vector2, radius: float) -> void:
@@ -167,8 +189,8 @@ func _draw() -> void:
 			draw_string(_font, Vector2(hover.x * TILE + TILE * 0.3, hover.y * TILE + TILE * 0.7), gl, HORIZONTAL_ALIGNMENT_LEFT, -1, int(TILE * 0.5), Color(1, 1, 1, 0.85))
 	for s in sim.shots:
 		draw_line(Vector2(s.x1 * TILE, s.y1 * TILE), Vector2(s.x2 * TILE, s.y2 * TILE), Color(1, 0.9, 0.47, clampf(s.t / 0.12, 0, 1)), 2.0)
-	for e in sim.enemies:
-		_draw_raider(e)
+	for ei in sim.enemies.size():
+		_draw_raider(sim.enemies[ei], ei)
 	_draw_player()
 
 func _draw_node(node, x: int, y: int) -> void:
@@ -179,7 +201,12 @@ func _draw_node(node, x: int, y: int) -> void:
 		var tall: bool = String(node.kind) == "tree"
 		var box := Rect2((x + 0.5) * TILE - TILE * (0.62 if tall else 0.5), (y + 1.0) * TILE - TILE * (1.5 if tall else 0.95), TILE * (1.24 if tall else 1.0), TILE * (1.5 if tall else 0.95))
 		draw_contact_shadow(Vector2(c.x, (y + 0.92) * TILE), TILE * (0.34 if tall else 0.36))
-		draw_sprite_fit(ntex, box)
+		var kind_s := String(node.kind)
+		var sway := 0.0
+		if kind_s == "tree" or kind_s == "bush":   # wind: slow, per-cell phase so a forest ripples instead of marching
+			var ph: float = float(x * 7 + y * 13)
+			sway = sin(_now() * (1.3 if tall else 1.8) + ph * 0.6) * (0.022 if tall else 0.03)
+		draw_sprite_fit(ntex, box, Color.WHITE, false, true, sway)
 		return
 	match node.kind:
 		"tree":
@@ -208,7 +235,12 @@ func _draw_building(b) -> void:
 			draw_texture_rect(btex, Rect2(p.x, p.y, TILE + 1, TILE + 1), false)
 		else:
 			draw_contact_shadow(Vector2(c.x, p.y + TILE * 0.92), TILE * 0.40)
-			draw_sprite_fit(btex, Rect2(p.x + inset, p.y - TILE * 0.12, TILE - 2 * inset, TILE * 1.08))
+			var bt := Color.WHITE
+			if LIGHT_KINDS.has(String(b.kind)):   # fire/lamp: layered-sine flicker (not a clean sine) + warm halo
+				var fk: float = 0.5 + 0.5 * sin(_now() * 9.0 + b.x * 3.1 + b.y * 1.7) * sin(_now() * 5.3 + b.y)
+				bt = Color(1.0 + 0.18 * fk, 1.0 + 0.08 * fk, 1.0)
+				draw_circle(c + Vector2(0, -TILE * 0.1), TILE * (0.62 + 0.10 * fk), Color(1.0, 0.62, 0.2, 0.10 + 0.07 * fk))
+			draw_sprite_fit(btex, Rect2(p.x + inset, p.y - TILE * 0.12, TILE - 2 * inset, TILE * 1.08), bt)
 		if float(def.get("range", 0.0)) > 0.0:
 			draw_line(c, c + Vector2(cos(b.aim), sin(b.aim)) * TILE * 0.45, Color.html("2a2f36"), maxf(2.0, TILE * 0.12))
 	elif blocking_wall:
@@ -228,13 +260,13 @@ func _draw_building(b) -> void:
 		var bc := Color.html("5fd38a") if fr > 0.5 else (Color.html("ffcf5c") if fr > 0.25 else Color.html("ff6b6b"))
 		draw_rect(Rect2(p.x + 2, p.y - 2, (TILE - 4) * fr, 3), bc)
 
-func _draw_raider(e) -> void:
+func _draw_raider(e, idx: int = 0) -> void:
 	var c := Vector2(e.px * TILE, e.py * TILE)
 	var r := TILE * 0.34
 	var is_bot: bool = String(e.get("kind", "raider")) == "bot"
 	var atex := art_texture("actor", "actor_patrol_robot" if is_bot else "actor_raider")
 	if atex != null:
-		_draw_actor(atex, c, cos(e.face), HIT_FLASH if e.hit_flash > 0 else Color.WHITE)
+		_draw_actor(atex, c, cos(e.face), HIT_FLASH if e.hit_flash > 0 else Color.WHITE, 100 + idx, clampf(float(e.hit_flash) / 0.12, 0.0, 1.0) * 0.08)
 	elif is_bot:
 		# патрульний робот Старого світу: сталевий корпус + червоне око-сенсор у напрямку руху
 		var body := Rect2(c - Vector2(r, r), Vector2(r * 2, r * 2))
@@ -249,10 +281,18 @@ func _draw_raider(e) -> void:
 	draw_rect(Rect2(c.x - r, c.y - r - 6, r * 2 * fr, 3), Color.html("ff6b6b"))
 
 # Actor sprite: ~1.5 tiles, feet near the pawn's position, mirrored when facing left.
-func _draw_actor(tex: Texture2D, c: Vector2, face_x: float, tint: Color) -> void:
+func _draw_actor(tex: Texture2D, c: Vector2, face_x: float, tint: Color, key: int = 0, hit: float = 0.0, work: float = 0.0) -> void:
 	var sz := TILE * 1.9
-	draw_contact_shadow(c + Vector2(0, TILE * 0.36), TILE * 0.32)
-	draw_sprite_fit(tex, Rect2(c.x - sz * 0.5, c.y + TILE * 0.40 - sz, sz, sz), tint, face_x < -0.2)
+	var g := _gait_of(key, c)
+	var t := _now()
+	# idle breathing (slow, ~2%) → walking bob + lean (step-synced) → hit squash → work swing, additive
+	var breath: float = sin(t * 2.2 + float(key % 7)) * 0.018 * (1.0 - g.y)
+	var bob: float = absf(sin(g.x * 1.6)) * TILE * 0.07 * g.y
+	var lean: float = sin(g.x * 1.6) * 0.06 * g.y * (-1.0 if face_x < -0.2 else 1.0)
+	var squash := Vector2(1.0 - breath * 0.5 + hit * 2.2, 1.0 + breath - hit * 1.6)
+	var swing: float = sin(t * 11.0) * 0.10 * work
+	draw_contact_shadow(c + Vector2(0, TILE * 0.36), TILE * (0.32 - 0.03 * (bob / maxf(TILE * 0.07, 0.001))))
+	draw_sprite_fit(tex, Rect2(c.x - sz * 0.5, c.y + TILE * 0.40 - sz - bob, sz, sz), tint, face_x < -0.2, true, lean + swing, squash)
 
 func _draw_player() -> void:
 	var p: Dictionary = sim.player
@@ -261,7 +301,8 @@ func _draw_player() -> void:
 	draw_circle(c + Vector2(0, r * 0.7), r * 0.9, Color(0, 0, 0, 0.3))
 	var htex := art_texture("actor", "actor_hero")
 	if htex != null:
-		_draw_actor(htex, c, cos(p.face), Color(0.62, 0.72, 0.95) if p.sleeping else Color.WHITE)
+		var working: bool = p.action != null and String(p.action.get("type", "")) == "gather"
+		_draw_actor(htex, c, cos(p.face), Color(0.62, 0.72, 0.95) if p.sleeping else Color.WHITE, 1, 0.0, 1.0 if working else 0.0)
 	else:
 		draw_circle(c, r, Color.html("7da0c0") if p.sleeping else Color.html("e7c25a"))
 		draw_arc(c, r, 0, TAU, 18, Color.html("1c2530"), 2.0)
