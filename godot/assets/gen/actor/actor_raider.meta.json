@@ -1,35 +1,36 @@
 {
  "id": "actor_raider",
  "kind": "actor",
- "variant": 3,
- "model": "gemini-2.5-flash-image",
- "hash": "36b2db28",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "7bd96bc3",
  "refs": [
   "ref_ground.png",
   "ref_world.png"
  ],
  "usage": {
-  "promptTokenCount": 1203,
-  "candidatesTokenCount": 1290,
-  "totalTokenCount": 2493,
+  "promptTokenCount": 2977,
+  "candidatesTokenCount": 1655,
+  "totalTokenCount": 5237,
   "promptTokensDetails": [
    {
     "modality": "TEXT",
-    "tokenCount": 687
+    "tokenCount": 737
    },
    {
     "modality": "IMAGE",
-    "tokenCount": 516
+    "tokenCount": 2240
    }
   ],
   "candidatesTokensDetails": [
    {
     "modality": "IMAGE",
-    "tokenCount": 1290
+    "tokenCount": 1120
    }
   ],
+  "thoughtsTokenCount": 605,
   "serviceTier": "standard"
  },
- "approved_from": "v3",
- "prompt_chars": 3006
+ "approved_from": "v0",
+ "prompt_chars": 3227
 }

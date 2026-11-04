@@ -1,0 +1,36 @@
+{
+ "id": "rsch_defense_systems",
+ "kind": "icon",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "a3bf6c4b",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3004,
+  "candidatesTokenCount": 1492,
+  "totalTokenCount": 5175,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 764
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 679,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3322
+}

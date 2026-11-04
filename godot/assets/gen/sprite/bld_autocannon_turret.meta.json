@@ -1,0 +1,36 @@
+{
+ "id": "bld_autocannon_turret",
+ "kind": "sprite",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "60398a06",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3011,
+  "candidatesTokenCount": 1578,
+  "totalTokenCount": 5858,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 771
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 1269,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3355
+}

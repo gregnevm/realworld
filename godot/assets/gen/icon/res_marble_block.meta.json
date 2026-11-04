@@ -1,0 +1,36 @@
+{
+ "id": "res_marble_block",
+ "kind": "icon",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "1a23e505",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2995,
+  "candidatesTokenCount": 1481,
+  "totalTokenCount": 5534,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 755
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 1058,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3250
+}

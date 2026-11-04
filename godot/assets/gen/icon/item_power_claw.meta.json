@@ -1,0 +1,35 @@
+{
+ "id": "item_power_claw",
+ "kind": "icon",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "9d9e9e09",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3001,
+  "candidatesTokenCount": 1662,
+  "totalTokenCount": 4663,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 761
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3280
+}

@@ -1,0 +1,36 @@
+{
+ "id": "rsch_plasteel_working",
+ "kind": "icon",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "947e0272",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3008,
+  "candidatesTokenCount": 1503,
+  "totalTokenCount": 5862,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 768
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 1351,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3327
+}

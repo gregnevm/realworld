@@ -1,0 +1,35 @@
+{
+ "id": "res_neutroamine",
+ "kind": "icon",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "7afe2eb3",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2997,
+  "candidatesTokenCount": 1585,
+  "totalTokenCount": 4582,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 757
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3250
+}

@@ -2,27 +2,28 @@
  "id": "ref_world",
  "kind": "ref",
  "variant": 0,
- "model": "gemini-2.5-flash-image",
- "hash": "43a6c4c5",
+ "model": "gemini-nano-banana-2.1",
+ "hash": "fb850915",
  "refs": [],
  "usage": {
-  "promptTokenCount": 578,
-  "candidatesTokenCount": 1290,
-  "totalTokenCount": 1868,
+  "promptTokenCount": 672,
+  "candidatesTokenCount": 1686,
+  "totalTokenCount": 3344,
   "promptTokensDetails": [
    {
     "modality": "TEXT",
-    "tokenCount": 578
+    "tokenCount": 672
    }
   ],
   "candidatesTokensDetails": [
    {
     "modality": "IMAGE",
-    "tokenCount": 1290
+    "tokenCount": 1120
    }
   ],
+  "thoughtsTokenCount": 986,
   "serviceTier": "standard"
  },
  "approved_from": "v0",
- "prompt_chars": 2432
+ "prompt_chars": 2970
 }

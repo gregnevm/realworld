@@ -1,0 +1,35 @@
+{
+ "id": "bld_sandbags",
+ "kind": "sprite",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "f6c1522d",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3009,
+  "candidatesTokenCount": 2155,
+  "totalTokenCount": 5164,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 769
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3335
+}

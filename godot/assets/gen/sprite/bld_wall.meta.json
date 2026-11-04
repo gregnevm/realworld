@@ -1,35 +1,36 @@
 {
  "id": "bld_wall",
  "kind": "sprite",
- "variant": 2,
- "model": "gemini-2.5-flash-image",
- "hash": "0478598e",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "898c9387",
  "refs": [
   "ref_ground.png",
   "ref_world.png"
  ],
  "usage": {
-  "promptTokenCount": 1233,
-  "candidatesTokenCount": 1290,
-  "totalTokenCount": 2523,
+  "promptTokenCount": 3021,
+  "candidatesTokenCount": 1498,
+  "totalTokenCount": 5816,
   "promptTokensDetails": [
    {
     "modality": "TEXT",
-    "tokenCount": 717
+    "tokenCount": 781
    },
    {
     "modality": "IMAGE",
-    "tokenCount": 516
+    "tokenCount": 2240
    }
   ],
   "candidatesTokensDetails": [
    {
     "modality": "IMAGE",
-    "tokenCount": 1290
+    "tokenCount": 1120
    }
   ],
+  "thoughtsTokenCount": 1297,
   "serviceTier": "standard"
  },
- "approved_from": "v2",
- "prompt_chars": 3080
+ "approved_from": "v1",
+ "prompt_chars": 3339
 }

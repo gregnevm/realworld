@@ -1,0 +1,36 @@
+{
+ "id": "res_plant_fiber",
+ "kind": "icon",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "a848674a",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2975,
+  "candidatesTokenCount": 1494,
+  "totalTokenCount": 4544,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 735
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 75,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3161
+}

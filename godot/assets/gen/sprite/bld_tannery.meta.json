@@ -1,0 +1,36 @@
+{
+ "id": "bld_tannery",
+ "kind": "sprite",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "50efdd90",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3003,
+  "candidatesTokenCount": 1668,
+  "totalTokenCount": 5846,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 763
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 1175,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3285
+}

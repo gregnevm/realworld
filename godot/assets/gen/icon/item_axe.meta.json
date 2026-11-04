@@ -1,0 +1,35 @@
+{
+ "id": "item_axe",
+ "kind": "icon",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "12882718",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2994,
+  "candidatesTokenCount": 1833,
+  "totalTokenCount": 4827,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 754
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3219
+}

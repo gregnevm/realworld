@@ -1,0 +1,36 @@
+{
+ "id": "bld_hospital_bed",
+ "kind": "sprite",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "de3d60be",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3011,
+  "candidatesTokenCount": 1530,
+  "totalTokenCount": 5457,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 771
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 916,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3342
+}

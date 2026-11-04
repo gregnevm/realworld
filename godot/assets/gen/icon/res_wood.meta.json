@@ -1,35 +1,36 @@
 {
  "id": "res_wood",
  "kind": "icon",
- "variant": 2,
- "model": "gemini-2.5-flash-image",
- "hash": "db48527b",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "cf2acc28",
  "refs": [
   "ref_ground.png",
   "ref_world.png"
  ],
  "usage": {
-  "promptTokenCount": 1228,
-  "candidatesTokenCount": 1290,
-  "totalTokenCount": 2518,
+  "promptTokenCount": 2974,
+  "candidatesTokenCount": 1466,
+  "totalTokenCount": 4973,
   "promptTokensDetails": [
    {
     "modality": "TEXT",
-    "tokenCount": 712
+    "tokenCount": 734
    },
    {
     "modality": "IMAGE",
-    "tokenCount": 516
+    "tokenCount": 2240
    }
   ],
   "candidatesTokensDetails": [
    {
     "modality": "IMAGE",
-    "tokenCount": 1290
+    "tokenCount": 1120
    }
   ],
+  "thoughtsTokenCount": 533,
   "serviceTier": "standard"
  },
- "approved_from": "v2",
- "prompt_chars": 3043
+ "approved_from": "v0",
+ "prompt_chars": 3153
 }

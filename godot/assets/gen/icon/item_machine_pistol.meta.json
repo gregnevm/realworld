@@ -1,0 +1,36 @@
+{
+ "id": "item_machine_pistol",
+ "kind": "icon",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "37d4a049",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2993,
+  "candidatesTokenCount": 1494,
+  "totalTokenCount": 4849,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 753
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 362,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3226
+}

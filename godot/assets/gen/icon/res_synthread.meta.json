@@ -1,0 +1,36 @@
+{
+ "id": "res_synthread",
+ "kind": "icon",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "b5a04430",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2994,
+  "candidatesTokenCount": 1418,
+  "totalTokenCount": 5750,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 754
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 1338,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3241
+}

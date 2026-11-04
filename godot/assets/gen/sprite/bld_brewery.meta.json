@@ -1,0 +1,35 @@
+{
+ "id": "bld_brewery",
+ "kind": "sprite",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "e839f9ab",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3002,
+  "candidatesTokenCount": 1706,
+  "totalTokenCount": 4708,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 762
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3285
+}

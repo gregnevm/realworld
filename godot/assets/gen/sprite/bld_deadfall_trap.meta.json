@@ -1,0 +1,35 @@
+{
+ "id": "bld_deadfall_trap",
+ "kind": "sprite",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "d0a9041c",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3010,
+  "candidatesTokenCount": 1520,
+  "totalTokenCount": 4530,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 770
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3344
+}

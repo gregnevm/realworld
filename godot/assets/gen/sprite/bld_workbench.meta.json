@@ -1,35 +1,35 @@
 {
  "id": "bld_workbench",
  "kind": "sprite",
- "variant": 2,
- "model": "gemini-2.5-flash-image",
- "hash": "b6fe81e5",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "8ce6a36f",
  "refs": [
   "ref_ground.png",
   "ref_world.png"
  ],
  "usage": {
-  "promptTokenCount": 1233,
-  "candidatesTokenCount": 1290,
-  "totalTokenCount": 2523,
+  "promptTokenCount": 3008,
+  "candidatesTokenCount": 1557,
+  "totalTokenCount": 4565,
   "promptTokensDetails": [
    {
     "modality": "TEXT",
-    "tokenCount": 717
+    "tokenCount": 768
    },
    {
     "modality": "IMAGE",
-    "tokenCount": 516
+    "tokenCount": 2240
    }
   ],
   "candidatesTokensDetails": [
    {
     "modality": "IMAGE",
-    "tokenCount": 1290
+    "tokenCount": 1120
    }
   ],
   "serviceTier": "standard"
  },
- "approved_from": "v2",
- "prompt_chars": 3088
+ "approved_from": "v1",
+ "prompt_chars": 3308
 }

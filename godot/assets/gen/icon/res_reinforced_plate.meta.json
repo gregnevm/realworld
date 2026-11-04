@@ -1,0 +1,36 @@
+{
+ "id": "res_reinforced_plate",
+ "kind": "icon",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "ec35acd9",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3001,
+  "candidatesTokenCount": 1536,
+  "totalTokenCount": 5410,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 761
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 873,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3298
+}

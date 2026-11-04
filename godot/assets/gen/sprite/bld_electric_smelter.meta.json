@@ -1,0 +1,36 @@
+{
+ "id": "bld_electric_smelter",
+ "kind": "sprite",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "56eab3ae",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3010,
+  "candidatesTokenCount": 1571,
+  "totalTokenCount": 5063,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 770
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 482,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3347
+}

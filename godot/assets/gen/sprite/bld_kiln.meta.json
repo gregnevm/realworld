@@ -1,0 +1,35 @@
+{
+ "id": "bld_kiln",
+ "kind": "sprite",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "44573909",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3011,
+  "candidatesTokenCount": 1594,
+  "totalTokenCount": 4605,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 771
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3310
+}

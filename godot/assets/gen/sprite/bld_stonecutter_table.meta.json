@@ -1,0 +1,35 @@
+{
+ "id": "bld_stonecutter_table",
+ "kind": "sprite",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "4acef720",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3013,
+  "candidatesTokenCount": 1582,
+  "totalTokenCount": 4595,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 773
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3326
+}

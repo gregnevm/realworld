@@ -1,17 +1,17 @@
 {
  "id": "actor_patrol_robot",
  "kind": "actor",
- "variant": 4,
- "model": "gemini-2.5-flash-image",
- "hash": "ca6aae88",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "63b533ec",
  "refs": [
   "ref_ground.png",
   "ref_world.png"
  ],
  "usage": {
-  "promptTokenCount": 1290,
-  "candidatesTokenCount": 1290,
-  "totalTokenCount": 2580,
+  "promptTokenCount": 3014,
+  "candidatesTokenCount": 1529,
+  "totalTokenCount": 5181,
   "promptTokensDetails": [
    {
     "modality": "TEXT",
@@ -19,17 +19,18 @@
    },
    {
     "modality": "IMAGE",
-    "tokenCount": 516
+    "tokenCount": 2240
    }
   ],
   "candidatesTokensDetails": [
    {
     "modality": "IMAGE",
-    "tokenCount": 1290
+    "tokenCount": 1120
    }
   ],
+  "thoughtsTokenCount": 638,
   "serviceTier": "standard"
  },
- "approved_from": "v4",
+ "approved_from": "v0",
  "prompt_chars": 3428
 }

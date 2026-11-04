@@ -1,0 +1,36 @@
+{
+ "id": "res_granite",
+ "kind": "icon",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "a543918d",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2974,
+  "candidatesTokenCount": 1519,
+  "totalTokenCount": 5293,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 734
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 800,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3156
+}

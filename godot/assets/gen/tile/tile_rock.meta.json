@@ -1,0 +1,36 @@
+{
+ "id": "tile_rock",
+ "kind": "tile",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "1b145928",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2908,
+  "candidatesTokenCount": 1433,
+  "totalTokenCount": 4954,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 668
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 613,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 2955
+}

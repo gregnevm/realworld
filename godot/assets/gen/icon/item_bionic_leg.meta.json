@@ -1,0 +1,36 @@
+{
+ "id": "item_bionic_leg",
+ "kind": "icon",
+ "variant": 2,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "07da1347",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3058,
+  "candidatesTokenCount": 1646,
+  "totalTokenCount": 5024,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 818
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 320,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v2",
+ "prompt_chars": 3529
+}

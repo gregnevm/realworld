@@ -1,0 +1,35 @@
+{
+ "id": "item_archotech_leg",
+ "kind": "icon",
+ "variant": 2,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "9488c219",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3061,
+  "candidatesTokenCount": 1513,
+  "totalTokenCount": 4574,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 821
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v2",
+ "prompt_chars": 3520
+}

@@ -1,28 +1,29 @@
 {
  "id": "ref_ground",
  "kind": "ref",
- "variant": 1,
- "model": "gemini-2.5-flash-image",
- "hash": "fa093883",
+ "variant": 4,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "7eeafe09",
  "refs": [],
  "usage": {
-  "promptTokenCount": 560,
-  "candidatesTokenCount": 1290,
-  "totalTokenCount": 1850,
+  "promptTokenCount": 730,
+  "candidatesTokenCount": 2296,
+  "totalTokenCount": 4312,
   "promptTokensDetails": [
    {
     "modality": "TEXT",
-    "tokenCount": 560
+    "tokenCount": 730
    }
   ],
   "candidatesTokensDetails": [
    {
     "modality": "IMAGE",
-    "tokenCount": 1290
+    "tokenCount": 1120
    }
   ],
+  "thoughtsTokenCount": 1286,
   "serviceTier": "standard"
  },
- "approved_from": "v1",
- "prompt_chars": 2364
+ "approved_from": "v4",
+ "prompt_chars": 3222
 }
