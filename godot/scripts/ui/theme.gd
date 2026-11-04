@@ -17,6 +17,7 @@ const V_BAR     := &"RwBar"        # need-bar track / raised chip
 const V_MONO    := &"MonoValue"    # right-aligned numeric Label
 const V_CARD    := &"RwCard"       # translucent feed/flash/banner card over the world
 const V_TIP     := &"RwTip"        # hover-inspect tooltip (amber edge: «this is about the cursor»)
+const V_BARE    := &"RwBare"       # chromeless dock unit: the content (medallions) IS the HUD, no box behind it
 
 static func build() -> Theme:
 	install_emoji_fallback()
@@ -29,15 +30,19 @@ static func build() -> Theme:
 
 	# Dock panel surface (replaces _sb_bar).
 	t.set_type_variation(V_PANEL, &"PanelContainer")
-	t.set_stylebox("panel", V_PANEL, _sb(Tokens.PANEL, Tokens.LINE, 6, 10))
+	t.set_stylebox("panel", V_PANEL, _sb_glass(Tokens.with_alpha(Tokens.PANEL, 0.86), Tokens.LINE2, 8, 12))
 
 	# Modal surface (replaces _sb_panel / _mk_modal).
 	t.set_type_variation(V_MODAL, &"PanelContainer")
-	t.set_stylebox("panel", V_MODAL, _sb(Color(Tokens.PANEL.r, Tokens.PANEL.g, Tokens.PANEL.b, 0.97), Tokens.LINE2, Tokens.R, 14))
+	t.set_stylebox("panel", V_MODAL, _sb_glass(Tokens.with_alpha(Tokens.PANEL, 0.96), Tokens.LINE2, Tokens.R, 14))
 
 	# Feedback cards over the world: readable on snow AND water (opaque-ish ink panel).
 	t.set_type_variation(V_CARD, &"PanelContainer")
-	t.set_stylebox("panel", V_CARD, _sb(Color(Tokens.PANEL.r, Tokens.PANEL.g, Tokens.PANEL.b, 0.9), Tokens.LINE2, 6, 6))
+	t.set_stylebox("panel", V_CARD, _sb_glass(Tokens.with_alpha(Tokens.PANEL, 0.92), Tokens.LINE2, 6, 8))
+	t.set_type_variation(V_BARE, &"PanelContainer")
+	var bare := StyleBoxEmpty.new()
+	bare.set_content_margin_all(2)
+	t.set_stylebox("panel", V_BARE, bare)
 	t.set_type_variation(V_TIP, &"PanelContainer")
 	t.set_stylebox("panel", V_TIP, _sb(Color(Tokens.PANEL2.r, Tokens.PANEL2.g, Tokens.PANEL2.b, 0.96), Tokens.AMBER, 6, 8))
 
@@ -81,17 +86,55 @@ static func _load_emoji_font() -> Font:
 			return ff
 	return null
 
+# Typography (2026-11): Rubik (OFL, Cyrillic) is the body face, Oswald (OFL, condensed) the display face for
+# headers/titles/big numbers — the engine default read as «prototype». Chain: Rubik → built-in default (any
+# glyph Rubik lacks) → NotoEmoji (icons). Both faces are variable fonts; weight is set per variation.
+const BODY_FONT := "res://assets/fonts/Rubik-Variable.ttf"
+const DISPLAY_FONT := "res://assets/fonts/Oswald-Variable.ttf"
+static var _display: Font = null
+
 static func install_emoji_fallback() -> void:
 	var base: Font = ThemeDB.fallback_font
 	if base is FontVariation:
 		return   # already installed (scene reload / respawn re-enters _ready)
 	var emoji: Font = _load_emoji_font()
-	if emoji == null:
-		return
+	var chain: Array[Font] = [base]
+	if emoji != null:
+		chain.append(emoji)
+	var body: Font = _load_font(BODY_FONT)
 	var f := FontVariation.new()
-	f.base_font = base
-	f.fallbacks = [emoji]
+	if body != null:
+		f.base_font = body
+		f.variation_opentype = {"wght": 500}
+		f.fallbacks = chain
+	else:
+		f.base_font = base
+		f.fallbacks = [emoji] if emoji != null else []
 	ThemeDB.fallback_font = f
+	var disp: Font = _load_font(DISPLAY_FONT)
+	if disp != null:
+		var dv := FontVariation.new()
+		dv.base_font = disp
+		dv.variation_opentype = {"wght": 560}
+		dv.fallbacks = [f]
+		_display = dv
+
+# Display face (Oswald) for headers, titles and hero numbers; the body face when it is missing.
+static func display_font() -> Font:
+	if _display == null:
+		install_emoji_fallback()
+	return _display if _display != null else ThemeDB.fallback_font
+
+static func _load_font(path: String) -> Font:
+	if ResourceLoader.exists(path):
+		var res: Variant = load(path)
+		if res is Font:
+			return res
+	if FileAccess.file_exists(path):
+		var ff := FontFile.new()
+		if ff.load_dynamic_font(path) == OK:
+			return ff
+	return null
 
 # StyleBoxFlat factory (allowed in this file per R3).
 static func _sb(bg: Color, border: Color, radius: int, pad: int) -> StyleBoxFlat:
@@ -101,6 +144,17 @@ static func _sb(bg: Color, border: Color, radius: int, pad: int) -> StyleBoxFlat
 	s.set_border_width_all(1)
 	s.set_corner_radius_all(radius)
 	s.set_content_margin_all(pad)
+	return s
+
+# «Glass» surface for panels floating over the world: translucent ground colour, a brighter hairline on top
+# (light from above), a soft drop shadow that lifts the panel off the map. Pure StyleBox — no per-frame cost.
+static func _sb_glass(bg: Color, border: Color, radius: int, pad: int) -> StyleBoxFlat:
+	var s := _sb(bg, border, radius, pad)
+	s.border_width_top = 2
+	s.border_color = border
+	s.shadow_color = Color(0, 0, 0, 0.42)
+	s.shadow_size = 10
+	s.shadow_offset = Vector2(0, 3)
 	return s
 
 # Transparent box with just a focus-visible outline (a11y focus ring, design-system §0.6 / R7-adjacent).

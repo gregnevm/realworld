@@ -2213,6 +2213,30 @@
    "approved": "v0"
   },
   {
+   "id": "key_death",
+   "kind": "key",
+   "subject": "a quiet pre-dawn field of dead machine wrecks and moss, a small campfire reduced to embers with a bedroll beside it and a worn survivor backpack left behind, a distant tower silhouette, cool blue-grey light with a thin warm amber ember glow, solemn but not gory",
+   "status": "approved",
+   "manual": true,
+   "label": "key_death",
+   "size": 0,
+   "notes": "no characters facing camera, no text, no UI; leave a calm darker lower-left area",
+   "hash": "55cd9c34",
+   "approved": "v0"
+  },
+  {
+   "id": "key_spawn",
+   "kind": "key",
+   "subject": "dusk over a river valley of drowned old-world towers overgrown with moss, a lone survivor silhouette with a backpack on a ridge in the foreground right looking toward a distant patrol machine whose single cold teal eye glows on a bridge, warm amber campfire glow in the far lower right, toppled antenna masts, birds, calm and hopeful-harsh",
+   "status": "approved",
+   "manual": true,
+   "label": "key_spawn",
+   "size": 0,
+   "notes": "no characters facing camera, no text, no UI; leave a calm darker lower-left area",
+   "hash": "aa50e933",
+   "approved": "v2"
+  },
+  {
    "id": "node_bush",
    "kind": "sprite",
    "subject": "a wild berry bush with herbs at its base",
@@ -2263,6 +2287,42 @@
    "hash": "da13681d",
    "approved": "v1",
    "auto": "a temperate deciduous tree, harvestable for wood"
+  },
+  {
+   "id": "promo_convoy",
+   "kind": "key",
+   "subject": "a small convoy of three hand-built cargo carts pulled by survivors along a cracked old highway through a green overgrown ruined city at dawn, a distant teal-eyed patrol robot silhouette on an overpass, hopeful and adventurous",
+   "status": "approved",
+   "manual": true,
+   "label": "promo_convoy",
+   "size": 0,
+   "notes": "no text, no UI, cinematic composition, rule of thirds",
+   "hash": "8247f21d",
+   "approved": "v1"
+  },
+  {
+   "id": "promo_machine",
+   "kind": "key",
+   "subject": "a colossal dormant old-world machine monolith half-buried in a mossy valley at golden hour, a tiny survivor with a backpack standing at its base looking up, thin amber sunbeams through haze, rusted mast towers on the horizon, awe and scale",
+   "status": "approved",
+   "manual": true,
+   "label": "promo_machine",
+   "size": 0,
+   "notes": "no text, no UI, cinematic composition, rule of thirds",
+   "hash": "6c137006",
+   "approved": "v1"
+  },
+  {
+   "id": "promo_raid",
+   "kind": "key",
+   "subject": "night defense of a small survivor camp built from salvaged machine plating and wood: a stone-and-plank wall with a hand-built turret and a bright amber torch line, two old-world patrol robots with cold teal sensor eyes approaching through mist across a moonlit field, survivors silhouette behind the wall, tense and cinematic",
+   "status": "approved",
+   "manual": true,
+   "label": "promo_raid",
+   "size": 0,
+   "notes": "no text, no UI, cinematic composition, rule of thirds",
+   "hash": "34dd2052",
+   "approved": "v1"
   },
   {
    "id": "ref_ground",
@@ -3970,6 +4030,126 @@
    "hash": "10daf67c",
    "notes": "Uniform murky shallow-river ripple field; only tiny, evenly scattered moss specks and leaves; NO single rock, lily pad or reed clump that would repeat as a landmark.",
    "approved": "v3"
+  },
+  {
+   "id": "ui_blood",
+   "kind": "ui",
+   "subject": "a single blood drop with a thin highlight, blood level symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_blood",
+   "size": 64,
+   "notes": "single bold readable silhouette, fills the frame, strong dark outline, no text",
+   "hash": "4a364ccf",
+   "approved": "v1"
+  },
+  {
+   "id": "ui_carry",
+   "kind": "ui",
+   "subject": "a patched canvas backpack with a bedroll strapped on top, carried load symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_carry",
+   "size": 64,
+   "notes": "single bold readable silhouette, fills the frame, strong dark outline, no text",
+   "hash": "619e39f1",
+   "approved": "v1"
+  },
+  {
+   "id": "ui_food",
+   "kind": "ui",
+   "subject": "a single roasted meat cut on a bone with a tiny steam-free glint, hunger symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_food",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO square plate behind it; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "ac61c792",
+   "approved": "v3"
+  },
+  {
+   "id": "ui_goal",
+   "kind": "ui",
+   "subject": "a hand-drawn compass star pointing up, objective marker symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_goal",
+   "size": 64,
+   "notes": "single bold readable silhouette, fills the frame, strong dark outline, no text",
+   "hash": "f10352ec",
+   "approved": "v1"
+  },
+  {
+   "id": "ui_hp",
+   "kind": "ui",
+   "subject": "a bold stylised heart pierced by a small cracked circuit trace, survivor vitality symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_hp",
+   "size": 64,
+   "notes": "single bold readable silhouette, fills the frame, strong dark outline, no text",
+   "hash": "585214d2",
+   "approved": "v1"
+  },
+  {
+   "id": "ui_research",
+   "kind": "ui",
+   "subject": "a magnifying lens over a circuit-board fragment, research symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_research",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO square plate behind it; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "30826af9",
+   "approved": "v2"
+  },
+  {
+   "id": "ui_rest",
+   "kind": "ui",
+   "subject": "a crescent moon over a rolled bedroll, sleep and fatigue symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_rest",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO square plate behind it; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "0769421c",
+   "approved": "v2"
+  },
+  {
+   "id": "ui_temp",
+   "kind": "ui",
+   "subject": "a simple thermometer with frost crystals on one side and a flame on the other, felt temperature symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_temp",
+   "size": 64,
+   "notes": "single bold readable silhouette, fills the frame, strong dark outline, no text",
+   "hash": "2cacf121",
+   "approved": "v1"
+  },
+  {
+   "id": "ui_threat",
+   "kind": "ui",
+   "subject": "a sharp warning chevron shaped like a machine sensor eye, incoming raid threat symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_threat",
+   "size": 64,
+   "notes": "single bold readable silhouette, fills the frame, strong dark outline, no text",
+   "hash": "0d88c502",
+   "approved": "v1"
+  },
+  {
+   "id": "ui_wealth",
+   "kind": "ui",
+   "subject": "a small stack of salvaged scrap plates with a coin-sized gear, wealth symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_wealth",
+   "size": 64,
+   "notes": "single bold readable silhouette, fills the frame, strong dark outline, no text",
+   "hash": "f77f8fb9",
+   "approved": "v1"
   }
  ]
 }

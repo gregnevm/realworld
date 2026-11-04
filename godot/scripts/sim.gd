@@ -623,6 +623,36 @@ func demolish(x: int, y: int) -> Dictionary:
 	_log("♻ %s розібрано%s." % [bdef.get("name", b.kind), (" (+" + _cost_str(refund) + ")") if not refund.is_empty() else ""], "good")
 	return {"ok": true}
 
+# Repair (touch Repair mode / radial «Ремонт»): restore a damaged building to full hp. Price = the build
+# cost scaled by the missing hp fraction × 0.5 (ceil, ≥1 of each priced resource) — cheaper than a rebuild,
+# never free. Paid through the open-stock seam (cost_keys/afford/pay), deterministic, action-driven.
+func repair_cost(b: Dictionary) -> Dictionary:
+	var def: Dictionary = building_def(String(b.kind))
+	var max_hp := float(def.get("hp", 50.0))
+	var miss: float = clampf(1.0 - float(b.hp) / maxf(max_hp, 1.0), 0.0, 1.0)
+	var out := {}
+	if miss <= 0.0:
+		return out
+	for res in def.get("cost", {}):
+		out[res] = maxi(1, int(ceil(float(def.cost[res]) * miss * 0.5)))
+	return out
+
+func repair(x: int, y: int) -> Dictionary:
+	if not _in(x, y) or not bgrid.has(y * n + x):
+		return {"ok": false, "msg": "Тут немає будівлі."}
+	var b: Dictionary = bgrid[y * n + x]
+	var def: Dictionary = building_def(String(b.kind))
+	var max_hp := float(def.get("hp", 50.0))
+	if float(b.hp) >= max_hp:
+		return {"ok": false, "msg": "%s ціле." % String(def.get("name", b.kind))}
+	var cost := repair_cost(b)
+	if not afford(cost):
+		return {"ok": false, "msg": "Бракує на ремонт: " + _cost_str(cost)}
+	GameData.pay_cost(stock, cost_keys(cost))
+	b.hp = max_hp
+	_log("🔧 %s відремонтовано (−%s)." % [String(def.get("name", b.kind)), _cost_str(cost)], "good")
+	return {"ok": true}
+
 # ---------------- items / equipment (spec 0001) ----------------
 func gather_time(node) -> float:
 	var info: Dictionary = GameData.NODEINFO[node.kind]

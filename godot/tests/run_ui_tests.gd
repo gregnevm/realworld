@@ -9,6 +9,10 @@ extends "res://tests/harness.gd"
 const Tokens = preload("res://scripts/ui/tokens.gd")
 const Fmt = preload("res://scripts/ui/format.gd")
 const ViewGeom = preload("res://scripts/ui/view_geom.gd")
+const ArtIcons = preload("res://scripts/ui/art_icons.gd")
+const WorldViewScript = preload("res://scripts/world_view.gd")
+const AM = preload("res://scripts/ui/action_model.gd")
+const TouchCtl = preload("res://scripts/ui/touch_controls.gd")
 const LatLon = preload("res://scripts/ui/latlon.gd")
 const HudModel = preload("res://scripts/ui/hud_model.gd")
 const CatalogView = preload("res://scripts/ui/catalog_view.gd")
@@ -38,6 +42,14 @@ const SessionScript = preload("res://scripts/session.gd")
 func _init() -> void:
 	print("== RealWorld UI view-layer tests (spec 0005) ==")
 	_t_tokens()
+	_t_art_icons()
+	_t_world_fx()
+	_t_panel_fold()
+	_t_goal_guide()
+	_t_build_drawer()
+	_t_enemy_intent()
+	_t_action_model()
+	await _t_touch_controls()
 	_t_format()
 	_t_view_geom()
 	_t_latlon()
@@ -77,6 +89,208 @@ func _init() -> void:
 
 
 # ---------------- Tokens (R3 / drift reconciliation) ----------------
+# Every emoji→art mapping must resolve to a real PNG (a typo'd id would silently fall back to the emoji
+# forever), every live resource has its icon, and building sprites crop to a non-empty opaque region.
+func _t_art_icons() -> void:
+	for g in ArtIcons.GLYPH_ART:
+		ok(ArtIcons.for_glyph(String(g)) != null, "GLYPH_ART %s → %s has a PNG" % [g, ArtIcons.GLYPH_ART[g]])
+	for res in GameData.RES_ORDER:
+		ok(ArtIcons.res(String(res)) != null, "live resource %s has an icon" % res)
+	var wall: Texture2D = ArtIcons.building("wall")
+	ok(wall != null and wall.get_size().x > 8.0, "building('wall') loads and crops")
+	ok(ArtIcons.for_glyph("no-such-glyph") == null and ArtIcons.building("no_such_building") == null, "unknown glyph/building → null (emoji fallback)")
+
+# Floating feedback is a pure observer: a stock rise / hit spawns text, nothing is written back to the sim,
+# texts age out, and an idle frame spawns nothing.
+func _t_world_fx() -> void:
+	var nn := 16
+	var tiles := PackedByteArray()
+	tiles.resize(nn * nn)
+	tiles.fill(WorldGen.GRASS)
+	var sim = Sim.new()
+	sim.new_game({"n": nn, "tiles": tiles, "nodes": {}, "spawn": Vector2i(8, 8), "lat": 50.4501, "lon": 30.5234})
+	var v = WorldViewScript.new()
+	v.sim = sim
+	v.observe_sim(0.016)
+	ok(v._fx.is_empty(), "world fx: first observation only records baselines")
+	var before_wood: int = int(sim.res_amount("wood"))
+	sim.stock[sim.res_key("wood")] = before_wood + 3
+	v.observe_sim(0.016)
+	ok(v._fx.size() == 1 and String(v._fx[0].text) == "+3", "world fx: a stock rise spawns +N text")
+	ok(int(sim.res_amount("wood")) == before_wood + 3, "world fx: observer never writes the sim")
+	v.observe_sim(0.016)
+	ok(v._fx.size() == 1, "world fx: an idle frame spawns nothing")
+	v.observe_sim(2.0)
+	ok(v._fx.is_empty(), "world fx: texts age out")
+	ok(v._born.is_empty(), "world fx: buildings present at load never pop (baseline)")
+	sim.stock[sim.res_key("wood")] = 200
+	sim.try_build("campfire", 9, 9)
+	v.observe_sim(0.016)
+	ok(v._born.has(9 * nn + 9), "world fx: a newly placed building gets a placement pop")
+	v.free()
+
+# Progressive disclosure: a panel shaped «VBox → header + rows» folds to its header on click; the rows keep
+# their own state/refs (nothing rebuilt — R2), and a panel can start folded.
+func _t_panel_fold() -> void:
+	var p = Panels.GoalsPanel.new()
+	p.build_once()
+	var rb: int = p.rebuild_count
+	var vb: Node = p.get_child(0)
+	var head: Node = vb.get_child(0)
+	ok(bool(head.collapsible) and p._fold_body != null, "fold: header is collapsible and the rows share one body")
+	ok(p._fold_body.visible and vb.get_child_count() == 2, "fold: starts open; VBox is [header, body]")
+	head.set_collapsed(true)
+	ok(not p._fold_body.visible, "fold: collapsing hides the body only")
+	head.set_collapsed(false)
+	ok(p._fold_body.visible and p.rebuild_count == rb, "fold: unfolding restores it without a rebuild (R2)")
+	var r = Panels.ResearchPanel.new()
+	r.build_once()
+	ok(r.collapsed_default and not r._fold_body.visible, "fold: ResearchPanel starts folded")
+	r.free()
+	p.free()
+
+# Contextual onboarding: the build slot the current goal is about pulses (amber tint + scale); other
+# slots stay neutral, and a goal without a build target lights nothing.
+func _t_goal_guide() -> void:
+	var bb = Panels.BuildBarPanel.new()
+	bb.build_once()
+	var slots: Array = [
+		{"key": "wall", "hotkey": "1", "name": "Стіна", "cost": "", "afford": true, "locked": false, "selected": false},
+		{"key": "campfire", "hotkey": "9", "name": "Багаття", "cost": "", "afford": true, "locked": false, "selected": false}]
+	bb.bind({"build": {"slots": slots}, "goals": {"current": {"build": "campfire"}}})
+	ok(bb._btns[1].modulate != Tokens.WHITE and bb._btns[0].modulate == Tokens.WHITE, "goal guide: only the goal's slot is tinted")
+	bb.bind({"build": {"slots": slots}, "goals": {"current": {"build": ""}}})
+	ok(bb._btns[1].modulate == Tokens.WHITE and bb._btns[1].scale == Vector2.ONE, "goal guide: no target → no pulse")
+	bb.free()
+
+# Touch build drawer: closed = only the 🔨 button; a category tab shows just its slots; desktop shows the
+# flat hotkey row with no button/tabs. Same Button pool throughout (R2).
+func _t_build_drawer() -> void:
+	var bb = Panels.BuildBarPanel.new()
+	bb.build_once()
+	var slots: Array = []
+	for k in ["wall", "door", "storage", "campfire", "turret"]:
+		slots.append({"key": k, "hotkey": "", "name": k, "cost": "", "afford": true, "locked": false, "selected": false})
+	bb.bind({"build": {"slots": slots}, "ui": {"touch": false}})
+	ok(not bb._fab.visible and not bb._tabs.visible and bb._scroll.visible and bb._btns[4].visible, "drawer: desktop = flat row, no 🔨/tabs")
+	bb.bind({"build": {"slots": slots}, "ui": {"touch": true}})
+	ok(bb._fab.visible and not bb._scroll.visible and not bb._tabs.visible, "drawer: touch starts closed — just the 🔨 button")
+	bb.set_category(3)
+	bb.bind({"build": {"slots": slots}, "ui": {"touch": true}})
+	ok(bb._scroll.visible and bb._tabs.visible and bb._btns[4].visible and not bb._btns[0].visible, "drawer: the Оборона tab shows only defence slots")
+	ok(bb.rebuild_count == 1, "drawer: tabs/drawer never rebuild the panel (R2)")
+	bb.free()
+
+# Threat telegraphing (Into the Breach): an enemy in reach shows ⚔ + the damage it will deal after armour;
+# a distant idle patrol bot shows 👁. Pure read of sim data.
+func _t_enemy_intent() -> void:
+	var nn := 16
+	var tiles := PackedByteArray()
+	tiles.resize(nn * nn)
+	tiles.fill(WorldGen.GRASS)
+	var sim = Sim.new()
+	sim.new_game({"n": nn, "tiles": tiles, "nodes": {}, "spawn": Vector2i(8, 8), "lat": 50.4501, "lon": 30.5234})
+	var v = WorldViewScript.new()
+	v.sim = sim
+	var near: Dictionary = GameData.make_raider(sim.player.px + 0.6, sim.player.py, 1)
+	var far: Dictionary = GameData.make_patrol_bot(1.5, 1.5, 1)
+	var a: Dictionary = v.enemy_intent(near)
+	var b: Dictionary = v.enemy_intent(far)
+	ok(String(a.glyph) == "⚔" and int(a.num) == int(round(float(near.dmg) * float(sim.armor_mult()))), "intent: adjacent raider telegraphs ⚔ + damage after armour")
+	ok(String(b.glyph) == "👁" and int(b.num) < 0, "intent: a distant patrol bot shows 👁 (searching), no number")
+	v.free()
+
+# Touch action scheme — the pure half: gestures, auto-target (cone/priority/sticky), verbs, radial, slots.
+func _t_action_model() -> void:
+	ok(AM.classify(0.1, Vector2.ZERO, INF) == &"tap", "gesture: a short still press is a tap")
+	ok(AM.classify(0.1, Vector2.ZERO, 0.2) == &"double", "gesture: a second tap within 300 ms is a double")
+	ok(AM.classify(0.5, Vector2(3, 2), INF) == &"hold", "gesture: ≥400 ms still is a hold")
+	ok(AM.classify(0.2, Vector2(4, -60), INF) == &"drag_v" and AM.classify(0.2, Vector2(70, 5), INF) == &"drag_h", "gesture: swipes split by axis")
+	ok(AM.classify(0.2, Vector2(20, 10), INF) == &"none", "gesture: a wobble past the slop is nothing")
+	ok(AM.next_mode(&"fight") == &"gather", "modes cycle gather → build → repair → fight → gather")
+	var nn := 16
+	var tiles := PackedByteArray()
+	tiles.resize(nn * nn)
+	tiles.fill(WorldGen.GRASS)
+	var nodes := {}
+	nodes[8 * nn + 10] = {"kind": "tree", "amount": 5}      # in front (east), 2 tiles
+	nodes[8 * nn + 6] = {"kind": "rock", "amount": 5}       # behind (west), 2 tiles
+	var sim = Sim.new()
+	sim.new_game({"n": nn, "tiles": tiles, "nodes": nodes, "spawn": Vector2i(8, 8), "lat": 50.4501, "lon": 30.5234})
+	var o := Vector2(8.5, 8.5)
+	var t: Dictionary = AM.pick_target(sim, &"gather", o, 0.0)
+	ok(StringName(t.get("kind", &"")) == &"node" and int(t.x) == 10, "auto-target: the node in front wins over an equally near one behind")
+	t["mode"] = &"gather"
+	ok(AM.keep_target(sim, t, &"gather", o, deg_to_rad(60.0)), "auto-target: a held target survives a 60° swing (sticky)")
+	ok(not AM.keep_target(sim, t, &"gather", o, PI), "auto-target: turning away drops it")
+	var v: Dictionary = AM.primary(&"gather", t)
+	ok(StringName(v.verb) == &"order_gather" and int(v.args.x) == 10, "primary: gather → order_gather on the target")
+	var bt: Dictionary = AM.pick_target(sim, &"build", o, 0.0, "campfire")
+	ok(StringName(bt.get("kind", &"")) == &"cell" and sim.build_valid(int(bt.x), int(bt.y)), "build mode: targets a valid cell next to the hero")
+	ok(StringName(AM.primary(&"build", bt, "campfire").verb) == &"build", "primary: build mode places the chosen building")
+	ok(AM.pick_target(sim, &"fight", o, 0.0).is_empty(), "fight mode with no enemy → no target (toast, no swing)")
+	var opts: Array = AM.options(sim, AM.target_at(sim, Vector2i(10, 8)))
+	ok(StringName(opts[0].verb) == &"order_gather" and StringName(opts[-1].verb) == &"order_move", "radial: primary first, «go here» last")
+	ok(AM.mode_for_slot({"type": &"weapon"}) == &"fight" and AM.mode_for_slot({"type": &"build"}) == &"build" and AM.mode_for_slot({"type": &"repair"}) == &"repair", "slots switch the mode automatically")
+	var slots: Array = AM.default_slots(sim, "wall")
+	ok(slots.size() >= 4 and StringName(slots[2].type) == &"build" and String(slots[2].id) == "wall", "quick bar: tool · weapon · armed building · repair")
+	sim.player.items.append("axe")
+	ok(String(AM.default_slots(sim, "wall")[0].id) == "axe", "quick bar: a crafted axe appears in the tool slot by itself")
+
+# The action button gestures through the real _input path (synthetic ScreenTouch/Drag).
+func _t_touch_controls() -> void:
+	var tcn = TouchCtl.TouchControls.new()
+	get_root().add_child(tcn)
+	await process_frame
+	var got := {"tap": 0, "double": 0, "hold": 0, "slot": 0, "zoom": 0, "over": 0}
+	tcn.action_tap.connect(func() -> void: got.tap += 1)
+	tcn.action_double.connect(func() -> void: got.double += 1)
+	tcn.action_hold.connect(func(_c: Vector2) -> void: got.hold += 1)
+	tcn.slot_step.connect(func(_d: int) -> void: got.slot += 1)
+	tcn.zoom_step.connect(func(_d: int) -> void: got.zoom += 1)
+	tcn.overview_toggled.connect(func() -> void: got.over += 1)
+	var c: Vector2 = tcn.act_center()
+	var touch := func(pos: Vector2, down: bool) -> void:
+		var e := InputEventScreenTouch.new()
+		e.index = 1
+		e.position = pos
+		e.pressed = down
+		tcn._input(e)
+	touch.call(c, true); touch.call(c, false)
+	ok(got.tap == 1, "action button: a tap acts at once")
+	touch.call(c, true); touch.call(c, false)
+	ok(got.double == 1 and got.tap == 1, "action button: a quick second tap is a double (mode cycle), not a 2nd act")
+	tcn._now += 1.0
+	touch.call(c, true)
+	tcn._process(0.5)
+	touch.call(c, false)
+	ok(got.hold == 1 and got.tap == 1, "action button: a 0.5 s hold opens the radial, no tap")
+	tcn._now += 1.0
+	touch.call(c, true)
+	var d := InputEventScreenDrag.new()
+	d.index = 1
+	d.position = c + Vector2(100, 0)
+	d.relative = Vector2(100, 0)
+	tcn._input(d)
+	touch.call(c + Vector2(100, 0), false)
+	ok(got.slot >= 1 and got.tap == 1, "action button: a horizontal swipe steps the quick slot")
+	var st := Vector2(60, tcn.size.y - 60)
+	for i in 2:
+		var e2 := InputEventScreenTouch.new()
+		e2.index = 0
+		e2.position = st
+		e2.pressed = true
+		tcn._input(e2)
+		e2 = InputEventScreenTouch.new()
+		e2.index = 0
+		e2.position = st
+		e2.pressed = false
+		tcn._input(e2)
+	ok(got.over == 1, "left stick: a strict double tap toggles the map overview")
+	ok(tcn.claims(c) and not tcn.claims(Vector2(tcn.size.x * 0.6, 40)), "touch layer claims its controls, never the open map")
+	tcn.queue_free()
+	await process_frame
+
 func _t_tokens() -> void:
 	ok(Tokens.GOOD == Color("6fae54"), "GOOD reconciled to locked --good (drift fixed from 5fd38a)")
 	ok(Tokens.WARN == Color("e0b070"), "WARN reconciled to locked --warn (drift fixed from ffcf5c)")
@@ -843,7 +1057,7 @@ func _t_touch_frame() -> void:
 	ok(top._tools[2].button_pressed, "the 🗑 tool reads armed")
 	var vit = preg.get_panel(&"vitals")
 	vit.bind(snap)
-	ok(vit._bar_grid.columns == 2 and not vit._carry.visible, "phone vitals pair their bars and drop the carry row")
+	ok(vit._meds.size() == 4 and not vit._carry.visible, "phone vitals: need medallions, no carry token (no bars)")
 	var c := Vector2i(int(sess.sim.player.px), int(sess.sim.player.py))
 	var store: Vector2i = sess.sim.base_center()
 	var rm: Dictionary = HudModel._inspect_slice(sess.sim, {"hover": store, "touch": true, "selected_build": String(WorldInput.WorldInput.REMOVE_TOOL)})

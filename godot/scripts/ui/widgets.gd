@@ -11,22 +11,32 @@ const Tokens = preload("res://scripts/ui/tokens.gd")
 const UITheme = preload("res://scripts/ui/theme.gd")
 const GameData = preload("res://scripts/data.gd")
 const Fmt = preload("res://scripts/ui/format.gd")
+const ArtIcons = preload("res://scripts/ui/art_icons.gd")
 
 
 # ---- StatRow (.stock .r): glyph · label · right-aligned mono value (Stock / Equipment / Agents) ----
 class StatRow extends WidgetBase.Widget:
 	var _glyph: Label
+	var _icon: TextureRect         # generated art icon; replaces the emoji glyph when a PNG exists
 	var _label: Label
 	var _value: Label
 	var value := ""
 	func _build() -> void:
-		custom_minimum_size = Vector2(0, 20)
+		custom_minimum_size = Vector2(0, 24)
 		var hb := HBoxContainer.new()
 		hb.set_anchors_preset(Control.PRESET_FULL_RECT)
 		hb.add_theme_constant_override("separation", 6)
 		add_child(hb)
 		_glyph = Label.new()
 		hb.add_child(_glyph)
+		_icon = TextureRect.new()
+		_icon.custom_minimum_size = Vector2(22, 22)
+		_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		_icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_icon.visible = false
+		hb.add_child(_icon)
 		_label = Label.new()
 		_label.add_theme_color_override("font_color", Tokens.MUT)
 		hb.add_child(_label)
@@ -44,13 +54,31 @@ class StatRow extends WidgetBase.Widget:
 		build_once()
 		var info: Dictionary = GameData.RES[res]
 		_glyph.text = String(info.icon)
+		_show_icon(ArtIcons.res(res))
 		_label.text = String(info.label)
+		if not _label.visible:
+			tooltip_text = _label.text
 		_value.add_theme_color_override("font_color", Tokens.res(res))
-	func set_row(glyph: String, label: String, val: String) -> void:
+	# Compact tile: icon + number only; the label becomes the hover tooltip (dense readouts).
+	func set_compact(on: bool) -> void:
+		build_once()
+		_label.visible = not on
+		custom_minimum_size = Vector2(84, 24) if on else Vector2(0, 24)
+		tooltip_text = _label.text if on else ""
+		_value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	func set_row(glyph: String, label: String, val: String, icon_id: String = "") -> void:
 		build_once()
 		_glyph.text = glyph
+		_show_icon(ArtIcons.res(icon_id) if icon_id != "" else ArtIcons.for_glyph(glyph))
 		_label.text = label
+		if not _label.visible:
+			tooltip_text = label
 		set_value(val)
+	# Art icon when we have one (glyph hidden), emoji glyph otherwise (R11 fallback).
+	func _show_icon(tex: Texture2D) -> void:
+		_icon.texture = tex
+		_icon.visible = tex != null
+		_glyph.visible = tex == null
 	func set_value(v) -> void:
 		build_once()
 		value = str(v)
@@ -66,11 +94,15 @@ class NeedBar extends WidgetBase.Widget:
 	var value := ""
 	var state: StringName = &"good"
 	var _pct := 0.0
+	var _shown := -1.0             # eased fill actually drawn (ease-out toward _pct; snaps on first bind)
+	var _pulse := 0.0
 	var _icon: Label
+	var _art: TextureRect
 	var _value: Label
 	var _track: Control
 	func _build() -> void:
-		custom_minimum_size = Vector2(0, 18)
+		custom_minimum_size = Vector2(0, 22)
+		set_process(true)
 		var hb := HBoxContainer.new()
 		hb.set_anchors_preset(Control.PRESET_FULL_RECT)
 		hb.add_theme_constant_override("separation", 8)
@@ -78,6 +110,15 @@ class NeedBar extends WidgetBase.Widget:
 		_icon = Label.new()
 		_icon.custom_minimum_size = Vector2(20, 0)
 		hb.add_child(_icon)
+		_art = TextureRect.new()
+		_art.custom_minimum_size = Vector2(22, 22)
+		_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		_art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_art.pivot_offset = Vector2(11, 11)
+		_art.visible = false
+		hb.add_child(_art)
 		_track = Control.new()
 		_track.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_track.custom_minimum_size = Vector2(0, 10)
@@ -92,7 +133,26 @@ class NeedBar extends WidgetBase.Widget:
 		var w: float = _track.size.x
 		var h: float = _track.size.y
 		_track.draw_rect(Rect2(0, 0, w, h), Tokens.PANEL2)
-		_track.draw_rect(Rect2(0, 0, w * clampf(_pct / 100.0, 0, 1), h), Tokens.urgency(state))
+		var fill: Color = Tokens.urgency(state)
+		if state == &"crit":
+			fill = fill.lerp(Tokens.PANEL2, 0.35 * _pulse)   # slow blink: urgency is felt, not only coloured (R11)
+		_track.draw_rect(Rect2(0, 0, w * clampf((_shown if _shown >= 0.0 else _pct) / 100.0, 0, 1), h), fill)
+	# Ease-out fill (~250 ms feel) + critical pulse. View-only time: no sim state, no RNG.
+	func _process(delta: float) -> void:
+		if _shown < 0.0:
+			return
+		var moving: bool = absf(_shown - _pct) > 0.05
+		if moving:
+			_shown = lerpf(_shown, _pct, 1.0 - exp(-12.0 * delta))
+		if state == &"crit":
+			_pulse = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
+			if _art != null and _art.visible:
+				var sc: float = 1.0 + 0.08 * _pulse
+				_art.scale = Vector2(sc, sc)
+		elif _art != null and _art.scale != Vector2.ONE:
+			_art.scale = Vector2.ONE
+		if (moving or state == &"crit") and _track != null:
+			_track.queue_redraw()
 	func bind(vm) -> void:
 		build_once()
 		if not (vm is Dictionary):
@@ -101,7 +161,13 @@ class NeedBar extends WidgetBase.Widget:
 		_pct = float(vm.get("pct", 0))
 		state = StringName(vm.get("state", &"good"))
 		value = str(int(_pct))
+		if _shown < 0.0:
+			_shown = _pct
 		_icon.text = icon
+		var tex: Texture2D = ArtIcons.for_glyph(icon)
+		_art.texture = tex
+		_art.visible = tex != null
+		_icon.visible = tex == null
 		_value.text = value
 		_value.add_theme_color_override("font_color", Tokens.urgency(state))
 		if _track != null:
@@ -188,24 +254,46 @@ class Card extends WidgetBase.Widget:
 
 # ---- H2Header: the panel h2 with the letter-spacing the locked design wants (§2.4 custom-draw) ----
 class H2Header extends WidgetBase.Widget:
+	signal toggled(collapsed: bool)      # a click on the header folds/unfolds the panel body (progressive disclosure)
 	var _text := ""
 	var _tag := ""
+	var collapsed := false
+	var collapsible := false             # set by the panel base once it has split header from body
 	func _build() -> void:
-		custom_minimum_size = Vector2(0, 16)
+		custom_minimum_size = Vector2(0, 20)
 		draw.connect(_on_draw)
+		gui_input.connect(_on_input)
+	func _on_input(ev: InputEvent) -> void:
+		if collapsible and ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+			set_collapsed(not collapsed)
+	func set_collapsed(v: bool) -> void:
+		collapsed = v
+		queue_redraw()
+		toggled.emit(v)
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_READY or what == NOTIFICATION_ENTER_TREE:
+			mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if collapsible else Control.CURSOR_ARROW
 	func set_header(text: String, tag := "") -> void:
 		build_once()
 		_text = text.to_upper()
 		_tag = tag
 		queue_redraw()
 	func _on_draw() -> void:
-		var f := ThemeDB.fallback_font
+		var f: Font = UITheme.display_font()
 		var x := 0.0
+		if collapsible:   # chevron: ▾ open / ▸ folded — a shape, not just colour (R11)
+			var cy := 8.0
+			var pts := PackedVector2Array([Vector2(1, cy - 3), Vector2(9, cy - 3), Vector2(5, cy + 3)]) if not collapsed \
+				else PackedVector2Array([Vector2(2, cy - 4), Vector2(2, cy + 4), Vector2(8, cy)])
+			draw_colored_polygon(pts, Tokens.MUT)
+			x = 16.0
 		for ch in _text:
-			draw_string(f, Vector2(x, 11), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Tokens.MUT)
-			x += f.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x + 1.6   # ~.16em tracking
-		if _tag != "":
-			draw_string(f, Vector2(size.x - 60, 11), _tag, HORIZONTAL_ALIGNMENT_RIGHT, 60, 10, Tokens.DIM)
+			draw_string(f, Vector2(x, 13), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Tokens.INK)
+			x += f.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 1.4   # ~.11em tracking
+		# dev-facing english tags (need/stock/tech) are metadata and never drawn; a COUNT tag («5/10») is
+		# player information and is drawn right-aligned in the display face
+		if _tag != "" and _tag.to_lower() == _tag.to_upper():
+			draw_string(f, Vector2(size.x - 64, 13), _tag, HORIZONTAL_ALIGNMENT_RIGHT, 64, 13, Tokens.AMBER)
 
 # ---- BuildSlot (.slot .sel/.no): number · glyph · selected/locked/affordable state ----
 class BuildSlot extends WidgetBase.Widget:
@@ -429,11 +517,11 @@ class FlashWidget extends WidgetBase.Widget:
 # fade, then hide. Text is the sim's own feed (R10: drained by the bus, never read here directly).
 class FeedWidget extends WidgetBase.Widget:
 	const POOL := 5            # sized to sit under the default RIGHT dock (Stock + Balance) at 720p
-	const FADE_AT := 18.0      # seconds a card stays fully opaque
-	const GONE_AT := 30.0      # …then fades out by this age
+	const FADE_AT := 4.0       # seconds a card stays fully opaque
+	const GONE_AT := 5.5       # …then fades out by this age
 	const WIDTH := 290.0
-	const MAX_H := 250.0       # never climb into the RIGHT dock above: the oldest cards give way
-	var _max_cards := POOL     # compact (phones): fewer, narrower cards — the map needs the room
+	const MAX_H := 205.0       # never climb into the RIGHT dock above: the oldest cards give way
+	var _max_cards := 3        # compact (phones): fewer, narrower cards — the map needs the room
 	var _max_h := MAX_H
 	var _bus: Variant
 	var _list: VBoxContainer
@@ -461,12 +549,19 @@ class FeedWidget extends WidgetBase.Widget:
 		bus.feed.connect(_on_feed)
 	func set_compact(on: bool) -> void:
 		build_once()
-		_max_cards = 3 if on else POOL
-		_max_h = 140.0 if on else MAX_H
+		_max_cards = 2 if on else 3
+		_max_h = 96.0 if on else MAX_H
 		for c in _cards:
 			c.label.custom_minimum_size = Vector2(230.0 if on else WIDTH, 0)
 	func _on_feed(evt: Dictionary) -> void:
-		_items.append({"cls": String(evt.get("cls", "")), "text": String(evt.get("text", "")), "age": 0.0})
+		var txt := String(evt.get("text", ""))
+		# an immediate repeat folds into the last card (×N) and re-arms it instead of stacking duplicates
+		if not _items.is_empty() and String(_items[-1].text) == txt and float(_items[-1].age) < FADE_AT:
+			_items[-1].n = int(_items[-1].get("n", 1)) + 1
+			_items[-1].age = 0.0
+			_rebind()
+			return
+		_items.append({"cls": String(evt.get("cls", "")), "text": txt, "age": 0.0, "n": 1})
 		while _items.size() > POOL:
 			_items.remove_at(0)
 		_rebind()
@@ -494,10 +589,17 @@ class FeedWidget extends WidgetBase.Widget:
 				c.panel.visible = false
 				continue
 			var it: Dictionary = _items[i]
-			c.label.text = String(it.text)
+			var reps: int = int(it.get("n", 1))
+			c.label.text = String(it.text) if reps <= 1 else "%s  ×%d" % [String(it.text), reps]
 			c.stripe.color = Tokens.category(String(it.cls))
 			var a: float = 1.0 if float(it.age) < FADE_AT else clampf(1.0 - (float(it.age) - FADE_AT) / (GONE_AT - FADE_AT), 0.0, 1.0)
-			c.panel.modulate = Tokens.with_alpha(Tokens.WHITE, a)
+			# arrival: ease-out-cubic fade + small pop over 0.25 s so a new message is noticed, not just appears
+			var tin: float = clampf(float(it.age) / 0.25, 0.0, 1.0)
+			var ein: float = 1.0 - pow(1.0 - tin, 3.0)
+			c.panel.modulate = Tokens.with_alpha(Tokens.WHITE, a * ein)
+			c.panel.pivot_offset = Vector2(c.panel.size.x, c.panel.size.y * 0.5)
+			var pop: float = 1.0 + 0.07 * (1.0 - ein)
+			c.panel.scale = Vector2(pop, pop)
 			var h: float = c.panel.get_combined_minimum_size().y + 4.0
 			var rank: int = _items.size() - 1 - i              # 0 = newest
 			c.panel.visible = rank < _max_cards and (used == 0.0 or used + h <= _max_h)
@@ -635,3 +737,92 @@ class PanelMenu extends WidgetBase.Widget:
 	func entry_count() -> int:
 		return _btns.size()
 
+
+
+# ---- Medallion: the mobile-HUD status/resource token (round icon + state ring + number badge) ----
+# Replaces progress BARS (research 2026-11: mobile survival HUDs show needs as icon tokens, state by ring
+# colour + shape + number, urgency by motion — never colour alone, R11). Custom-drawn, build-once (R2):
+# bind() only swaps values. Size follows the frame (desktop 46 px; touch scale enlarges the whole UI).
+class Medallion extends WidgetBase.Widget:
+	const D := 46.0
+	var icon_tex: Texture2D = null
+	var glyph := ""
+	var value := ""
+	var label := ""
+	var state: StringName = &"good"     # good | warn | crit | info
+	var badge := true
+	var quiet_when_good := false        # needs: in the normal band the token is a dim icon, no number (The Long Dark / Don't Starve)
+	var trend := 0                      # -1 falling / 0 steady / +1 rising (vs a ~3 s moving average) — direction beats the exact number
+	var _ema := NAN
+	var _pulse := 0.0
+	func _build() -> void:
+		custom_minimum_size = Vector2(D, D + 12.0)
+		mouse_filter = Control.MOUSE_FILTER_PASS
+		draw.connect(_on_draw)
+		set_process(true)
+	func set_token(tex: Texture2D, glyph_fallback: String, lbl: String) -> void:
+		build_once()
+		icon_tex = tex
+		glyph = glyph_fallback
+		label = lbl
+		queue_redraw()
+	func bind(vm) -> void:
+		build_once()
+		if not (vm is Dictionary):
+			return
+		value = str(vm.get("value", value))
+		state = StringName(vm.get("state", state))
+		var num: float = value.get_slice("/", 0).to_float() if value.is_valid_float() or value.get_slice("/", 0).replace("°", "").is_valid_float() else NAN
+		if value.ends_with("°"):
+			num = value.trim_suffix("°").to_float()
+		if not is_nan(num):
+			if is_nan(_ema):
+				_ema = num
+			var d: float = num - _ema
+			trend = -1 if d < -0.6 else (1 if d > 0.6 else 0)
+			_ema = lerpf(_ema, num, 0.012)   # bound ~60/s → ~3 s window
+		tooltip_text = "%s · %s" % [label, value] if label != "" else value
+		queue_redraw()
+	func _process(_dt: float) -> void:
+		if state == &"crit":
+			_pulse = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008)
+			queue_redraw()
+		elif _pulse != 0.0:
+			_pulse = 0.0
+			queue_redraw()
+	func _ring() -> Color:
+		match state:
+			&"crit": return Tokens.CRIT
+			&"warn": return Tokens.WARN
+			&"info": return Tokens.TEAL
+			_:       return Tokens.LINE2
+	func _on_draw() -> void:
+		var c := Vector2(size.x * 0.5, D * 0.5)
+		var r := D * 0.5 - 2.0
+		draw_circle(c + Vector2(0, 2), r + 1.0, Tokens.with_alpha(Tokens.BG, 0.55))          # drop shadow
+		draw_circle(c, r, Tokens.with_alpha(Tokens.PANEL, 0.92))
+		var ring := _ring()
+		var rw: float = (1.5 if quiet_when_good and state == &"good" else 3.0) + (2.0 * _pulse if state == &"crit" else 0.0)
+		draw_arc(c, r - rw * 0.5, 0, TAU, 40, ring, rw, true)
+		if state == &"crit":   # urgency is motion + a second halo, not only red
+			draw_arc(c, r + 3.0 + 3.0 * _pulse, 0, TAU, 40, Tokens.with_alpha(Tokens.CRIT, 0.45 * (1.0 - _pulse)), 2.0, true)
+		var isz := D * 0.58
+		var quiet: bool = quiet_when_good and state == &"good"
+		if icon_tex != null:
+			draw_texture_rect(icon_tex, Rect2(c - Vector2(isz, isz) * 0.5, Vector2(isz, isz)), false, Tokens.DIMMED if quiet else Tokens.WHITE)
+		elif glyph != "":
+			var gf: Font = ThemeDB.fallback_font
+			draw_string(gf, c + Vector2(-isz * 0.5, isz * 0.32), glyph, HORIZONTAL_ALIGNMENT_CENTER, isz, int(isz * 0.8), Tokens.INK)
+		if trend < 0 and not quiet:   # ▼ falling: a shape cue next to the ring (not colour alone, R11)
+			var tx := c + Vector2(r * 0.78, -r * 0.62)
+			draw_colored_polygon(PackedVector2Array([tx + Vector2(-5, -3), tx + Vector2(5, -3), tx + Vector2(0, 4)]), Tokens.urgency(state) if state != &"good" else Tokens.INK)
+		if badge and value != "" and not quiet:
+			var f: Font = UITheme.display_font()
+			var fs := 13
+			var tw: float = f.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+			var pw: float = maxf(tw + 10.0, 22.0)
+			var pr := Rect2(c.x - pw * 0.5, D - 6.0, pw, 17.0)
+			draw_rect(pr, Tokens.with_alpha(Tokens.BG, 0.92))
+			draw_rect(pr, ring if state != &"good" else Tokens.LINE2, false, 1.0)
+			draw_string(f, Vector2(pr.position.x + (pw - tw) * 0.5, pr.position.y + 13.5), value, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
+				Tokens.urgency(state) if state != &"good" and state != &"info" else Tokens.INK)

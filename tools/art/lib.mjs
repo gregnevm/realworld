@@ -95,6 +95,11 @@ export const KINDS = {
     size: 64, key: false, aspect: "1:1",
     frame: "One seamless, tileable square ground texture seen strictly from directly above (orthographic). The texture fills the ENTIRE image edge to edge — no card, no frame, no padding, no swatch layout (even if a reference shows swatch cards); uniform coverage, no objects, no horizon, no vignette, no border, NO outlines (the outline rule applies to objects only); the left/right and top/bottom edges must wrap seamlessly.",
   },
+  // Wide cinematic backdrop for full-screen chrome (spawn / death). Not keyed, not resized, no frame.
+  key: {
+    size: 0, key: false, aspect: "16:9",
+    frame: "One wide cinematic environment illustration for a game's full-screen menu backdrop: a painterly scene with clear foreground, midground and distant depth, soft atmospheric haze, a calm dark area in the lower-left third where menu text will sit. Edge to edge, no frame, no border, no UI, no letters, no logos, no characters facing the camera. The even outline rule applies to small props only; large shapes may be soft painterly masses.",
+  },
   ui: {
     size: 64, key: true, aspect: "1:1",
     frame: "One flat UI pictogram for a game HUD button, simple geometric shapes, 2–3 tones, centered, generous padding, readable at 20 px. Background: a technical chroma-key that is NOT part of the art and is EXEMPT from the muted palette — exactly pure saturated magenta #FF00FF (RGB 255,0,255), perfectly flat, no vignette, no gradient, no cast shadow on it." + SOLO,

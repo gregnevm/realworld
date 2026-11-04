@@ -1,0 +1,35 @@
+{
+ "id": "ui_food",
+ "kind": "ui",
+ "variant": 3,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "ac61c792",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2997,
+  "candidatesTokenCount": 1544,
+  "totalTokenCount": 4541,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 757
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v3",
+ "prompt_chars": 3280
+}

@@ -1,0 +1,36 @@
+{
+ "id": "ui_wealth",
+ "kind": "ui",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "f77f8fb9",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2976,
+  "candidatesTokenCount": 2427,
+  "totalTokenCount": 5847,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 736
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 444,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3208
+}

@@ -58,15 +58,19 @@ func set_compact(on: bool) -> void:
 	compact = on
 	dock_top = 52.0 if on else 10.0
 	dock_bottom_gap = 76.0 if on else DOCK_BOTTOM_GAP
+	if _docks.has(3):   # touch: the build button + drawer sit under the RIGHT thumb (bottom-right)
+		(_docks[3] as HBoxContainer).alignment = BoxContainer.ALIGNMENT_END if on else BoxContainer.ALIGNMENT_CENTER
 	if feed_w != null:
 		feed_w.set_compact(on)
+		# the phone build bar is taller (finger slots + scrollbar): the feed must clear it, never cover a slot
+		WidgetBase.Widget.pin_bottom_right(feed_w, 14.0, 150.0 if on else 74.0)
 
 func _build_zones() -> void:
 	_left_scroll = _dock_scroll()
 	add_child(_left_scroll)
 	var left := VBoxContainer.new()
 	left.add_theme_constant_override("separation", 8)
-	left.custom_minimum_size = Vector2(232, 0)
+	left.custom_minimum_size = Vector2(214, 0)
 	_left_scroll.add_child(left)
 	# Right dock: an explicit-width right strip (design-system §2 RIGHT DOCK width, 250px). A
 	# right-anchored container growing BEGIN from a zero nominal size does not reliably expand to its
@@ -75,7 +79,7 @@ func _build_zones() -> void:
 	add_child(_right_scroll)
 	var right := VBoxContainer.new()
 	right.add_theme_constant_override("separation", 8)
-	right.custom_minimum_size = Vector2(250, 0)
+	right.custom_minimum_size = Vector2(214, 0)
 	_right_scroll.add_child(right)
 	var top := HBoxContainer.new()
 	top.set_anchors_preset(Control.PRESET_TOP_WIDE)
@@ -107,8 +111,21 @@ func _fit_one(sc: ScrollContainer, right_edge: bool, cap: float) -> void:
 	var box: Control = sc.get_child(0)
 	var need: Vector2 = box.get_combined_minimum_size()
 	var w: float = maxf(box.custom_minimum_size.x, need.x) + (10.0 if need.y > cap else 0.0)   # + scrollbar
-	sc.position = Vector2((size.x - 12.0 - w) if right_edge else 12.0, dock_top)
+	var inset: Vector2 = safe_insets()
+	sc.position = Vector2((size.x - 12.0 - inset.y - w) if right_edge else 12.0 + inset.x, dock_top)
 	sc.size = Vector2(w, minf(need.y, cap))
+
+# Phone safe area (camera cutout / rounded corners, often on a SHORT side in landscape): returns the
+# (left, right) insets in this Control's logical px. Desktop/windowed → (0, 0).
+func safe_insets() -> Vector2:
+	if not compact:
+		return Vector2.ZERO
+	var sa: Rect2i = DisplayServer.get_display_safe_area()
+	var ss: Vector2i = DisplayServer.screen_get_size()
+	if sa.size.x <= 0 or ss.x <= 0:
+		return Vector2.ZERO
+	var k: float = size.x / float(ss.x)
+	return Vector2(maxf(0.0, sa.position.x * k), maxf(0.0, (ss.x - sa.end.x) * k))
 
 func setup(p_session, p_balance, p_bus, p_registry, p_overlays = null) -> void:
 	session = p_session
@@ -130,6 +147,7 @@ func mount() -> void:
 	_mount_feedback()
 	if compact:
 		feed_w.set_compact(true)
+		WidgetBase.Widget.pin_bottom_right(feed_w, 14.0, 150.0)
 
 func _starts_open(p) -> bool:
 	if compact and int(p.compact_open) >= 0:
@@ -179,3 +197,28 @@ func refresh(dt: float) -> void:
 		tip_w.bind(snap.get("inspect", {}) if bool(view_ctx.get("in_world", false)) else {})
 		var at: Vector2 = view_ctx.get("pointer", get_viewport().get_mouse_position())
 		tip_w.follow(at, size, bool(view_ctx.get("touch", false)))
+
+
+# Screen rects of the side/top docks (touch layer: the stick zone must not steal taps meant for panels).
+func dock_rects() -> Array:
+	var out: Array = []
+	for sc in [_left_scroll, _right_scroll]:
+		if sc != null and sc.visible and sc.size.y > 1.0:
+			out.append(Rect2(sc.position, sc.size))
+	for d in [2, 3]:
+		if _docks.has(d):
+			var c: Control = _docks[d]
+			var need: Vector2 = c.get_combined_minimum_size()
+			if d == 3:
+				out.append(Rect2(Vector2((size.x - need.x) * 0.5, c.position.y + c.size.y - need.y), need))
+			else:
+				out.append(Rect2(Vector2((size.x - need.x) * 0.5, c.position.y), need))
+	return out
+
+# Touch scheme: the build drawer floats centred ABOVE the quick bar instead of hugging the right thumb.
+func set_bar_lift(px: float) -> void:
+	if _docks.has(3):
+		var c: HBoxContainer = _docks[3]
+		c.alignment = BoxContainer.ALIGNMENT_CENTER
+		c.offset_bottom = -px
+		c.offset_top = -px

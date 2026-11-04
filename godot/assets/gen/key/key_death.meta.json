@@ -1,0 +1,36 @@
+{
+ "id": "key_death",
+ "kind": "key",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "55cd9c34",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2972,
+  "candidatesTokenCount": 1610,
+  "totalTokenCount": 6293,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 732
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 1711,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3259
+}

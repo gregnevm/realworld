@@ -1,0 +1,36 @@
+{
+ "id": "key_spawn",
+ "kind": "key",
+ "variant": 2,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "aa50e933",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2984,
+  "candidatesTokenCount": 1643,
+  "totalTokenCount": 5512,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 744
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 885,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v2",
+ "prompt_chars": 3337
+}

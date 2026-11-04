@@ -1,0 +1,36 @@
+{
+ "id": "promo_convoy",
+ "kind": "key",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "8247f21d",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2952,
+  "candidatesTokenCount": 1684,
+  "totalTokenCount": 5371,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 712
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 735,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3196
+}
