@@ -66,7 +66,7 @@ func _build_zones() -> void:
 	add_child(_left_scroll)
 	var left := VBoxContainer.new()
 	left.add_theme_constant_override("separation", 8)
-	left.custom_minimum_size = Vector2(232, 0)
+	left.custom_minimum_size = Vector2(214, 0)
 	_left_scroll.add_child(left)
 	# Right dock: an explicit-width right strip (design-system §2 RIGHT DOCK width, 250px). A
 	# right-anchored container growing BEGIN from a zero nominal size does not reliably expand to its
@@ -75,7 +75,7 @@ func _build_zones() -> void:
 	add_child(_right_scroll)
 	var right := VBoxContainer.new()
 	right.add_theme_constant_override("separation", 8)
-	right.custom_minimum_size = Vector2(250, 0)
+	right.custom_minimum_size = Vector2(214, 0)
 	_right_scroll.add_child(right)
 	var top := HBoxContainer.new()
 	top.set_anchors_preset(Control.PRESET_TOP_WIDE)

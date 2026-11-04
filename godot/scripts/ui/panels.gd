@@ -27,14 +27,21 @@ class StockPanel extends PanelBase.Base:
 		vb.add_theme_constant_override("separation", 5)
 		add_child(vb)
 		var head := Widgets.H2Header.new()
-		vb.add_child(head); head.set_header("Склад", "stock")
+		vb.add_child(head); head.set_header("Склад", "")
+		# icon + number tiles, two per line (RimWorld/Factorio resource readout): the label lives in the
+		# tooltip — six rows of «Дерево … 149» were 230 px of chrome for six numbers
+		var grid := GridContainer.new()
+		grid.columns = 2
+		grid.add_theme_constant_override("h_separation", 14)
+		grid.add_theme_constant_override("v_separation", 2)
+		vb.add_child(grid)
 		for res in GameData.RES_ORDER:
 			var row := Widgets.StatRow.new()
-			vb.add_child(row); row.set_glyph_res(res)
+			grid.add_child(row); row.set_glyph_res(res); row.set_compact(true)
 			_rows[res] = row
 		for i in EXTRA_POOL:
 			var xrow := Widgets.StatRow.new()
-			vb.add_child(xrow); xrow.set_row("•", "—", "")
+			grid.add_child(xrow); xrow.set_row("•", "—", ""); xrow.set_compact(true)
 			xrow.visible = false
 			_extra.append(xrow)
 		_total = Widgets.StatRow.new()
@@ -162,7 +169,7 @@ class BalancePanel extends PanelBase.Base:
 	var _wealth: Widgets.StatRow
 	var _hint: Widgets.StatRow
 	func _init() -> void:
-		panel_id = &"balance"; dock = PanelBase.DOCK_RIGHT; priority = 20; default_open = true
+		panel_id = &"balance"; dock = PanelBase.DOCK_RIGHT; priority = 20; hotkey = KEY_X; default_open = false   # director internals: on demand, not on the player's face
 		menu_label = "⚖ Загроза"; compact_open = 0
 	func _build() -> void:
 		rebuild_count += 1
@@ -170,7 +177,7 @@ class BalancePanel extends PanelBase.Base:
 		vb.add_theme_constant_override("separation", 5)
 		add_child(vb)
 		var head := Widgets.H2Header.new()
-		vb.add_child(head); head.set_header("Balance", "director")
+		vb.add_child(head); head.set_header("Загроза", "")
 		_gauge = Widgets.Gauge.new(); vb.add_child(_gauge)
 		_phase = Widgets.StatRow.new(); vb.add_child(_phase); _phase.set_row("◔", "Фаза", "—")
 		_threat = Widgets.StatRow.new(); vb.add_child(_threat); _threat.set_row("⚔", "Загроза", "—")

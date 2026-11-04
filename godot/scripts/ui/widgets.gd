@@ -56,12 +56,23 @@ class StatRow extends WidgetBase.Widget:
 		_glyph.text = String(info.icon)
 		_show_icon(ArtIcons.res(res))
 		_label.text = String(info.label)
+		if not _label.visible:
+			tooltip_text = _label.text
 		_value.add_theme_color_override("font_color", Tokens.res(res))
+	# Compact tile: icon + number only; the label becomes the hover tooltip (dense readouts).
+	func set_compact(on: bool) -> void:
+		build_once()
+		_label.visible = not on
+		custom_minimum_size = Vector2(84, 24) if on else Vector2(0, 24)
+		tooltip_text = _label.text if on else ""
+		_value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	func set_row(glyph: String, label: String, val: String, icon_id: String = "") -> void:
 		build_once()
 		_glyph.text = glyph
 		_show_icon(ArtIcons.res(icon_id) if icon_id != "" else ArtIcons.for_glyph(glyph))
 		_label.text = label
+		if not _label.visible:
+			tooltip_text = label
 		set_value(val)
 	# Art icon when we have one (glyph hidden), emoji glyph otherwise (R11 fallback).
 	func _show_icon(tex: Texture2D) -> void:
@@ -279,8 +290,7 @@ class H2Header extends WidgetBase.Widget:
 		for ch in _text:
 			draw_string(f, Vector2(x, 11), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Tokens.MUT)
 			x += f.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x + 1.6   # ~.16em tracking
-		if _tag != "":
-			draw_string(f, Vector2(size.x - 60, 11), _tag, HORIZONTAL_ALIGNMENT_RIGHT, 60, 10, Tokens.DIM)
+		# (the dev-facing english tag — need/stock/tech — is metadata, never drawn for the player)
 
 # ---- BuildSlot (.slot .sel/.no): number · glyph · selected/locked/affordable state ----
 class BuildSlot extends WidgetBase.Widget:
@@ -504,11 +514,11 @@ class FlashWidget extends WidgetBase.Widget:
 # fade, then hide. Text is the sim's own feed (R10: drained by the bus, never read here directly).
 class FeedWidget extends WidgetBase.Widget:
 	const POOL := 5            # sized to sit under the default RIGHT dock (Stock + Balance) at 720p
-	const FADE_AT := 18.0      # seconds a card stays fully opaque
-	const GONE_AT := 30.0      # …then fades out by this age
+	const FADE_AT := 7.0       # seconds a card stays fully opaque
+	const GONE_AT := 10.0      # …then fades out by this age
 	const WIDTH := 290.0
 	const MAX_H := 205.0       # never climb into the RIGHT dock above: the oldest cards give way
-	var _max_cards := POOL     # compact (phones): fewer, narrower cards — the map needs the room
+	var _max_cards := 3        # compact (phones): fewer, narrower cards — the map needs the room
 	var _max_h := MAX_H
 	var _bus: Variant
 	var _list: VBoxContainer
@@ -536,7 +546,7 @@ class FeedWidget extends WidgetBase.Widget:
 		bus.feed.connect(_on_feed)
 	func set_compact(on: bool) -> void:
 		build_once()
-		_max_cards = 2 if on else POOL
+		_max_cards = 2 if on else 3
 		_max_h = 96.0 if on else MAX_H
 		for c in _cards:
 			c.label.custom_minimum_size = Vector2(230.0 if on else WIDTH, 0)
