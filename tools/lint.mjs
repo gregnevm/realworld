@@ -3,7 +3,7 @@
 //   • game/index.html loads exactly the modules on disk, in the contract order from AGENTS.md;
 //   • every module wraps itself in a "use strict" IIFE over the RW namespace;
 //   • no Math.random in sim paths (determinism: only the seeded G.rng / worldgen rng may roll);
-//   • secret-scan: no Google API key (AIza…) in any tracked file, and .env.local stays gitignored
+//   • secret-scan: no Google API key (AIza…/AQ.…) in any tracked file, and .env.local stays gitignored
 //     (tools/gen-art.mjs keeps the one-day Gemini key there).
 import fs from "node:fs";
 import path from "node:path";
@@ -35,12 +35,12 @@ for (const name of ORDER) {
 // secret-scan over everything git tracks or would track (cached + untracked-not-ignored)
 const tracked = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: root })
   .toString().split("\0").filter(Boolean);
-const KEY_RE = /AIza[0-9A-Za-z_-]{35}/;
+const { KEY_SCAN_RE: KEY_RE } = await import("./art/lib.mjs"); // one definition of "what a Google key looks like"
 for (const f of tracked) {
   const abs = path.join(root, f);
   let st; try { st = fs.statSync(abs); } catch { continue; }
   if (!st.isFile() || st.size > 2_000_000) continue;
-  if (KEY_RE.test(fs.readFileSync(abs, "latin1"))) problems.push(`${f} contains a Google API key (AIza…) — move it to .env.local`);
+  if (KEY_RE.test(fs.readFileSync(abs, "latin1"))) problems.push(`${f} contains a Google API key (AIza…/AQ.…) — move it to .env.local`);
 }
 try { execFileSync("git", ["check-ignore", "-q", ".env.local"], { cwd: root }); }
 catch { problems.push(".env.local is not gitignored — the Gemini key would be committable"); }

@@ -116,3 +116,21 @@ test(".env.local (where the key lives) is gitignored and generation drafts stay 
   assert.match(gi, /^\.env\.\*$/m);
   assert.match(gi, /^art\/out\/$/m);
 });
+
+test("429 triage: free-tier `limit: 0` is fatal (no retry loop); transient bursts carry a retry delay", async () => {
+  const { classify429 } = await lib();
+  const hard = { error: { code: 429, message: "Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-3-pro-image\nPlease retry in 5m4.49s." } };
+  assert.deepStrictEqual(classify429(hard), { fatal: true, freeTierZero: true, retryMs: 304490 });
+  const burst = { error: { code: 429, message: "Resource has been exhausted (e.g. check quota).", details: [{ "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "7s" }] } };
+  assert.deepStrictEqual(classify429(burst), { fatal: false, freeTierZero: false, retryMs: 7000 });
+  assert.deepStrictEqual(classify429(null), { fatal: false, freeTierZero: false, retryMs: null });
+});
+
+test("both Google key shapes (AIza… and AQ.…) are recognized and caught by the lint secret-scan pattern", async () => {
+  const { looksLikeKey, KEY_SCAN_RE } = await lib();
+  const classic = "AIza" + "x".repeat(35);
+  const studio = "AQ." + "Ab8" + "y".repeat(45);
+  for (const k of [classic, studio]) { assert.ok(looksLikeKey(k), k.slice(0, 3)); assert.ok(KEY_SCAN_RE.test(`k = "${k}"`)); }
+  assert.ok(!KEY_SCAN_RE.test("AQ.short"));
+  assert.ok(!KEY_SCAN_RE.test("plain text with AQ. in it"));
+});

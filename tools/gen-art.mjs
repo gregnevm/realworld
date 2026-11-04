@@ -20,7 +20,7 @@ import url from "node:url";
 import { execFileSync } from "node:child_process";
 import {
   KEY_ENV, KINDS, parseEnv, upsertEnv, looksLikeKey, maskKey,
-  buildManifest, composePrompt, promptHash, selectAssets, pickRefs,
+  buildManifest, composePrompt, promptHash, selectAssets, pickRefs, classify429,
 } from "./art/lib.mjs";
 
 const ROOT = path.dirname(path.dirname(url.fileURLToPath(import.meta.url)));
@@ -62,7 +62,11 @@ function explainHttp(status, body) {
   if (/API key expired|API_KEY_INVALID|API key not valid/i.test(msg) || status === 401)
     return `ключ недійсний або прострочений (${status}). Дай новий: node tools/gen-art.mjs key <KEY>`;
   if (status === 403) return `доступ заборонено (403): ${msg} — перевір, що для ключа ввімкнено Generative Language API`;
-  if (status === 429) return `ліміт/квота (429): ${msg}`;
+  if (status === 429) {
+    const q = classify429(body);
+    if (q.freeTierZero) return "квота 0 на Free Tier: проєкт цього ключа не має доступу до image-моделей без білінгу. Увімкни білінг (AI Studio → API keys → проєкт → Set up billing), ключ лишається той самий";
+    return `ліміт/квота (429): ${msg.split("\n")[0]}`;
+  }
   return `HTTP ${status}: ${msg || JSON.stringify(body).slice(0, 300)}`;
 }
 
@@ -163,8 +167,18 @@ async function generateOne(key, model, asset, prompt, refs, variant) {
       const why = (cand && cand.finishReason) || (r.json.promptFeedback && r.json.promptFeedback.blockReason) || "no image part";
       throw new Error(`${asset.id} v${variant}: модель не повернула зображення (${why})`);
     }
-    if (![429, 500, 502, 503, 504].includes(r.status)) throw new Error(`${asset.id}: ${explainHttp(r.status, r.json)}`);
-    const wait = 2000 * 2 ** attempt;
+    const q = r.status === 429 ? classify429(r.json) : null;
+    if (![429, 500, 502, 503, 504].includes(r.status) || (q && q.fatal)) {
+      const e = new Error(`${asset.id}: ${explainHttp(r.status, r.json)}`);
+      e.fatal = true; // same answer for every job in this run — stop the whole batch
+      throw e;
+    }
+    const wait = Math.min(60000, (q && q.retryMs) || 2000 * 2 ** attempt);
+    if (q && q.retryMs && q.retryMs > 60000) {
+      const e = new Error(`${asset.id}: ${explainHttp(r.status, r.json)} — сервер просить чекати ${Math.round(q.retryMs / 1000)}s; запусти пізніше`);
+      e.fatal = true;
+      throw e;
+    }
     console.warn(`… ${asset.id}: ${r.status}, повтор через ${wait / 1000}s`);
     await sleep(wait);
   }
@@ -209,9 +223,10 @@ async function cmdGen() {
   // Variant numbers are reserved up-front per asset so concurrent jobs never race on the directory listing.
   const base = new Map(picked.map((a) => [a.id, nextVersion(path.join(OUT, a.kind, a.id))]));
   const jobs = picked.flatMap((a) => Array.from({ length: n }, (_, v) => ({ a, v })));
-  let okCount = 0, fail = 0;
+  let okCount = 0, fail = 0, halted = null;
 
   await pool(jobs, Number(opt("concurrency", 2)) || 2, async ({ a, v }) => {
+    if (halted) return;
     const refs = refParts(a.kind);
     const prompt = composePrompt(style, a);
     const hash = promptHash(prompt, model, refs.sig);
@@ -230,11 +245,18 @@ async function cmdGen() {
       if (row.status !== "approved") row.status = "draft";
       okCount++;
       console.log(`✔ ${path.relative(ROOT, path.join(dir, `v${ver}.png`))}`);
-    } catch (e) { fail++; console.error(`✖ ${e.message}`); if (/недійсний|прострочений/.test(e.message)) process.exitCode = 2; }
+    } catch (e) {
+      fail++;
+      if (e.fatal) { if (!halted) { halted = e; console.error(`✖ ${e.message}\n  ⏹ батч зупинено: ця відповідь однакова для всіх асетів`); } }
+      else console.error(`✖ ${e.message}`);
+      if (/недійсний|прострочений/.test(e.message)) process.exitCode = 2;
+      else if (/квота 0/.test(e.message)) process.exitCode = 3;
+    }
   });
   if (!dry) {
     writeJSON(MANIFEST, manifest);
-    console.log(`\n${okCount} згенеровано, ${fail} помилок. Переглянь art/out/ і зроби: node tools/gen-art.mjs approve <id>@vN`);
+    const skipped = halted ? jobs.length - okCount - fail : 0;
+    console.log(`\n${okCount} згенеровано, ${fail} помилок${skipped ? `, ${skipped} пропущено (батч зупинено)` : ""}.${okCount ? " Переглянь art/out/ і зроби: node tools/gen-art.mjs approve <id>@vN" : ""}`);
     if (fail) process.exitCode ||= 1;
   }
 }

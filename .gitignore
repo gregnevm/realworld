@@ -27,3 +27,6 @@ godot/.godot/
 godot/*_shot*.png
 godot/*.import
 godot/android/build/
+
+# python bytecode (tools/art/post.py)
+__pycache__/

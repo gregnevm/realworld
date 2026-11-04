@@ -10,7 +10,10 @@
 
 // ---------------------------------------------------------------- key hygiene
 export const KEY_ENV = "GEMINI_API_KEY";
-const KEY_RE = /^AIza[0-9A-Za-z_-]{35}$/;
+// Two Google key shapes: classic `AIza…` (39 chars) and the newer AI Studio `AQ.…` keys.
+const KEY_RE = /^(?:AIza[0-9A-Za-z_-]{35}|AQ\.[0-9A-Za-z_-]{40,})$/;
+// Same shapes un-anchored — the secret-scan pattern tools/lint.mjs greps every tracked file with.
+export const KEY_SCAN_RE = /AIza[0-9A-Za-z_-]{35}|AQ\.[0-9A-Za-z_-]{40,}/;
 
 // Minimal dotenv: KEY=VALUE lines, optional quotes, # comments. Returns a plain object.
 export function parseEnv(text) {
@@ -41,6 +44,24 @@ export const maskKey = (k) => {
   const s = String(k || "");
   return s.length < 8 ? "∅" : `${s.slice(0, 4)}…${s.slice(-4)}`;
 };
+
+// 429 triage. Google returns RESOURCE_EXHAUSTED for both a transient per-minute burst AND a hard
+// "this tier has no quota for this model" (free tier image models: `limit: 0`). Retrying the latter
+// just burns minutes, so it is classified as fatal. `retryMs` honours "Please retry in 5m4.9s" / RetryInfo.
+export function classify429(body) {
+  const err = (body && body.error) || {};
+  const msg = String(err.message || "");
+  const zero = /limit:\s*0\b/.test(msg);
+  const free = /free_tier/i.test(msg);
+  let retryMs = null;
+  const m = msg.match(/retry in\s+(?:(\d+)h)?(?:(\d+)m)?([\d.]+)s/i);
+  if (m) retryMs = Math.round(((+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0)) * 1000);
+  for (const d of err.details || []) {
+    const rd = d && d.retryDelay && String(d.retryDelay).match(/^([\d.]+)s$/);
+    if (rd && retryMs == null) retryMs = Math.round(+rd[1] * 1000);
+  }
+  return { fatal: zero, freeTierZero: zero && free, retryMs };
+}
 
 // ---------------------------------------------------------------- kinds (the conceptual frame)
 // Every kind fixes camera, background, framing and target size — the subject never repeats these.
