@@ -1,0 +1,36 @@
+{
+ "id": "item_plate_armor",
+ "kind": "icon",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "ac70ed1c",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3008,
+  "candidatesTokenCount": 1514,
+  "totalTokenCount": 5406,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 768
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 884,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3282
+}

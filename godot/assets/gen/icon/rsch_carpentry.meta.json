@@ -1,0 +1,35 @@
+{
+ "id": "rsch_carpentry",
+ "kind": "icon",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "f9f9437d",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3004,
+  "candidatesTokenCount": 1493,
+  "totalTokenCount": 4497,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 764
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3288
+}

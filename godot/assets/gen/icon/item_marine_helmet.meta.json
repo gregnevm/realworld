@@ -1,0 +1,36 @@
+{
+ "id": "item_marine_helmet",
+ "kind": "icon",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "ded0adbd",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3008,
+  "candidatesTokenCount": 1581,
+  "totalTokenCount": 5780,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 768
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 1191,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3283
+}

@@ -1,0 +1,35 @@
+{
+ "id": "item_lmg",
+ "kind": "icon",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "a0fea768",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2989,
+  "candidatesTokenCount": 1707,
+  "totalTokenCount": 4696,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 749
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3206
+}

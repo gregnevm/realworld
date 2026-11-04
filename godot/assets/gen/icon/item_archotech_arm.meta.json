@@ -1,0 +1,36 @@
+{
+ "id": "item_archotech_arm",
+ "kind": "icon",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "a0121c01",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3009,
+  "candidatesTokenCount": 1497,
+  "totalTokenCount": 5101,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 769
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 595,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3281
+}

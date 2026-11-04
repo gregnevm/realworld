@@ -1,0 +1,35 @@
+{
+ "id": "item_revolver",
+ "kind": "icon",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "3053a88a",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2988,
+  "candidatesTokenCount": 1483,
+  "totalTokenCount": 4471,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 748
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3213
+}

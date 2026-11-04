@@ -1,0 +1,36 @@
+{
+ "id": "item_stone_pick",
+ "kind": "icon",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "7153c6bb",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2999,
+  "candidatesTokenCount": 1487,
+  "totalTokenCount": 5605,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 759
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 1119,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3233
+}

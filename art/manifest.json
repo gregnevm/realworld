@@ -1200,9 +1200,10 @@
    "tier": 8,
    "subject": "archotech arm (prosthetic, worn/used as arm)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "archotech arm (prosthetic, worn/used as arm)",
-   "hash": "a0121c01"
+   "hash": "a0121c01",
+   "approved": "v1"
   },
   {
    "id": "item_archotech_eye",
@@ -1212,9 +1213,10 @@
    "tier": 8,
    "subject": "archotech eye (prosthetic, worn/used as eye)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "archotech eye (prosthetic, worn/used as eye)",
-   "hash": "445da37a"
+   "hash": "445da37a",
+   "approved": "v1"
   },
   {
    "id": "item_archotech_leg",
@@ -1224,9 +1226,11 @@
    "tier": 8,
    "subject": "archotech leg (prosthetic, worn/used as leg)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "archotech leg (prosthetic, worn/used as leg)",
-   "hash": "a11a3302"
+   "hash": "9488c219",
+   "notes": "The whole prosthetic leg lying DIAGONALLY on the ground, thigh to boot, large — filling most of the frame like a tool icon; weathered olive-grey plating with a cyan accent; NOT an upright side-profile standing figure.",
+   "approved": "v2"
   },
   {
    "id": "item_assault_rifle",
@@ -1236,9 +1240,10 @@
    "tier": 5,
    "subject": "assault rifle (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "assault rifle (weapon)",
-   "hash": "a6de9684"
+   "hash": "a6de9684",
+   "approved": "v0"
   },
   {
    "id": "item_autopistol",
@@ -1248,9 +1253,10 @@
    "tier": 5,
    "subject": "autopistol (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "autopistol (weapon)",
-   "hash": "e539da98"
+   "hash": "e539da98",
+   "approved": "v0"
   },
   {
    "id": "item_axe",
@@ -1273,9 +1279,10 @@
    "tier": 7,
    "subject": "bionic arm (prosthetic, worn/used as arm)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "bionic arm (prosthetic, worn/used as arm)",
-   "hash": "8350ff98"
+   "hash": "8350ff98",
+   "approved": "v1"
   },
   {
    "id": "item_bionic_ear",
@@ -1285,9 +1292,10 @@
    "tier": 8,
    "subject": "bionic ear (prosthetic, worn/used as ear)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "bionic ear (prosthetic, worn/used as ear)",
-   "hash": "9928bb18"
+   "hash": "9928bb18",
+   "approved": "v0"
   },
   {
    "id": "item_bionic_eye",
@@ -1297,9 +1305,10 @@
    "tier": 7,
    "subject": "bionic eye (prosthetic, worn/used as eye)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "bionic eye (prosthetic, worn/used as eye)",
-   "hash": "c1413dfe"
+   "hash": "c1413dfe",
+   "approved": "v0"
   },
   {
    "id": "item_bionic_heart",
@@ -1309,9 +1318,10 @@
    "tier": 8,
    "subject": "bionic heart (prosthetic, worn/used as heart)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "bionic heart (prosthetic, worn/used as heart)",
-   "hash": "6c6b65d9"
+   "hash": "6c6b65d9",
+   "approved": "v0"
   },
   {
    "id": "item_bionic_leg",
@@ -1321,9 +1331,11 @@
    "tier": 7,
    "subject": "bionic leg (prosthetic, worn/used as leg)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "bionic leg (prosthetic, worn/used as leg)",
-   "hash": "7222d507"
+   "hash": "07da1347",
+   "notes": "The whole prosthetic leg lying DIAGONALLY on the ground, thigh to boot, large — filling most of the frame like a tool icon; slim robotic thigh, one visible knee joint, readable boot; NOT an upright side-profile standing figure.",
+   "approved": "v2"
   },
   {
    "id": "item_bionic_spine",
@@ -1333,9 +1345,11 @@
    "tier": 8,
    "subject": "bionic spine (prosthetic, worn/used as spine)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "bionic spine (prosthetic, worn/used as spine)",
-   "hash": "0bf32a10"
+   "hash": "6fc752b3",
+   "notes": "One tidy chain of metal vertebrae with a compact pelvic base and few cables, tilted diagonally so it fills the frame; mechanical, not bone-like.",
+   "approved": "v2"
   },
   {
    "id": "item_bionic_stomach",
@@ -1345,9 +1359,10 @@
    "tier": 8,
    "subject": "bionic stomach (prosthetic, worn/used as stomach)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "bionic stomach (prosthetic, worn/used as stomach)",
-   "hash": "4a027045"
+   "hash": "4a027045",
+   "approved": "v0"
   },
   {
    "id": "item_bolt_rifle",
@@ -1357,9 +1372,10 @@
    "tier": 5,
    "subject": "bolt rifle (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "bolt rifle (weapon)",
-   "hash": "b075795d"
+   "hash": "b075795d",
+   "approved": "v1"
   },
   {
    "id": "item_bow",
@@ -1369,9 +1385,11 @@
    "tier": 1,
    "subject": "bow (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "bow (weapon)",
-   "hash": "1a3220d7"
+   "hash": "9d9573b1",
+   "notes": "A recurve wooden bow with a clearly visible, slightly thick dark bowstring, simple wrapped grip, no dangling scraps or forked limbs; lying diagonally, large in the frame.",
+   "approved": "v2"
   },
   {
    "id": "item_bowler_hat",
@@ -1381,9 +1399,10 @@
    "tier": 2,
    "subject": "bowler hat (apparel, worn/used as head)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "bowler hat (apparel, worn/used as head)",
-   "hash": "4afdf310"
+   "hash": "4afdf310",
+   "approved": "v1"
   },
   {
    "id": "item_bronze_mace",
@@ -1393,9 +1412,10 @@
    "tier": 3,
    "subject": "bronze mace (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "bronze mace (weapon)",
-   "hash": "d7387d17"
+   "hash": "d7387d17",
+   "approved": "v0"
   },
   {
    "id": "item_charge_rifle",
@@ -1405,9 +1425,10 @@
    "tier": 8,
    "subject": "charge rifle (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "charge rifle (weapon)",
-   "hash": "5a2ffc95"
+   "hash": "5a2ffc95",
+   "approved": "v1"
   },
   {
    "id": "item_cloth_cap",
@@ -1417,9 +1438,10 @@
    "tier": 2,
    "subject": "cloth cap (apparel, worn/used as head)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "cloth cap (apparel, worn/used as head)",
-   "hash": "8cf0ee31"
+   "hash": "8cf0ee31",
+   "approved": "v0"
   },
   {
    "id": "item_club",
@@ -1442,9 +1464,10 @@
    "tier": 4,
    "subject": "devilstrand duster (apparel, worn/used as torso)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "devilstrand duster (apparel, worn/used as torso)",
-   "hash": "1f83bfa4"
+   "hash": "1f83bfa4",
+   "approved": "v1"
   },
   {
    "id": "item_drill_arm",
@@ -1454,9 +1477,10 @@
    "tier": 7,
    "subject": "drill arm (prosthetic, worn/used as arm)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "drill arm (prosthetic, worn/used as arm)",
-   "hash": "1c09d0cd"
+   "hash": "1c09d0cd",
+   "approved": "v1"
   },
   {
    "id": "item_duster",
@@ -1466,9 +1490,10 @@
    "tier": 2,
    "subject": "duster (apparel, worn/used as torso)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "duster (apparel, worn/used as torso)",
-   "hash": "6792ac5e"
+   "hash": "6792ac5e",
+   "approved": "v1"
   },
   {
    "id": "item_emp_grenade",
@@ -1478,9 +1503,10 @@
    "tier": 6,
    "subject": "emp grenade (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emp grenade (weapon)",
-   "hash": "94f2b6a2"
+   "hash": "94f2b6a2",
+   "approved": "v0"
   },
   {
    "id": "item_flak_helmet",
@@ -1490,9 +1516,10 @@
    "tier": 4,
    "subject": "flak helmet (apparel, worn/used as head)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "flak helmet (apparel, worn/used as head)",
-   "hash": "bf8d7076"
+   "hash": "bf8d7076",
+   "approved": "v1"
   },
   {
    "id": "item_flak_jacket",
@@ -1502,9 +1529,10 @@
    "tier": 4,
    "subject": "flak jacket (apparel, worn/used as torso)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "flak jacket (apparel, worn/used as torso)",
-   "hash": "2a24c10a"
+   "hash": "2a24c10a",
+   "approved": "v0"
   },
   {
    "id": "item_flak_pants",
@@ -1514,9 +1542,10 @@
    "tier": 4,
    "subject": "flak pants (apparel, worn/used as legs)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "flak pants (apparel, worn/used as legs)",
-   "hash": "6afcf67e"
+   "hash": "6afcf67e",
+   "approved": "v1"
   },
   {
    "id": "item_flak_vest",
@@ -1526,9 +1555,10 @@
    "tier": 4,
    "subject": "flak vest (apparel, worn/used as torso)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "flak vest (apparel, worn/used as torso)",
-   "hash": "81d715c1"
+   "hash": "81d715c1",
+   "approved": "v0"
   },
   {
    "id": "item_frag_grenade",
@@ -1538,9 +1568,10 @@
    "tier": 5,
    "subject": "frag grenade (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "frag grenade (weapon)",
-   "hash": "e9bced9e"
+   "hash": "e9bced9e",
+   "approved": "v0"
   },
   {
    "id": "item_gladius",
@@ -1550,9 +1581,10 @@
    "tier": 3,
    "subject": "gladius (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "gladius (weapon)",
-   "hash": "749fdf10"
+   "hash": "749fdf10",
+   "approved": "v1"
   },
   {
    "id": "item_hyperweave_parka",
@@ -1562,9 +1594,10 @@
    "tier": 4,
    "subject": "hyperweave parka (apparel, worn/used as torso)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "hyperweave parka (apparel, worn/used as torso)",
-   "hash": "1218b54a"
+   "hash": "1218b54a",
+   "approved": "v0"
   },
   {
    "id": "item_iron_axe",
@@ -1574,9 +1607,10 @@
    "tier": 3,
    "subject": "iron axe (tool)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "iron axe (tool)",
-   "hash": "1803c954"
+   "hash": "1803c954",
+   "approved": "v1"
   },
   {
    "id": "item_iron_helmet",
@@ -1586,9 +1620,10 @@
    "tier": 3,
    "subject": "iron helmet (apparel, worn/used as head)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "iron helmet (apparel, worn/used as head)",
-   "hash": "b46b9bc1"
+   "hash": "b46b9bc1",
+   "approved": "v0"
   },
   {
    "id": "item_iron_mace",
@@ -1598,9 +1633,10 @@
    "tier": 3,
    "subject": "iron mace (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "iron mace (weapon)",
-   "hash": "658d8772"
+   "hash": "658d8772",
+   "approved": "v1"
   },
   {
    "id": "item_iron_pick",
@@ -1610,9 +1646,10 @@
    "tier": 3,
    "subject": "iron pick (tool)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "iron pick (tool)",
-   "hash": "809a6bc9"
+   "hash": "809a6bc9",
+   "approved": "v1"
   },
   {
    "id": "item_iron_sword",
@@ -1622,9 +1659,10 @@
    "tier": 3,
    "subject": "iron sword (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "iron sword (weapon)",
-   "hash": "e1b51797"
+   "hash": "e1b51797",
+   "approved": "v0"
   },
   {
    "id": "item_joywire",
@@ -1634,9 +1672,10 @@
    "tier": 7,
    "subject": "joywire (prosthetic, worn/used as brain)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "joywire (prosthetic, worn/used as brain)",
-   "hash": "6dee19f6"
+   "hash": "6dee19f6",
+   "approved": "v0"
   },
   {
    "id": "item_jump_pack",
@@ -1646,9 +1685,10 @@
    "tier": 8,
    "subject": "jump pack (apparel, worn/used as belt)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "jump pack (apparel, worn/used as belt)",
-   "hash": "8aa66c44"
+   "hash": "8aa66c44",
+   "approved": "v0"
   },
   {
    "id": "item_knife",
@@ -1658,9 +1698,10 @@
    "tier": 3,
    "subject": "knife (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "knife (weapon)",
-   "hash": "8114bad3"
+   "hash": "8114bad3",
+   "approved": "v1"
   },
   {
    "id": "item_leather_pants",
@@ -1670,9 +1711,10 @@
    "tier": 2,
    "subject": "leather pants (apparel, worn/used as legs)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "leather pants (apparel, worn/used as legs)",
-   "hash": "c8ee5a0f"
+   "hash": "c8ee5a0f",
+   "approved": "v0"
   },
   {
    "id": "item_leather_tunic",
@@ -1682,9 +1724,10 @@
    "tier": 2,
    "subject": "leather tunic (apparel, worn/used as torso)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "leather tunic (apparel, worn/used as torso)",
-   "hash": "48a1da0b"
+   "hash": "48a1da0b",
+   "approved": "v1"
   },
   {
    "id": "item_lmg",
@@ -1694,9 +1737,10 @@
    "tier": 5,
    "subject": "lmg (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "lmg (weapon)",
-   "hash": "a0fea768"
+   "hash": "a0fea768",
+   "approved": "v1"
   },
   {
    "id": "item_longsword",
@@ -1706,9 +1750,10 @@
    "tier": 4,
    "subject": "longsword (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "longsword (weapon)",
-   "hash": "e48160d7"
+   "hash": "e48160d7",
+   "approved": "v1"
   },
   {
    "id": "item_machine_pistol",
@@ -1718,9 +1763,10 @@
    "tier": 5,
    "subject": "machine pistol (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "machine pistol (weapon)",
-   "hash": "37d4a049"
+   "hash": "37d4a049",
+   "approved": "v1"
   },
   {
    "id": "item_marine_armor",
@@ -1730,9 +1776,10 @@
    "tier": 8,
    "subject": "marine armor (apparel, worn/used as torso)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "marine armor (apparel, worn/used as torso)",
-   "hash": "825329d0"
+   "hash": "825329d0",
+   "approved": "v1"
   },
   {
    "id": "item_marine_helmet",
@@ -1742,9 +1789,10 @@
    "tier": 8,
    "subject": "marine helmet (apparel, worn/used as head)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "marine helmet (apparel, worn/used as head)",
-   "hash": "ded0adbd"
+   "hash": "ded0adbd",
+   "approved": "v1"
   },
   {
    "id": "item_minigun",
@@ -1754,9 +1802,10 @@
    "tier": 8,
    "subject": "minigun (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "minigun (weapon)",
-   "hash": "fb58cdac"
+   "hash": "fb58cdac",
+   "approved": "v1"
   },
   {
    "id": "item_molotov",
@@ -1766,9 +1815,10 @@
    "tier": 4,
    "subject": "molotov (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "molotov (weapon)",
-   "hash": "e52c798e"
+   "hash": "e52c798e",
+   "approved": "v0"
   },
   {
    "id": "item_monosword",
@@ -1778,9 +1828,10 @@
    "tier": 8,
    "subject": "monosword (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "monosword (weapon)",
-   "hash": "ff2593c9"
+   "hash": "ff2593c9",
+   "approved": "v1"
   },
   {
    "id": "item_painstopper",
@@ -1790,9 +1841,10 @@
    "tier": 7,
    "subject": "painstopper (prosthetic, worn/used as brain)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "painstopper (prosthetic, worn/used as brain)",
-   "hash": "6ede552c"
+   "hash": "6ede552c",
+   "approved": "v0"
   },
   {
    "id": "item_parka",
@@ -1802,9 +1854,10 @@
    "tier": 2,
    "subject": "parka (apparel, worn/used as torso)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "parka (apparel, worn/used as torso)",
-   "hash": "a53da0e9"
+   "hash": "a53da0e9",
+   "approved": "v1"
   },
   {
    "id": "item_peg_leg",
@@ -1814,9 +1867,11 @@
    "tier": 0,
    "subject": "peg leg (prosthetic, worn/used as leg)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "peg leg (prosthetic, worn/used as leg)",
-   "hash": "4b797957"
+   "hash": "de13c23e",
+   "notes": "A simple carved wooden peg-leg prosthesis lying diagonally across the frame, large: straight wooden shaft, padded leather knee-cup with one buckled strap on top and an iron ferrule at the tip; NOT a club, NOT a torch, no fur stuffing.",
+   "approved": "v0"
   },
   {
    "id": "item_pick",
@@ -1839,9 +1894,10 @@
    "tier": 8,
    "subject": "plasteel sword (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "plasteel sword (weapon)",
-   "hash": "cd4fb004"
+   "hash": "cd4fb004",
+   "approved": "v0"
   },
   {
    "id": "item_plate",
@@ -1864,9 +1920,10 @@
    "tier": 8,
    "subject": "plate armor (apparel, worn/used as torso)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "plate armor (apparel, worn/used as torso)",
-   "hash": "ac70ed1c"
+   "hash": "ac70ed1c",
+   "approved": "v1"
   },
   {
    "id": "item_plate_helmet",
@@ -1876,9 +1933,10 @@
    "tier": 8,
    "subject": "plate helmet (apparel, worn/used as head)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "plate helmet (apparel, worn/used as head)",
-   "hash": "d0360c3a"
+   "hash": "d0360c3a",
+   "approved": "v0"
   },
   {
    "id": "item_power_claw",
@@ -1888,9 +1946,10 @@
    "tier": 7,
    "subject": "power claw (prosthetic, worn/used as arm)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "power claw (prosthetic, worn/used as arm)",
-   "hash": "9d9e9e09"
+   "hash": "9d9e9e09",
+   "approved": "v1"
   },
   {
    "id": "item_prosthetic_arm",
@@ -1900,9 +1959,10 @@
    "tier": 3,
    "subject": "prosthetic arm (prosthetic, worn/used as arm)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "prosthetic arm (prosthetic, worn/used as arm)",
-   "hash": "7c09bc9b"
+   "hash": "7c09bc9b",
+   "approved": "v0"
   },
   {
    "id": "item_pump_shotgun",
@@ -1912,9 +1972,10 @@
    "tier": 5,
    "subject": "pump shotgun (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "pump shotgun (weapon)",
-   "hash": "5ba57e30"
+   "hash": "5ba57e30",
+   "approved": "v0"
   },
   {
    "id": "item_revolver",
@@ -1924,9 +1985,10 @@
    "tier": 5,
    "subject": "revolver (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "revolver (weapon)",
-   "hash": "3053a88a"
+   "hash": "3053a88a",
+   "approved": "v0"
   },
   {
    "id": "item_shield_belt",
@@ -1936,9 +1998,10 @@
    "tier": 6,
    "subject": "shield belt (apparel, worn/used as belt)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "shield belt (apparel, worn/used as belt)",
-   "hash": "a3b182b3"
+   "hash": "a3b182b3",
+   "approved": "v1"
   },
   {
    "id": "item_sledge",
@@ -1961,9 +2024,10 @@
    "tier": 4,
    "subject": "smokepop belt (apparel, worn/used as belt)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "smokepop belt (apparel, worn/used as belt)",
-   "hash": "782a3357"
+   "hash": "782a3357",
+   "approved": "v0"
   },
   {
    "id": "item_sniper_rifle",
@@ -1973,9 +2037,10 @@
    "tier": 5,
    "subject": "sniper rifle (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "sniper rifle (weapon)",
-   "hash": "9e8cb1a1"
+   "hash": "9e8cb1a1",
+   "approved": "v0"
   },
   {
    "id": "item_spear",
@@ -1998,9 +2063,10 @@
    "tier": 4,
    "subject": "steel axe (tool)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "steel axe (tool)",
-   "hash": "fb0c2953"
+   "hash": "fb0c2953",
+   "approved": "v0"
   },
   {
    "id": "item_steel_pick",
@@ -2010,9 +2076,10 @@
    "tier": 4,
    "subject": "steel pick (tool)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "steel pick (tool)",
-   "hash": "a54225c8"
+   "hash": "a54225c8",
+   "approved": "v0"
   },
   {
    "id": "item_steel_sword",
@@ -2022,9 +2089,10 @@
    "tier": 4,
    "subject": "steel sword (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "steel sword (weapon)",
-   "hash": "ed5be520"
+   "hash": "ed5be520",
+   "approved": "v0"
   },
   {
    "id": "item_stone_axe",
@@ -2048,9 +2116,10 @@
    "tier": 0,
    "subject": "stone pick (tool)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "stone pick (tool)",
-   "hash": "7153c6bb"
+   "hash": "7153c6bb",
+   "approved": "v1"
   },
   {
    "id": "item_tribal_pants",
@@ -2060,9 +2129,10 @@
    "tier": 2,
    "subject": "tribal pants (apparel, worn/used as legs)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "tribal pants (apparel, worn/used as legs)",
-   "hash": "2e37aaef"
+   "hash": "2e37aaef",
+   "approved": "v1"
   },
   {
    "id": "item_tribal_top",
@@ -2072,9 +2142,10 @@
    "tier": 2,
    "subject": "tribal top (apparel, worn/used as torso)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "tribal top (apparel, worn/used as torso)",
-   "hash": "5c699d9d"
+   "hash": "5c699d9d",
+   "approved": "v0"
   },
   {
    "id": "item_tuque",
@@ -2084,9 +2155,10 @@
    "tier": 2,
    "subject": "tuque (apparel, worn/used as head)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "tuque (apparel, worn/used as head)",
-   "hash": "95394ca0"
+   "hash": "95394ca0",
+   "approved": "v0"
   },
   {
    "id": "item_vest",
@@ -2109,9 +2181,10 @@
    "tier": 4,
    "subject": "warhammer (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "warhammer (weapon)",
-   "hash": "1e61ea08"
+   "hash": "1e61ea08",
+   "approved": "v0"
   },
   {
    "id": "item_wooden_club",
@@ -2121,9 +2194,10 @@
    "tier": 0,
    "subject": "wooden club (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "wooden club (weapon)",
-   "hash": "4454d188"
+   "hash": "4454d188",
+   "approved": "v0"
   },
   {
    "id": "item_wooden_spear",
@@ -2133,9 +2207,10 @@
    "tier": 0,
    "subject": "wooden spear (weapon)",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "wooden spear (weapon)",
-   "hash": "d32b0891"
+   "hash": "d32b0891",
+   "approved": "v0"
   },
   {
    "id": "node_bush",
@@ -3251,9 +3326,10 @@
    "tier": 4,
    "subject": "emblem for the technology \"advanced chemistry\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"advanced chemistry\": one symbolic object that embodies it",
-   "hash": "2f945def"
+   "hash": "2f945def",
+   "approved": "v0"
   },
   {
    "id": "rsch_advanced_fabrication",
@@ -3263,9 +3339,10 @@
    "tier": 8,
    "subject": "emblem for the technology \"advanced fabrication\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"advanced fabrication\": one symbolic object that embodies it",
-   "hash": "9b892e93"
+   "hash": "9b892e93",
+   "approved": "v1"
   },
   {
    "id": "rsch_advanced_metallurgy",
@@ -3275,9 +3352,10 @@
    "tier": 4,
    "subject": "emblem for the technology \"advanced metallurgy\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"advanced metallurgy\": one symbolic object that embodies it",
-   "hash": "b9bc6470"
+   "hash": "b9bc6470",
+   "approved": "v1"
   },
   {
    "id": "rsch_advanced_prosthetics",
@@ -3287,9 +3365,10 @@
    "tier": 8,
    "subject": "emblem for the technology \"advanced prosthetics\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"advanced prosthetics\": one symbolic object that embodies it",
-   "hash": "ace2ef15"
+   "hash": "ace2ef15",
+   "approved": "v0"
   },
   {
    "id": "rsch_advanced_textiles",
@@ -3299,9 +3378,10 @@
    "tier": 4,
    "subject": "emblem for the technology \"advanced textiles\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"advanced textiles\": one symbolic object that embodies it",
-   "hash": "b57e2df2"
+   "hash": "b57e2df2",
+   "approved": "v0"
   },
   {
    "id": "rsch_advanced_weapons",
@@ -3311,9 +3391,10 @@
    "tier": 8,
    "subject": "emblem for the technology \"advanced weapons\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"advanced weapons\": one symbolic object that embodies it",
-   "hash": "2b9707d5"
+   "hash": "2b9707d5",
+   "approved": "v0"
   },
   {
    "id": "rsch_agriculture",
@@ -3323,9 +3404,10 @@
    "tier": 1,
    "subject": "emblem for the technology \"agriculture\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"agriculture\": one symbolic object that embodies it",
-   "hash": "ff83a286"
+   "hash": "ff83a286",
+   "approved": "v1"
   },
   {
    "id": "rsch_automation",
@@ -3335,9 +3417,10 @@
    "tier": 7,
    "subject": "emblem for the technology \"automation\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"automation\": one symbolic object that embodies it",
-   "hash": "195abc1d"
+   "hash": "195abc1d",
+   "approved": "v1"
   },
   {
    "id": "rsch_bionics",
@@ -3347,9 +3430,10 @@
    "tier": 7,
    "subject": "emblem for the technology \"bionics\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"bionics\": one symbolic object that embodies it",
-   "hash": "961c9c29"
+   "hash": "961c9c29",
+   "approved": "v1"
   },
   {
    "id": "rsch_brewing",
@@ -3359,9 +3443,10 @@
    "tier": 3,
    "subject": "emblem for the technology \"brewing\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"brewing\": one symbolic object that embodies it",
-   "hash": "a9d6ffc3"
+   "hash": "a9d6ffc3",
+   "approved": "v1"
   },
   {
    "id": "rsch_carpentry",
@@ -3371,9 +3456,10 @@
    "tier": 1,
    "subject": "emblem for the technology \"carpentry\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"carpentry\": one symbolic object that embodies it",
-   "hash": "f9f9437d"
+   "hash": "f9f9437d",
+   "approved": "v0"
   },
   {
    "id": "rsch_chemistry",
@@ -3383,9 +3469,10 @@
    "tier": 4,
    "subject": "emblem for the technology \"chemistry\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"chemistry\": one symbolic object that embodies it",
-   "hash": "9d672d0c"
+   "hash": "9d672d0c",
+   "approved": "v0"
   },
   {
    "id": "rsch_cooking",
@@ -3395,9 +3482,10 @@
    "tier": 2,
    "subject": "emblem for the technology \"cooking\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"cooking\": one symbolic object that embodies it",
-   "hash": "049bef33"
+   "hash": "049bef33",
+   "approved": "v0"
   },
   {
    "id": "rsch_defense_systems",
@@ -3407,9 +3495,10 @@
    "tier": 7,
    "subject": "emblem for the technology \"defense systems\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"defense systems\": one symbolic object that embodies it",
-   "hash": "a3bf6c4b"
+   "hash": "a3bf6c4b",
+   "approved": "v0"
   },
   {
    "id": "rsch_drug_production",
@@ -3419,9 +3508,10 @@
    "tier": 5,
    "subject": "emblem for the technology \"drug production\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"drug production\": one symbolic object that embodies it",
-   "hash": "dba82782"
+   "hash": "dba82782",
+   "approved": "v1"
   },
   {
    "id": "rsch_electricity",
@@ -3431,9 +3521,10 @@
    "tier": 5,
    "subject": "emblem for the technology \"electricity\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"electricity\": one symbolic object that embodies it",
-   "hash": "f889163c"
+   "hash": "f889163c",
+   "approved": "v1"
   },
   {
    "id": "rsch_electronics",
@@ -3443,9 +3534,10 @@
    "tier": 6,
    "subject": "emblem for the technology \"electronics\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"electronics\": one symbolic object that embodies it",
-   "hash": "bdd3ffd9"
+   "hash": "bdd3ffd9",
+   "approved": "v1"
   },
   {
    "id": "rsch_fire_mastery",
@@ -3455,9 +3547,10 @@
    "tier": 1,
    "subject": "emblem for the technology \"fire mastery\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"fire mastery\": one symbolic object that embodies it",
-   "hash": "220d06e5"
+   "hash": "220d06e5",
+   "approved": "v1"
   },
   {
    "id": "rsch_firearms",
@@ -3467,9 +3560,10 @@
    "tier": 5,
    "subject": "emblem for the technology \"firearms\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"firearms\": one symbolic object that embodies it",
-   "hash": "5da2d726"
+   "hash": "5da2d726",
+   "approved": "v0"
   },
   {
    "id": "rsch_fortification",
@@ -3479,9 +3573,10 @@
    "tier": 6,
    "subject": "emblem for the technology \"fortification\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"fortification\": one symbolic object that embodies it",
-   "hash": "6b4abc18"
+   "hash": "6b4abc18",
+   "approved": "v1"
   },
   {
    "id": "rsch_geothermal_power",
@@ -3491,9 +3586,10 @@
    "tier": 5,
    "subject": "emblem for the technology \"geothermal power\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"geothermal power\": one symbolic object that embodies it",
-   "hash": "12eeaaa5"
+   "hash": "12eeaaa5",
+   "approved": "v0"
   },
   {
    "id": "rsch_gunsmithing",
@@ -3503,9 +3599,10 @@
    "tier": 5,
    "subject": "emblem for the technology \"gunsmithing\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"gunsmithing\": one symbolic object that embodies it",
-   "hash": "1cd02469"
+   "hash": "1cd02469",
+   "approved": "v0"
   },
   {
    "id": "rsch_hunting",
@@ -3515,9 +3612,10 @@
    "tier": 1,
    "subject": "emblem for the technology \"hunting\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"hunting\": one symbolic object that embodies it",
-   "hash": "1d5105e1"
+   "hash": "1d5105e1",
+   "approved": "v1"
   },
   {
    "id": "rsch_husbandry",
@@ -3527,9 +3625,10 @@
    "tier": 3,
    "subject": "emblem for the technology \"husbandry\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"husbandry\": one symbolic object that embodies it",
-   "hash": "b3b6de49"
+   "hash": "b3b6de49",
+   "approved": "v1"
   },
   {
    "id": "rsch_industrialization",
@@ -3539,9 +3638,10 @@
    "tier": 8,
    "subject": "emblem for the technology \"industrialization\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"industrialization\": one symbolic object that embodies it",
-   "hash": "b7722a57"
+   "hash": "b7722a57",
+   "approved": "v1"
   },
   {
    "id": "rsch_leatherworking",
@@ -3551,9 +3651,10 @@
    "tier": 2,
    "subject": "emblem for the technology \"leatherworking\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"leatherworking\": one symbolic object that embodies it",
-   "hash": "9005f32d"
+   "hash": "9005f32d",
+   "approved": "v0"
   },
   {
    "id": "rsch_machining",
@@ -3563,9 +3664,10 @@
    "tier": 3,
    "subject": "emblem for the technology \"machining\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"machining\": one symbolic object that embodies it",
-   "hash": "d07fcc2c"
+   "hash": "d07fcc2c",
+   "approved": "v1"
   },
   {
    "id": "rsch_masonry",
@@ -3575,9 +3677,10 @@
    "tier": 1,
    "subject": "emblem for the technology \"masonry\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"masonry\": one symbolic object that embodies it",
-   "hash": "0e979970"
+   "hash": "0e979970",
+   "approved": "v0"
   },
   {
    "id": "rsch_medicine_research",
@@ -3587,9 +3690,10 @@
    "tier": 4,
    "subject": "emblem for the technology \"medicine research\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"medicine research\": one symbolic object that embodies it",
-   "hash": "99576941"
+   "hash": "99576941",
+   "approved": "v1"
   },
   {
    "id": "rsch_metallurgy",
@@ -3599,9 +3703,10 @@
    "tier": 3,
    "subject": "emblem for the technology \"metallurgy\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"metallurgy\": one symbolic object that embodies it",
-   "hash": "24585308"
+   "hash": "24585308",
+   "approved": "v0"
   },
   {
    "id": "rsch_microelectronics",
@@ -3611,9 +3716,10 @@
    "tier": 7,
    "subject": "emblem for the technology \"microelectronics\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"microelectronics\": one symbolic object that embodies it",
-   "hash": "9d21c8b3"
+   "hash": "9d21c8b3",
+   "approved": "v1"
   },
   {
    "id": "rsch_plasteel_working",
@@ -3623,9 +3729,10 @@
    "tier": 7,
    "subject": "emblem for the technology \"plasteel working\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"plasteel working\": one symbolic object that embodies it",
-   "hash": "947e0272"
+   "hash": "947e0272",
+   "approved": "v1"
   },
   {
    "id": "rsch_powered_armor",
@@ -3635,9 +3742,10 @@
    "tier": 8,
    "subject": "emblem for the technology \"powered armor\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"powered armor\": one symbolic object that embodies it",
-   "hash": "8b5acf84"
+   "hash": "8b5acf84",
+   "approved": "v1"
   },
   {
    "id": "rsch_ship_construction",
@@ -3647,9 +3755,10 @@
    "tier": 9,
    "subject": "emblem for the technology \"ship construction\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"ship construction\": one symbolic object that embodies it",
-   "hash": "bebaae6f"
+   "hash": "bebaae6f",
+   "approved": "v1"
   },
   {
    "id": "rsch_smelting",
@@ -3659,9 +3768,10 @@
    "tier": 2,
    "subject": "emblem for the technology \"smelting\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"smelting\": one symbolic object that embodies it",
-   "hash": "4ee84d58"
+   "hash": "4ee84d58",
+   "approved": "v1"
   },
   {
    "id": "rsch_smithing",
@@ -3671,9 +3781,10 @@
    "tier": 3,
    "subject": "emblem for the technology \"smithing\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"smithing\": one symbolic object that embodies it",
-   "hash": "8ecf8096"
+   "hash": "8ecf8096",
+   "approved": "v0"
   },
   {
    "id": "rsch_spacer_medicine",
@@ -3683,9 +3794,10 @@
    "tier": 8,
    "subject": "emblem for the technology \"spacer medicine\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"spacer medicine\": one symbolic object that embodies it",
-   "hash": "72e50a01"
+   "hash": "72e50a01",
+   "approved": "v0"
   },
   {
    "id": "rsch_spacer_tech",
@@ -3695,9 +3807,10 @@
    "tier": 8,
    "subject": "emblem for the technology \"spacer tech\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"spacer tech\": one symbolic object that embodies it",
-   "hash": "6725b767"
+   "hash": "6725b767",
+   "approved": "v0"
   },
   {
    "id": "rsch_steelmaking",
@@ -3707,9 +3820,10 @@
    "tier": 4,
    "subject": "emblem for the technology \"steelmaking\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"steelmaking\": one symbolic object that embodies it",
-   "hash": "f32fe46c"
+   "hash": "f32fe46c",
+   "approved": "v0"
   },
   {
    "id": "rsch_stonecarving",
@@ -3719,9 +3833,10 @@
    "tier": 3,
    "subject": "emblem for the technology \"stonecarving\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"stonecarving\": one symbolic object that embodies it",
-   "hash": "58e97b8f"
+   "hash": "58e97b8f",
+   "approved": "v0"
   },
   {
    "id": "rsch_textiles",
@@ -3731,9 +3846,10 @@
    "tier": 2,
    "subject": "emblem for the technology \"textiles\": one symbolic object that embodies it",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emblem for the technology \"textiles\": one symbolic object that embodies it",
-   "hash": "0811d161"
+   "hash": "0811d161",
+   "approved": "v0"
   },
   {
    "id": "tile_dirt",

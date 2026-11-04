@@ -1,0 +1,36 @@
+{
+ "id": "rsch_ship_construction",
+ "kind": "icon",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "bebaae6f",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3009,
+  "candidatesTokenCount": 1538,
+  "totalTokenCount": 5811,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 769
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 1264,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3327
+}

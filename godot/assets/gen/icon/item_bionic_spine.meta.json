@@ -1,0 +1,36 @@
+{
+ "id": "item_bionic_spine",
+ "kind": "icon",
+ "variant": 2,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "6fc752b3",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3045,
+  "candidatesTokenCount": 1515,
+  "totalTokenCount": 4890,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 805
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 330,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v2",
+ "prompt_chars": 3452
+}

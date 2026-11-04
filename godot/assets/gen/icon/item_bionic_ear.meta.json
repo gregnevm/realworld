@@ -1,0 +1,36 @@
+{
+ "id": "item_bionic_ear",
+ "kind": "icon",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "9928bb18",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3009,
+  "candidatesTokenCount": 1580,
+  "totalTokenCount": 5327,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 769
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 738,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3279
+}

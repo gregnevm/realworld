@@ -1,0 +1,35 @@
+{
+ "id": "item_tuque",
+ "kind": "icon",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "95394ca0",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2996,
+  "candidatesTokenCount": 1466,
+  "totalTokenCount": 4462,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 756
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3222
+}

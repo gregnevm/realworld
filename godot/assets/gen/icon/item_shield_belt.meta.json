@@ -1,0 +1,35 @@
+{
+ "id": "item_shield_belt",
+ "kind": "icon",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "a3b182b3",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3001,
+  "candidatesTokenCount": 1929,
+  "totalTokenCount": 4930,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 761
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3278
+}

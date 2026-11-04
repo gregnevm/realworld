@@ -1,0 +1,36 @@
+{
+ "id": "item_frag_grenade",
+ "kind": "icon",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "e9bced9e",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2992,
+  "candidatesTokenCount": 1513,
+  "totalTokenCount": 5423,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 752
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 918,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3225
+}
