@@ -389,7 +389,8 @@ class BuildBarPanel extends PanelBase.Base:
 		if touch != _touch_sized:
 			_touch_sized = touch
 			for b in _btns:
-				b.custom_minimum_size = Vector2(72, 84) if touch else Vector2(84, 74)
+				b.custom_minimum_size = Vector2(64, 66) if touch else Vector2(84, 74)
+				b.add_theme_constant_override("icon_max_width", 26 if touch else 36)
 		var need: Vector2 = _hb.get_combined_minimum_size()
 		var avail: float = maxf(200.0, get_viewport_rect().size.x - 44.0)
 		_scroll.custom_minimum_size = Vector2(minf(need.x, avail), need.y + (10.0 if need.x > avail else 0.0))

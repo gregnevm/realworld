@@ -516,12 +516,19 @@ class FeedWidget extends WidgetBase.Widget:
 		bus.feed.connect(_on_feed)
 	func set_compact(on: bool) -> void:
 		build_once()
-		_max_cards = 3 if on else POOL
-		_max_h = 140.0 if on else MAX_H
+		_max_cards = 2 if on else POOL
+		_max_h = 96.0 if on else MAX_H
 		for c in _cards:
 			c.label.custom_minimum_size = Vector2(230.0 if on else WIDTH, 0)
 	func _on_feed(evt: Dictionary) -> void:
-		_items.append({"cls": String(evt.get("cls", "")), "text": String(evt.get("text", "")), "age": 0.0})
+		var txt := String(evt.get("text", ""))
+		# an immediate repeat folds into the last card (×N) and re-arms it instead of stacking duplicates
+		if not _items.is_empty() and String(_items[-1].text) == txt and float(_items[-1].age) < FADE_AT:
+			_items[-1].n = int(_items[-1].get("n", 1)) + 1
+			_items[-1].age = 0.0
+			_rebind()
+			return
+		_items.append({"cls": String(evt.get("cls", "")), "text": txt, "age": 0.0, "n": 1})
 		while _items.size() > POOL:
 			_items.remove_at(0)
 		_rebind()
@@ -549,10 +556,17 @@ class FeedWidget extends WidgetBase.Widget:
 				c.panel.visible = false
 				continue
 			var it: Dictionary = _items[i]
-			c.label.text = String(it.text)
+			var reps: int = int(it.get("n", 1))
+			c.label.text = String(it.text) if reps <= 1 else "%s  ×%d" % [String(it.text), reps]
 			c.stripe.color = Tokens.category(String(it.cls))
 			var a: float = 1.0 if float(it.age) < FADE_AT else clampf(1.0 - (float(it.age) - FADE_AT) / (GONE_AT - FADE_AT), 0.0, 1.0)
-			c.panel.modulate = Tokens.with_alpha(Tokens.WHITE, a)
+			# arrival: ease-out-cubic fade + small pop over 0.25 s so a new message is noticed, not just appears
+			var tin: float = clampf(float(it.age) / 0.25, 0.0, 1.0)
+			var ein: float = 1.0 - pow(1.0 - tin, 3.0)
+			c.panel.modulate = Tokens.with_alpha(Tokens.WHITE, a * ein)
+			c.panel.pivot_offset = Vector2(c.panel.size.x, c.panel.size.y * 0.5)
+			var pop: float = 1.0 + 0.07 * (1.0 - ein)
+			c.panel.scale = Vector2(pop, pop)
 			var h: float = c.panel.get_combined_minimum_size().y + 4.0
 			var rank: int = _items.size() - 1 - i              # 0 = newest
 			c.panel.visible = rank < _max_cards and (used == 0.0 or used + h <= _max_h)

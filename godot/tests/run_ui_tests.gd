@@ -9,6 +9,7 @@ extends "res://tests/harness.gd"
 const Tokens = preload("res://scripts/ui/tokens.gd")
 const Fmt = preload("res://scripts/ui/format.gd")
 const ViewGeom = preload("res://scripts/ui/view_geom.gd")
+const ArtIcons = preload("res://scripts/ui/art_icons.gd")
 const LatLon = preload("res://scripts/ui/latlon.gd")
 const HudModel = preload("res://scripts/ui/hud_model.gd")
 const CatalogView = preload("res://scripts/ui/catalog_view.gd")
@@ -38,6 +39,7 @@ const SessionScript = preload("res://scripts/session.gd")
 func _init() -> void:
 	print("== RealWorld UI view-layer tests (spec 0005) ==")
 	_t_tokens()
+	_t_art_icons()
 	_t_format()
 	_t_view_geom()
 	_t_latlon()
@@ -77,6 +79,17 @@ func _init() -> void:
 
 
 # ---------------- Tokens (R3 / drift reconciliation) ----------------
+# Every emoji→art mapping must resolve to a real PNG (a typo'd id would silently fall back to the emoji
+# forever), every live resource has its icon, and building sprites crop to a non-empty opaque region.
+func _t_art_icons() -> void:
+	for g in ArtIcons.GLYPH_ART:
+		ok(ArtIcons.for_glyph(String(g)) != null, "GLYPH_ART %s → %s has a PNG" % [g, ArtIcons.GLYPH_ART[g]])
+	for res in GameData.RES_ORDER:
+		ok(ArtIcons.res(String(res)) != null, "live resource %s has an icon" % res)
+	var wall: Texture2D = ArtIcons.building("wall")
+	ok(wall != null and wall.get_size().x > 8.0, "building('wall') loads and crops")
+	ok(ArtIcons.for_glyph("no-such-glyph") == null and ArtIcons.building("no_such_building") == null, "unknown glyph/building → null (emoji fallback)")
+
 func _t_tokens() -> void:
 	ok(Tokens.GOOD == Color("6fae54"), "GOOD reconciled to locked --good (drift fixed from 5fd38a)")
 	ok(Tokens.WARN == Color("e0b070"), "WARN reconciled to locked --warn (drift fixed from ffcf5c)")
