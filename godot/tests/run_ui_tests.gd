@@ -44,6 +44,8 @@ func _init() -> void:
 	_t_world_fx()
 	_t_panel_fold()
 	_t_goal_guide()
+	_t_build_drawer()
+	_t_enemy_intent()
 	_t_format()
 	_t_view_geom()
 	_t_latlon()
@@ -156,6 +158,43 @@ func _t_goal_guide() -> void:
 	bb.bind({"build": {"slots": slots}, "goals": {"current": {"build": ""}}})
 	ok(bb._btns[1].modulate == Tokens.WHITE and bb._btns[1].scale == Vector2.ONE, "goal guide: no target → no pulse")
 	bb.free()
+
+# Touch build drawer: closed = only the 🔨 button; a category tab shows just its slots; desktop shows the
+# flat hotkey row with no button/tabs. Same Button pool throughout (R2).
+func _t_build_drawer() -> void:
+	var bb = Panels.BuildBarPanel.new()
+	bb.build_once()
+	var slots: Array = []
+	for k in ["wall", "door", "storage", "campfire", "turret"]:
+		slots.append({"key": k, "hotkey": "", "name": k, "cost": "", "afford": true, "locked": false, "selected": false})
+	bb.bind({"build": {"slots": slots}, "ui": {"touch": false}})
+	ok(not bb._fab.visible and not bb._tabs.visible and bb._scroll.visible and bb._btns[4].visible, "drawer: desktop = flat row, no 🔨/tabs")
+	bb.bind({"build": {"slots": slots}, "ui": {"touch": true}})
+	ok(bb._fab.visible and not bb._scroll.visible and not bb._tabs.visible, "drawer: touch starts closed — just the 🔨 button")
+	bb.set_category(3)
+	bb.bind({"build": {"slots": slots}, "ui": {"touch": true}})
+	ok(bb._scroll.visible and bb._tabs.visible and bb._btns[4].visible and not bb._btns[0].visible, "drawer: the Оборона tab shows only defence slots")
+	ok(bb.rebuild_count == 1, "drawer: tabs/drawer never rebuild the panel (R2)")
+	bb.free()
+
+# Threat telegraphing (Into the Breach): an enemy in reach shows ⚔ + the damage it will deal after armour;
+# a distant idle patrol bot shows 👁. Pure read of sim data.
+func _t_enemy_intent() -> void:
+	var nn := 16
+	var tiles := PackedByteArray()
+	tiles.resize(nn * nn)
+	tiles.fill(WorldGen.GRASS)
+	var sim = Sim.new()
+	sim.new_game({"n": nn, "tiles": tiles, "nodes": {}, "spawn": Vector2i(8, 8), "lat": 50.4501, "lon": 30.5234})
+	var v = WorldViewScript.new()
+	v.sim = sim
+	var near: Dictionary = GameData.make_raider(sim.player.px + 0.6, sim.player.py, 1)
+	var far: Dictionary = GameData.make_patrol_bot(1.5, 1.5, 1)
+	var a: Dictionary = v.enemy_intent(near)
+	var b: Dictionary = v.enemy_intent(far)
+	ok(String(a.glyph) == "⚔" and int(a.num) == int(round(float(near.dmg) * float(sim.armor_mult()))), "intent: adjacent raider telegraphs ⚔ + damage after armour")
+	ok(String(b.glyph) == "👁" and int(b.num) < 0, "intent: a distant patrol bot shows 👁 (searching), no number")
+	v.free()
 
 func _t_tokens() -> void:
 	ok(Tokens.GOOD == Color("6fae54"), "GOOD reconciled to locked --good (drift fixed from 5fd38a)")

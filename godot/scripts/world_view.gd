@@ -50,7 +50,9 @@ var _seen_b: Dictionary = {}        # building cells seen last frame
 var _b_baseline := false            # first observation = existing base: no pops on load
 var _last_epos: Array = []          # enemy world positions last frame (death poofs)
 var _poofs: Array = []              # {pos, age}
-var shake := 0.0                    # 0..1 camera-shake request (hero hurt); the scene reads & applies it
+var shake := 0.0                    # TRAUMA 0..1 (Eiserloh): events add, decays 1/s; the scene offsets the camera by trauma²
+var hitstop := 0.0                  # seconds the RENDER holds its frame (Vlambeer/Dead Cells hit-stop) — the sim never pauses
+var _hero_flash := 0.0              # white flash on the hero for the first frames of a hit
 var _last_target := -1
 
 func fx_add(text: String, wpos: Vector2, color: Color, icon_id: String = "") -> void:
@@ -102,15 +104,21 @@ func observe_sim(dt: float) -> void:
 					break
 			if gone:
 				_poofs.append({"pos": lp, "age": 0.0})
+				hitstop = 0.06                       # a kill lands heavier
+				shake = minf(1.0, shake + 0.2)
 	_last_epos = epos
 	for pf in _poofs:
 		pf.age = float(pf.age) + dt
 	_poofs = _poofs.filter(func(pf) -> bool: return float(pf.age) < 0.6)
-	shake = maxf(0.0, shake - dt * 3.0)
+	shake = maxf(0.0, shake - dt * 1.0)
+	hitstop = maxf(0.0, hitstop - dt)
+	_hero_flash = maxf(0.0, _hero_flash - dt)
 	var hp_now: float = float(sim.player.hp)
 	if _last_hp.has("hero") and hp_now < float(_last_hp.hero) - 0.4:
 		fx_add("-%d" % int(round(float(_last_hp.hero) - hp_now)), hero + Vector2(TILE * 0.5, 0), Color(1.0, 0.42, 0.38))
-		shake = 1.0
+		shake = minf(1.0, shake + 0.35)
+		hitstop = 0.04
+		_hero_flash = 0.08
 	_last_hp["hero"] = hp_now
 	for ei in sim.enemies.size():
 		var e: Variant = sim.enemies[ei]
@@ -331,6 +339,10 @@ func _draw() -> void:
 		draw_line(Vector2(s.x1 * TILE, s.y1 * TILE), Vector2(s.x2 * TILE, s.y2 * TILE), Color(1, 0.9, 0.47, clampf(s.t / 0.12, 0, 1)), 2.0)
 	for ei in sim.enemies.size():
 		_draw_raider(sim.enemies[ei], ei)
+	_draw_intents()
+	if cam:
+		var vr2: Vector2 = get_viewport_rect().size / cam.zoom
+		_draw_edge_threats(Rect2(cam.get_screen_center_position() - vr2 / 2.0, vr2), cam.zoom.x)
 	_draw_player()
 	_draw_fx()
 
@@ -462,6 +474,68 @@ func _draw_raider(e, idx: int = 0) -> void:
 	draw_rect(Rect2(c.x - r, c.y - r - 6, r * 2, 3), Color(0, 0, 0, 0.6))
 	draw_rect(Rect2(c.x - r, c.y - r - 6, r * 2 * fr, 3), Color.html("ff6b6b"))
 
+# --- threat telegraphing (Into the Breach / Slay the Spire): every enemy shows its INTENT before it acts —
+# what it is about to do + the number. Derived from sim data (distance, path, target) — view only. ---
+const INTENT_HIT := Color(0.88, 0.42, 0.36, 1.0)
+const INTENT_WARN := Color(0.88, 0.69, 0.44, 1.0)
+func enemy_intent(e) -> Dictionary:
+	var p: Dictionary = sim.player
+	var d: float = Vector2(e.px, e.py).distance_to(Vector2(p.px, p.py))
+	if d < 1.25:
+		return {"glyph": "⚔", "num": int(round(float(e.dmg) * float(sim.armor_mult()))), "col": INTENT_HIT, "hunt": true}
+	if not (e.path as Array).is_empty():
+		var nx: Vector2i = e.path[0]
+		var bi: int = nx.y * sim.n + nx.x
+		if sim.bgrid.has(bi) and bool(sim.building_def(String(sim.bgrid[bi].kind)).get("blocks", false)):
+			return {"glyph": "🔨", "num": int(e.dmg), "col": INTENT_WARN, "hunt": false}
+	if int(e.tx) == int(p.px) and int(e.ty) == int(p.py):
+		return {"glyph": "⚔", "num": int(round(float(e.dmg) * float(sim.armor_mult()))), "col": INTENT_WARN, "hunt": true}
+	return {"glyph": "👁" if String(e.get("kind", "raider")) == "bot" else "⚑", "num": -1, "col": Color(0.53, 0.82, 0.84, 1.0), "hunt": false}
+
+func _draw_intents() -> void:
+	for e in sim.enemies:
+		var it := enemy_intent(e)
+		var head := Vector2(e.px * TILE, e.py * TILE - TILE * 1.35)
+		if bool(it.hunt):   # the next three steps of its path, as a red dotted line on the ground
+			var prev := Vector2(e.px * TILE, e.py * TILE)
+			for k in mini(3, (e.path as Array).size()):
+				var w: Vector2i = e.path[k]
+				var q := Vector2((w.x + 0.5) * TILE, (w.y + 0.5) * TILE)
+				for j in 3:
+					draw_circle(prev.lerp(q, (j + 0.5) / 3.0), TILE * 0.06, Color(it.col.r, it.col.g, it.col.b, 0.75))
+				prev = q
+		var fs := int(TILE * 0.42)
+		var label: String = String(it.glyph) + ("%d" % int(it.num) if int(it.num) >= 0 else "")
+		var tw: float = _font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var rr := Rect2(head.x - tw * 0.5 - 5.0, head.y - fs * 0.95, tw + 10.0, fs * 1.25)
+		draw_rect(rr, Color(0.05, 0.07, 0.09, 0.85))
+		draw_rect(rr, it.col, false, 1.5)
+		draw_string(_font, Vector2(rr.position.x + 5.0, head.y), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, it.col)
+
+# Off-screen threats: a pulsing arrow on the screen edge pointing at each enemy outside the view (edge
+# indicators — the low-clutter alternative to a minimap). `view` is the camera rect in world px.
+func _draw_edge_threats(view: Rect2, zoom: float) -> void:
+	var inset: float = 26.0 / maxf(zoom, 0.01)
+	var inner := view.grow(-inset)
+	var ctr := view.get_center()
+	var pulse: float = 0.6 + 0.4 * sin(_now() * 6.0)
+	for e in sim.enemies:
+		var ep := Vector2(e.px * TILE, e.py * TILE)
+		if view.has_point(ep):
+			continue
+		var dir: Vector2 = (ep - ctr).normalized()
+		var tmax := INF
+		if absf(dir.x) > 0.001:
+			tmax = minf(tmax, (inner.size.x * 0.5) / absf(dir.x))
+		if absf(dir.y) > 0.001:
+			tmax = minf(tmax, (inner.size.y * 0.5) / absf(dir.y))
+		var at: Vector2 = ctr + dir * tmax
+		var sz: float = 11.0 / maxf(zoom, 0.01)
+		var side := Vector2(-dir.y, dir.x)
+		var pts := PackedVector2Array([at + dir * sz, at - dir * sz * 0.6 + side * sz * 0.8, at - dir * sz * 0.6 - side * sz * 0.8])
+		draw_colored_polygon(pts, Color(INTENT_HIT.r, INTENT_HIT.g, INTENT_HIT.b, pulse))
+		draw_polyline(PackedVector2Array([pts[0], pts[1], pts[2], pts[0]]), Color(0.05, 0.07, 0.09, 0.9), 1.5 / maxf(zoom, 0.01))
+
 # Actor sprite: ~1.5 tiles, feet near the pawn's position, mirrored when facing left.
 func _draw_actor(tex: Texture2D, c: Vector2, face_x: float, tint: Color, key: int = 0, hit: float = 0.0, work: float = 0.0) -> void:
 	var sz := TILE * 1.9
@@ -487,7 +561,8 @@ func _draw_player() -> void:
 	var htex := art_texture("actor", "actor_hero")
 	if htex != null:
 		var working: bool = p.action != null and String(p.action.get("type", "")) == "gather"
-		_draw_actor(htex, c, cos(p.face), Color(0.62, 0.72, 0.95) if p.sleeping else Color.WHITE, 1, 0.0, 1.0 if working else 0.0)
+		var htint: Color = HIT_FLASH if _hero_flash > 0.0 else (Color(0.62, 0.72, 0.95) if p.sleeping else Color.WHITE)
+		_draw_actor(htex, c, cos(p.face), htint, 1, 0.08 if _hero_flash > 0.0 else 0.0, 1.0 if working else 0.0)
 	else:
 		draw_circle(c, r, Color.html("7da0c0") if p.sleeping else Color.html("e7c25a"))
 		draw_arc(c, r, 0, TAU, 18, Color.html("1c2530"), 2.0)

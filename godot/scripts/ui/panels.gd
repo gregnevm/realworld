@@ -349,14 +349,80 @@ class BuildBarPanel extends PanelBase.Base:
 	var _guide := ""               # build kind the current onboarding goal is about → that slot pulses
 	var _hb: HBoxContainer
 	var _sized_for := -1           # 0 desktop / 1 touch the slots were last sized for; -1 = never (first _fit sizes)
+	# Touch build DRAWER (mobile research 2026-11: Clash of Clans / Don't Starve — a Build button under the
+	# right thumb opens a categorised drawer; the map stays live). Desktop keeps the flat 1–0 hotkey row.
+	const CATS := [
+		{"name": "Будова", "icon": "wall", "keys": ["wall", "door", "floor"]},
+		{"name": "Побут", "icon": "campfire", "keys": ["storage", "bed", "campfire", "torch", "lamp", "heater"]},
+		{"name": "Ремесло", "icon": "workbench", "keys": ["workbench", "research_bench"]},
+		{"name": "Оборона", "icon": "turret", "keys": ["turret", "spike_trap"]},
+	]
+	var _touch := false
+	var _open := false             # touch drawer open?
+	var _cat := 0                  # touch: the category shown
+	var _fab: Button               # 🔨 build button (touch only)
+	var _tabs: HBoxContainer
+	var _tab_btns: Array = []
 	func _init() -> void:
 		panel_id = &"build_bar"; dock = PanelBase.DOCK_BAR; priority = 10; default_open = true
+	static func cat_of(key: String) -> int:
+		for ci in CATS.size():
+			if (CATS[ci].keys as Array).has(key):
+				return ci
+		return 1                   # catalogue-live extras land in «Побут» (never lost)
+	func set_drawer(open: bool) -> void:
+		_open = open
+		_apply_layout()
+	func set_category(ci: int) -> void:
+		_cat = clampi(ci, 0, CATS.size() - 1)
+		_open = true
+		_apply_layout()
+	func _apply_layout() -> void:
+		if _tabs == null:
+			return
+		_fab.visible = _touch
+		_tabs.visible = _touch and _open
+		_scroll.visible = (not _touch) or _open
+		_fab.set_pressed_no_signal(_open)
+		for ci in _tab_btns.size():
+			_tab_btns[ci].set_pressed_no_signal(ci == _cat)
 	func _build() -> void:
 		rebuild_count += 1
+		var root := VBoxContainer.new()
+		root.add_theme_constant_override("separation", 4)
+		add_child(root)
+		_tabs = HBoxContainer.new()
+		_tabs.add_theme_constant_override("separation", 4)
+		root.add_child(_tabs)
+		for ci in CATS.size():
+			var tb := Button.new()
+			tb.toggle_mode = true
+			tb.icon = ArtIcons.building(String(CATS[ci].icon))
+			tb.expand_icon = true
+			tb.add_theme_constant_override("icon_max_width", 26)
+			tb.text = String(CATS[ci].name)
+			tb.custom_minimum_size = Vector2(96, 44)
+			tb.focus_mode = Control.FOCUS_NONE
+			tb.pressed.connect(set_category.bind(ci))
+			_tabs.add_child(tb)
+			_tab_btns.append(tb)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		root.add_child(row)
 		_scroll = ScrollContainer.new()
 		_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 		_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-		add_child(_scroll)
+		row.add_child(_scroll)
+		_fab = Button.new()
+		_fab.toggle_mode = true
+		_fab.text = "🔨"
+		_fab.add_theme_font_size_override("font_size", 26)
+		_fab.custom_minimum_size = Vector2(60, 60)
+		_fab.focus_mode = Control.FOCUS_NONE
+		_fab.tooltip_text = "Будувати"
+		_fab.pressed.connect(func() -> void: set_drawer(not _open))
+		row.add_child(_fab)
+		_apply_layout()   # desktop by default: no 🔨/tabs until the frame says touch
 		_hb = HBoxContainer.new()
 		_hb.add_theme_constant_override("separation", 4)
 		_scroll.add_child(_hb)
@@ -419,10 +485,22 @@ class BuildBarPanel extends PanelBase.Base:
 				elif _btns[i].scale != Vector2.ONE and not _btns[i].is_hovered():
 					_btns[i].scale = Vector2.ONE
 				_btns[i].modulate = base_mod
-				_btns[i].visible = true
+				_btns[i].visible = (not _touch) or cat_of(_keys[i]) == _cat
 			else:
 				_btns[i].visible = false
-		_fit(bool((vm.get("ui", {}) as Dictionary).get("touch", false)))
+		var touch := bool((vm.get("ui", {}) as Dictionary).get("touch", false))
+		if touch != _touch:
+			_touch = touch
+			_open = false
+			_apply_layout()
+		if _touch:
+			# guidance travels with the drawer: closed → the 🔨 pulses; open on another tab → that tab pulses
+			var gk: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
+			var gc: int = cat_of(_guide) if _guide != "" else -1
+			_fab.modulate = Tokens.WHITE.lerp(Tokens.AMBER, 0.5 * gk) if (gc >= 0 and not _open) else Tokens.WHITE
+			for ci in _tab_btns.size():
+				_tab_btns[ci].modulate = Tokens.WHITE.lerp(Tokens.AMBER, 0.5 * gk) if (ci == gc and ci != _cat and _open) else Tokens.WHITE
+		_fit(touch)
 
 	# Finger-sized slots on touch; the palette never runs off a narrow screen — it scrolls instead.
 	func _fit(touch: bool) -> void:

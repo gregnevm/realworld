@@ -752,6 +752,8 @@ class Medallion extends WidgetBase.Widget:
 	var state: StringName = &"good"     # good | warn | crit | info
 	var badge := true
 	var quiet_when_good := false        # needs: in the normal band the token is a dim icon, no number (The Long Dark / Don't Starve)
+	var trend := 0                      # -1 falling / 0 steady / +1 rising (vs a ~3 s moving average) — direction beats the exact number
+	var _ema := NAN
 	var _pulse := 0.0
 	func _build() -> void:
 		custom_minimum_size = Vector2(D, D + 12.0)
@@ -770,6 +772,15 @@ class Medallion extends WidgetBase.Widget:
 			return
 		value = str(vm.get("value", value))
 		state = StringName(vm.get("state", state))
+		var num: float = value.get_slice("/", 0).to_float() if value.is_valid_float() or value.get_slice("/", 0).replace("°", "").is_valid_float() else NAN
+		if value.ends_with("°"):
+			num = value.trim_suffix("°").to_float()
+		if not is_nan(num):
+			if is_nan(_ema):
+				_ema = num
+			var d: float = num - _ema
+			trend = -1 if d < -0.6 else (1 if d > 0.6 else 0)
+			_ema = lerpf(_ema, num, 0.012)   # bound ~60/s → ~3 s window
 		tooltip_text = "%s · %s" % [label, value] if label != "" else value
 		queue_redraw()
 	func _process(_dt: float) -> void:
@@ -802,6 +813,9 @@ class Medallion extends WidgetBase.Widget:
 		elif glyph != "":
 			var gf: Font = ThemeDB.fallback_font
 			draw_string(gf, c + Vector2(-isz * 0.5, isz * 0.32), glyph, HORIZONTAL_ALIGNMENT_CENTER, isz, int(isz * 0.8), Tokens.INK)
+		if trend < 0 and not quiet:   # ▼ falling: a shape cue next to the ring (not colour alone, R11)
+			var tx := c + Vector2(r * 0.78, -r * 0.62)
+			draw_colored_polygon(PackedVector2Array([tx + Vector2(-5, -3), tx + Vector2(5, -3), tx + Vector2(0, 4)]), Tokens.urgency(state) if state != &"good" else Tokens.INK)
 		if badge and value != "" and not quiet:
 			var f: Font = UITheme.display_font()
 			var fs := 13

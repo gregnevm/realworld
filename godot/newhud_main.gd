@@ -287,9 +287,10 @@ func _process(dt: float) -> void:
 		cam.global_position = cam.global_position.lerp(cam_target, 1.0 - exp(-7.0 * dt))
 	# hurt shake: deterministic sine noise (no global RNG — tripwire), decays inside world_view
 	var tsec: float = Time.get_ticks_msec() * 0.001
-	cam.offset = Vector2(sin(tsec * 53.0), cos(tsec * 47.0)) * 5.0 * view.shake * view.shake
+	cam.offset = Vector2(sin(tsec * 53.0), cos(tsec * 47.0)) * 6.0 * view.shake * view.shake   # trauma² (Eiserloh)
 	view.observe_sim(dt)             # floating +N / -N feedback (view-only diff of sim numbers)
-	view.queue_redraw()
+	if view.hitstop <= 0.0:          # render-only hit-stop: the frame holds 40–60 ms, the sim never pauses
+		view.queue_redraw()
 	# VIEW state for this frame's snapshot (hud_root runs after us: parent before child)
 	hud_root.view_ctx = {"hover": view.hover, "hover_world": winput.hover_world(),
 		"in_world": winput.tooltip_wanted(touch_ui) and not session.sim.dead and not panel_menu.visible,
@@ -362,6 +363,8 @@ func _shot_step(dt: float) -> void:
 	if not _built and _t > 0.15 and session != null:
 		_built = true
 		_build_demo_base()
+		if "drawer" in OS.get_cmdline_user_args():
+			preg.get_panel(&"build_bar").set_category(1)   # `shot drawer`: touch build drawer opened on «Побут»
 		if "gear" in OS.get_cmdline_user_args():
 			preg.toggle(&"gear")           # `shot gear`: open the loadout panel
 		if "light" in OS.get_cmdline_user_args():

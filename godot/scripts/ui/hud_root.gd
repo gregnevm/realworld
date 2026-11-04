@@ -58,10 +58,12 @@ func set_compact(on: bool) -> void:
 	compact = on
 	dock_top = 52.0 if on else 10.0
 	dock_bottom_gap = 76.0 if on else DOCK_BOTTOM_GAP
+	if _docks.has(3):   # touch: the build button + drawer sit under the RIGHT thumb (bottom-right)
+		(_docks[3] as HBoxContainer).alignment = BoxContainer.ALIGNMENT_END if on else BoxContainer.ALIGNMENT_CENTER
 	if feed_w != null:
 		feed_w.set_compact(on)
 		# the phone build bar is taller (finger slots + scrollbar): the feed must clear it, never cover a slot
-		WidgetBase.Widget.pin_bottom_right(feed_w, 14.0, 112.0 if on else 74.0)
+		WidgetBase.Widget.pin_bottom_right(feed_w, 14.0, 150.0 if on else 74.0)
 
 func _build_zones() -> void:
 	_left_scroll = _dock_scroll()
@@ -109,8 +111,21 @@ func _fit_one(sc: ScrollContainer, right_edge: bool, cap: float) -> void:
 	var box: Control = sc.get_child(0)
 	var need: Vector2 = box.get_combined_minimum_size()
 	var w: float = maxf(box.custom_minimum_size.x, need.x) + (10.0 if need.y > cap else 0.0)   # + scrollbar
-	sc.position = Vector2((size.x - 12.0 - w) if right_edge else 12.0, dock_top)
+	var inset: Vector2 = safe_insets()
+	sc.position = Vector2((size.x - 12.0 - inset.y - w) if right_edge else 12.0 + inset.x, dock_top)
 	sc.size = Vector2(w, minf(need.y, cap))
+
+# Phone safe area (camera cutout / rounded corners, often on a SHORT side in landscape): returns the
+# (left, right) insets in this Control's logical px. Desktop/windowed → (0, 0).
+func safe_insets() -> Vector2:
+	if not compact:
+		return Vector2.ZERO
+	var sa: Rect2i = DisplayServer.get_display_safe_area()
+	var ss: Vector2i = DisplayServer.screen_get_size()
+	if sa.size.x <= 0 or ss.x <= 0:
+		return Vector2.ZERO
+	var k: float = size.x / float(ss.x)
+	return Vector2(maxf(0.0, sa.position.x * k), maxf(0.0, (ss.x - sa.end.x) * k))
 
 func setup(p_session, p_balance, p_bus, p_registry, p_overlays = null) -> void:
 	session = p_session
@@ -132,7 +147,7 @@ func mount() -> void:
 	_mount_feedback()
 	if compact:
 		feed_w.set_compact(true)
-		WidgetBase.Widget.pin_bottom_right(feed_w, 14.0, 112.0)
+		WidgetBase.Widget.pin_bottom_right(feed_w, 14.0, 150.0)
 
 func _starts_open(p) -> bool:
 	if compact and int(p.compact_open) >= 0:
