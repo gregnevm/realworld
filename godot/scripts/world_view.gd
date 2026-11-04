@@ -3,6 +3,7 @@ extends Node2D
 
 const WorldGen = preload("res://scripts/world_gen.gd")
 const GameData = preload("res://scripts/data.gd")
+const InventoryMod = preload("res://scripts/sim/inventory.gd")
 const ViewGeom = preload("res://scripts/ui/view_geom.gd")
 const TILE := ViewGeom.TILE
 
@@ -327,7 +328,8 @@ func _draw() -> void:
 		draw_line(Vector2(rr.end.x, rr.position.y), Vector2(rr.position.x, rr.end.y), rc, 3.0)
 	elif selected_build != "" and sim._in(hover.x, hover.y):
 		var sel_def: Dictionary = sim.building_def(selected_build)
-		var okb: bool = not sel_def.is_empty() and sim.build_valid(hover.x, hover.y) and sim.afford(sel_def.get("cost", {}))
+		var have_it: bool = int(InventoryMod.count(sim, "bld:" + selected_build)) > 0 if sim.use_inventory else bool(sim.afford(sel_def.get("cost", {})))
+		var okb: bool = not sel_def.is_empty() and sim.build_valid(hover.x, hover.y) and have_it
 		var col := Color(0.35, 0.82, 0.55, 0.5) if okb else Color(1, 0.35, 0.35, 0.45)
 		var gr := Rect2(hover.x * TILE + 1, hover.y * TILE + 1, TILE - 2, TILE - 2)
 		draw_rect(gr, col)

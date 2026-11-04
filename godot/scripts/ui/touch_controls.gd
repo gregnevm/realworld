@@ -30,7 +30,7 @@ class TouchControls extends Control:
 	const STICK_R := 62.0                   # travel radius (logical px ≈ 10 mm at our scale)
 	const DEAD := 0.15
 	const ACT_R := 46.0                     # action button radius (Ø ≈ 15 mm)
-	const SLOTS := 6
+	const SLOTS := 8                        # = the inventory hotbar (spec 0009)
 
 	var move_vec := Vector2.ZERO
 	var gui_rects := Callable()             # () -> Array[Rect2] of HUD docks the stick must not steal touches from
@@ -152,7 +152,8 @@ class TouchControls extends Control:
 				b.tooltip_text = String(sl.get("label", ""))
 				var tex: Texture2D = _slot_tex(sl)
 				b.icon = tex
-				b.text = "" if tex != null else String(sl.get("glyph", "•"))
+				var cnt: int = int(sl.get("n", 0))
+				b.text = ("%d" % cnt if cnt > 1 else "") if tex != null else String(sl.get("glyph", "•"))
 			else:
 				b.visible = false
 		queue_redraw()
@@ -166,6 +167,8 @@ class TouchControls extends Control:
 				return ArtIcons.building(id)
 			&"repair":
 				return ArtIcons.texture("item_sledge")
+			&"res":
+				return ArtIcons.res(id)
 		return null
 
 	func show_toast(t: String) -> void:

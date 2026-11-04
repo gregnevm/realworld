@@ -27,6 +27,7 @@ const ViewGeom = preload("res://scripts/ui/view_geom.gd")
 const Widgets = preload("res://scripts/ui/widgets.gd")
 const TouchCtl = preload("res://scripts/ui/touch_controls.gd")
 const AM = preload("res://scripts/ui/action_model.gd")
+const InventoryMod = preload("res://scripts/sim/inventory.gd")
 const TILE := ViewGeom.TILE
 
 var session: SessionScript
@@ -108,6 +109,7 @@ func _ready() -> void:
 		winput.apply_speed(&"set", float(a.get("mult", 1.0))))
 	# touch tools — all VIEW state (menu, armed tool, camera), bound where the view lives
 	router.bind(&"toggle_menu", func(_s, _a: Dictionary) -> void: _set_menu(not panel_menu.visible))
+	router.bind(&"toggle_inventory", func(_s, _a: Dictionary) -> void: preg.toggle(&"inventory"))
 	router.bind(&"cancel_tool", func(_s, _a: Dictionary) -> void:
 		view.selected_build = ""
 		router.dispatch(&"cancel_action", {}, session))
@@ -177,6 +179,7 @@ func _start_game(lat: float, lon: float, place_name: String) -> void:
 	if session != null:
 		return   # уже в грі (пізній GPS-callback чи повторний сигнал): другий бут ремонтував би панелі
 	session = SessionScript.new()
+	session.use_inventory = true          # spec 0009: new games play with the Minecraft-style inventory
 	session.autosave = not shot_mode
 	session.start(lat, lon, place_name)
 	_enter_session()
@@ -203,6 +206,13 @@ func _enter_session() -> void:
 	_saved_day = int(session.sim.time.day)
 	if touch_ui and tc == null:
 		_setup_action_controls()
+	if session.sim.use_inventory:   # spec 0009: the hotbar replaces the build palette (touch: the quick bar shows it)
+		var bbar: Variant = preg.get_panel(&"build_bar")
+		if bbar != null:
+			bbar.visible = false
+		var hot: Variant = preg.get_panel(&"hotbar")
+		if hot != null:
+			hot.visible = not touch_ui
 
 func _autosave() -> void:
 	if session == null or shot_mode or not session.autosave:
@@ -300,6 +310,8 @@ func _process(dt: float) -> void:
 	# a jump (spawn/travel/respawn) larger than half a screen snaps
 	if tc != null:
 		_tick_action(dt)
+	elif session.sim.use_inventory:
+		_sync_held_ghost()
 	var cam_target := overview_pos if act_overview else Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE)
 	if cam.global_position.distance_to(cam_target) > 600.0:
 		cam.global_position = cam_target
@@ -408,6 +420,8 @@ func _shot_step(dt: float) -> void:
 	if not _built and _t > 0.15 and session != null:
 		_built = true
 		_build_demo_base()
+		if "inv" in OS.get_cmdline_user_args():
+			preg.toggle(&"inventory")   # `shot inv`: the inventory screen (spec 0009)
 		if "drawer" in OS.get_cmdline_user_args():
 			preg.get_panel(&"build_bar").set_category(1)   # `shot drawer`: touch build drawer opened on «Побут»
 		if "gear" in OS.get_cmdline_user_args():
@@ -480,6 +494,11 @@ func _build_demo_base() -> void:
 	session.progression.add_points(0.8)   # ~half of carpentry so the active bar is visibly filled
 
 func _put(kind: String, x: int, y: int) -> void:
+	if bool(session.sim.use_inventory):   # dev demo: hand the building item over first (spec 0009)
+		if session.sim.build_valid(x, y):
+			InventoryMod.add(session.sim, InventoryMod.BLD + kind, 1)
+			router.dispatch(&"build", {"kind": kind, "x": x, "y": y}, session)
+		return
 	if session.sim.build_valid(x, y) and session.sim.afford(GameData.BUILDINGS[kind].cost):
 		router.dispatch(&"build", {"kind": kind, "x": x, "y": y}, session)
 
@@ -503,7 +522,7 @@ func _setup_action_controls() -> void:
 	tc.zoom_step.connect(func(d: int) -> void: winput.zoom_step(1.15 if d > 0 else 1.0 / 1.15))
 	tc.slot_step.connect(func(d: int) -> void: _apply_slot(posmod(act_slot + d, maxi(1, _act_slots.size()))))
 	tc.slot_selected.connect(_apply_slot)
-	tc.inventory_pressed.connect(func() -> void: preg.toggle(&"gear"))
+	tc.inventory_pressed.connect(func() -> void: preg.toggle(&"inventory" if bool(session.sim.use_inventory) else &"gear"))
 	tc.option_chosen.connect(func(o: Dictionary) -> void: router.dispatch(StringName(o.verb), o.args, session))
 	winput.long_pressed.connect(func(cell: Vector2i, screen: Vector2) -> void:
 		_open_radial(AM.target_at(session.sim, cell, act_mode, act_build), screen))
@@ -520,7 +539,14 @@ func _tick_action(dt: float) -> void:
 		overview_pos = overview_pos.clamp(Vector2.ZERO, Vector2(sim.n, sim.n) * TILE)
 	else:
 		winput.stick_move = tc.move_vec
-	_act_slots = AM.default_slots(sim, act_build)
+	if bool(sim.use_inventory):
+		_act_slots = AM.slots_from_inventory(sim)
+		act_slot = int(sim.player.get("hand", 0))
+		var hs: Dictionary = _act_slots[act_slot]
+		if StringName(hs.type) == &"build":
+			act_build = String(hs.id)
+	else:
+		_act_slots = AM.default_slots(sim, act_build)
 	act_slot = clampi(act_slot, 0, _act_slots.size() - 1)
 	var origin := Vector2(sim.player.px, sim.player.py)
 	var facing: float = float(sim.player.face)
@@ -535,7 +561,7 @@ func _tick_action(dt: float) -> void:
 	tc.bind_state({"mode": act_mode, "slots": _act_slots, "active": act_slot, "overview": act_overview,
 		"target": _target_label(act_target)})
 	var bb: Variant = preg.get_panel(&"build_bar")
-	if bb != null and bool(bb._open) != (act_mode == &"build"):
+	if bb != null and not bool(sim.use_inventory) and bool(bb._open) != (act_mode == &"build"):
 		bb.set_drawer(act_mode == &"build")   # proactive drawer: Build mode opens it, any other mode closes it
 		if act_mode == &"build":
 			bb.set_category(bb.cat_of(act_build))   # …on the tab of the building the button will place
@@ -586,6 +612,8 @@ func _set_mode(m: StringName) -> void:
 	for i in _act_slots.size():   # the bar follows the mode (auto-switch both ways)
 		if AM.mode_for_slot(_act_slots[i]) == m:
 			act_slot = i
+			if bool(session.sim.use_inventory):
+				router.dispatch(&"set_hand", {"i": i}, session)   # inventory world: the hand takes that slot
 			break
 
 func _apply_slot(i: int) -> void:
@@ -595,6 +623,11 @@ func _apply_slot(i: int) -> void:
 	var sl: Dictionary = _act_slots[i]
 	act_mode = AM.mode_for_slot(sl)
 	act_target = {}
+	if bool(session.sim.use_inventory):
+		router.dispatch(&"set_hand", {"i": i}, session)   # the hand IS the hotbar slot (equips tools itself)
+		if StringName(sl.type) == &"build":
+			act_build = String(sl.id)
+		return
 	if StringName(sl.type) in [&"tool", &"weapon"] and String(sl.id) != "":
 		router.dispatch(&"equip", {"id": String(sl.id)}, session)
 	if StringName(sl.type) == &"build":
@@ -612,3 +645,17 @@ func _on_overview() -> void:
 	overview_pos = Vector2(session.sim.player.px, session.sim.player.py) * TILE
 	act_target = {}
 	tc.show_toast("Огляд мапи — подвійний тап стіком, щоб повернутись" if act_overview else "Назад до героя")
+
+# Desktop inventory world: holding a building item arms its ghost (click/drag places it, consuming items);
+# holding anything else clears a ghost we armed. The 🗑 remove tool is left alone.
+var _held_kind := ""
+func _sync_held_ghost() -> void:
+	var sim: Variant = session.sim
+	var h: Dictionary = sim.player.inv[clampi(int(sim.player.get("hand", 0)), 0, 7)]
+	var id := String(h.id)
+	var kind := id.substr(4) if id.begins_with("bld:") else ""
+	if kind == _held_kind:
+		return
+	if String(view.selected_build) == _held_kind or kind != "":
+		view.selected_build = kind
+	_held_kind = kind

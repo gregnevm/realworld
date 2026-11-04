@@ -1,6 +1,10 @@
 # RealWorld — headless test runner for the Godot sim core.
 # Run: Godot_console.exe --headless --path godot -s res://tests/run_tests.gd
 extends "res://tests/harness.gd"
+const InventoryMod = preload("res://scripts/sim/inventory.gd")
+const UpkeepMod = preload("res://scripts/sim/upkeep.gd")
+const PersistenceMod = preload("res://scripts/persistence.gd")
+const ThreatsMod = preload("res://scripts/sim/threats.gd")
 
 const Sim = preload("res://scripts/sim.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
@@ -35,6 +39,7 @@ func _init() -> void:
 	_t_items()
 	_t_demolish()
 	_t_repair()
+	_t_inventory()
 	_t_osm_overlay()
 	_t_social()
 	_t_capsule()
@@ -221,6 +226,109 @@ func _t_items() -> void:
 
 # Repair (touch Repair mode): a damaged building is restored to full hp for a price scaled by the damage
 # (× 0.5, ≥ 1), paid through the stock seam; a full building / an empty cell / an unaffordable bill refuse.
+# spec 0009 — Minecraft-style inventory (flag ON): buildings are items, pay from the backpack, storage
+# link is a perk, death leaves a bag; flag OFF stays byte-identical in the save record.
+func _t_inventory() -> void:
+	var off = Sim.new()
+	off.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
+	ok(not PersistenceMod.serialize_region(off).has("use_inventory") and not off.player.has("inv"), "inv: flag OFF → no inventory, save record unchanged")
+	var s = Sim.new()
+	s.use_inventory = true
+	s.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
+	ok(String(s.player.inv[0].id) == "bld:campfire" and InventoryMod.count(s, "wood") == 20 and InventoryMod.count(s, "food") == 8, "inv: starter kit — a campfire in hand, wood/stone/food in the pack")
+	ok(InventoryMod.add(s, "wood", 100) == 0 and InventoryMod.count(s, "wood") == 120, "inv: stacks fill (50 per raw stack)")
+	var full_slots := 0
+	for sl in s.player.inv:
+		if String(sl.id) == "wood":
+			ok(int(sl.n) <= 50, "inv: no stack over its cap")
+			full_slots += 1
+	ok(full_slots == 3, "inv: 120 wood = 3 stacks")
+	ok(not InventoryMod.take(s, "stone", 999) and InventoryMod.count(s, "stone") == 10, "inv: take is all-or-nothing")
+	var c = s.base_center()
+	var spot := Vector2i(-1, -1)
+	for dy in range(-3, 4):
+		for dx in range(-3, 4):
+			if spot.x < 0 and s.build_valid(c.x + dx, c.y + dy):
+				spot = Vector2i(c.x + dx, c.y + dy)
+	var nb: int = s.buildings.size()
+	s.try_build("campfire", spot.x, spot.y)
+	ok(s.buildings.size() == nb + 1 and InventoryMod.count(s, "bld:campfire") == 0, "inv: placing a building consumes the item")
+	var spot2 := Vector2i(-1, -1)
+	for dy in range(-3, 4):
+		for dx in range(-3, 4):
+			if spot2.x < 0 and s.build_valid(c.x + dx, c.y + dy):
+				spot2 = Vector2i(c.x + dx, c.y + dy)
+	s.try_build("campfire", spot2.x, spot2.y)
+	ok(s.buildings.size() == nb + 1, "inv: no item in the pack → nothing is built (stock is NOT used)")
+	var stone0: int = InventoryMod.count(s, "stone")
+	ok(InventoryMod.craft_building(s, "wall").ok and InventoryMod.count(s, "bld:wall") == 1, "inv: a wall is crafted INTO the backpack (hand recipe)")
+	ok(InventoryMod.count(s, "stone") == stone0 - int(GameData.BUILDINGS["wall"].cost.stone), "inv: the recipe is paid from the backpack")
+	ok(not InventoryMod.craft_building(s, "turret").ok, "inv: a turret needs a workbench nearby (and research)")
+	ok(s.demolish(spot.x, spot.y).ok and InventoryMod.count(s, "bld:campfire") == 1, "inv: demolishing gives the building item back")
+	# storage: stash + take (stand next to the starter storage)
+	var st: Variant = null
+	for b in s.buildings:
+		if String(b.kind) == "storage":
+			st = b
+	s.player.px = float(st.x) + 1.5
+	s.player.py = float(st.y) + 0.5
+	var stock_wood: int = s.res_amount("wood")
+	var r: Dictionary = InventoryMod.stash_all(s)
+	ok(r.ok and s.res_amount("wood") > stock_wood, "inv: ⇣ stash moves backpack resources into the storage")
+	ok(InventoryMod.take_from_storage(s, "stone", 5).ok and InventoryMod.count(s, "stone") >= 5, "inv: take a resource out of the storage")
+	# storage link perk: paying from stock only once the gather skill unlocks it
+	for id in ["stone", "wood"]:
+		InventoryMod.take(s, id, InventoryMod.count(s, id))
+	ok(not InventoryMod.craft_building(s, "wall").ok, "inv: without the perk the storage is NOT reachable from the backpack")
+	s.player.skills.gather = InventoryMod.LINK_SKILL
+	ok(InventoryMod.craft_building(s, "wall").ok, "inv: storage-link perk (gather skill) pays from storages nearby")
+	# death bag
+	InventoryMod.add(s, "wood", 7)
+	var at := Vector2i(int(s.player.px), int(s.player.py))
+	ThreatsMod.on_death(s)
+	ok(s.bags.size() == 1 and InventoryMod.count(s, "wood") == 0, "inv: death drops the backpack as a bag on the spot")
+	var rec: Dictionary = PersistenceMod.serialize_region(s)
+	ok(bool(rec.get("use_inventory", false)) and (rec.bags as Array).size() == 1 and rec.player.has("inv"), "inv: flag, bags and the inventory ride the save record")
+	ThreatsMod.respawn_new_pawn(s)
+	ok(InventoryMod.count(s, "wood") == 0 and s.player.has("inv"), "inv: the rookie arrives empty-handed")
+	s.player.px = at.x + 0.5
+	s.player.py = at.y + 0.5
+	InventoryMod.pickup_bags(s)
+	ok(s.bags.is_empty() and InventoryMod.count(s, "wood") == 7, "inv: walking over the bag gets everything back")
+	# gathering lands in the backpack (no carry, no auto-haul)
+	var nkey: int = -1
+	for key in s.map.nodes:
+		if String(s.map.nodes[key].kind) in ["tree", "rock"]:
+			nkey = int(key)
+			break
+	var nres: String = String(GameData.NODEINFO[String(s.map.nodes[nkey].kind)].res)
+	var inv0: int = InventoryMod.count(s, nres)
+	s.player.px = float(nkey % s.n) + 0.5
+	s.player.py = float(nkey / s.n) + 1.5
+	s.player.action = null
+	s.order_gather(nkey % s.n, nkey / s.n)
+	for i in 120:
+		s.update(0.1)
+	ok(InventoryMod.count(s, nres) > inv0 and s.carry_total() == 0, "inv: gathering fills the backpack, never the old carry")
+	# repair in an inventory world pays from the backpack
+	var wall_spot := Vector2i(-1, -1)
+	for dy in range(-3, 4):
+		for dx in range(-3, 4):
+			if wall_spot.x < 0 and s.build_valid(c.x + dx, c.y + dy):
+				wall_spot = Vector2i(c.x + dx, c.y + dy)
+	InventoryMod.add(s, "bld:wall", 1)
+	s.try_build("wall", wall_spot.x, wall_spot.y)
+	var wb: Dictionary = s.bgrid[wall_spot.y * s.n + wall_spot.x]
+	wb.hp = 1.0
+	s.player.skills.gather = 0.0
+	InventoryMod.add(s, "stone", 10)
+	var st0: int = InventoryMod.count(s, "stone")
+	var stock_st: int = s.res_amount("stone")
+	ok(s.repair(wall_spot.x, wall_spot.y).ok and InventoryMod.count(s, "stone") < st0 and s.res_amount("stone") == stock_st, "inv: repair pays from the backpack, not the storage")
+	var twin = Sim.new()
+	twin.load_region(rec)
+	ok(twin.use_inventory and twin.bags.size() == 1 and (twin.player.inv as Array).size() == InventoryMod.SLOTS, "inv: load_region restores flag, bag and slots")
+
 func _t_repair() -> void:
 	var s = Sim.new()
 	s.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
@@ -239,7 +347,7 @@ func _t_repair() -> void:
 	ok(not s.repair(wx, wy).ok, "repair: a full-hp wall refuses")
 	ok(not s.repair(0, 0).ok or s.bgrid.has(0), "repair: an empty cell refuses")
 	b.hp = max_hp * 0.5
-	var cost: Dictionary = s.repair_cost(b)
+	var cost: Dictionary = UpkeepMod.repair_cost(s, b)
 	ok(int(cost.get("stone", 0)) == maxi(1, int(ceil(float(GameData.BUILDINGS["wall"].cost.stone) * 0.25))), "repair: price = cost × missing × 0.5 (ceil)")
 	var before: int = int(s.stock.stone)
 	ok(s.repair(wx, wy).ok and is_equal_approx(float(b.hp), max_hp), "repair: restores full hp")

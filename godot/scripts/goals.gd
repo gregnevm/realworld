@@ -38,6 +38,15 @@ const GOALS := [
 	{"id": "survive", "title": "🌅 Переживи 5 днів",
 		"hint": "Тепло, їжа, сон. Стрілка часу: Space — пауза, +/− — швидкість."},
 ]
+# spec 0009 (inventory world): buildings are ITEMS — craft them in the backpack (🎒 / Tab), hold, place.
+const INV_HINT := {
+	"fire": "Багаття вже в руці (слот 1). Клікни біля пішака — воно ляже. Вогонь гріє й світить уночі.",
+	"shelter": "🎒 Tab → скрафти «Стіна» і «Двері» з каменю й дерева, візьми в руку (1–8) і обстав клітинку.",
+	"bed": "🎒 Tab → скрафти «Ліжко», візьми в руку й постав поруч: сон лікує й відновлює сили.",
+	"tools": "🎒 Tab → «Верстак» у руку й на землю. Біля верстака крафтиться сокира — рубаєш у 1.6× швидше.",
+	"bench": "Біля верстака скрафти «Дослідницький стіл» і постав — він дає очки досліджень.",
+	"defense": "Біля верстака скрафти шипи чи турель і постав біля входу. Рейди можливі з 5-го дня.",
+}
 const FOOD_TARGET := 30
 const GATHER_TARGET := 15         # units gathered by this pawn (skills.gather grows 0.2 per unit)
 const SURVIVE_DAY := 6            # «пережити 5 днів» == reach the morning of day 6

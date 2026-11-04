@@ -8,6 +8,8 @@ const Threats = preload("res://scripts/sim/threats.gd")
 const SimEnv = preload("res://scripts/sim/environment.gd")
 const WorldMeta = preload("res://scripts/sim/world_meta.gd")
 const HeroHealth = preload("res://scripts/sim/hero_health.gd")
+const Inventory = preload("res://scripts/sim/inventory.gd")
+const Upkeep = preload("res://scripts/sim/upkeep.gd")
 const SimPower = preload("res://scripts/sim/power.gd")
 const SimFarm = preload("res://scripts/sim/farming.gd")
 const Director = preload("res://scripts/sim/director.gd")
@@ -31,6 +33,8 @@ const RAID_IDLE := 1.0e12
 var raid := {"timer": 0.0, "next": RAID_IDLE, "active": false, "warned": false, "wave": 0}
 var patrol := {"timer": 0.0, "next": 300.0, "wave": 0}   # патрульні роботи; перший контакт ~день 3
 var research_unlocked: Dictionary = {}   # catalog research id -> true; session мостить із kernel/progression
+var use_inventory := false   # spec 0009: ON = Minecraft-style personal inventory (buildings are items). Set BEFORE new_game.
+var bags: Array = []          # spec 0009: death bags [{x, y, slots, day}] — region state (save + world_hash)
 var use_catalog := false   # spec 0008 phase 2: OFF = stock живе на 6 data.gd-ключах (шліфований зріз
                            # байт-у-байт, його сьюти це доводять); ON = ключі stock — catalogue-ids через
                            # data_bridge, тож каталожні рецепти можуть afford-итись проти живого складу.
@@ -121,6 +125,9 @@ func new_game(m: Dictionary, hint: bool = true) -> void:
 	n = m.n
 	var sp: Vector2i = m.spawn
 	player = _default_player(sp)
+	bags = []
+	if use_inventory:
+		Inventory.starter(self)
 	stock = {}
 	for pair in [["wood", 50], ["stone", 30], ["food", 18], ["scrap", 16], ["planks", 0], ["components", 2]]:
 		stock[res_key(pair[0])] = int(pair[1])
@@ -174,7 +181,7 @@ func _reset_local_threats() -> void:
 	banner = ""
 
 # The pawn's portable inventory + condition (what a capsule carries).
-const PAWN_FIELDS := ["carry", "carry_cap", "skills", "equipped", "items", "hp", "hunger", "rest", "born"]
+const PAWN_FIELDS := ["carry", "carry_cap", "skills", "equipped", "items", "hp", "hunger", "rest", "born", "inv", "hand"]
 
 func extract_pawn() -> Dictionary:
 	return {
@@ -186,7 +193,7 @@ func extract_pawn() -> Dictionary:
 		"hp": float(player.hp), "hunger": float(player.hunger), "rest": float(player.rest),
 		"born": int(player.get("born", int(time.day))),
 		"health": health_dict(),
-	}
+	}.merged({"inv": (player.inv as Array).duplicate(true), "hand": int(player.get("hand", 0))} if player.has("inv") else {})
 
 # Overwrite the current pawn's portable state with a travelling pawn, placed at this region's base.
 func apply_pawn(pawn: Dictionary) -> void:
@@ -235,6 +242,8 @@ func load_region(data: Dictionary) -> void:
 	# spec 0008: сейв несе словник ключів складу — відновлюємо прапор ДО копії stock, інакше
 	# крос-прапорний load читає чужі ключі й ресурси «зникають». Старі сейви — поточний прапор.
 	use_catalog = bool(data.get("use_catalog", use_catalog))
+	use_inventory = bool(data.get("use_inventory", false))
+	bags = (data.get("bags", []) as Array).duplicate(true)
 	stock = {}
 	for k in data.stock:
 		stock[k] = data.stock[k]
@@ -593,6 +602,12 @@ func try_build(kind: String, x: int, y: int) -> void:
 	if not research_ok(def):
 		_flash("🔒 Потребує дослідження: %s." % _research_label(def))
 		return
+	if use_inventory:   # spec 0009: buildings are ITEMS — place the one you carry
+		if not Inventory.take(self, Inventory.BLD + kind, 1):
+			_flash("Нема «%s» у рюкзаку — скрафти (🎒)." % String(def.get("name", kind)))
+			return
+		_place_building(kind, x, y, -1)
+		return
 	if not afford(def.cost):
 		_flash("Бракує: " + _cost_str(def.cost))
 		return
@@ -613,6 +628,10 @@ func demolish(x: int, y: int) -> Dictionary:
 		if storages <= 1:
 			return {"ok": false, "msg": "Не можна знести єдиний склад."}
 	var bdef: Dictionary = building_def(String(b.kind))
+	if use_inventory and Inventory.add(self, Inventory.BLD + String(b.kind), 1) == 0:
+		_remove_building(b)   # spec 0009: breaking a block gives the block back (Minecraft)
+		_log("♻ %s → у рюкзак." % bdef.get("name", b.kind), "good")
+		return {"ok": true}
 	var refund := {}
 	for res in bdef.get("cost", {}):
 		var back: int = int(bdef.cost[res]) / 2
@@ -621,36 +640,6 @@ func demolish(x: int, y: int) -> Dictionary:
 			refund[res] = back
 	_remove_building(b)
 	_log("♻ %s розібрано%s." % [bdef.get("name", b.kind), (" (+" + _cost_str(refund) + ")") if not refund.is_empty() else ""], "good")
-	return {"ok": true}
-
-# Repair (touch Repair mode / radial «Ремонт»): restore a damaged building to full hp. Price = the build
-# cost scaled by the missing hp fraction × 0.5 (ceil, ≥1 of each priced resource) — cheaper than a rebuild,
-# never free. Paid through the open-stock seam (cost_keys/afford/pay), deterministic, action-driven.
-func repair_cost(b: Dictionary) -> Dictionary:
-	var def: Dictionary = building_def(String(b.kind))
-	var max_hp := float(def.get("hp", 50.0))
-	var miss: float = clampf(1.0 - float(b.hp) / maxf(max_hp, 1.0), 0.0, 1.0)
-	var out := {}
-	if miss <= 0.0:
-		return out
-	for res in def.get("cost", {}):
-		out[res] = maxi(1, int(ceil(float(def.cost[res]) * miss * 0.5)))
-	return out
-
-func repair(x: int, y: int) -> Dictionary:
-	if not _in(x, y) or not bgrid.has(y * n + x):
-		return {"ok": false, "msg": "Тут немає будівлі."}
-	var b: Dictionary = bgrid[y * n + x]
-	var def: Dictionary = building_def(String(b.kind))
-	var max_hp := float(def.get("hp", 50.0))
-	if float(b.hp) >= max_hp:
-		return {"ok": false, "msg": "%s ціле." % String(def.get("name", b.kind))}
-	var cost := repair_cost(b)
-	if not afford(cost):
-		return {"ok": false, "msg": "Бракує на ремонт: " + _cost_str(cost)}
-	GameData.pay_cost(stock, cost_keys(cost))
-	b.hp = max_hp
-	_log("🔧 %s відремонтовано (−%s)." % [String(def.get("name", b.kind)), _cost_str(cost)], "good")
 	return {"ok": true}
 
 # ---------------- items / equipment (spec 0001) ----------------
@@ -785,6 +774,10 @@ func _craft_refusal(rc: Dictionary) -> Dictionary:
 		r = {"ok": false, "reason": &"cost", "missing": _cost_str(Catalog.missing_for(cost_keys(rc.get("inputs", {})), stock))}
 	return r
 
+# Repair lives in sim/upkeep.gd (touch Repair mode / radial «Ремонт»); one delegate keeps the verb API.
+func repair(x: int, y: int) -> Dictionary:
+	return Upkeep.repair(self, x, y)
+
 func craft_item(item_id: String) -> Dictionary:
 	if not GameData.ITEMS.has(item_id):
 		return {"ok": false, "msg": "Невідомий предмет."}
@@ -792,10 +785,13 @@ func craft_item(item_id: String) -> Dictionary:
 		equip(item_id)  # already owned -> just (re)equip for free, never re-pay
 		_log("⚔ Екіпіровано: %s." % GameData.ITEMS[item_id].name)
 		return {"ok": true}
-	if not has_workbench():
-		return {"ok": false, "msg": "Потрібен верстак."}
-	if not research_ok(GameData.ITEMS[item_id]):
-		return {"ok": false, "msg": "🔒 Потребує дослідження: %s." % _research_label(GameData.ITEMS[item_id])}
+	var gate := "" if has_workbench() else "Потрібен верстак."
+	if gate == "" and not research_ok(GameData.ITEMS[item_id]):
+		gate = "🔒 Потребує дослідження: %s." % _research_label(GameData.ITEMS[item_id])
+	if gate != "":
+		return {"ok": false, "msg": gate}
+	if use_inventory:   # spec 0009: tools are crafted from what you carry and land in the backpack
+		return Inventory.craft_tool(self, item_id)
 	var recipe: Dictionary = GameData.ITEMS[item_id].recipe
 	if not afford(recipe):
 		return {"ok": false, "msg": "Бракує: " + GameData.cost_str(recipe)}
@@ -938,6 +934,12 @@ func _update_player(dt: float) -> void:
 		return
 	if HeroHealth.is_downed(self):
 		return   # unconscious where they fell: no eating, hauling, orders or movement; needs run on
+	if use_inventory:
+		Inventory.pickup_bags(self)
+		if p.hunger < 55 and p.eat_cd <= 0 and Inventory.count(self, "food") > 0:
+			Inventory.take(self, "food", 1)   # food you carry is eaten on the go (the backpack IS the larder)
+			p.hunger = min(100.0, p.hunger + 38.0)
+			p.eat_cd = 2.5
 	if p.hunger < 55 and p.eat_cd <= 0 and _near_storage(2.2):
 		# cooked meals first (spec 0008: thing-outputs are edible stock — cooking beats foraging);
 		# the flag-OFF path is byte-identical to the shipped slice (no meal keys can exist there)
@@ -1008,7 +1010,7 @@ func _do_gather(dt: float, step: float) -> void:
 	a.t += dt
 	if a.t >= a.dur:
 		a.t = 0.0
-		if carry_total() >= p.carry_cap:
+		if not use_inventory and carry_total() >= p.carry_cap:
 			_start_haul(int(a.cell), String(node.kind))   # full hands: carry the load home, come back
 			return
 		# phase 4 (spec 0008): under the open catalogue, a node yields its catalogue BUNDLE — rocks
@@ -1019,7 +1021,14 @@ func _do_gather(dt: float, step: float) -> void:
 			var enriched := CatalogDefs.gather_yield(str(node.kind), int(a.cell), int(node.amount))
 			if enriched != "":
 				res = enriched
-		p.carry[res] = p.carry.get(res, 0) + 1
+		if use_inventory:   # spec 0009: the yield lands in the backpack; a full one stops the work
+			if Inventory.room(self, res) <= 0:
+				_flash("🎒 Рюкзак повний — розклади на складі.")
+				p.action = null
+				return
+			Inventory.add(self, res, 1)
+		else:
+			p.carry[res] = p.carry.get(res, 0) + 1
 		node.amount -= 1
 		p.skills.gather = min(20.0, p.skills.gather + 0.2)
 		if node.amount <= 0:
@@ -1249,3 +1258,13 @@ func phase_name() -> String:
 func clock_str() -> String:
 	var mins := int(time.frac * 24 * 60)
 	return "%02d:%02d" % [mins / 60, mins % 60]
+
+
+func _inv_drop_bag() -> void:
+	Inventory.drop_bag(self)
+func _inv_empty() -> Array:
+	return Inventory.empty_slots()
+# stock withdrawal THROUGH the seam (spec 0008 tripwire: no stock[...] outside sim.gd's seam)
+func _stock_take(res: String, k: int) -> void:
+	var key: String = res_key(res)
+	stock[key] = int(stock.get(key, 0)) - k

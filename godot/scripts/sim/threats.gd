@@ -262,6 +262,8 @@ static func damage_enemy(s, e, amt: float) -> void:
 				s.deposit("food", 1)
 
 static func on_death(s) -> void:
+	if s.get("use_inventory") == true:
+		s._inv_drop_bag()   # spec 0009: the backpack stays where the pawn fell, as a bag
 	s.dead = true
 	s.banner = ""
 	s._log("☠ Твій персонаж загинув. Все нажите втрачено.", "bad")
@@ -274,6 +276,9 @@ static func respawn_new_pawn(s) -> void:
 	if open == Vector2i(-1, -1):
 		open = s.map.spawn
 	s.player = s._default_player(open)
+	if s.get("use_inventory") == true:
+		s.player.inv = s._inv_empty()      # the rookie arrives empty-handed: the bag and the storage hold the rest
+		s.player.hand = 0
 	HeroHealth.reset(s)   # the rookie arrives in an unscarred body
 	s.enemies = []
 	s.raid.active = false

@@ -7,6 +7,7 @@
 extends RefCounted
 const Fmt = preload("res://scripts/ui/format.gd")
 const GameData = preload("res://scripts/data.gd")
+const InventoryMod = preload("res://scripts/sim/inventory.gd")
 const CatalogView = preload("res://scripts/ui/catalog_view.gd")
 const CatalogSim = preload("res://scripts/catalog_sim.gd")
 const Social = preload("res://scripts/social.gd")
@@ -41,6 +42,7 @@ static func snapshot(session, world: Dictionary, ctx: Dictionary, balance) -> Di
 		"vitals":    _vitals_slice(p, sim),
 		"stats":     _stats_slice(sim),
 		"stock":     _stock_slice(sim),
+		"inventory": _inventory_slice(sim),
 		"power":     _power_slice(sim),
 		"build":     _build_slice(sim, String(ctx.get("selected_build", ""))),
 		"threat":    _threat_slice(world, ctx, balance),
@@ -354,9 +356,76 @@ static func _afford(sim, cost: Dictionary) -> bool:
 	return bool(sim.afford(cost)) if sim.has_method("afford") else GameData.can_afford(sim.stock, cost)
 
 # --- stock (rows in RES_ORDER; total computed purely; cap from the sim) ---
+# --- spec 0009 inventory: slots (value data), the hand, the craft list with first refusal reason, and the
+# storage you stand at (stash/take). {enabled:false} on stock-path sims and lean fakes. ---
+const INV_CRAFT_BUILDINGS := ["wall", "door", "floor", "campfire", "torch", "storage", "bed", "workbench",
+	"research_bench", "spike_trap", "turret", "heater", "lamp"]
+static func _inventory_slice(sim) -> Dictionary:
+	if sim == null or not sim.get("use_inventory") == true:
+		return {"enabled": false}
+	var slots: Array = []
+	for sl in sim.player.inv:
+		var id := String(sl.id)
+		slots.append({"id": id, "n": int(sl.n), "label": _inv_label(sim, id)})
+	var at := Vector2(sim.player.px, sim.player.py)
+	var craft: Array = []
+	for kind in INV_CRAFT_BUILDINGS:
+		var rc: Dictionary = InventoryMod.building_recipe(sim, kind)
+		if rc.is_empty():
+			continue
+		var def: Dictionary = sim.building_def(kind)
+		var why := ""
+		if not sim.research_ok(def):
+			why = "🔒 " + String(sim._research_label(def))
+		elif String(rc.station) != "" and not InventoryMod.near_station(sim, String(rc.station)):
+			why = "потрібен верстак поруч"
+		elif not InventoryMod.can_pay(sim, rc.cost, at):
+			why = "бракує " + String(sim._cost_str(InventoryMod.missing(sim, rc.cost, at)))
+		craft.append({"type": "building", "id": kind, "label": String(rc.name), "cost": GameData.cost_str(rc.cost),
+			"ok": why == "", "why": why, "have": int(InventoryMod.count(sim, InventoryMod.BLD + kind))})
+	for iid in GameData.ITEM_ORDER:
+		var it: Dictionary = GameData.ITEMS[iid]
+		var why2 := ""
+		if not sim.research_ok(it):
+			why2 = "🔒 " + String(sim._research_label(it))
+		elif not sim.has_workbench():
+			why2 = "потрібен верстак"
+		elif not InventoryMod.can_pay(sim, it.recipe, at):
+			why2 = "бракує " + String(sim._cost_str(InventoryMod.missing(sim, it.recipe, at)))
+		craft.append({"type": "item", "id": iid, "label": String(it.name), "cost": GameData.cost_str(it.recipe),
+			"ok": why2 == "", "why": why2, "have": int(InventoryMod.count(sim, iid))})
+	var near := InventoryMod.near_storage(sim)
+	var storage: Array = []
+	if near:
+		for res in GameData.RES_ORDER:
+			if _amount(sim, res) > 0:
+				storage.append({"res": res, "n": _amount(sim, res), "label": String(GameData.RES[res].label)})
+	return {"enabled": true, "slots": slots, "hand": int(sim.player.get("hand", 0)), "hotbar": InventoryMod.HOTBAR,
+		"craft": craft, "near_storage": near, "storage": storage, "link": InventoryMod.link_unlocked(sim),
+		"bags": (sim.bags as Array).size()}
+
+static func _inv_label(sim, id: String) -> String:
+	if id == "":
+		return ""
+	if InventoryMod.is_building(id):
+		return String(sim.building_def(InventoryMod.building_kind(id)).get("name", id))
+	if GameData.ITEMS.has(id):
+		return String(GameData.ITEMS[id].name)
+	if GameData.RES.has(id):
+		return String(GameData.RES[id].label)
+	return id
+
 static func _stock_slice(sim) -> Dictionary:
 	var rows := {}
 	var total := 0
+	if sim.get("use_inventory") == true:   # spec 0009: the HUD counters read what you CARRY (the backpack)
+		var used := 0
+		for sl in sim.player.inv:
+			if String(sl.id) != "":
+				used += 1
+		for res in GameData.RES_ORDER:
+			rows[res] = int(InventoryMod.count(sim, res))
+		return {"rows": rows, "total": used, "cap": InventoryMod.SLOTS, "extra": [], "backpack": true}
 	for res in GameData.RES_ORDER:
 		var amt: int = _amount(sim, res)
 		rows[res] = amt
@@ -689,7 +758,10 @@ static func _ghost_refusal(sim, kind: String, def: Dictionary, t: Vector2i, cell
 	if not bool(sim.research_ok(def)):
 		var need := String(def.get("research", ""))
 		return "🔒 потрібне дослідження: %s" % String(GameData.RESEARCH_LABEL.get(need, CatalogDefs.research_label(need)))
-	if not bool(sim.afford(def.get("cost", {}))):
+	if sim.get("use_inventory") == true:   # spec 0009: you place what you CARRY — the stock is not the question
+		if int(InventoryMod.count(sim, InventoryMod.BLD + kind)) <= 0:
+			return "нема в рюкзаку — скрафти (🎒 Tab)"
+	elif not bool(sim.afford(def.get("cost", {}))):
 		var have: Dictionary = {}
 		for k in def.cost:
 			have[k] = int(sim.res_amount(k))
