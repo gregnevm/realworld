@@ -38,6 +38,66 @@ const LIGHT_KINDS := ["campfire", "torch", "torch_lamp", "lamp", "standing_lamp"
 var _last_pos: Dictionary = {}     # instance id -> Vector2 (previous frame world pos) → walking detection
 var _gait: Dictionary = {}         # instance id -> accumulated walk phase
 
+# --- floating feedback text (view-only): "+3 🪵" when stock rises, red "-N" on hits. Observes the sim by
+# diffing numbers between frames — it never writes sim state and never touches RNG. -------------------
+var _fx: Array = []                 # {text, pos(world), age, color, icon}
+var _last_stock: Dictionary = {}    # res id -> amount last frame
+var _last_hp: Dictionary = {}       # enemy index / "hero" -> hp last frame
+const FX_LIFE := 1.1
+
+func fx_add(text: String, wpos: Vector2, color: Color, icon_id: String = "") -> void:
+	if _fx.size() > 24:
+		_fx.pop_front()
+	_fx.append({"text": text, "pos": wpos, "age": 0.0, "color": color, "icon": icon_id})
+
+# Call once per frame BEFORE queue_redraw(): ages the texts and spawns new ones from observed deltas.
+func observe_sim(dt: float) -> void:
+	for f in _fx:
+		f.age = float(f.age) + dt
+	_fx = _fx.filter(func(f) -> bool: return float(f.age) < FX_LIFE)
+	if sim == null or sim.map.is_empty():
+		return
+	var hero := Vector2(sim.player.px * TILE, sim.player.py * TILE - TILE * 1.3)
+	var k := 0
+	for res in GameData.RES_ORDER:
+		var now_amt: int = int(sim.res_amount(res))
+		if _last_stock.has(res):
+			var d: int = now_amt - int(_last_stock[res])
+			if d > 0:
+				fx_add("+%d" % d, hero + Vector2(0, -TILE * 0.45 * k), Color(1.0, 0.95, 0.8), "res_" + String(res))
+				k += 1
+		_last_stock[res] = now_amt
+	var hp_now: float = float(sim.player.hp)
+	if _last_hp.has("hero") and hp_now < float(_last_hp.hero) - 0.4:
+		fx_add("-%d" % int(round(float(_last_hp.hero) - hp_now)), hero + Vector2(TILE * 0.5, 0), Color(1.0, 0.42, 0.38))
+	_last_hp["hero"] = hp_now
+	for ei in sim.enemies.size():
+		var e: Variant = sim.enemies[ei]
+		var key := "e%d" % ei
+		if _last_hp.has(key) and float(e.hp) < float(_last_hp[key]) - 0.4:
+			fx_add("-%d" % int(round(float(_last_hp[key]) - float(e.hp))), Vector2(e.px * TILE, e.py * TILE - TILE * 0.9), Color(1.0, 0.85, 0.4))
+		_last_hp[key] = float(e.hp)
+
+func _draw_fx() -> void:
+	for f in _fx:
+		var t: float = clampf(float(f.age) / FX_LIFE, 0.0, 1.0)
+		var rise: float = 1.0 - pow(1.0 - t, 2.0)                 # ease-out: quick lift, soft settle
+		var a: float = 1.0 - pow(t, 3.0)                          # hold, then fade late
+		var p: Vector2 = f.pos + Vector2(0, -TILE * 0.9 * rise)
+		var col: Color = f.color
+		col.a = a
+		var fs := int(TILE * 0.5)
+		var tw: float = _font.get_string_size(String(f.text), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var icon: Texture2D = art_texture("icon", String(f.icon)) if String(f.icon) != "" else null
+		var isz := TILE * 0.55
+		var total: float = tw + (isz + 3.0 if icon != null else 0.0)
+		var x0: float = p.x - total * 0.5
+		if icon != null:
+			draw_texture_rect(icon, Rect2(x0, p.y - isz * 0.8, isz, isz), false, Color(1, 1, 1, a))
+			x0 += isz + 3.0
+		draw_string_outline(_font, Vector2(x0, p.y), String(f.text), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, Color(0.04, 0.05, 0.06, a * 0.9))
+		draw_string(_font, Vector2(x0, p.y), String(f.text), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+
 func _now() -> float:
 	return Time.get_ticks_msec() * 0.001
 
@@ -203,6 +263,7 @@ func _draw() -> void:
 	for ei in sim.enemies.size():
 		_draw_raider(sim.enemies[ei], ei)
 	_draw_player()
+	_draw_fx()
 
 # Shoreline: where land meets water, a thin pale foam line on the LAND edge and a dark wet rim on the
 # WATER edge — turns a hard tile seam into a readable coast (the single biggest "map looks stitched" cue).

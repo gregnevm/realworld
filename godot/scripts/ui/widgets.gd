@@ -487,7 +487,7 @@ class FeedWidget extends WidgetBase.Widget:
 	const FADE_AT := 18.0      # seconds a card stays fully opaque
 	const GONE_AT := 30.0      # …then fades out by this age
 	const WIDTH := 290.0
-	const MAX_H := 250.0       # never climb into the RIGHT dock above: the oldest cards give way
+	const MAX_H := 205.0       # never climb into the RIGHT dock above: the oldest cards give way
 	var _max_cards := POOL     # compact (phones): fewer, narrower cards — the map needs the room
 	var _max_h := MAX_H
 	var _bus: Variant

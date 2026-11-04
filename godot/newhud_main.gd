@@ -267,6 +267,7 @@ func _process(dt: float) -> void:
 	session.tick_goals(dt)            # onboarding goals observe the world (real time, ~2×/s)
 	CatalogSim.shared().tick(sdt)     # advance the forward-engine catalogue model
 	cam.global_position = Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE)
+	view.observe_sim(dt)             # floating +N / -N feedback (view-only diff of sim numbers)
 	view.queue_redraw()
 	# VIEW state for this frame's snapshot (hud_root runs after us: parent before child)
 	hud_root.view_ctx = {"hover": view.hover, "hover_world": winput.hover_world(),
@@ -297,6 +298,10 @@ func _shot_step(dt: float) -> void:
 		session.sim.time.frac = 0.86       # dusk so daylight darkening is visible
 		if "death" in OS.get_cmdline_user_args():
 			session.sim.dead = true        # `shot death`: capture the death screen
+	if "fx" in OS.get_cmdline_user_args() and _t > 1.45 and _t < 1.5:
+		var hp := Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE - TILE * 1.3)   # `shot fx`: show the floating texts
+		view.fx_add("+3", hp, Color(1.0, 0.95, 0.8), "res_wood")
+		view.fx_add("-7", hp + Vector2(TILE * 2.5, TILE * 0.3), Color(1.0, 0.85, 0.4))
 	if _t > 1.6 and not _shot:
 		_shot = true
 		await RenderingServer.frame_post_draw

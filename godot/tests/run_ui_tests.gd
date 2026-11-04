@@ -10,6 +10,7 @@ const Tokens = preload("res://scripts/ui/tokens.gd")
 const Fmt = preload("res://scripts/ui/format.gd")
 const ViewGeom = preload("res://scripts/ui/view_geom.gd")
 const ArtIcons = preload("res://scripts/ui/art_icons.gd")
+const WorldViewScript = preload("res://scripts/world_view.gd")
 const LatLon = preload("res://scripts/ui/latlon.gd")
 const HudModel = preload("res://scripts/ui/hud_model.gd")
 const CatalogView = preload("res://scripts/ui/catalog_view.gd")
@@ -40,6 +41,7 @@ func _init() -> void:
 	print("== RealWorld UI view-layer tests (spec 0005) ==")
 	_t_tokens()
 	_t_art_icons()
+	_t_world_fx()
 	_t_format()
 	_t_view_geom()
 	_t_latlon()
@@ -89,6 +91,30 @@ func _t_art_icons() -> void:
 	var wall: Texture2D = ArtIcons.building("wall")
 	ok(wall != null and wall.get_size().x > 8.0, "building('wall') loads and crops")
 	ok(ArtIcons.for_glyph("no-such-glyph") == null and ArtIcons.building("no_such_building") == null, "unknown glyph/building → null (emoji fallback)")
+
+# Floating feedback is a pure observer: a stock rise / hit spawns text, nothing is written back to the sim,
+# texts age out, and an idle frame spawns nothing.
+func _t_world_fx() -> void:
+	var nn := 16
+	var tiles := PackedByteArray()
+	tiles.resize(nn * nn)
+	tiles.fill(WorldGen.GRASS)
+	var sim = Sim.new()
+	sim.new_game({"n": nn, "tiles": tiles, "nodes": {}, "spawn": Vector2i(8, 8), "lat": 50.4501, "lon": 30.5234})
+	var v = WorldViewScript.new()
+	v.sim = sim
+	v.observe_sim(0.016)
+	ok(v._fx.is_empty(), "world fx: first observation only records baselines")
+	var before_wood: int = int(sim.res_amount("wood"))
+	sim.stock[sim.res_key("wood")] = before_wood + 3
+	v.observe_sim(0.016)
+	ok(v._fx.size() == 1 and String(v._fx[0].text) == "+3", "world fx: a stock rise spawns +N text")
+	ok(int(sim.res_amount("wood")) == before_wood + 3, "world fx: observer never writes the sim")
+	v.observe_sim(0.016)
+	ok(v._fx.size() == 1, "world fx: an idle frame spawns nothing")
+	v.observe_sim(2.0)
+	ok(v._fx.is_empty(), "world fx: texts age out")
+	v.free()
 
 func _t_tokens() -> void:
 	ok(Tokens.GOOD == Color("6fae54"), "GOOD reconciled to locked --good (drift fixed from 5fd38a)")

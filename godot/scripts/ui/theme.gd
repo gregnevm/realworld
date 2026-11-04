@@ -29,15 +29,15 @@ static func build() -> Theme:
 
 	# Dock panel surface (replaces _sb_bar).
 	t.set_type_variation(V_PANEL, &"PanelContainer")
-	t.set_stylebox("panel", V_PANEL, _sb(Tokens.PANEL, Tokens.LINE, 6, 10))
+	t.set_stylebox("panel", V_PANEL, _sb_glass(Tokens.with_alpha(Tokens.PANEL, 0.86), Tokens.LINE2, 8, 12))
 
 	# Modal surface (replaces _sb_panel / _mk_modal).
 	t.set_type_variation(V_MODAL, &"PanelContainer")
-	t.set_stylebox("panel", V_MODAL, _sb(Color(Tokens.PANEL.r, Tokens.PANEL.g, Tokens.PANEL.b, 0.97), Tokens.LINE2, Tokens.R, 14))
+	t.set_stylebox("panel", V_MODAL, _sb_glass(Tokens.with_alpha(Tokens.PANEL, 0.96), Tokens.LINE2, Tokens.R, 14))
 
 	# Feedback cards over the world: readable on snow AND water (opaque-ish ink panel).
 	t.set_type_variation(V_CARD, &"PanelContainer")
-	t.set_stylebox("panel", V_CARD, _sb(Color(Tokens.PANEL.r, Tokens.PANEL.g, Tokens.PANEL.b, 0.9), Tokens.LINE2, 6, 6))
+	t.set_stylebox("panel", V_CARD, _sb_glass(Tokens.with_alpha(Tokens.PANEL, 0.92), Tokens.LINE2, 6, 8))
 	t.set_type_variation(V_TIP, &"PanelContainer")
 	t.set_stylebox("panel", V_TIP, _sb(Color(Tokens.PANEL2.r, Tokens.PANEL2.g, Tokens.PANEL2.b, 0.96), Tokens.AMBER, 6, 8))
 
@@ -101,6 +101,17 @@ static func _sb(bg: Color, border: Color, radius: int, pad: int) -> StyleBoxFlat
 	s.set_border_width_all(1)
 	s.set_corner_radius_all(radius)
 	s.set_content_margin_all(pad)
+	return s
+
+# «Glass» surface for panels floating over the world: translucent ground colour, a brighter hairline on top
+# (light from above), a soft drop shadow that lifts the panel off the map. Pure StyleBox — no per-frame cost.
+static func _sb_glass(bg: Color, border: Color, radius: int, pad: int) -> StyleBoxFlat:
+	var s := _sb(bg, border, radius, pad)
+	s.border_width_top = 2
+	s.border_color = border
+	s.shadow_color = Color(0, 0, 0, 0.42)
+	s.shadow_size = 10
+	s.shadow_offset = Vector2(0, 3)
 	return s
 
 # Transparent box with just a focus-visible outline (a11y focus ring, design-system §0.6 / R7-adjacent).
