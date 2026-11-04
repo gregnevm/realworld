@@ -1,7 +1,7 @@
 # AGENTS.md — RealWorld
 
 > Машиночитний контекст проєкту для AI-агентів (Claude Code, Cursor, Codex, Copilot, Gemini CLI, Windsurf). Тримай актуальним: застарілий AGENTS.md гірший за відсутній.
-> last_reviewed: 2026-07
+> last_reviewed: 2026-11
 
 ## Огляд
 - **Що це:** RealWorld — survival-MMORPG із симуляційною глибиною RimWorld на **картах зі справжньої географії (OSM/GPS)**; один глибоко симульований персонаж, persistent-світ, логістика конвоями. Репозиторій містить дизайн-документ і граний прототип.
@@ -15,7 +15,7 @@
 - **Мова(и):** JavaScript (classic scripts, без транспіляції), HTML5, CSS.
 - **Фреймворки/рантайм:** жодного фреймворку і **жодного кроку збірки** — браузер виконує файли як є. Node 22 та Python 3.10 доступні локально (тести/сервери/тулінг).
 - **Сховище даних:** `localStorage` (збереження гри); дизайн — `gdd.json`.
-- **Зовнішні залежності/API:** OpenStreetMap **Overpass API** (генерація карти з реальних координат) з детермінованим процедурним fallback. Жодних npm-залежностей у рантаймі.
+- **Зовнішні залежності/API:** OpenStreetMap **Overpass API** (генерація карти з реальних координат) з детермінованим процедурним fallback. Жодних npm-залежностей у рантаймі. Dev-only: Gemini image API (Nano Banana) для `tools/gen-art.mjs`, не в рантаймі гри; постобробка — Python Pillow.
 
 ## Архітектура
 - Гра — єдиний глобальний неймспейс **`RW`**, розкладений по файлах у `game/js/`, які підключаються **у фіксованому порядку** в `game/index.html`: `util → worldgen → entities → catalog_data → progression → render → logistics → ui → input → game`. `game.js` стартує на `DOMContentLoaded`.
@@ -51,7 +51,9 @@ realworld/
     tests/                headless-сьюти Godot (run_*.gd)
   GDD_BOOK/            інтерактивний GDD; правда — gdd.json
   tests/               Node-тести (node --test): sim-ядро (вкл. drag-build/двері/ремонт/рейд-спавн/смерть), catalog, progression
-  tools/               sync-catalog.mjs · lint.mjs (контракт no-build) · smoke.mjs (Playwright-прохід гри, CI job browser-smoke)
+  tools/               sync-catalog.mjs · lint.mjs (контракт no-build + secret-scan) · smoke.mjs (Playwright-прохід гри, CI job browser-smoke) · gen-art.mjs + art/ (арт-пайплайн Nano Banana)
+  art/                 style.md (арт-біблія) · palette.json · refs/ (якорі стилю) · manifest.json (виводиться з catalog.json) · out/ (gitignored кандидати)
+  .claude/skills/gen-art/  скіл генерації арту (/gen-art)
   specs/               специфікації фіч (0001…0008)
   docs/                довідники: catalog.md, mechanics-status.md, ux/
   .github/workflows/   CI: ci.yml (Node) + godot.yml (Godot headless)
@@ -85,16 +87,23 @@ realworld/
 - **Web-експорт (клік-і-грай):** `Godot_console.exe --headless --path godot --export-release "Web" build/web/index.html` → `godot/build/web/` (gitignored); на свіжому checkout спершу `--import`. Пресет `godot/export_presets.cfg`: **threads OFF** (без COOP/COEP — працює на будь-якому статичному хостингу; рендер веб-дефолтний gl_compatibility). **CI білдить сам:** job `godot-web-build` у `godot.yml` — артефакт `web-build` (готовий клік-і-грай зі README.txt) з кожного пушу; темплейти кешуються між ранами. Шаблони локально: Windows — `%APPDATA%\Godot\export_templates\4.7.stable\web_*.zip` (тягнуться частково з 1.28ГБ tpz HTTP-Range-скриптом — не качай весь); Linux — `~/.local/share/godot/export_templates/4.7.stable/` (range-запити до GitHub-CDN ненадійні — качай tpz цілком транзитно і бери лише `templates/web_*`, як робить CI-job). Локальне прев'ю: dev-сервер `godot-web` (порт 8792, `.claude/launch.json`); ГОЧА: прихована вкладка прев'ю заморожує rAF → одно-тредовий web-білд Godot не рендерить і canvas лишається 0×0 — верифікуй у ВИДИМІЙ вкладці (claude-in-chrome). **Емодзі-іконки у веб-білді ПРАЦЮЮТЬ:** монохромний NotoEmoji (OFL, `godot/assets/fonts/`) підвішений фолбеком через `theme.gd` — `Theme.default_font` = FontVariation(base=вбудований, fallbacks=[NotoEmoji]) + `ThemeDB.fallback_font` для custom-draw; сам лише `ThemeDB.fallback_font` НЕ працює (дефолтна тема Godot несе власний шрифт і перехоплює lookup — десктоп маскує це системними шрифтами). Завантаження шрифту двошляхове: `ResourceLoader` (експорт пакує ttf як imported-ресурс заремапом — сирого шляху в PCK нема) АБО `FileAccess`+`load_dynamic_font` (свіжий checkout / headless-тести без import-кешу).
 - **UX-контракт:** `docs/ux/design-system.md` (зафіксовані токени §1 / layout §2 / оверлеї §3 / віджети §4 / граматика §5) + `docs/ux/hud.html` (рендер-макет, джерело parity). Специфікації: `specs/0003` (кернел), `specs/0004` (каталог механік+UX), `specs/0005` (view-архітектура).
 
+## Арт-пайплайн (gen-art, Nano Banana)
+- **Що:** концептуально-консистентна генерація спрайтів/акторів/іконок/тайлів/UI через Gemini image API (`gemini-2.5-flash-image`; Pro — `--model gemini-3-pro-image-preview`). Скіл — `.claude/skills/gen-art/SKILL.md` (/gen-art).
+- **Консистентність = 4 шари:** `art/style.md` (біблія, префікс КОЖНОГО промпту) + рамка kind (`KINDS` у `tools/art/lib.mjs`: ракурс/фон/кадр/розмір) + епоха з research-tier (`eraOf`) + ≤3 затверджені якорі `art/refs/*.png` як image-input; post.py снепить sprite/actor/tile до спільної `art/palette.json` (сід — `tokens.gd`).
+- **Автоматика:** `node tools/gen-art.mjs sync` — `catalog.json` → `art/manifest.json` (чиста ідемпотентна `buildManifest`, людські `subject/status/notes` не перетираються, видалені def → `orphan`); Node-тест падає, якщо маніфест розсинхронізований із каталогом (як `sync-catalog`). `gen` — лише `todo` (draft — `--only`/`--force`, approved — `--only`+`--force`), дефолт `--limit 12`. Кандидати → `art/out/` (gitignored) → `approve <id>@vN` → `godot/assets/gen/<kind>/<id>.png` (refs → `art/refs/`).
+- **Ключ:** лише `.env.local` (0600, gitignored; `node tools/gen-art.mjs key`) або `$GEMINI_API_KEY`; маскується в усьому виводі, у meta не пишеться; `npm run lint` валить на `AIza…` у будь-якому трекнутому файлі. Прострочений ключ → exit 2 + прохання дати новий.
+- **Межа:** пайплайн лише виробляє PNG. Підключення в `world_view.gd`/HUD — окрема задача (R3/R11 view-шару, emoji-фолбек лишається).
+
 ## Конвенції
 - **Іменування:** усе публічне вішається на `RW.*`; стан гри — `G`; тайл-індекс — `i = y*N + x`.
 - **Стиль:** 2 пробіли; `"use strict"` у кожному IIFE-модулі; без ES-модулів (`import/export`) — лишаємось на classic scripts заради no-build.
 - **Патерни:** симуляція детермінована від seed; логіку тримай по змозі **без залежності від DOM/canvas** (щоб була тестовна в Node).
-- **Чого НЕ робити:** не додавати збірку/бандлер/фреймворк без обговорення; не ламати порядок підключення скриптів; не змішувати рендер із симуляцією; жодних мережевих викликів окрім Overpass без узгодження.
+- **Чого НЕ робити:** не додавати збірку/бандлер/фреймворк без обговорення; не ламати порядок підключення скриптів; не змішувати рендер із симуляцією; жодних мережевих викликів окрім Overpass без узгодження (виняток — dev-тулінг `tools/gen-art.mjs` → Gemini, узгоджено 2026-11).
 
 ## Команди
 - **Запуск гри (dev):** `cd game && python -m http.server 8765` → http://localhost:8765
 - **Запуск GDD:** `python "C:\Users\gregn\.claude\skills\gdd_build\scripts\serve.py" "O:\realworld\GDD_BOOK"`
-- **Тести:** `npm test` (Node `node --test` — детерміноване sim-ядро + валідація `catalog.json`/пайплайну прогресії); `npm run lint` (tools/lint.mjs: порядок скриптів = контракт, strict-IIFE, без ES-модулів, без `Math.random` у sim-файлах); `npm run smoke` (tools/smoke.mjs: Playwright + Chromium — спавн → drag-build → вибір/демонтаж → модалки → дослідження → рейд → смерть → reload/continue; падає на будь-якому console.error; у CI — job `browser-smoke` з артефактом скриншотів); headless-сьюти Godot — `test.cmd` у корені (перелік — у розділі «Godot-порт» вище). Обидва набори ганяються в CI (`.github/workflows/ci.yml` + `godot.yml`).
+- **Тести:** `npm test` (Node `node --test` — детерміноване sim-ядро + валідація `catalog.json`/пайплайну прогресії + чиста половина арт-пайплайну `tests/art.test.js`); `npm run lint` (tools/lint.mjs: порядок скриптів = контракт, strict-IIFE, без ES-модулів, без `Math.random` у sim-файлах); `npm run smoke` (tools/smoke.mjs: Playwright + Chromium — спавн → drag-build → вибір/демонтаж → модалки → дослідження → рейд → смерть → reload/continue; падає на будь-якому console.error; у CI — job `browser-smoke` з артефактом скриншотів); headless-сьюти Godot — `test.cmd` у корені (перелік — у розділі «Godot-порт» вище). Обидва набори ганяються в CI (`.github/workflows/ci.yml` + `godot.yml`).
 - **Білд/деплой:** білду немає; статичний хостинг (GitHub Pages / Railway / itch.io).
 
 ## Ключові рішення (ADR-лайт)
