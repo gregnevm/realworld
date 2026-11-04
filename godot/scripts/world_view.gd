@@ -19,10 +19,43 @@ const BUILD_GLYPH := {"wall": "#", "door": "D", "floor": ".", "storage": "S", "w
 var terrain_colors: Array[Color] = []
 var _font: Font
 
+# --- generated art (art/ pipeline → assets/gen). Every lookup falls back to the vector drawing below,
+# so a missing/unimported PNG never blanks the map. Index = WorldGen terrain id.
+const ART_DIR := "res://assets/gen/"
+const TERRAIN_TILE := ["tile_water", "tile_grass", "tile_forest", "tile_rock", "tile_road", "tile_dirt", "tile_ruins", "tile_sand", "tile_snow"]
+const HIT_FLASH := Color(1.7, 1.7, 1.7, 1.0)
+var _tex_cache := {}
+var _tile_tex: Array = []
+
 func _ready() -> void:
 	for h in WorldGen.TERRAIN_COLOR:
 		terrain_colors.append(Color.html(h))
 	_font = ThemeDB.fallback_font
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	for tid in TERRAIN_TILE:
+		_tile_tex.append(art_texture("tile", String(tid)))
+
+# Texture for assets/gen/<dir>/<id>.png, or null. Imported resource first (exports / editor); raw PNG via
+# Image.load_from_file when there is no import cache (fresh checkout, headless tests). Misses are cached too.
+func art_texture(dir: String, id: String) -> Texture2D:
+	var path := "%s%s/%s.png" % [ART_DIR, dir, id]
+	if _tex_cache.has(path):
+		return _tex_cache[path]
+	var tex: Texture2D = null
+	if ResourceLoader.exists(path):
+		tex = load(path) as Texture2D
+	if tex == null and FileAccess.file_exists(path):
+		var img := Image.load_from_file(path)
+		if img != null and not img.is_empty():
+			img.generate_mipmaps()
+			tex = ImageTexture.create_from_image(img)
+	_tex_cache[path] = tex
+	return tex
+
+# Building art: sprites dir first, floors/zones live in tile dir (bld_ prefix in both).
+func building_texture(kind: String) -> Texture2D:
+	var t := art_texture("sprite", "bld_" + kind)
+	return t if t != null else art_texture("tile", "bld_" + kind)
 
 func _draw() -> void:
 	if sim == null or sim.map.is_empty():
@@ -44,9 +77,14 @@ func _draw() -> void:
 	for y in range(y0, y1 + 1):
 		for x in range(x0, x1 + 1):
 			var i := y * n + x
-			draw_rect(Rect2(x * TILE, y * TILE, TILE + 1, TILE + 1), terrain_colors[tiles[i]])
-			if (x + y) % 2 == 1:
-				draw_rect(Rect2(x * TILE, y * TILE, TILE + 1, TILE + 1), Color(0, 0, 0, 0.05))
+			var tr := Rect2(x * TILE, y * TILE, TILE + 1, TILE + 1)
+			var ttex: Texture2D = _tile_tex[tiles[i]] if tiles[i] < _tile_tex.size() else null
+			if ttex != null:
+				draw_texture_rect(ttex, tr, false)
+			else:
+				draw_rect(tr, terrain_colors[tiles[i]])
+				if (x + y) % 2 == 1:
+					draw_rect(tr, Color(0, 0, 0, 0.05))
 	for key in sim.map.nodes:
 		var nx: int = key % n
 		var ny: int = int(key / n)
@@ -73,8 +111,12 @@ func _draw() -> void:
 		var gr := Rect2(hover.x * TILE + 1, hover.y * TILE + 1, TILE - 2, TILE - 2)
 		draw_rect(gr, col)
 		draw_rect(gr, Color.html("5fd38a") if okb else Color.html("ff6b6b"), false, 2.0)
-		var gl: String = BUILD_GLYPH.get(selected_build, str(sel_def.get("glyph", "?")))
-		draw_string(_font, Vector2(hover.x * TILE + TILE * 0.3, hover.y * TILE + TILE * 0.7), gl, HORIZONTAL_ALIGNMENT_LEFT, -1, int(TILE * 0.5), Color(1, 1, 1, 0.85))
+		var gtex := building_texture(selected_build)
+		if gtex != null:
+			draw_texture_rect(gtex, gr, false, Color(1, 1, 1, 0.75))
+		else:
+			var gl: String = BUILD_GLYPH.get(selected_build, str(sel_def.get("glyph", "?")))
+			draw_string(_font, Vector2(hover.x * TILE + TILE * 0.3, hover.y * TILE + TILE * 0.7), gl, HORIZONTAL_ALIGNMENT_LEFT, -1, int(TILE * 0.5), Color(1, 1, 1, 0.85))
 	for s in sim.shots:
 		draw_line(Vector2(s.x1 * TILE, s.y1 * TILE), Vector2(s.x2 * TILE, s.y2 * TILE), Color(1, 0.9, 0.47, clampf(s.t / 0.12, 0, 1)), 2.0)
 	for e in sim.enemies:
@@ -84,6 +126,10 @@ func _draw() -> void:
 func _draw_node(node, x: int, y: int) -> void:
 	var c := Vector2((x + 0.5) * TILE, (y + 0.5) * TILE)
 	var r := TILE * 0.36
+	var ntex := art_texture("sprite", "node_" + String(node.kind))
+	if ntex != null:
+		draw_texture_rect(ntex, Rect2(c - Vector2(TILE, TILE) * 0.5, Vector2(TILE, TILE)), false)
+		return
 	match node.kind:
 		"tree":
 			draw_rect(Rect2(c.x - TILE * 0.05, c.y, TILE * 0.1, TILE * 0.32), Color.html("5a3d22"))
@@ -103,7 +149,14 @@ func _draw_building(b) -> void:
 	var p := Vector2(b.x * TILE, b.y * TILE)
 	var c := p + Vector2(TILE, TILE) * 0.5
 	var blocking_wall: bool = String(b.kind) == "wall" or (def.get("blocks", false) and String(b.kind).ends_with("_wall"))
-	if blocking_wall:
+	var btex := building_texture(String(b.kind))
+	if btex != null:
+		var floorlike: bool = String(b.kind) == "floor" or String(b.kind).ends_with("_floor") or String(b.kind) == "grow_zone"
+		var inset := 0.0 if (floorlike or blocking_wall) else 1.0
+		draw_texture_rect(btex, Rect2(p.x + inset, p.y + inset, TILE - 2 * inset, TILE - 2 * inset), false)
+		if float(def.get("range", 0.0)) > 0.0:
+			draw_line(c, c + Vector2(cos(b.aim), sin(b.aim)) * TILE * 0.45, Color.html("2a2f36"), maxf(2.0, TILE * 0.12))
+	elif blocking_wall:
 		draw_rect(Rect2(p.x + 1, p.y + 1, TILE - 2, TILE - 2), Color.html("8a8f97"))
 	elif String(b.kind) == "floor" or String(b.kind).ends_with("_floor"):
 		draw_rect(Rect2(p.x + 1, p.y + 1, TILE - 2, TILE - 2), Color.html("7d756a"))
@@ -123,7 +176,11 @@ func _draw_building(b) -> void:
 func _draw_raider(e) -> void:
 	var c := Vector2(e.px * TILE, e.py * TILE)
 	var r := TILE * 0.34
-	if String(e.get("kind", "raider")) == "bot":
+	var is_bot: bool = String(e.get("kind", "raider")) == "bot"
+	var atex := art_texture("actor", "actor_patrol_robot" if is_bot else "actor_raider")
+	if atex != null:
+		_draw_actor(atex, c, cos(e.face), HIT_FLASH if e.hit_flash > 0 else Color.WHITE)
+	elif is_bot:
 		# патрульний робот Старого світу: сталевий корпус + червоне око-сенсор у напрямку руху
 		var body := Rect2(c - Vector2(r, r), Vector2(r * 2, r * 2))
 		draw_rect(body, Color(1, 1, 1) if e.hit_flash > 0 else Color.html("8a97a3"))
@@ -136,14 +193,25 @@ func _draw_raider(e) -> void:
 	draw_rect(Rect2(c.x - r, c.y - r - 6, r * 2, 3), Color(0, 0, 0, 0.6))
 	draw_rect(Rect2(c.x - r, c.y - r - 6, r * 2 * fr, 3), Color.html("ff6b6b"))
 
+# Actor sprite: ~1.5 tiles, feet near the pawn's position, mirrored when facing left.
+func _draw_actor(tex: Texture2D, c: Vector2, face_x: float, tint: Color) -> void:
+	var sz := TILE * 1.5
+	var w := -sz if face_x < -0.2 else sz
+	var x := c.x + sz * 0.5 if w < 0.0 else c.x - sz * 0.5
+	draw_texture_rect(tex, Rect2(x, c.y - sz * 0.72, w, sz), false, tint)
+
 func _draw_player() -> void:
 	var p: Dictionary = sim.player
 	var c := Vector2(p.px * TILE, p.py * TILE)
 	var r := TILE * 0.34
 	draw_circle(c + Vector2(0, r * 0.7), r * 0.9, Color(0, 0, 0, 0.3))
-	draw_circle(c, r, Color.html("7da0c0") if p.sleeping else Color.html("e7c25a"))
-	draw_arc(c, r, 0, TAU, 18, Color.html("1c2530"), 2.0)
-	draw_circle(c + Vector2(cos(p.face), sin(p.face)) * r * 0.55, r * 0.22, Color.html("1c2530"))
+	var htex := art_texture("actor", "actor_hero")
+	if htex != null:
+		_draw_actor(htex, c, cos(p.face), Color(0.62, 0.72, 0.95) if p.sleeping else Color.WHITE)
+	else:
+		draw_circle(c, r, Color.html("7da0c0") if p.sleeping else Color.html("e7c25a"))
+		draw_arc(c, r, 0, TAU, 18, Color.html("1c2530"), 2.0)
+		draw_circle(c + Vector2(cos(p.face), sin(p.face)) * r * 0.55, r * 0.22, Color.html("1c2530"))
 	if p.action != null and p.action.type == "gather" and float(p.action.get("dur", 0)) > 0:
 		var frac: float = clampf(p.action.t / p.action.dur, 0, 1)
 		draw_arc(c, r + 5, -PI / 2, -PI / 2 + frac * TAU, 24, Color.html("5db0ff"), 3.0)
