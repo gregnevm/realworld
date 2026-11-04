@@ -75,7 +75,7 @@ jobs:
           # import assets headlessly first so the scene loads cleanly, then run windowed under xvfb
           ./godot-bin --headless --path godot --import || true
           xvfb-run -a --server-args="-screen 0 1280x720x24" \
-            ./godot-bin --path godot --resolution 1280x720 res://newhud.tscn -- newhud shot
+            ./godot-bin --path godot --resolution 1280x720 res://newhud.tscn -- newhud shot light
       - name: Show result
         run: ls -la godot/newhud_shot.png godot/newhud_thumb.png && file godot/newhud_shot.png
       - name: Emit thumb as base64 (log readback channel)

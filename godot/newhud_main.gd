@@ -143,7 +143,7 @@ func _ready() -> void:
 		_autosave())
 	life.add_child(death_screen)
 
-	if shot_mode:
+	if shot_mode and not ("spawn" in OS.get_cmdline_user_args()):   # `-- newhud shot spawn` captures the spawn screen
 		_start_game(50.4501, 30.5234, "Київ")
 
 # The spawn screen (or shot mode) picked a world address — boot the real session on it.
@@ -256,6 +256,8 @@ func _route_intent(verb: StringName, args: Dictionary) -> void:
 
 func _process(dt: float) -> void:
 	if session == null:
+		if shot_mode:
+			_shot_step(dt)   # `shot spawn`: the spawn screen itself is the subject
 		return
 	view.sim = session.sim            # travel/respawn swap the sim under the session — track it
 	var sdt := dt * winput.speed
@@ -287,10 +289,11 @@ func _process(dt: float) -> void:
 # --- dev screenshot: build a base, toggle the Light overlay, capture the new HUD, quit ---
 func _shot_step(dt: float) -> void:
 	_t += dt
-	if not _built and _t > 0.15:
+	if not _built and _t > 0.15 and session != null:
 		_built = true
 		_build_demo_base()
-		oreg.toggle(&"light")              # radio-on the L/Light overlay so OverlayHost renders it
+		if "light" in OS.get_cmdline_user_args():
+			oreg.toggle(&"light")          # `shot light`: radio-on the L/Light overlay (default frame = what a player sees)
 		session.sim.time.frac = 0.86       # dusk so daylight darkening is visible
 	if _t > 1.6 and not _shot:
 		_shot = true

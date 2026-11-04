@@ -98,12 +98,11 @@ func draw_sprite_fit(tex: Texture2D, box: Rect2, tint: Color = Color.WHITE, flip
 	var sz := src.size * sc
 	var pos := Vector2(box.position.x + (box.size.x - sz.x) * 0.5, box.end.y - sz.y)
 	var dst := Rect2(pos, sz)
-	if flip_x:
-		dst = Rect2(Vector2(dst.end.x, dst.position.y), Vector2(-sz.x, sz.y))
-	var animated: bool = rot != 0.0 or squash != Vector2.ONE
+	var animated: bool = rot != 0.0 or squash != Vector2.ONE or flip_x
 	if animated:   # pivot = bottom-centre (feet / trunk base): sway, squash & stretch keep the sprite planted
 		var pv := Vector2(dst.position.x + dst.size.x * 0.5, box.end.y)
-		draw_set_transform_matrix(Transform2D(rot, squash, 0.0, pv) * Transform2D(0.0, Vector2.ONE, 0.0, -pv))
+		var sq := Vector2(-squash.x if flip_x else squash.x, squash.y)   # mirror via matrix: negative rect sizes draw nothing
+		draw_set_transform_matrix(Transform2D(rot, sq, 0.0, pv) * Transform2D(0.0, Vector2.ONE, 0.0, -pv))
 	if outline:
 		var o := maxf(1.0, TILE * 0.045)
 		for d in [Vector2(o, 0), Vector2(-o, 0), Vector2(0, o), Vector2(0, -o)]:
@@ -146,7 +145,19 @@ func _draw() -> void:
 			var tr := Rect2(x * TILE, y * TILE, TILE + 1, TILE + 1)
 			var ttex: Texture2D = _tile_tex[tiles[i]] if tiles[i] < _tile_tex.size() else null
 			if ttex != null:
-				draw_texture_rect(ttex, tr, false, GROUND_TINT)
+				# break the repetition: per-cell flip (4 variants) + ±4% brightness jitter from a cell hash.
+				# Pure function of (x, y) → stable frame to frame, never touches sim RNG.
+				var hh: int = ((x * 73856093) ^ (y * 19349663)) & 0xff
+				var jit: float = 1.0 + (float(hh & 15) / 15.0 - 0.5) * 0.08
+				var tint := Color(GROUND_TINT.r * jit, GROUND_TINT.g * jit, GROUND_TINT.b * jit, 1.0)
+				if hh & 48:   # a negative rect size draws NOTHING in Godot — flip through the transform matrix
+					var cc := tr.get_center()
+					draw_set_transform_matrix(Transform2D(0.0, Vector2(-1.0 if hh & 16 else 1.0, -1.0 if hh & 32 else 1.0), 0.0, cc) * Transform2D(0.0, Vector2.ONE, 0.0, -cc))
+					draw_texture_rect(ttex, tr, false, tint)
+					draw_set_transform_matrix(Transform2D.IDENTITY)
+				else:
+					draw_texture_rect(ttex, tr, false, tint)
+				_shore(tiles, n, x, y, int(tiles[i]), tr)
 			else:
 				draw_rect(tr, terrain_colors[tiles[i]])
 				if (x + y) % 2 == 1:
@@ -192,6 +203,33 @@ func _draw() -> void:
 	for ei in sim.enemies.size():
 		_draw_raider(sim.enemies[ei], ei)
 	_draw_player()
+
+# Shoreline: where land meets water, a thin pale foam line on the LAND edge and a dark wet rim on the
+# WATER edge — turns a hard tile seam into a readable coast (the single biggest "map looks stitched" cue).
+const FOAM := Color(0.80, 0.90, 0.95, 0.45)
+const WET := Color(0.03, 0.10, 0.16, 0.35)
+func _shore(tiles: PackedByteArray, n: int, x: int, y: int, t: int, tr: Rect2) -> void:
+	var is_water: bool = t == 0
+	var w := maxf(2.0, TILE * 0.09)
+	var dirs := [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]
+	for d in dirs:
+		var nx: int = x + d.x
+		var ny: int = y + d.y
+		if nx < 0 or ny < 0 or nx >= n or ny >= n:
+			continue
+		var nw: bool = tiles[ny * n + nx] == 0
+		if nw == is_water:
+			continue
+		var edge: Rect2
+		if d.y < 0:
+			edge = Rect2(tr.position.x, tr.position.y, TILE, w)
+		elif d.y > 0:
+			edge = Rect2(tr.position.x, tr.position.y + TILE - w, TILE, w)
+		elif d.x < 0:
+			edge = Rect2(tr.position.x, tr.position.y, w, TILE)
+		else:
+			edge = Rect2(tr.position.x + TILE - w, tr.position.y, w, TILE)
+		draw_rect(edge, WET if is_water else FOAM)
 
 func _draw_node(node, x: int, y: int) -> void:
 	var c := Vector2((x + 0.5) * TILE, (y + 0.5) * TILE)
