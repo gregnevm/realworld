@@ -1,0 +1,36 @@
+{
+ "id": "bld_embrasure",
+ "kind": "sprite",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "8e38f595",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3007,
+  "candidatesTokenCount": 1552,
+  "totalTokenCount": 5471,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 767
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 912,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3329
+}

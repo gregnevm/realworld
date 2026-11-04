@@ -1,0 +1,35 @@
+{
+ "id": "res_chemfuel",
+ "kind": "icon",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "b0c58b4f",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2995,
+  "candidatesTokenCount": 1559,
+  "totalTokenCount": 4554,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 755
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3246
+}

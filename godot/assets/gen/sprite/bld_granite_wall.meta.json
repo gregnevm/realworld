@@ -1,0 +1,35 @@
+{
+ "id": "bld_granite_wall",
+ "kind": "sprite",
+ "variant": 3,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "5c37db4b",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3094,
+  "candidatesTokenCount": 2063,
+  "totalTokenCount": 5157,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 854
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v3",
+ "prompt_chars": 3676
+}

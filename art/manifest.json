@@ -50,9 +50,10 @@
    "tier": 8,
    "subject": "advanced fabrication bench — a production station, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "advanced fabrication bench — a production station, built by survivors",
-   "hash": "a1de0e2c"
+   "hash": "a1de0e2c",
+   "approved": "v0"
   },
   {
    "id": "bld_assembler",
@@ -62,9 +63,10 @@
    "tier": 7,
    "subject": "assembler — a production station, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "assembler — a production station, built by survivors",
-   "hash": "3e366841"
+   "hash": "3e366841",
+   "approved": "v1"
   },
   {
    "id": "bld_auto_turret",
@@ -74,9 +76,10 @@
    "tier": 7,
    "subject": "auto turret — a defensive installation, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "auto turret — a defensive installation, built by survivors",
-   "hash": "76261f3f"
+   "hash": "76261f3f",
+   "approved": "v0"
   },
   {
    "id": "bld_autocannon_turret",
@@ -86,9 +89,10 @@
    "tier": 7,
    "subject": "autocannon turret — a defensive installation, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "autocannon turret — a defensive installation, built by survivors",
-   "hash": "60398a06"
+   "hash": "60398a06",
+   "approved": "v0"
   },
   {
    "id": "bld_battery",
@@ -137,9 +141,10 @@
    "tier": 8,
    "subject": "biosculpter pod — a utility installation, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "biosculpter pod — a utility installation, built by survivors",
-   "hash": "fd1c4ea4"
+   "hash": "fd1c4ea4",
+   "approved": "v0"
   },
   {
    "id": "bld_brazier",
@@ -175,10 +180,11 @@
    "tier": 1,
    "subject": "brick wall — a structural piece, a single 1×1 grid-cell segment designed to repeat in a row",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "brick wall — a structural piece, a single 1×1 grid-cell segment designed to repeat in a row",
    "hash": "d180e3c4",
-   "notes": "A straight horizontal segment: it runs exactly LEFT-TO-RIGHT across the whole cell and reaches the left and right edges of the frame, so copies placed side by side connect seamlessly in a row; high 3/4 camera, top face visible, NOT rotated diagonally; red-brown brick only, nothing extra."
+   "notes": "A straight horizontal segment: it runs exactly LEFT-TO-RIGHT across the whole cell and reaches the left and right edges of the frame, so copies placed side by side connect seamlessly in a row; high 3/4 camera, top face visible, NOT rotated diagonally; red-brown brick only, nothing extra.",
+   "approved": "v1"
   },
   {
    "id": "bld_campfire",
@@ -241,9 +247,10 @@
    "tier": 7,
    "subject": "comms console — a utility installation, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "comms console — a utility installation, built by survivors",
-   "hash": "4d9bd256"
+   "hash": "4d9bd256",
+   "approved": "v0"
   },
   {
    "id": "bld_cooler",
@@ -266,9 +273,10 @@
    "tier": 6,
    "subject": "deadfall trap — a defensive installation, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "deadfall trap — a defensive installation, built by survivors",
-   "hash": "d0a9041c"
+   "hash": "d0a9041c",
+   "approved": "v0"
   },
   {
    "id": "bld_dining_table",
@@ -330,9 +338,10 @@
    "tier": 7,
    "subject": "electric smelter — a production station, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "electric smelter — a production station, built by survivors",
-   "hash": "56eab3ae"
+   "hash": "56eab3ae",
+   "approved": "v0"
   },
   {
    "id": "bld_electronics_bench",
@@ -342,9 +351,10 @@
    "tier": 6,
    "subject": "electronics bench — a production station, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "electronics bench — a production station, built by survivors",
-   "hash": "aa19bd0c"
+   "hash": "aa19bd0c",
+   "approved": "v0"
   },
   {
    "id": "bld_embrasure",
@@ -354,9 +364,10 @@
    "tier": 6,
    "subject": "embrasure — a structural piece, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "embrasure — a structural piece, built by survivors",
-   "hash": "8e38f595"
+   "hash": "8e38f595",
+   "approved": "v1"
   },
   {
    "id": "bld_end_table",
@@ -379,9 +390,10 @@
    "tier": 8,
    "subject": "fabrication bench — a production station, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "fabrication bench — a production station, built by survivors",
-   "hash": "d7514bf2"
+   "hash": "d7514bf2",
+   "approved": "v1"
   },
   {
    "id": "bld_floor",
@@ -444,10 +456,11 @@
    "tier": 1,
    "subject": "granite wall — a structural piece, a single 1×1 grid-cell segment designed to repeat in a row",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "granite wall — a structural piece, a single 1×1 grid-cell segment designed to repeat in a row",
    "hash": "5c37db4b",
-   "notes": "A straight horizontal segment: it runs exactly LEFT-TO-RIGHT across the whole cell and reaches the left and right edges of the frame, so copies placed side by side connect seamlessly in a row; high 3/4 camera, top face visible, NOT rotated diagonally; plain grey granite blocks only, nothing extra."
+   "notes": "A straight horizontal segment: it runs exactly LEFT-TO-RIGHT across the whole cell and reaches the left and right edges of the frame, so copies placed side by side connect seamlessly in a row; high 3/4 camera, top face visible, NOT rotated diagonally; plain grey granite blocks only, nothing extra.",
+   "approved": "v3"
   },
   {
    "id": "bld_grave",
@@ -496,9 +509,10 @@
    "tier": 6,
    "subject": "hi tech research bench — a production station, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "hi tech research bench — a production station, built by survivors",
-   "hash": "5d142a65"
+   "hash": "5d142a65",
+   "approved": "v0"
   },
   {
    "id": "bld_hospital_bed",
@@ -508,9 +522,10 @@
    "tier": 7,
    "subject": "hospital bed — a piece of furniture, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "hospital bed — a piece of furniture, built by survivors",
-   "hash": "de3d60be"
+   "hash": "de3d60be",
+   "approved": "v1"
   },
   {
    "id": "bld_hydroponics",
@@ -637,9 +652,10 @@
    "tier": 7,
    "subject": "mortar — a defensive installation, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "mortar — a defensive installation, built by survivors",
-   "hash": "affb6896"
+   "hash": "affb6896",
+   "approved": "v1"
   },
   {
    "id": "bld_orbital_trade_beacon",
@@ -649,9 +665,10 @@
    "tier": 7,
    "subject": "orbital trade beacon — a utility installation, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "orbital trade beacon — a utility installation, built by survivors",
-   "hash": "dfbc659e"
+   "hash": "dfbc659e",
+   "approved": "v0"
   },
   {
    "id": "bld_power_conduit",
@@ -661,10 +678,11 @@
    "tier": 5,
    "subject": "power conduit — a power installation, a single 1×1 grid-cell segment designed to repeat in a row",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "power conduit — a power installation, a single 1×1 grid-cell segment designed to repeat in a row",
    "hash": "59399625",
-   "notes": "A straight horizontal segment: it runs exactly LEFT-TO-RIGHT across the whole cell and reaches the left and right edges of the frame, so copies placed side by side connect seamlessly in a row; high 3/4 camera, top face visible, NOT rotated diagonally; a thick cable/pipe conduit with end couplings only, nothing extra."
+   "notes": "A straight horizontal segment: it runs exactly LEFT-TO-RIGHT across the whole cell and reaches the left and right edges of the frame, so copies placed side by side connect seamlessly in a row; high 3/4 camera, top face visible, NOT rotated diagonally; a thick cable/pipe conduit with end couplings only, nothing extra.",
+   "approved": "v3"
   },
   {
    "id": "bld_research_bench",
@@ -700,9 +718,10 @@
    "tier": 6,
    "subject": "sandbags — a structural piece, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "sandbags — a structural piece, built by survivors",
-   "hash": "f6c1522d"
+   "hash": "f6c1522d",
+   "approved": "v1"
   },
   {
    "id": "bld_sarcophagus",
@@ -777,9 +796,10 @@
    "tier": 9,
    "subject": "ship computer core — a spaceship component, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "ship computer core — a spaceship component, built by survivors",
-   "hash": "3860e0e8"
+   "hash": "3860e0e8",
+   "approved": "v0"
   },
   {
    "id": "bld_ship_cryptosleep_casket",
@@ -789,9 +809,10 @@
    "tier": 9,
    "subject": "ship cryptosleep casket — a spaceship component, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "ship cryptosleep casket — a spaceship component, built by survivors",
-   "hash": "5c9de4b3"
+   "hash": "5c9de4b3",
+   "approved": "v0"
   },
   {
    "id": "bld_ship_engine",
@@ -801,9 +822,10 @@
    "tier": 9,
    "subject": "ship engine — a spaceship component, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "ship engine — a spaceship component, built by survivors",
-   "hash": "6ecb5c01"
+   "hash": "6ecb5c01",
+   "approved": "v1"
   },
   {
    "id": "bld_ship_reactor",
@@ -813,9 +835,10 @@
    "tier": 9,
    "subject": "ship reactor — a spaceship component, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "ship reactor — a spaceship component, built by survivors",
-   "hash": "7b4f09c5"
+   "hash": "7b4f09c5",
+   "approved": "v0"
   },
   {
    "id": "bld_ship_sensor_cluster",
@@ -825,9 +848,10 @@
    "tier": 9,
    "subject": "ship sensor cluster — a spaceship component, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "ship sensor cluster — a spaceship component, built by survivors",
-   "hash": "9c304e05"
+   "hash": "9c304e05",
+   "approved": "v1"
   },
   {
    "id": "bld_ship_structural_beam",
@@ -837,9 +861,10 @@
    "tier": 9,
    "subject": "ship structural beam — a spaceship component, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "ship structural beam — a spaceship component, built by survivors",
-   "hash": "fa47cee4"
+   "hash": "fa47cee4",
+   "approved": "v1"
   },
   {
    "id": "bld_smelter",
@@ -888,9 +913,10 @@
    "tier": 6,
    "subject": "solar panel — a power installation, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "solar panel — a power installation, built by survivors",
-   "hash": "883d36f3"
+   "hash": "883d36f3",
+   "approved": "v0"
   },
   {
    "id": "bld_spike_trap",
@@ -926,9 +952,10 @@
    "tier": 6,
    "subject": "steel wall — a structural piece, a single 1×1 grid-cell segment designed to repeat in a row",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "steel wall — a structural piece, a single 1×1 grid-cell segment designed to repeat in a row",
-   "hash": "8f3274d0"
+   "hash": "8f3274d0",
+   "approved": "v1"
   },
   {
    "id": "bld_stone_floor",
@@ -951,10 +978,11 @@
    "tier": 1,
    "subject": "stone wall — a structural piece, a single 1×1 grid-cell segment designed to repeat in a row",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "stone wall — a structural piece, a single 1×1 grid-cell segment designed to repeat in a row",
    "hash": "93c8f604",
-   "notes": "A straight horizontal segment: it runs exactly LEFT-TO-RIGHT across the whole cell and reaches the left and right edges of the frame, so copies placed side by side connect seamlessly in a row; high 3/4 camera, top face visible, NOT rotated diagonally; rough fieldstone masonry only, nothing extra."
+   "notes": "A straight horizontal segment: it runs exactly LEFT-TO-RIGHT across the whole cell and reaches the left and right edges of the frame, so copies placed side by side connect seamlessly in a row; high 3/4 camera, top face visible, NOT rotated diagonally; rough fieldstone masonry only, nothing extra.",
+   "approved": "v3"
   },
   {
    "id": "bld_stonecutter_table",
@@ -1068,9 +1096,10 @@
    "tier": 8,
    "subject": "uranium slug turret — a defensive installation, built by survivors",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "uranium slug turret — a defensive installation, built by survivors",
-   "hash": "cf661ccc"
+   "hash": "cf661ccc",
+   "approved": "v0"
   },
   {
    "id": "bld_wall",
@@ -1171,8 +1200,9 @@
    "tier": 8,
    "subject": "archotech arm (prosthetic, worn/used as arm)",
    "size": 128,
-   "status": "todo",
-   "auto": "archotech arm (prosthetic, worn/used as arm)"
+   "status": "draft",
+   "auto": "archotech arm (prosthetic, worn/used as arm)",
+   "hash": "a0121c01"
   },
   {
    "id": "item_archotech_eye",
@@ -1182,8 +1212,9 @@
    "tier": 8,
    "subject": "archotech eye (prosthetic, worn/used as eye)",
    "size": 128,
-   "status": "todo",
-   "auto": "archotech eye (prosthetic, worn/used as eye)"
+   "status": "draft",
+   "auto": "archotech eye (prosthetic, worn/used as eye)",
+   "hash": "445da37a"
   },
   {
    "id": "item_archotech_leg",
@@ -1193,8 +1224,9 @@
    "tier": 8,
    "subject": "archotech leg (prosthetic, worn/used as leg)",
    "size": 128,
-   "status": "todo",
-   "auto": "archotech leg (prosthetic, worn/used as leg)"
+   "status": "draft",
+   "auto": "archotech leg (prosthetic, worn/used as leg)",
+   "hash": "a11a3302"
   },
   {
    "id": "item_assault_rifle",
@@ -1204,8 +1236,9 @@
    "tier": 5,
    "subject": "assault rifle (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "assault rifle (weapon)"
+   "status": "draft",
+   "auto": "assault rifle (weapon)",
+   "hash": "a6de9684"
   },
   {
    "id": "item_autopistol",
@@ -1215,8 +1248,9 @@
    "tier": 5,
    "subject": "autopistol (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "autopistol (weapon)"
+   "status": "draft",
+   "auto": "autopistol (weapon)",
+   "hash": "e539da98"
   },
   {
    "id": "item_axe",
@@ -1239,8 +1273,9 @@
    "tier": 7,
    "subject": "bionic arm (prosthetic, worn/used as arm)",
    "size": 128,
-   "status": "todo",
-   "auto": "bionic arm (prosthetic, worn/used as arm)"
+   "status": "draft",
+   "auto": "bionic arm (prosthetic, worn/used as arm)",
+   "hash": "8350ff98"
   },
   {
    "id": "item_bionic_ear",
@@ -1250,8 +1285,9 @@
    "tier": 8,
    "subject": "bionic ear (prosthetic, worn/used as ear)",
    "size": 128,
-   "status": "todo",
-   "auto": "bionic ear (prosthetic, worn/used as ear)"
+   "status": "draft",
+   "auto": "bionic ear (prosthetic, worn/used as ear)",
+   "hash": "9928bb18"
   },
   {
    "id": "item_bionic_eye",
@@ -1261,8 +1297,9 @@
    "tier": 7,
    "subject": "bionic eye (prosthetic, worn/used as eye)",
    "size": 128,
-   "status": "todo",
-   "auto": "bionic eye (prosthetic, worn/used as eye)"
+   "status": "draft",
+   "auto": "bionic eye (prosthetic, worn/used as eye)",
+   "hash": "c1413dfe"
   },
   {
    "id": "item_bionic_heart",
@@ -1272,8 +1309,9 @@
    "tier": 8,
    "subject": "bionic heart (prosthetic, worn/used as heart)",
    "size": 128,
-   "status": "todo",
-   "auto": "bionic heart (prosthetic, worn/used as heart)"
+   "status": "draft",
+   "auto": "bionic heart (prosthetic, worn/used as heart)",
+   "hash": "6c6b65d9"
   },
   {
    "id": "item_bionic_leg",
@@ -1283,8 +1321,9 @@
    "tier": 7,
    "subject": "bionic leg (prosthetic, worn/used as leg)",
    "size": 128,
-   "status": "todo",
-   "auto": "bionic leg (prosthetic, worn/used as leg)"
+   "status": "draft",
+   "auto": "bionic leg (prosthetic, worn/used as leg)",
+   "hash": "7222d507"
   },
   {
    "id": "item_bionic_spine",
@@ -1294,8 +1333,9 @@
    "tier": 8,
    "subject": "bionic spine (prosthetic, worn/used as spine)",
    "size": 128,
-   "status": "todo",
-   "auto": "bionic spine (prosthetic, worn/used as spine)"
+   "status": "draft",
+   "auto": "bionic spine (prosthetic, worn/used as spine)",
+   "hash": "0bf32a10"
   },
   {
    "id": "item_bionic_stomach",
@@ -1305,8 +1345,9 @@
    "tier": 8,
    "subject": "bionic stomach (prosthetic, worn/used as stomach)",
    "size": 128,
-   "status": "todo",
-   "auto": "bionic stomach (prosthetic, worn/used as stomach)"
+   "status": "draft",
+   "auto": "bionic stomach (prosthetic, worn/used as stomach)",
+   "hash": "4a027045"
   },
   {
    "id": "item_bolt_rifle",
@@ -1316,8 +1357,9 @@
    "tier": 5,
    "subject": "bolt rifle (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "bolt rifle (weapon)"
+   "status": "draft",
+   "auto": "bolt rifle (weapon)",
+   "hash": "b075795d"
   },
   {
    "id": "item_bow",
@@ -1327,8 +1369,9 @@
    "tier": 1,
    "subject": "bow (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "bow (weapon)"
+   "status": "draft",
+   "auto": "bow (weapon)",
+   "hash": "1a3220d7"
   },
   {
    "id": "item_bowler_hat",
@@ -1338,8 +1381,9 @@
    "tier": 2,
    "subject": "bowler hat (apparel, worn/used as head)",
    "size": 128,
-   "status": "todo",
-   "auto": "bowler hat (apparel, worn/used as head)"
+   "status": "draft",
+   "auto": "bowler hat (apparel, worn/used as head)",
+   "hash": "4afdf310"
   },
   {
    "id": "item_bronze_mace",
@@ -1349,8 +1393,9 @@
    "tier": 3,
    "subject": "bronze mace (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "bronze mace (weapon)"
+   "status": "draft",
+   "auto": "bronze mace (weapon)",
+   "hash": "d7387d17"
   },
   {
    "id": "item_charge_rifle",
@@ -1360,8 +1405,9 @@
    "tier": 8,
    "subject": "charge rifle (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "charge rifle (weapon)"
+   "status": "draft",
+   "auto": "charge rifle (weapon)",
+   "hash": "5a2ffc95"
   },
   {
    "id": "item_cloth_cap",
@@ -1371,8 +1417,9 @@
    "tier": 2,
    "subject": "cloth cap (apparel, worn/used as head)",
    "size": 128,
-   "status": "todo",
-   "auto": "cloth cap (apparel, worn/used as head)"
+   "status": "draft",
+   "auto": "cloth cap (apparel, worn/used as head)",
+   "hash": "8cf0ee31"
   },
   {
    "id": "item_club",
@@ -1395,8 +1442,9 @@
    "tier": 4,
    "subject": "devilstrand duster (apparel, worn/used as torso)",
    "size": 128,
-   "status": "todo",
-   "auto": "devilstrand duster (apparel, worn/used as torso)"
+   "status": "draft",
+   "auto": "devilstrand duster (apparel, worn/used as torso)",
+   "hash": "1f83bfa4"
   },
   {
    "id": "item_drill_arm",
@@ -1406,8 +1454,9 @@
    "tier": 7,
    "subject": "drill arm (prosthetic, worn/used as arm)",
    "size": 128,
-   "status": "todo",
-   "auto": "drill arm (prosthetic, worn/used as arm)"
+   "status": "draft",
+   "auto": "drill arm (prosthetic, worn/used as arm)",
+   "hash": "1c09d0cd"
   },
   {
    "id": "item_duster",
@@ -1417,8 +1466,9 @@
    "tier": 2,
    "subject": "duster (apparel, worn/used as torso)",
    "size": 128,
-   "status": "todo",
-   "auto": "duster (apparel, worn/used as torso)"
+   "status": "draft",
+   "auto": "duster (apparel, worn/used as torso)",
+   "hash": "6792ac5e"
   },
   {
    "id": "item_emp_grenade",
@@ -1428,8 +1478,9 @@
    "tier": 6,
    "subject": "emp grenade (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "emp grenade (weapon)"
+   "status": "draft",
+   "auto": "emp grenade (weapon)",
+   "hash": "94f2b6a2"
   },
   {
    "id": "item_flak_helmet",
@@ -1439,8 +1490,9 @@
    "tier": 4,
    "subject": "flak helmet (apparel, worn/used as head)",
    "size": 128,
-   "status": "todo",
-   "auto": "flak helmet (apparel, worn/used as head)"
+   "status": "draft",
+   "auto": "flak helmet (apparel, worn/used as head)",
+   "hash": "bf8d7076"
   },
   {
    "id": "item_flak_jacket",
@@ -1450,8 +1502,9 @@
    "tier": 4,
    "subject": "flak jacket (apparel, worn/used as torso)",
    "size": 128,
-   "status": "todo",
-   "auto": "flak jacket (apparel, worn/used as torso)"
+   "status": "draft",
+   "auto": "flak jacket (apparel, worn/used as torso)",
+   "hash": "2a24c10a"
   },
   {
    "id": "item_flak_pants",
@@ -1461,8 +1514,9 @@
    "tier": 4,
    "subject": "flak pants (apparel, worn/used as legs)",
    "size": 128,
-   "status": "todo",
-   "auto": "flak pants (apparel, worn/used as legs)"
+   "status": "draft",
+   "auto": "flak pants (apparel, worn/used as legs)",
+   "hash": "6afcf67e"
   },
   {
    "id": "item_flak_vest",
@@ -1472,8 +1526,9 @@
    "tier": 4,
    "subject": "flak vest (apparel, worn/used as torso)",
    "size": 128,
-   "status": "todo",
-   "auto": "flak vest (apparel, worn/used as torso)"
+   "status": "draft",
+   "auto": "flak vest (apparel, worn/used as torso)",
+   "hash": "81d715c1"
   },
   {
    "id": "item_frag_grenade",
@@ -1483,8 +1538,9 @@
    "tier": 5,
    "subject": "frag grenade (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "frag grenade (weapon)"
+   "status": "draft",
+   "auto": "frag grenade (weapon)",
+   "hash": "e9bced9e"
   },
   {
    "id": "item_gladius",
@@ -1494,8 +1550,9 @@
    "tier": 3,
    "subject": "gladius (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "gladius (weapon)"
+   "status": "draft",
+   "auto": "gladius (weapon)",
+   "hash": "749fdf10"
   },
   {
    "id": "item_hyperweave_parka",
@@ -1505,8 +1562,9 @@
    "tier": 4,
    "subject": "hyperweave parka (apparel, worn/used as torso)",
    "size": 128,
-   "status": "todo",
-   "auto": "hyperweave parka (apparel, worn/used as torso)"
+   "status": "draft",
+   "auto": "hyperweave parka (apparel, worn/used as torso)",
+   "hash": "1218b54a"
   },
   {
    "id": "item_iron_axe",
@@ -1516,8 +1574,9 @@
    "tier": 3,
    "subject": "iron axe (tool)",
    "size": 128,
-   "status": "todo",
-   "auto": "iron axe (tool)"
+   "status": "draft",
+   "auto": "iron axe (tool)",
+   "hash": "1803c954"
   },
   {
    "id": "item_iron_helmet",
@@ -1527,8 +1586,9 @@
    "tier": 3,
    "subject": "iron helmet (apparel, worn/used as head)",
    "size": 128,
-   "status": "todo",
-   "auto": "iron helmet (apparel, worn/used as head)"
+   "status": "draft",
+   "auto": "iron helmet (apparel, worn/used as head)",
+   "hash": "b46b9bc1"
   },
   {
    "id": "item_iron_mace",
@@ -1538,8 +1598,9 @@
    "tier": 3,
    "subject": "iron mace (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "iron mace (weapon)"
+   "status": "draft",
+   "auto": "iron mace (weapon)",
+   "hash": "658d8772"
   },
   {
    "id": "item_iron_pick",
@@ -1549,8 +1610,9 @@
    "tier": 3,
    "subject": "iron pick (tool)",
    "size": 128,
-   "status": "todo",
-   "auto": "iron pick (tool)"
+   "status": "draft",
+   "auto": "iron pick (tool)",
+   "hash": "809a6bc9"
   },
   {
    "id": "item_iron_sword",
@@ -1560,8 +1622,9 @@
    "tier": 3,
    "subject": "iron sword (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "iron sword (weapon)"
+   "status": "draft",
+   "auto": "iron sword (weapon)",
+   "hash": "e1b51797"
   },
   {
    "id": "item_joywire",
@@ -1571,8 +1634,9 @@
    "tier": 7,
    "subject": "joywire (prosthetic, worn/used as brain)",
    "size": 128,
-   "status": "todo",
-   "auto": "joywire (prosthetic, worn/used as brain)"
+   "status": "draft",
+   "auto": "joywire (prosthetic, worn/used as brain)",
+   "hash": "6dee19f6"
   },
   {
    "id": "item_jump_pack",
@@ -1582,8 +1646,9 @@
    "tier": 8,
    "subject": "jump pack (apparel, worn/used as belt)",
    "size": 128,
-   "status": "todo",
-   "auto": "jump pack (apparel, worn/used as belt)"
+   "status": "draft",
+   "auto": "jump pack (apparel, worn/used as belt)",
+   "hash": "8aa66c44"
   },
   {
    "id": "item_knife",
@@ -1593,8 +1658,9 @@
    "tier": 3,
    "subject": "knife (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "knife (weapon)"
+   "status": "draft",
+   "auto": "knife (weapon)",
+   "hash": "8114bad3"
   },
   {
    "id": "item_leather_pants",
@@ -1604,8 +1670,9 @@
    "tier": 2,
    "subject": "leather pants (apparel, worn/used as legs)",
    "size": 128,
-   "status": "todo",
-   "auto": "leather pants (apparel, worn/used as legs)"
+   "status": "draft",
+   "auto": "leather pants (apparel, worn/used as legs)",
+   "hash": "c8ee5a0f"
   },
   {
    "id": "item_leather_tunic",
@@ -1615,8 +1682,9 @@
    "tier": 2,
    "subject": "leather tunic (apparel, worn/used as torso)",
    "size": 128,
-   "status": "todo",
-   "auto": "leather tunic (apparel, worn/used as torso)"
+   "status": "draft",
+   "auto": "leather tunic (apparel, worn/used as torso)",
+   "hash": "48a1da0b"
   },
   {
    "id": "item_lmg",
@@ -1626,8 +1694,9 @@
    "tier": 5,
    "subject": "lmg (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "lmg (weapon)"
+   "status": "draft",
+   "auto": "lmg (weapon)",
+   "hash": "a0fea768"
   },
   {
    "id": "item_longsword",
@@ -1637,8 +1706,9 @@
    "tier": 4,
    "subject": "longsword (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "longsword (weapon)"
+   "status": "draft",
+   "auto": "longsword (weapon)",
+   "hash": "e48160d7"
   },
   {
    "id": "item_machine_pistol",
@@ -1648,8 +1718,9 @@
    "tier": 5,
    "subject": "machine pistol (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "machine pistol (weapon)"
+   "status": "draft",
+   "auto": "machine pistol (weapon)",
+   "hash": "37d4a049"
   },
   {
    "id": "item_marine_armor",
@@ -1659,8 +1730,9 @@
    "tier": 8,
    "subject": "marine armor (apparel, worn/used as torso)",
    "size": 128,
-   "status": "todo",
-   "auto": "marine armor (apparel, worn/used as torso)"
+   "status": "draft",
+   "auto": "marine armor (apparel, worn/used as torso)",
+   "hash": "825329d0"
   },
   {
    "id": "item_marine_helmet",
@@ -1670,8 +1742,9 @@
    "tier": 8,
    "subject": "marine helmet (apparel, worn/used as head)",
    "size": 128,
-   "status": "todo",
-   "auto": "marine helmet (apparel, worn/used as head)"
+   "status": "draft",
+   "auto": "marine helmet (apparel, worn/used as head)",
+   "hash": "ded0adbd"
   },
   {
    "id": "item_minigun",
@@ -1681,8 +1754,9 @@
    "tier": 8,
    "subject": "minigun (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "minigun (weapon)"
+   "status": "draft",
+   "auto": "minigun (weapon)",
+   "hash": "fb58cdac"
   },
   {
    "id": "item_molotov",
@@ -1692,8 +1766,9 @@
    "tier": 4,
    "subject": "molotov (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "molotov (weapon)"
+   "status": "draft",
+   "auto": "molotov (weapon)",
+   "hash": "e52c798e"
   },
   {
    "id": "item_monosword",
@@ -1703,8 +1778,9 @@
    "tier": 8,
    "subject": "monosword (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "monosword (weapon)"
+   "status": "draft",
+   "auto": "monosword (weapon)",
+   "hash": "ff2593c9"
   },
   {
    "id": "item_painstopper",
@@ -1714,8 +1790,9 @@
    "tier": 7,
    "subject": "painstopper (prosthetic, worn/used as brain)",
    "size": 128,
-   "status": "todo",
-   "auto": "painstopper (prosthetic, worn/used as brain)"
+   "status": "draft",
+   "auto": "painstopper (prosthetic, worn/used as brain)",
+   "hash": "6ede552c"
   },
   {
    "id": "item_parka",
@@ -1725,8 +1802,9 @@
    "tier": 2,
    "subject": "parka (apparel, worn/used as torso)",
    "size": 128,
-   "status": "todo",
-   "auto": "parka (apparel, worn/used as torso)"
+   "status": "draft",
+   "auto": "parka (apparel, worn/used as torso)",
+   "hash": "a53da0e9"
   },
   {
    "id": "item_peg_leg",
@@ -1736,8 +1814,9 @@
    "tier": 0,
    "subject": "peg leg (prosthetic, worn/used as leg)",
    "size": 128,
-   "status": "todo",
-   "auto": "peg leg (prosthetic, worn/used as leg)"
+   "status": "draft",
+   "auto": "peg leg (prosthetic, worn/used as leg)",
+   "hash": "4b797957"
   },
   {
    "id": "item_pick",
@@ -1760,8 +1839,9 @@
    "tier": 8,
    "subject": "plasteel sword (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "plasteel sword (weapon)"
+   "status": "draft",
+   "auto": "plasteel sword (weapon)",
+   "hash": "cd4fb004"
   },
   {
    "id": "item_plate",
@@ -1784,8 +1864,9 @@
    "tier": 8,
    "subject": "plate armor (apparel, worn/used as torso)",
    "size": 128,
-   "status": "todo",
-   "auto": "plate armor (apparel, worn/used as torso)"
+   "status": "draft",
+   "auto": "plate armor (apparel, worn/used as torso)",
+   "hash": "ac70ed1c"
   },
   {
    "id": "item_plate_helmet",
@@ -1795,8 +1876,9 @@
    "tier": 8,
    "subject": "plate helmet (apparel, worn/used as head)",
    "size": 128,
-   "status": "todo",
-   "auto": "plate helmet (apparel, worn/used as head)"
+   "status": "draft",
+   "auto": "plate helmet (apparel, worn/used as head)",
+   "hash": "d0360c3a"
   },
   {
    "id": "item_power_claw",
@@ -1806,8 +1888,9 @@
    "tier": 7,
    "subject": "power claw (prosthetic, worn/used as arm)",
    "size": 128,
-   "status": "todo",
-   "auto": "power claw (prosthetic, worn/used as arm)"
+   "status": "draft",
+   "auto": "power claw (prosthetic, worn/used as arm)",
+   "hash": "9d9e9e09"
   },
   {
    "id": "item_prosthetic_arm",
@@ -1817,8 +1900,9 @@
    "tier": 3,
    "subject": "prosthetic arm (prosthetic, worn/used as arm)",
    "size": 128,
-   "status": "todo",
-   "auto": "prosthetic arm (prosthetic, worn/used as arm)"
+   "status": "draft",
+   "auto": "prosthetic arm (prosthetic, worn/used as arm)",
+   "hash": "7c09bc9b"
   },
   {
    "id": "item_pump_shotgun",
@@ -1828,8 +1912,9 @@
    "tier": 5,
    "subject": "pump shotgun (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "pump shotgun (weapon)"
+   "status": "draft",
+   "auto": "pump shotgun (weapon)",
+   "hash": "5ba57e30"
   },
   {
    "id": "item_revolver",
@@ -1839,8 +1924,9 @@
    "tier": 5,
    "subject": "revolver (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "revolver (weapon)"
+   "status": "draft",
+   "auto": "revolver (weapon)",
+   "hash": "3053a88a"
   },
   {
    "id": "item_shield_belt",
@@ -1850,8 +1936,9 @@
    "tier": 6,
    "subject": "shield belt (apparel, worn/used as belt)",
    "size": 128,
-   "status": "todo",
-   "auto": "shield belt (apparel, worn/used as belt)"
+   "status": "draft",
+   "auto": "shield belt (apparel, worn/used as belt)",
+   "hash": "a3b182b3"
   },
   {
    "id": "item_sledge",
@@ -1874,8 +1961,9 @@
    "tier": 4,
    "subject": "smokepop belt (apparel, worn/used as belt)",
    "size": 128,
-   "status": "todo",
-   "auto": "smokepop belt (apparel, worn/used as belt)"
+   "status": "draft",
+   "auto": "smokepop belt (apparel, worn/used as belt)",
+   "hash": "782a3357"
   },
   {
    "id": "item_sniper_rifle",
@@ -1885,8 +1973,9 @@
    "tier": 5,
    "subject": "sniper rifle (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "sniper rifle (weapon)"
+   "status": "draft",
+   "auto": "sniper rifle (weapon)",
+   "hash": "9e8cb1a1"
   },
   {
    "id": "item_spear",
@@ -1909,8 +1998,9 @@
    "tier": 4,
    "subject": "steel axe (tool)",
    "size": 128,
-   "status": "todo",
-   "auto": "steel axe (tool)"
+   "status": "draft",
+   "auto": "steel axe (tool)",
+   "hash": "fb0c2953"
   },
   {
    "id": "item_steel_pick",
@@ -1920,8 +2010,9 @@
    "tier": 4,
    "subject": "steel pick (tool)",
    "size": 128,
-   "status": "todo",
-   "auto": "steel pick (tool)"
+   "status": "draft",
+   "auto": "steel pick (tool)",
+   "hash": "a54225c8"
   },
   {
    "id": "item_steel_sword",
@@ -1931,8 +2022,9 @@
    "tier": 4,
    "subject": "steel sword (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "steel sword (weapon)"
+   "status": "draft",
+   "auto": "steel sword (weapon)",
+   "hash": "ed5be520"
   },
   {
    "id": "item_stone_axe",
@@ -1956,8 +2048,9 @@
    "tier": 0,
    "subject": "stone pick (tool)",
    "size": 128,
-   "status": "todo",
-   "auto": "stone pick (tool)"
+   "status": "draft",
+   "auto": "stone pick (tool)",
+   "hash": "7153c6bb"
   },
   {
    "id": "item_tribal_pants",
@@ -1967,8 +2060,9 @@
    "tier": 2,
    "subject": "tribal pants (apparel, worn/used as legs)",
    "size": 128,
-   "status": "todo",
-   "auto": "tribal pants (apparel, worn/used as legs)"
+   "status": "draft",
+   "auto": "tribal pants (apparel, worn/used as legs)",
+   "hash": "2e37aaef"
   },
   {
    "id": "item_tribal_top",
@@ -1978,8 +2072,9 @@
    "tier": 2,
    "subject": "tribal top (apparel, worn/used as torso)",
    "size": 128,
-   "status": "todo",
-   "auto": "tribal top (apparel, worn/used as torso)"
+   "status": "draft",
+   "auto": "tribal top (apparel, worn/used as torso)",
+   "hash": "5c699d9d"
   },
   {
    "id": "item_tuque",
@@ -1989,8 +2084,9 @@
    "tier": 2,
    "subject": "tuque (apparel, worn/used as head)",
    "size": 128,
-   "status": "todo",
-   "auto": "tuque (apparel, worn/used as head)"
+   "status": "draft",
+   "auto": "tuque (apparel, worn/used as head)",
+   "hash": "95394ca0"
   },
   {
    "id": "item_vest",
@@ -2013,8 +2109,9 @@
    "tier": 4,
    "subject": "warhammer (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "warhammer (weapon)"
+   "status": "draft",
+   "auto": "warhammer (weapon)",
+   "hash": "1e61ea08"
   },
   {
    "id": "item_wooden_club",
@@ -2024,8 +2121,9 @@
    "tier": 0,
    "subject": "wooden club (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "wooden club (weapon)"
+   "status": "draft",
+   "auto": "wooden club (weapon)",
+   "hash": "4454d188"
   },
   {
    "id": "item_wooden_spear",
@@ -2035,8 +2133,9 @@
    "tier": 0,
    "subject": "wooden spear (weapon)",
    "size": 128,
-   "status": "todo",
-   "auto": "wooden spear (weapon)"
+   "status": "draft",
+   "auto": "wooden spear (weapon)",
+   "hash": "d32b0891"
   },
   {
    "id": "node_bush",
@@ -2125,9 +2224,10 @@
    "tier": 6,
    "subject": "advanced component — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "advanced component — a neat stack of this processed material",
-   "hash": "3e0f12eb"
+   "hash": "3e0f12eb",
+   "approved": "v0"
   },
   {
    "id": "res_ammo",
@@ -2137,9 +2237,10 @@
    "tier": 4,
    "subject": "ammo — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "ammo — a neat stack of this processed material",
-   "hash": "de0389a3"
+   "hash": "de0389a3",
+   "approved": "v1"
   },
   {
    "id": "res_antigrain_shell",
@@ -2149,9 +2250,10 @@
    "tier": 6,
    "subject": "antigrain shell — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "antigrain shell — a neat stack of this processed material",
-   "hash": "69c53265"
+   "hash": "69c53265",
+   "approved": "v0"
   },
   {
    "id": "res_beer",
@@ -2161,9 +2263,10 @@
    "tier": 2,
    "subject": "beer — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "beer — a neat stack of this processed material",
-   "hash": "763f9538"
+   "hash": "763f9538",
+   "approved": "v1"
   },
   {
    "id": "res_brick",
@@ -2173,9 +2276,10 @@
    "tier": 2,
    "subject": "brick — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "brick — a neat stack of this processed material",
-   "hash": "f96e5ddd"
+   "hash": "f96e5ddd",
+   "approved": "v0"
   },
   {
    "id": "res_bronze",
@@ -2185,9 +2289,10 @@
    "tier": 4,
    "subject": "bronze — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "bronze — a neat stack of this processed material",
-   "hash": "0459b9ff"
+   "hash": "0459b9ff",
+   "approved": "v0"
   },
   {
    "id": "res_charcoal",
@@ -2197,9 +2302,10 @@
    "tier": 2,
    "subject": "charcoal — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "charcoal — a neat stack of this processed material",
-   "hash": "69082bf9"
+   "hash": "69082bf9",
+   "approved": "v0"
   },
   {
    "id": "res_chemfuel",
@@ -2209,9 +2315,10 @@
    "tier": 4,
    "subject": "chemfuel — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "chemfuel — a neat stack of this processed material",
-   "hash": "b0c58b4f"
+   "hash": "b0c58b4f",
+   "approved": "v1"
   },
   {
    "id": "res_circuit",
@@ -2221,9 +2328,10 @@
    "tier": 6,
    "subject": "circuit — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "circuit — a neat stack of this processed material",
-   "hash": "ffa33c2a"
+   "hash": "ffa33c2a",
+   "approved": "v1"
   },
   {
    "id": "res_clay",
@@ -2233,9 +2341,10 @@
    "tier": null,
    "subject": "raw clay as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw clay as freshly gathered — a small pile or bundle",
-   "hash": "fd8b6981"
+   "hash": "fd8b6981",
+   "approved": "v1"
   },
   {
    "id": "res_cloth",
@@ -2245,9 +2354,10 @@
    "tier": 2,
    "subject": "cloth — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "cloth — a neat stack of this processed material",
-   "hash": "1d3d4bd3"
+   "hash": "1d3d4bd3",
+   "approved": "v0"
   },
   {
    "id": "res_coal",
@@ -2257,9 +2367,10 @@
    "tier": null,
    "subject": "raw coal as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw coal as freshly gathered — a small pile or bundle",
-   "hash": "55108861"
+   "hash": "55108861",
+   "approved": "v1"
   },
   {
    "id": "res_components",
@@ -2269,9 +2380,10 @@
    "tier": 4,
    "subject": "components — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "components — a neat stack of this processed material",
-   "hash": "acbccf90"
+   "hash": "acbccf90",
+   "approved": "v1"
   },
   {
    "id": "res_copper_bar",
@@ -2281,9 +2393,10 @@
    "tier": 2,
    "subject": "copper bar — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "copper bar — a neat stack of this processed material",
-   "hash": "24f1c2c2"
+   "hash": "24f1c2c2",
+   "approved": "v0"
   },
   {
    "id": "res_copper_ore",
@@ -2293,9 +2406,10 @@
    "tier": null,
    "subject": "raw copper ore as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw copper ore as freshly gathered — a small pile or bundle",
-   "hash": "5bd3bef8"
+   "hash": "5bd3bef8",
+   "approved": "v0"
   },
   {
    "id": "res_copper_wire",
@@ -2305,9 +2419,10 @@
    "tier": 4,
    "subject": "copper wire — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "copper wire — a neat stack of this processed material",
-   "hash": "621ed23a"
+   "hash": "621ed23a",
+   "approved": "v1"
   },
   {
    "id": "res_devilstrand",
@@ -2317,9 +2432,10 @@
    "tier": 2,
    "subject": "devilstrand — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "devilstrand — a neat stack of this processed material",
-   "hash": "f10ce62d"
+   "hash": "f10ce62d",
+   "approved": "v0"
   },
   {
    "id": "res_devilstrand_bud",
@@ -2329,9 +2445,10 @@
    "tier": null,
    "subject": "raw devilstrand bud as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw devilstrand bud as freshly gathered — a small pile or bundle",
-   "hash": "bd344383"
+   "hash": "bd344383",
+   "approved": "v1"
   },
   {
    "id": "res_emp_shell",
@@ -2341,9 +2458,10 @@
    "tier": 4,
    "subject": "emp shell — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "emp shell — a neat stack of this processed material",
-   "hash": "80ae4481"
+   "hash": "80ae4481",
+   "approved": "v0"
   },
   {
    "id": "res_flake",
@@ -2353,9 +2471,10 @@
    "tier": 4,
    "subject": "flake — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "flake — a neat stack of this processed material",
-   "hash": "09e3e4d2"
+   "hash": "09e3e4d2",
+   "approved": "v0"
   },
   {
    "id": "res_flour",
@@ -2365,9 +2484,10 @@
    "tier": 2,
    "subject": "flour — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "flour — a neat stack of this processed material",
-   "hash": "7f26d5ef"
+   "hash": "7f26d5ef",
+   "approved": "v1"
   },
   {
    "id": "res_food",
@@ -2390,9 +2510,10 @@
    "tier": 4,
    "subject": "gear wheel — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "gear wheel — a neat stack of this processed material",
-   "hash": "5096d865"
+   "hash": "5096d865",
+   "approved": "v0"
   },
   {
    "id": "res_glass",
@@ -2402,9 +2523,10 @@
    "tier": 2,
    "subject": "glass — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "glass — a neat stack of this processed material",
-   "hash": "dc5f3efd"
+   "hash": "dc5f3efd",
+   "approved": "v1"
   },
   {
    "id": "res_glitterworld_medicine",
@@ -2414,9 +2536,10 @@
    "tier": 6,
    "subject": "glitterworld medicine — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "glitterworld medicine — a neat stack of this processed material",
-   "hash": "27d624e6"
+   "hash": "27d624e6",
+   "approved": "v1"
   },
   {
    "id": "res_go_juice",
@@ -2426,9 +2549,10 @@
    "tier": 6,
    "subject": "go juice — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "go juice — a neat stack of this processed material",
-   "hash": "08cddb5f"
+   "hash": "08cddb5f",
+   "approved": "v1"
   },
   {
    "id": "res_gold",
@@ -2438,9 +2562,10 @@
    "tier": 2,
    "subject": "gold — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "gold — a neat stack of this processed material",
-   "hash": "3b9ae5df"
+   "hash": "3b9ae5df",
+   "approved": "v0"
   },
   {
    "id": "res_gold_ore",
@@ -2450,9 +2575,10 @@
    "tier": null,
    "subject": "raw gold ore as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw gold ore as freshly gathered — a small pile or bundle",
-   "hash": "8538958e"
+   "hash": "8538958e",
+   "approved": "v1"
   },
   {
    "id": "res_grain",
@@ -2462,9 +2588,10 @@
    "tier": null,
    "subject": "raw grain as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw grain as freshly gathered — a small pile or bundle",
-   "hash": "29c8f39f"
+   "hash": "29c8f39f",
+   "approved": "v0"
   },
   {
    "id": "res_granite",
@@ -2474,9 +2601,10 @@
    "tier": null,
    "subject": "raw granite as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw granite as freshly gathered — a small pile or bundle",
-   "hash": "a543918d"
+   "hash": "a543918d",
+   "approved": "v1"
   },
   {
    "id": "res_granite_block",
@@ -2486,9 +2614,10 @@
    "tier": 2,
    "subject": "granite block — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "granite block — a neat stack of this processed material",
-   "hash": "f3427e8c"
+   "hash": "f3427e8c",
+   "approved": "v1"
   },
   {
    "id": "res_gunpowder",
@@ -2498,9 +2627,10 @@
    "tier": 4,
    "subject": "gunpowder — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "gunpowder — a neat stack of this processed material",
-   "hash": "023d6bf1"
+   "hash": "023d6bf1",
+   "approved": "v0"
   },
   {
    "id": "res_he_shell",
@@ -2510,9 +2640,10 @@
    "tier": 4,
    "subject": "he shell — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "he shell — a neat stack of this processed material",
-   "hash": "5aaf119d"
+   "hash": "5aaf119d",
+   "approved": "v1"
   },
   {
    "id": "res_herbal",
@@ -2522,9 +2653,10 @@
    "tier": null,
    "subject": "raw herbal as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw herbal as freshly gathered — a small pile or bundle",
-   "hash": "b6f538eb"
+   "hash": "b6f538eb",
+   "approved": "v0"
   },
   {
    "id": "res_herbal_medicine",
@@ -2534,9 +2666,10 @@
    "tier": 4,
    "subject": "herbal medicine — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "herbal medicine — a neat stack of this processed material",
-   "hash": "87fada70"
+   "hash": "87fada70",
+   "approved": "v0"
   },
   {
    "id": "res_hide",
@@ -2546,9 +2679,10 @@
    "tier": null,
    "subject": "raw hide as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw hide as freshly gathered — a small pile or bundle",
-   "hash": "6e0c3b20"
+   "hash": "6e0c3b20",
+   "approved": "v0"
   },
   {
    "id": "res_hops",
@@ -2558,9 +2692,10 @@
    "tier": null,
    "subject": "raw hops as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw hops as freshly gathered — a small pile or bundle",
-   "hash": "dd6dbe19"
+   "hash": "dd6dbe19",
+   "approved": "v1"
   },
   {
    "id": "res_hyperweave",
@@ -2570,9 +2705,10 @@
    "tier": 4,
    "subject": "hyperweave — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "hyperweave — a neat stack of this processed material",
-   "hash": "3d3a4be5"
+   "hash": "3d3a4be5",
+   "approved": "v1"
   },
   {
    "id": "res_incendiary_shell",
@@ -2582,9 +2718,10 @@
    "tier": 4,
    "subject": "incendiary shell — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "incendiary shell — a neat stack of this processed material",
-   "hash": "b338247d"
+   "hash": "b338247d",
+   "approved": "v0"
   },
   {
    "id": "res_iron_bar",
@@ -2594,9 +2731,10 @@
    "tier": 2,
    "subject": "iron bar — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "iron bar — a neat stack of this processed material",
-   "hash": "7bbaa21a"
+   "hash": "7bbaa21a",
+   "approved": "v1"
   },
   {
    "id": "res_iron_ore",
@@ -2606,9 +2744,10 @@
    "tier": null,
    "subject": "raw iron ore as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw iron ore as freshly gathered — a small pile or bundle",
-   "hash": "875fd17e"
+   "hash": "875fd17e",
+   "approved": "v0"
   },
   {
    "id": "res_jade",
@@ -2618,9 +2757,10 @@
    "tier": null,
    "subject": "raw jade as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw jade as freshly gathered — a small pile or bundle",
-   "hash": "2148a1a1"
+   "hash": "2148a1a1",
+   "approved": "v1"
   },
   {
    "id": "res_kibble",
@@ -2630,9 +2770,10 @@
    "tier": 2,
    "subject": "kibble — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "kibble — a neat stack of this processed material",
-   "hash": "247c020a"
+   "hash": "247c020a",
+   "approved": "v0"
   },
   {
    "id": "res_leather",
@@ -2642,9 +2783,10 @@
    "tier": 2,
    "subject": "leather — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "leather — a neat stack of this processed material",
-   "hash": "0a16a9ac"
+   "hash": "0a16a9ac",
+   "approved": "v0"
   },
   {
    "id": "res_luciferium",
@@ -2654,9 +2796,10 @@
    "tier": 6,
    "subject": "luciferium — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "luciferium — a neat stack of this processed material",
-   "hash": "aa0c02c2"
+   "hash": "aa0c02c2",
+   "approved": "v0"
   },
   {
    "id": "res_machine_frame",
@@ -2666,9 +2809,10 @@
    "tier": 6,
    "subject": "machine frame — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "machine frame — a neat stack of this processed material",
-   "hash": "bc8751ec"
+   "hash": "bc8751ec",
+   "approved": "v0"
   },
   {
    "id": "res_marble",
@@ -2678,9 +2822,10 @@
    "tier": null,
    "subject": "raw marble as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw marble as freshly gathered — a small pile or bundle",
-   "hash": "382d70bb"
+   "hash": "382d70bb",
+   "approved": "v0"
   },
   {
    "id": "res_marble_block",
@@ -2690,9 +2835,10 @@
    "tier": 2,
    "subject": "marble block — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "marble block — a neat stack of this processed material",
-   "hash": "1a23e505"
+   "hash": "1a23e505",
+   "approved": "v0"
   },
   {
    "id": "res_meat",
@@ -2702,9 +2848,10 @@
    "tier": null,
    "subject": "raw meat as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw meat as freshly gathered — a small pile or bundle",
-   "hash": "106c3eb9"
+   "hash": "106c3eb9",
+   "approved": "v1"
   },
   {
    "id": "res_medicine",
@@ -2714,9 +2861,10 @@
    "tier": 6,
    "subject": "medicine — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "medicine — a neat stack of this processed material",
-   "hash": "6d826d4d"
+   "hash": "6d826d4d",
+   "approved": "v0"
   },
   {
    "id": "res_nails",
@@ -2726,9 +2874,10 @@
    "tier": 4,
    "subject": "nails — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "nails — a neat stack of this processed material",
-   "hash": "2c0bad4d"
+   "hash": "2c0bad4d",
+   "approved": "v1"
   },
   {
    "id": "res_neutroamine",
@@ -2738,9 +2887,10 @@
    "tier": 4,
    "subject": "neutroamine — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "neutroamine — a neat stack of this processed material",
-   "hash": "7afe2eb3"
+   "hash": "7afe2eb3",
+   "approved": "v1"
   },
   {
    "id": "res_penoxycyline",
@@ -2750,9 +2900,10 @@
    "tier": 4,
    "subject": "penoxycyline — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "penoxycyline — a neat stack of this processed material",
-   "hash": "9adb63d1"
+   "hash": "9adb63d1",
+   "approved": "v0"
   },
   {
    "id": "res_planks",
@@ -2762,9 +2913,10 @@
    "tier": 2,
    "subject": "planks — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "planks — a neat stack of this processed material",
-   "hash": "aa22e8f6"
+   "hash": "aa22e8f6",
+   "approved": "v1"
   },
   {
    "id": "res_plant_fiber",
@@ -2774,9 +2926,10 @@
    "tier": null,
    "subject": "raw plant fiber as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw plant fiber as freshly gathered — a small pile or bundle",
-   "hash": "a848674a"
+   "hash": "a848674a",
+   "approved": "v1"
   },
   {
    "id": "res_plasteel",
@@ -2786,9 +2939,10 @@
    "tier": 6,
    "subject": "plasteel — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "plasteel — a neat stack of this processed material",
-   "hash": "f8e1803d"
+   "hash": "f8e1803d",
+   "approved": "v1"
   },
   {
    "id": "res_psychite_tea",
@@ -2798,9 +2952,10 @@
    "tier": 2,
    "subject": "psychite tea — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "psychite tea — a neat stack of this processed material",
-   "hash": "46017fc6"
+   "hash": "46017fc6",
+   "approved": "v1"
   },
   {
    "id": "res_psychoid_leaves",
@@ -2810,9 +2965,10 @@
    "tier": null,
    "subject": "raw psychoid leaves as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw psychoid leaves as freshly gathered — a small pile or bundle",
-   "hash": "172e0e3f"
+   "hash": "172e0e3f",
+   "approved": "v1"
   },
   {
    "id": "res_raw_food",
@@ -2822,9 +2978,10 @@
    "tier": null,
    "subject": "raw raw food as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw raw food as freshly gathered — a small pile or bundle",
-   "hash": "80d5c859"
+   "hash": "80d5c859",
+   "approved": "v1"
   },
   {
    "id": "res_reinforced_plate",
@@ -2834,9 +2991,10 @@
    "tier": 6,
    "subject": "reinforced plate — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "reinforced plate — a neat stack of this processed material",
-   "hash": "ec35acd9"
+   "hash": "ec35acd9",
+   "approved": "v1"
   },
   {
    "id": "res_sand",
@@ -2846,9 +3004,10 @@
    "tier": null,
    "subject": "raw sand as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw sand as freshly gathered — a small pile or bundle",
-   "hash": "80777079"
+   "hash": "80777079",
+   "approved": "v0"
   },
   {
    "id": "res_scrap",
@@ -2858,9 +3017,10 @@
    "tier": null,
    "subject": "raw scrap as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw scrap as freshly gathered — a small pile or bundle",
-   "hash": "703e356f"
+   "hash": "703e356f",
+   "approved": "v1"
   },
   {
    "id": "res_silver",
@@ -2870,9 +3030,10 @@
    "tier": 2,
    "subject": "silver — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "silver — a neat stack of this processed material",
-   "hash": "848b44e1"
+   "hash": "848b44e1",
+   "approved": "v1"
   },
   {
    "id": "res_silver_ore",
@@ -2882,9 +3043,10 @@
    "tier": null,
    "subject": "raw silver ore as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw silver ore as freshly gathered — a small pile or bundle",
-   "hash": "1339e00c"
+   "hash": "1339e00c",
+   "approved": "v0"
   },
   {
    "id": "res_smokeleaf_joint",
@@ -2894,9 +3056,10 @@
    "tier": 2,
    "subject": "smokeleaf joint — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "smokeleaf joint — a neat stack of this processed material",
-   "hash": "2b205166"
+   "hash": "2b205166",
+   "approved": "v1"
   },
   {
    "id": "res_smokeleaf_leaves",
@@ -2906,9 +3069,10 @@
    "tier": null,
    "subject": "raw smokeleaf leaves as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw smokeleaf leaves as freshly gathered — a small pile or bundle",
-   "hash": "fa8b0b48"
+   "hash": "fa8b0b48",
+   "approved": "v1"
   },
   {
    "id": "res_steel",
@@ -2918,9 +3082,10 @@
    "tier": 4,
    "subject": "steel — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "steel — a neat stack of this processed material",
-   "hash": "a8939a91"
+   "hash": "a8939a91",
+   "approved": "v0"
   },
   {
    "id": "res_stone",
@@ -2930,9 +3095,10 @@
    "tier": null,
    "subject": "raw stone as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw stone as freshly gathered — a small pile or bundle",
-   "hash": "955bfa3d"
+   "hash": "955bfa3d",
+   "approved": "v1"
   },
   {
    "id": "res_stone_block",
@@ -2942,9 +3108,10 @@
    "tier": 2,
    "subject": "stone block — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "stone block — a neat stack of this processed material",
-   "hash": "90116916"
+   "hash": "90116916",
+   "approved": "v1"
   },
   {
    "id": "res_synthread",
@@ -2954,9 +3121,10 @@
    "tier": 2,
    "subject": "synthread — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "synthread — a neat stack of this processed material",
-   "hash": "b5a04430"
+   "hash": "b5a04430",
+   "approved": "v1"
   },
   {
    "id": "res_tin_bar",
@@ -2966,9 +3134,10 @@
    "tier": 2,
    "subject": "tin bar — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "tin bar — a neat stack of this processed material",
-   "hash": "e4e91fa5"
+   "hash": "e4e91fa5",
+   "approved": "v1"
   },
   {
    "id": "res_tin_ore",
@@ -2978,9 +3147,10 @@
    "tier": null,
    "subject": "raw tin ore as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw tin ore as freshly gathered — a small pile or bundle",
-   "hash": "42216535"
+   "hash": "42216535",
+   "approved": "v1"
   },
   {
    "id": "res_uranium",
@@ -2990,9 +3160,10 @@
    "tier": 2,
    "subject": "uranium — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "uranium — a neat stack of this processed material",
-   "hash": "a73f84ca"
+   "hash": "a73f84ca",
+   "approved": "v0"
   },
   {
    "id": "res_uranium_ore",
@@ -3002,9 +3173,10 @@
    "tier": null,
    "subject": "raw uranium ore as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw uranium ore as freshly gathered — a small pile or bundle",
-   "hash": "4030d299"
+   "hash": "4030d299",
+   "approved": "v0"
   },
   {
    "id": "res_wake_up",
@@ -3014,9 +3186,10 @@
    "tier": 4,
    "subject": "wake up — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "wake up — a neat stack of this processed material",
-   "hash": "0e1dfc37"
+   "hash": "0e1dfc37",
+   "approved": "v1"
   },
   {
    "id": "res_wood",
@@ -3039,9 +3212,10 @@
    "tier": null,
    "subject": "raw wool as freshly gathered — a small pile or bundle",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "raw wool as freshly gathered — a small pile or bundle",
-   "hash": "e6d223f1"
+   "hash": "e6d223f1",
+   "approved": "v0"
   },
   {
    "id": "res_wort",
@@ -3051,9 +3225,10 @@
    "tier": 2,
    "subject": "wort — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "wort — a neat stack of this processed material",
-   "hash": "3d7e889f"
+   "hash": "3d7e889f",
+   "approved": "v0"
   },
   {
    "id": "res_yayo",
@@ -3063,9 +3238,10 @@
    "tier": 4,
    "subject": "yayo — a neat stack of this processed material",
    "size": 128,
-   "status": "draft",
+   "status": "approved",
    "auto": "yayo — a neat stack of this processed material",
-   "hash": "8db94b3a"
+   "hash": "8db94b3a",
+   "approved": "v1"
   },
   {
    "id": "rsch_advanced_chemistry",
@@ -3075,8 +3251,9 @@
    "tier": 4,
    "subject": "emblem for the technology \"advanced chemistry\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"advanced chemistry\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"advanced chemistry\": one symbolic object that embodies it",
+   "hash": "2f945def"
   },
   {
    "id": "rsch_advanced_fabrication",
@@ -3086,8 +3263,9 @@
    "tier": 8,
    "subject": "emblem for the technology \"advanced fabrication\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"advanced fabrication\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"advanced fabrication\": one symbolic object that embodies it",
+   "hash": "9b892e93"
   },
   {
    "id": "rsch_advanced_metallurgy",
@@ -3097,8 +3275,9 @@
    "tier": 4,
    "subject": "emblem for the technology \"advanced metallurgy\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"advanced metallurgy\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"advanced metallurgy\": one symbolic object that embodies it",
+   "hash": "b9bc6470"
   },
   {
    "id": "rsch_advanced_prosthetics",
@@ -3108,8 +3287,9 @@
    "tier": 8,
    "subject": "emblem for the technology \"advanced prosthetics\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"advanced prosthetics\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"advanced prosthetics\": one symbolic object that embodies it",
+   "hash": "ace2ef15"
   },
   {
    "id": "rsch_advanced_textiles",
@@ -3119,8 +3299,9 @@
    "tier": 4,
    "subject": "emblem for the technology \"advanced textiles\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"advanced textiles\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"advanced textiles\": one symbolic object that embodies it",
+   "hash": "b57e2df2"
   },
   {
    "id": "rsch_advanced_weapons",
@@ -3130,8 +3311,9 @@
    "tier": 8,
    "subject": "emblem for the technology \"advanced weapons\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"advanced weapons\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"advanced weapons\": one symbolic object that embodies it",
+   "hash": "2b9707d5"
   },
   {
    "id": "rsch_agriculture",
@@ -3141,8 +3323,9 @@
    "tier": 1,
    "subject": "emblem for the technology \"agriculture\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"agriculture\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"agriculture\": one symbolic object that embodies it",
+   "hash": "ff83a286"
   },
   {
    "id": "rsch_automation",
@@ -3152,8 +3335,9 @@
    "tier": 7,
    "subject": "emblem for the technology \"automation\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"automation\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"automation\": one symbolic object that embodies it",
+   "hash": "195abc1d"
   },
   {
    "id": "rsch_bionics",
@@ -3163,8 +3347,9 @@
    "tier": 7,
    "subject": "emblem for the technology \"bionics\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"bionics\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"bionics\": one symbolic object that embodies it",
+   "hash": "961c9c29"
   },
   {
    "id": "rsch_brewing",
@@ -3174,8 +3359,9 @@
    "tier": 3,
    "subject": "emblem for the technology \"brewing\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"brewing\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"brewing\": one symbolic object that embodies it",
+   "hash": "a9d6ffc3"
   },
   {
    "id": "rsch_carpentry",
@@ -3185,8 +3371,9 @@
    "tier": 1,
    "subject": "emblem for the technology \"carpentry\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"carpentry\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"carpentry\": one symbolic object that embodies it",
+   "hash": "f9f9437d"
   },
   {
    "id": "rsch_chemistry",
@@ -3196,8 +3383,9 @@
    "tier": 4,
    "subject": "emblem for the technology \"chemistry\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"chemistry\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"chemistry\": one symbolic object that embodies it",
+   "hash": "9d672d0c"
   },
   {
    "id": "rsch_cooking",
@@ -3207,8 +3395,9 @@
    "tier": 2,
    "subject": "emblem for the technology \"cooking\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"cooking\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"cooking\": one symbolic object that embodies it",
+   "hash": "049bef33"
   },
   {
    "id": "rsch_defense_systems",
@@ -3218,8 +3407,9 @@
    "tier": 7,
    "subject": "emblem for the technology \"defense systems\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"defense systems\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"defense systems\": one symbolic object that embodies it",
+   "hash": "a3bf6c4b"
   },
   {
    "id": "rsch_drug_production",
@@ -3229,8 +3419,9 @@
    "tier": 5,
    "subject": "emblem for the technology \"drug production\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"drug production\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"drug production\": one symbolic object that embodies it",
+   "hash": "dba82782"
   },
   {
    "id": "rsch_electricity",
@@ -3240,8 +3431,9 @@
    "tier": 5,
    "subject": "emblem for the technology \"electricity\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"electricity\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"electricity\": one symbolic object that embodies it",
+   "hash": "f889163c"
   },
   {
    "id": "rsch_electronics",
@@ -3251,8 +3443,9 @@
    "tier": 6,
    "subject": "emblem for the technology \"electronics\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"electronics\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"electronics\": one symbolic object that embodies it",
+   "hash": "bdd3ffd9"
   },
   {
    "id": "rsch_fire_mastery",
@@ -3262,8 +3455,9 @@
    "tier": 1,
    "subject": "emblem for the technology \"fire mastery\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"fire mastery\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"fire mastery\": one symbolic object that embodies it",
+   "hash": "220d06e5"
   },
   {
    "id": "rsch_firearms",
@@ -3273,8 +3467,9 @@
    "tier": 5,
    "subject": "emblem for the technology \"firearms\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"firearms\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"firearms\": one symbolic object that embodies it",
+   "hash": "5da2d726"
   },
   {
    "id": "rsch_fortification",
@@ -3284,8 +3479,9 @@
    "tier": 6,
    "subject": "emblem for the technology \"fortification\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"fortification\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"fortification\": one symbolic object that embodies it",
+   "hash": "6b4abc18"
   },
   {
    "id": "rsch_geothermal_power",
@@ -3295,8 +3491,9 @@
    "tier": 5,
    "subject": "emblem for the technology \"geothermal power\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"geothermal power\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"geothermal power\": one symbolic object that embodies it",
+   "hash": "12eeaaa5"
   },
   {
    "id": "rsch_gunsmithing",
@@ -3306,8 +3503,9 @@
    "tier": 5,
    "subject": "emblem for the technology \"gunsmithing\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"gunsmithing\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"gunsmithing\": one symbolic object that embodies it",
+   "hash": "1cd02469"
   },
   {
    "id": "rsch_hunting",
@@ -3317,8 +3515,9 @@
    "tier": 1,
    "subject": "emblem for the technology \"hunting\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"hunting\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"hunting\": one symbolic object that embodies it",
+   "hash": "1d5105e1"
   },
   {
    "id": "rsch_husbandry",
@@ -3328,8 +3527,9 @@
    "tier": 3,
    "subject": "emblem for the technology \"husbandry\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"husbandry\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"husbandry\": one symbolic object that embodies it",
+   "hash": "b3b6de49"
   },
   {
    "id": "rsch_industrialization",
@@ -3339,8 +3539,9 @@
    "tier": 8,
    "subject": "emblem for the technology \"industrialization\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"industrialization\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"industrialization\": one symbolic object that embodies it",
+   "hash": "b7722a57"
   },
   {
    "id": "rsch_leatherworking",
@@ -3350,8 +3551,9 @@
    "tier": 2,
    "subject": "emblem for the technology \"leatherworking\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"leatherworking\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"leatherworking\": one symbolic object that embodies it",
+   "hash": "9005f32d"
   },
   {
    "id": "rsch_machining",
@@ -3361,8 +3563,9 @@
    "tier": 3,
    "subject": "emblem for the technology \"machining\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"machining\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"machining\": one symbolic object that embodies it",
+   "hash": "d07fcc2c"
   },
   {
    "id": "rsch_masonry",
@@ -3372,8 +3575,9 @@
    "tier": 1,
    "subject": "emblem for the technology \"masonry\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"masonry\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"masonry\": one symbolic object that embodies it",
+   "hash": "0e979970"
   },
   {
    "id": "rsch_medicine_research",
@@ -3383,8 +3587,9 @@
    "tier": 4,
    "subject": "emblem for the technology \"medicine research\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"medicine research\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"medicine research\": one symbolic object that embodies it",
+   "hash": "99576941"
   },
   {
    "id": "rsch_metallurgy",
@@ -3394,8 +3599,9 @@
    "tier": 3,
    "subject": "emblem for the technology \"metallurgy\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"metallurgy\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"metallurgy\": one symbolic object that embodies it",
+   "hash": "24585308"
   },
   {
    "id": "rsch_microelectronics",
@@ -3405,8 +3611,9 @@
    "tier": 7,
    "subject": "emblem for the technology \"microelectronics\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"microelectronics\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"microelectronics\": one symbolic object that embodies it",
+   "hash": "9d21c8b3"
   },
   {
    "id": "rsch_plasteel_working",
@@ -3416,8 +3623,9 @@
    "tier": 7,
    "subject": "emblem for the technology \"plasteel working\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"plasteel working\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"plasteel working\": one symbolic object that embodies it",
+   "hash": "947e0272"
   },
   {
    "id": "rsch_powered_armor",
@@ -3427,8 +3635,9 @@
    "tier": 8,
    "subject": "emblem for the technology \"powered armor\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"powered armor\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"powered armor\": one symbolic object that embodies it",
+   "hash": "8b5acf84"
   },
   {
    "id": "rsch_ship_construction",
@@ -3438,8 +3647,9 @@
    "tier": 9,
    "subject": "emblem for the technology \"ship construction\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"ship construction\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"ship construction\": one symbolic object that embodies it",
+   "hash": "bebaae6f"
   },
   {
    "id": "rsch_smelting",
@@ -3449,8 +3659,9 @@
    "tier": 2,
    "subject": "emblem for the technology \"smelting\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"smelting\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"smelting\": one symbolic object that embodies it",
+   "hash": "4ee84d58"
   },
   {
    "id": "rsch_smithing",
@@ -3460,8 +3671,9 @@
    "tier": 3,
    "subject": "emblem for the technology \"smithing\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"smithing\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"smithing\": one symbolic object that embodies it",
+   "hash": "8ecf8096"
   },
   {
    "id": "rsch_spacer_medicine",
@@ -3471,8 +3683,9 @@
    "tier": 8,
    "subject": "emblem for the technology \"spacer medicine\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"spacer medicine\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"spacer medicine\": one symbolic object that embodies it",
+   "hash": "72e50a01"
   },
   {
    "id": "rsch_spacer_tech",
@@ -3482,8 +3695,9 @@
    "tier": 8,
    "subject": "emblem for the technology \"spacer tech\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"spacer tech\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"spacer tech\": one symbolic object that embodies it",
+   "hash": "6725b767"
   },
   {
    "id": "rsch_steelmaking",
@@ -3493,8 +3707,9 @@
    "tier": 4,
    "subject": "emblem for the technology \"steelmaking\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"steelmaking\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"steelmaking\": one symbolic object that embodies it",
+   "hash": "f32fe46c"
   },
   {
    "id": "rsch_stonecarving",
@@ -3504,8 +3719,9 @@
    "tier": 3,
    "subject": "emblem for the technology \"stonecarving\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"stonecarving\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"stonecarving\": one symbolic object that embodies it",
+   "hash": "58e97b8f"
   },
   {
    "id": "rsch_textiles",
@@ -3515,8 +3731,9 @@
    "tier": 2,
    "subject": "emblem for the technology \"textiles\": one symbolic object that embodies it",
    "size": 128,
-   "status": "todo",
-   "auto": "emblem for the technology \"textiles\": one symbolic object that embodies it"
+   "status": "draft",
+   "auto": "emblem for the technology \"textiles\": one symbolic object that embodies it",
+   "hash": "0811d161"
   },
   {
    "id": "tile_dirt",

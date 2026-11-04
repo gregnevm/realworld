@@ -1,0 +1,36 @@
+{
+ "id": "bld_ship_structural_beam",
+ "kind": "sprite",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "fa47cee4",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 3017,
+  "candidatesTokenCount": 1529,
+  "totalTokenCount": 5936,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 777
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 1390,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 3357
+}
