@@ -126,7 +126,7 @@ func _t_world_fx() -> void:
 # Progressive disclosure: a panel shaped «VBox → header + rows» folds to its header on click; the rows keep
 # their own state/refs (nothing rebuilt — R2), and a panel can start folded.
 func _t_panel_fold() -> void:
-	var p = Panels.StockPanel.new()
+	var p = Panels.GoalsPanel.new()
 	p.build_once()
 	var rb: int = p.rebuild_count
 	var vb: Node = p.get_child(0)
@@ -923,7 +923,7 @@ func _t_touch_frame() -> void:
 	ok(top._tools[2].button_pressed, "the 🗑 tool reads armed")
 	var vit = preg.get_panel(&"vitals")
 	vit.bind(snap)
-	ok(vit._bar_grid.columns == 2 and not vit._carry.visible, "phone vitals pair their bars and drop the carry row")
+	ok(vit._meds.size() == 4 and not vit._carry.visible, "phone vitals: need medallions, no carry token (no bars)")
 	var c := Vector2i(int(sess.sim.player.px), int(sess.sim.player.py))
 	var store: Vector2i = sess.sim.base_center()
 	var rm: Dictionary = HudModel._inspect_slice(sess.sim, {"hover": store, "touch": true, "selected_build": String(WorldInput.WorldInput.REMOVE_TOOL)})

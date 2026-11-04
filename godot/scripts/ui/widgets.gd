@@ -517,8 +517,8 @@ class FlashWidget extends WidgetBase.Widget:
 # fade, then hide. Text is the sim's own feed (R10: drained by the bus, never read here directly).
 class FeedWidget extends WidgetBase.Widget:
 	const POOL := 5            # sized to sit under the default RIGHT dock (Stock + Balance) at 720p
-	const FADE_AT := 7.0       # seconds a card stays fully opaque
-	const GONE_AT := 10.0      # …then fades out by this age
+	const FADE_AT := 4.0       # seconds a card stays fully opaque
+	const GONE_AT := 5.5       # …then fades out by this age
 	const WIDTH := 290.0
 	const MAX_H := 205.0       # never climb into the RIGHT dock above: the oldest cards give way
 	var _max_cards := 3        # compact (phones): fewer, narrower cards — the map needs the room
@@ -737,3 +737,78 @@ class PanelMenu extends WidgetBase.Widget:
 	func entry_count() -> int:
 		return _btns.size()
 
+
+
+# ---- Medallion: the mobile-HUD status/resource token (round icon + state ring + number badge) ----
+# Replaces progress BARS (research 2026-11: mobile survival HUDs show needs as icon tokens, state by ring
+# colour + shape + number, urgency by motion — never colour alone, R11). Custom-drawn, build-once (R2):
+# bind() only swaps values. Size follows the frame (desktop 46 px; touch scale enlarges the whole UI).
+class Medallion extends WidgetBase.Widget:
+	const D := 46.0
+	var icon_tex: Texture2D = null
+	var glyph := ""
+	var value := ""
+	var label := ""
+	var state: StringName = &"good"     # good | warn | crit | info
+	var badge := true
+	var quiet_when_good := false        # needs: in the normal band the token is a dim icon, no number (The Long Dark / Don't Starve)
+	var _pulse := 0.0
+	func _build() -> void:
+		custom_minimum_size = Vector2(D, D + 12.0)
+		mouse_filter = Control.MOUSE_FILTER_PASS
+		draw.connect(_on_draw)
+		set_process(true)
+	func set_token(tex: Texture2D, glyph_fallback: String, lbl: String) -> void:
+		build_once()
+		icon_tex = tex
+		glyph = glyph_fallback
+		label = lbl
+		queue_redraw()
+	func bind(vm) -> void:
+		build_once()
+		if not (vm is Dictionary):
+			return
+		value = str(vm.get("value", value))
+		state = StringName(vm.get("state", state))
+		tooltip_text = "%s · %s" % [label, value] if label != "" else value
+		queue_redraw()
+	func _process(_dt: float) -> void:
+		if state == &"crit":
+			_pulse = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008)
+			queue_redraw()
+		elif _pulse != 0.0:
+			_pulse = 0.0
+			queue_redraw()
+	func _ring() -> Color:
+		match state:
+			&"crit": return Tokens.CRIT
+			&"warn": return Tokens.WARN
+			&"info": return Tokens.TEAL
+			_:       return Tokens.LINE2
+	func _on_draw() -> void:
+		var c := Vector2(size.x * 0.5, D * 0.5)
+		var r := D * 0.5 - 2.0
+		draw_circle(c + Vector2(0, 2), r + 1.0, Tokens.with_alpha(Tokens.BG, 0.55))          # drop shadow
+		draw_circle(c, r, Tokens.with_alpha(Tokens.PANEL, 0.92))
+		var ring := _ring()
+		var rw: float = (1.5 if quiet_when_good and state == &"good" else 3.0) + (2.0 * _pulse if state == &"crit" else 0.0)
+		draw_arc(c, r - rw * 0.5, 0, TAU, 40, ring, rw, true)
+		if state == &"crit":   # urgency is motion + a second halo, not only red
+			draw_arc(c, r + 3.0 + 3.0 * _pulse, 0, TAU, 40, Tokens.with_alpha(Tokens.CRIT, 0.45 * (1.0 - _pulse)), 2.0, true)
+		var isz := D * 0.58
+		var quiet: bool = quiet_when_good and state == &"good"
+		if icon_tex != null:
+			draw_texture_rect(icon_tex, Rect2(c - Vector2(isz, isz) * 0.5, Vector2(isz, isz)), false, Tokens.DIMMED if quiet else Tokens.WHITE)
+		elif glyph != "":
+			var gf: Font = ThemeDB.fallback_font
+			draw_string(gf, c + Vector2(-isz * 0.5, isz * 0.32), glyph, HORIZONTAL_ALIGNMENT_CENTER, isz, int(isz * 0.8), Tokens.INK)
+		if badge and value != "" and not quiet:
+			var f: Font = UITheme.display_font()
+			var fs := 13
+			var tw: float = f.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+			var pw: float = maxf(tw + 10.0, 22.0)
+			var pr := Rect2(c.x - pw * 0.5, D - 6.0, pw, 17.0)
+			draw_rect(pr, Tokens.with_alpha(Tokens.BG, 0.92))
+			draw_rect(pr, ring if state != &"good" else Tokens.LINE2, false, 1.0)
+			draw_string(f, Vector2(pr.position.x + (pw - tw) * 0.5, pr.position.y + 13.5), value, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
+				Tokens.urgency(state) if state != &"good" and state != &"info" else Tokens.INK)

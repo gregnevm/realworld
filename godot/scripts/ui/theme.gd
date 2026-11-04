@@ -17,6 +17,7 @@ const V_BAR     := &"RwBar"        # need-bar track / raised chip
 const V_MONO    := &"MonoValue"    # right-aligned numeric Label
 const V_CARD    := &"RwCard"       # translucent feed/flash/banner card over the world
 const V_TIP     := &"RwTip"        # hover-inspect tooltip (amber edge: «this is about the cursor»)
+const V_BARE    := &"RwBare"       # chromeless dock unit: the content (medallions) IS the HUD, no box behind it
 
 static func build() -> Theme:
 	install_emoji_fallback()
@@ -38,6 +39,10 @@ static func build() -> Theme:
 	# Feedback cards over the world: readable on snow AND water (opaque-ish ink panel).
 	t.set_type_variation(V_CARD, &"PanelContainer")
 	t.set_stylebox("panel", V_CARD, _sb_glass(Tokens.with_alpha(Tokens.PANEL, 0.92), Tokens.LINE2, 6, 8))
+	t.set_type_variation(V_BARE, &"PanelContainer")
+	var bare := StyleBoxEmpty.new()
+	bare.set_content_margin_all(2)
+	t.set_stylebox("panel", V_BARE, bare)
 	t.set_type_variation(V_TIP, &"PanelContainer")
 	t.set_stylebox("panel", V_TIP, _sb(Color(Tokens.PANEL2.r, Tokens.PANEL2.g, Tokens.PANEL2.b, 0.96), Tokens.AMBER, 6, 8))
 

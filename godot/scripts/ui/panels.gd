@@ -14,38 +14,37 @@ const Fmt = preload("res://scripts/ui/format.gd")
 
 # ---- StockPanel (RIGHT dock) — THE PROOF SLICE: Snapshot -> Panel -> Widget -> Tokens end to end ----
 class StockPanel extends PanelBase.Base:
-	const EXTRA_POOL := 8          # fixed pool of catalogue-stock lines (R2; slice caps to match)
-	var _rows: Dictionary = {}     # res id -> StatRow
-	var _extra: Array = []         # StatRow pool for catalogue-only resources (spec 0008 phase 4)
-	var _total: Widgets.StatRow
+	# Mobile-HUD redesign (2026-11): a bare row of resource medallions (icon + count badge, name in the
+	# tooltip) — Clash/Boom-Beach-style counters, no box, no header, no labels. Storage fill is the last token.
+	const EXTRA_POOL := 8          # fixed pool of catalogue-stock tokens (R2; slice caps to match)
+	const HOT := ["wood", "stone", "food", "scrap"]
+	var _rows: Dictionary = {}     # res id -> Medallion
+	var _extra: Array = []         # Medallion pool for catalogue-only resources (spec 0008 phase 4)
+	var _total: Widgets.Medallion
 	func _init() -> void:
-		panel_id = &"stock"; dock = PanelBase.DOCK_RIGHT; priority = 10; default_open = true
+		panel_id = &"stock"; dock = PanelBase.DOCK_RIGHT; priority = 10; default_open = true; bare = true
 		menu_label = "📦 Склад"; compact_open = 1
 	func _build() -> void:
 		rebuild_count += 1
-		var vb := VBoxContainer.new()
-		vb.add_theme_constant_override("separation", 5)
-		add_child(vb)
-		var head := Widgets.H2Header.new()
-		vb.add_child(head); head.set_header("Склад", "")
-		# icon + number tiles, two per line (RimWorld/Factorio resource readout): the label lives in the
-		# tooltip — six rows of «Дерево … 149» were 230 px of chrome for six numbers
-		var grid := GridContainer.new()
-		grid.columns = 2
-		grid.add_theme_constant_override("h_separation", 14)
-		grid.add_theme_constant_override("v_separation", 2)
-		vb.add_child(grid)
+		var flow := HFlowContainer.new()
+		flow.add_theme_constant_override("h_separation", 6)
+		flow.add_theme_constant_override("v_separation", 2)
+		flow.alignment = FlowContainer.ALIGNMENT_END
+		flow.custom_minimum_size = Vector2(330, 0)
+		add_child(flow)
 		for res in GameData.RES_ORDER:
-			var row := Widgets.StatRow.new()
-			grid.add_child(row); row.set_glyph_res(res); row.set_compact(true)
-			_rows[res] = row
+			var m := Widgets.Medallion.new()
+			flow.add_child(m)
+			m.set_token(ArtIcons.res(String(res)), String(GameData.RES[res].icon), String(GameData.RES[res].label))
+			_rows[res] = m
 		for i in EXTRA_POOL:
-			var xrow := Widgets.StatRow.new()
-			grid.add_child(xrow); xrow.set_row("•", "—", ""); xrow.set_compact(true)
-			xrow.visible = false
-			_extra.append(xrow)
-		_total = Widgets.StatRow.new()
-		vb.add_child(_total); _total.set_row("Σ", "Всього", "0")
+			var xm := Widgets.Medallion.new()
+			flow.add_child(xm)
+			xm.visible = false
+			_extra.append(xm)
+		_total = Widgets.Medallion.new()
+		flow.add_child(_total)
+		_total.set_token(ArtIcons.building("storage"), "Σ", "Склад заповнено")   # storage crate ≠ the hero's backpack
 	func bind(vm) -> void:
 		rebind_count += 1
 		build_once()
@@ -54,51 +53,64 @@ class StockPanel extends PanelBase.Base:
 		var st: Dictionary = vm.stock
 		var rows: Dictionary = st.rows
 		for res in _rows:
-			_rows[res].set_value(int(rows.get(res, 0)))
+			var n: int = int(rows.get(res, 0))
+			_rows[res].bind({"value": str(n), "state": &"crit" if (res == "food" and n < 10) else &"good"})
+			# hot resources always; the rest only once you actually hold some (contextual, mobile «subtraction»)
+			_rows[res].visible = HOT.has(String(res)) or n > 0
 		var extra: Array = st.get("extra", [])
 		for i in _extra.size():
 			if i < extra.size():
 				var e: Dictionary = extra[i]
-				_extra[i].set_row(String(e.icon), String(e.label), str(int(e.amt)), String(e.get("id", "")))
+				if _extra[i].label != String(e.label):
+					_extra[i].set_token(ArtIcons.res(String(e.get("id", ""))), String(e.icon), String(e.label))
+				_extra[i].bind({"value": str(int(e.amt)), "state": &"good"})
 				_extra[i].visible = true
 			else:
 				_extra[i].visible = false
-		_total.set_value("%d/%d" % [int(st.total), int(st.cap)])
+		var fill: float = float(st.total) / maxf(1.0, float(st.cap))
+		_total.bind({"value": "%d/%d" % [int(st.total), int(st.cap)], "state": &"crit" if fill >= 0.98 else (&"warn" if fill >= 0.85 else &"good")})
 
 # ---- VitalsPanel (LEFT dock) — hero need bars (HP/hunger/rest/blood) + located-health readout ----
 class VitalsPanel extends PanelBase.Base:
-	var _bars: Array = []          # NeedBar instances, in bar order
-	var _bar_grid: GridContainer   # 1 column on desktop, 2×2 on a phone (same bars, no rebuild — R2)
+	# Mobile-HUD redesign (2026-11): no bars, no header, no box. A row of medallions — health, hunger,
+	# rest, warmth (+ carry) — whose ring colour/shape/number says the state; blood and afflictions appear
+	# ONLY while active (The Long Dark pattern). Fixed widget pool, bind() swaps values (R2).
+	var _meds: Array = []          # Medallion per need bar (hp, hunger, rest, blood) in slice order
+	var _warm: Widgets.Medallion   # felt °C + comfort state
+	var _carry: Widgets.Medallion
+	var _row: HBoxContainer
+	var _cond: Label               # active afflictions only; hidden when healthy
 	var _touch := false
-	var _felt: Widgets.StatRow     # felt °C + comfort enum icon (R11: icon+число, не лише колір)
-	var _state: Widgets.StatRow    # worst hediff inspect line / здоровий / непритомний
-	var _carry: Widgets.StatRow
 	func _init() -> void:
-		panel_id = &"vitals"; dock = PanelBase.DOCK_LEFT; priority = 10; default_open = true
+		panel_id = &"vitals"; dock = PanelBase.DOCK_LEFT; priority = 10; default_open = true; bare = true
 		menu_label = "❤ Життєві"; compact_open = 1
 	func _build() -> void:
 		rebuild_count += 1
 		var vb := VBoxContainer.new()
-		vb.add_theme_constant_override("separation", 5)
+		vb.add_theme_constant_override("separation", 2)
 		add_child(vb)
-		var head := Widgets.H2Header.new()
-		vb.add_child(head); head.set_header("Життєві", "need")
-		_bar_grid = GridContainer.new()
-		_bar_grid.columns = 1
-		_bar_grid.add_theme_constant_override("h_separation", 10)
-		_bar_grid.add_theme_constant_override("v_separation", 5)
-		vb.add_child(_bar_grid)
+		_row = HBoxContainer.new()
+		_row.add_theme_constant_override("separation", 6)
+		vb.add_child(_row)
 		for i in 4:
-			var bar := Widgets.NeedBar.new()
-			bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			_bar_grid.add_child(bar)
-			_bars.append(bar)
-		_felt = Widgets.StatRow.new()
-		vb.add_child(_felt); _felt.set_row("🌡", "Відчуття", "—")
-		_state = Widgets.StatRow.new()
-		vb.add_child(_state); _state.set_row("🩺", "Стан", "—")
-		_carry = Widgets.StatRow.new()
-		vb.add_child(_carry); _carry.set_row("🎒", "Несе", "0/0")
+			var m := Widgets.Medallion.new()
+			m.quiet_when_good = true
+			_row.add_child(m)
+			_meds.append(m)
+		_warm = Widgets.Medallion.new()
+		_warm.quiet_when_good = true
+		_row.add_child(_warm)
+		_warm.set_token(ArtIcons.for_glyph("🌡"), "🌡", "Відчуття")
+		_carry = Widgets.Medallion.new()
+		_row.add_child(_carry)
+		_carry.set_token(ArtIcons.for_glyph("🎒"), "🎒", "Несе")
+		_cond = Label.new()
+		_cond.add_theme_font_size_override("font_size", 13)
+		_cond.add_theme_color_override("font_color", Tokens.CRIT)
+		_cond.add_theme_color_override("font_outline_color", Tokens.BG)
+		_cond.add_theme_constant_override("outline_size", 4)
+		_cond.visible = false
+		vb.add_child(_cond)
 	func bind(vm) -> void:
 		rebind_count += 1
 		build_once()
@@ -106,23 +118,31 @@ class VitalsPanel extends PanelBase.Base:
 			return
 		var v: Dictionary = vm.vitals
 		var bars: Array = v.bars
-		for i in mini(_bars.size(), bars.size()):
-			_bars[i].bind(bars[i])
-			_bars[i].tooltip_text = "%s: %d%%" % [String(bars[i].get("label", "")), int(bars[i].get("pct", 0))]
-		_felt.set_value("%s %s" % [Fmt.temp(float(v.get("felt_c", 20.0))), Fmt.comfort_icon(StringName(v.get("comfort", &"ok")))])
-		var conds: Array = v.get("conditions", [])
-		var state_line: String = "😵 непритомний" if bool(v.get("downed", false)) else ("✔ здоровий" if conds.is_empty() else String(conds[0]))
-		if not conds.is_empty() and bool(v.get("downed", false)):
-			state_line += " · " + String(conds[0])
-		_state.set_value(state_line)
-		_state.tooltip_text = "\n".join(conds) if not conds.is_empty() else "Жодних уражень"
+		for i in mini(_meds.size(), bars.size()):
+			var bar: Dictionary = bars[i]
+			var pct: int = int(bar.get("pct", 0))
+			if _meds[i].label == "":
+				_meds[i].set_token(ArtIcons.for_glyph(String(bar.get("icon", ""))), String(bar.get("icon", "")), String(bar.get("label", "")))
+			_meds[i].bind({"value": "%d" % pct, "state": bar.get("state", &"good")})
+			# blood is an affliction channel: shown only while bleeding/low (index 3 in the slice)
+			if i == 3:
+				_meds[i].visible = pct < 100
+		var felt := float(v.get("felt_c", 20.0))
+		var comfort := StringName(v.get("comfort", &"ok"))
+		var wstate: StringName = &"good" if comfort == &"ok" else (&"crit" if absf(felt - 18.0) > 22.0 else &"warn")
+		_warm.bind({"value": "%d°" % int(round(felt)), "state": wstate})
 		var carry: Dictionary = v.carry
-		_carry.set_value("%d/%d" % [int(carry.cur), int(carry.cap)])
+		_carry.bind({"value": "%d/%d" % [int(carry.cur), int(carry.cap)], "state": &"info" if int(carry.cur) > 0 else &"good"})
+		var conds: Array = v.get("conditions", [])
+		var downed := bool(v.get("downed", false))
+		var line: String = ("😵 непритомний · " if downed else "") + (String(conds[0]) if not conds.is_empty() else "")
+		_cond.text = line.trim_suffix(" · ")
+		_cond.visible = _cond.text != ""
+		_cond.tooltip_text = "\n".join(conds)
 		var touch := bool((vm.get("ui", {}) as Dictionary).get("touch", false))
 		if touch != _touch:
 			_touch = touch
-			_bar_grid.columns = 2 if touch else 1   # a phone's dock is short: bars pair up
-			_carry.visible = not touch             # the haul loop runs itself; the bar is spare
+			_carry.visible = not touch             # the haul loop runs itself; a phone has no spare width
 
 # ---- PowerPanel (RIGHT dock) — the grid readout (Batch 8c): supply/draw/battery + brownout state ----
 class PowerPanel extends PanelBase.Base:
@@ -328,7 +348,7 @@ class BuildBarPanel extends PanelBase.Base:
 	var _scroll: ScrollContainer   # the palette scrolls sideways when the screen is narrower (phones)
 	var _guide := ""               # build kind the current onboarding goal is about → that slot pulses
 	var _hb: HBoxContainer
-	var _touch_sized := false
+	var _sized_for := -1           # 0 desktop / 1 touch the slots were last sized for; -1 = never (first _fit sizes)
 	func _init() -> void:
 		panel_id = &"build_bar"; dock = PanelBase.DOCK_BAR; priority = 10; default_open = true
 	func _build() -> void:
@@ -382,12 +402,14 @@ class BuildBarPanel extends PanelBase.Base:
 				var s: Dictionary = slots[i]
 				_keys[i] = String(s.get("key", ""))
 				var locked := bool(s.get("locked", false))
-				var name := ("🔒 " + String(s.get("name", ""))) if locked else String(s.get("name", ""))
-				_btns[i].text = "%s %s\n%s" % [String(s.get("hotkey", "")), name, String(s.get("cost", ""))]
+				# icon-only slot (mobile best practice: glyph in a ≥48 px target, label + cost in the tooltip);
+				# the visible text is just the hotkey digit (or the lock) — the art says what it is
+				_btns[i].text = "🔒" if locked else String(s.get("hotkey", ""))
 				_btns[i].icon = ArtIcons.building(_keys[i])
+				var tip_head := "%s  ·  %s" % [String(s.get("name", "")), String(s.get("cost", ""))]
 				_btns[i].disabled = locked   # замок дерева досліджень: слот видно (ціль!), тиснути — ні
 				_btns[i].set_pressed_no_signal(bool(s.get("selected", false)))
-				_btns[i].tooltip_text = String(s.get("tip", ""))
+				_btns[i].tooltip_text = tip_head + ("\n" + String(s.get("tip", "")) if String(s.get("tip", "")) != "" else "")
 				var base_mod: Color = Tokens.WHITE if (bool(s.get("afford", false)) and not locked) else Tokens.DIMMED
 				if _keys[i] == _guide and not locked and not bool(s.get("selected", false)):
 					# onboarding pulse: the slot the current goal needs breathes amber (shape+motion, not colour alone)
@@ -404,11 +426,11 @@ class BuildBarPanel extends PanelBase.Base:
 
 	# Finger-sized slots on touch; the palette never runs off a narrow screen — it scrolls instead.
 	func _fit(touch: bool) -> void:
-		if touch != _touch_sized:
-			_touch_sized = touch
+		if int(touch) != _sized_for:
+			_sized_for = int(touch)
 			for b in _btns:
-				b.custom_minimum_size = Vector2(64, 66) if touch else Vector2(84, 74)
-				b.add_theme_constant_override("icon_max_width", 26 if touch else 36)
+				b.custom_minimum_size = Vector2(56, 58) if touch else Vector2(58, 62)
+				b.add_theme_constant_override("icon_max_width", 34 if touch else 38)
 		var need: Vector2 = _hb.get_combined_minimum_size()
 		var avail: float = maxf(200.0, get_viewport_rect().size.x - 44.0)
 		_scroll.custom_minimum_size = Vector2(minf(need.x, avail), need.y + (10.0 if need.x > avail else 0.0))
@@ -654,9 +676,17 @@ class GoalsPanel extends PanelBase.Base:
 		_title.text = String(cur.get("title", ""))
 		var touch := bool((vm.get("ui", {}) as Dictionary).get("touch", false))
 		_hint.text = Fmt.touchify(String(cur.get("hint", ""))) if touch else String(cur.get("hint", ""))
+		# objective CHIP: one line (title · n/N); the how-to lives in the tooltip and the pulsing build slot
+		_count.visible = false
+		_hint.visible = false
+		tooltip_text = _hint.text
+		_title.tooltip_text = _hint.text
+		_title.mouse_filter = Control.MOUSE_FILTER_PASS
 		var pct: int = int(round(float(cur.get("pct", 0.0)) * 100.0))
-		_bar.visible = true
-		_bar.bind({"icon": "◎", "pct": pct, "state": &"good" if pct >= 100 else &"warn"})
+		_bar.visible = false   # no progress bar (HUD diet): progress rides the title as a number when it means something
+		if pct > 0 and pct < 100:
+			_title.text += "  ·  %d%%" % pct
 		var nxt := String(g.get("next", ""))
 		_next.text = ("далі: " + nxt) if nxt != "" else ""
-		_next.visible = nxt != ""
+		_next.visible = false
+		_title.text += "   %d/%d" % [int(g.get("done", 0)), int(g.get("total", 0))]

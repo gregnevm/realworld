@@ -23,6 +23,7 @@ class Base extends PanelContainer:
 	var priority: int = 0
 	var hotkey: int = 0            # KEY_* toggle, 0 = none (metadata, not a switch — R12)
 	var default_open := false
+	var bare := false              # chromeless: medallion clusters float on the world without a panel box
 	# design-system §2 «advanced panels open on first relevance»: a hidden panel with reveal_once set
 	# is shown ONCE, the first frame wants_reveal(snapshot) says it has something to show; after that
 	# the player owns its visibility (a hotkey/close never fights a re-reveal).
@@ -36,7 +37,7 @@ class Base extends PanelContainer:
 	var rebind_count := 0
 
 	func _ready() -> void:
-		theme_type_variation = &"RwPanel"   # == UITheme.V_PANEL
+		theme_type_variation = &"RwBare" if bare else &"RwPanel"   # == UITheme.V_BARE / V_PANEL
 		build_once()
 
 	var collapsed_default := false     # start folded (long, secondary panels: the player unfolds on demand)
