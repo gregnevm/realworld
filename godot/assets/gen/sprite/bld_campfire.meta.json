@@ -1,0 +1,35 @@
+{
+ "id": "bld_campfire",
+ "kind": "sprite",
+ "variant": 3,
+ "model": "gemini-2.5-flash-image",
+ "hash": "f57711c5",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 1154,
+  "candidatesTokenCount": 1290,
+  "totalTokenCount": 2444,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 638
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 516
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1290
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v3",
+ "prompt_chars": 2651
+}

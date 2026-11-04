@@ -1,0 +1,35 @@
+{
+ "id": "actor_raider",
+ "kind": "actor",
+ "variant": 1,
+ "model": "gemini-2.5-flash-image",
+ "hash": "65db58e0",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 1054,
+  "candidatesTokenCount": 1290,
+  "totalTokenCount": 2344,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 538
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 516
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1290
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v1",
+ "prompt_chars": 2295
+}

@@ -11,6 +11,8 @@
 //       --only a,b   --kind icon|sprite|actor|tile|ui|ref   --prefix bld_   --n 2   --limit 12
 //       --model gemini-2.5-flash-image   --force   --dry (print prompts, no API)   --concurrency 2
 //   node tools/gen-art.mjs approve <id>[@vN]  candidate → godot/assets/gen/<kind>/<id>.png (refs → art/refs/)
+//   node tools/gen-art.mjs repost [--only a,b] [--kind k]   re-run post.py over saved raws (no API, no spend)
+//   post.py needs Pillow + numpy; --palette opts into the palette snap (manifest `palette: true` per asset)
 //
 // Key lookup order: $GEMINI_API_KEY → $GEMINI_KEY_FILE → <repo>/.env.local → <repo>/.env.
 // The key is never printed (masked AIza…xxxx), never written to meta, never committed (lint secret-scan).
@@ -190,8 +192,31 @@ function postProcess(raw, out, asset) {
   const args = ["-I", P("tools", "art", "post.py"), raw, out, "--size", String(asset.size ?? k.size)];
   if (k.key) args.push("--key");
   if (asset.kind === "tile") args.push("--tile");
-  if (asset.palette !== false && ["sprite", "actor", "tile"].includes(asset.kind)) args.push("--palette", P("art", "palette.json"));
-  execFileSync("python3", args, { stdio: "inherit" });
+  // Palette snap is opt-in (manifest `palette: true` or --palette): on painterly renders it posterizes.
+  if (asset.palette === true || flag("palette")) args.push("--palette", P("art", "palette.json"));
+  execFileSync(PYTHON, args, { stdio: "inherit" });
+}
+
+// `python3` does not exist on stock Windows (it is `python`/`py`); $PYTHON overrides.
+const PYTHON = process.env.PYTHON || (process.platform === "win32" ? "python" : "python3");
+
+// Re-run post-processing over existing raw renders — no API call, no spend. For tuning post.py.
+function cmdRepost() {
+  const manifest = readJSON(MANIFEST, null) || die("немає manifest");
+  const only = opt("only") ? new Set(opt("only").split(",")) : null;
+  let n = 0;
+  for (const a of manifest.assets) {
+    if (only && !only.has(a.id)) continue;
+    if (opt("kind") && a.kind !== opt("kind")) continue;
+    const dir = path.join(OUT, a.kind, a.id);
+    for (const v of [...new Set(versions(dir))].sort((x, y) => x - y)) {
+      const raw = path.join(dir, `v${v}.raw.png`);
+      if (!fs.existsSync(raw)) continue;
+      postProcess(raw, path.join(dir, `v${v}.png`), a);
+      n++;
+    }
+  }
+  console.log(`✔ перероблено ${n} кандидатів (без API)`);
 }
 
 async function pool(items, n, fn) {
@@ -294,9 +319,10 @@ const commands = {
   status: cmdStatus,
   gen: cmdGen,
   approve: cmdApprove,
+  repost: cmdRepost,
 };
 if (!commands[cmd]) {
-  console.log(fs.readFileSync(url.fileURLToPath(import.meta.url), "utf8").split("\n").slice(1, 18).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
+  console.log(fs.readFileSync(url.fileURLToPath(import.meta.url), "utf8").split("\n").slice(1, 20).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
   process.exit(cmd ? 1 : 0);
 }
 Promise.resolve(commands[cmd]()).catch((e) => die(e.message));

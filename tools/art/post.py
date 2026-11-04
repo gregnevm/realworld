@@ -1,88 +1,110 @@
 #!/usr/bin/env python3
 """RealWorld — tools/art/post.py : post-process one Nano Banana render into a game-ready PNG.
 
-Nano Banana never returns alpha and never returns an exact pixel size, so every candidate goes through:
-  1. --key     chroma-key the flat magenta (#FF00FF) background to alpha — flood-filled FROM THE BORDER only,
-               so magenta-ish pixels inside the subject (a purple crystal, a pink cloth) survive; then
-               de-spill the magenta fringe on the remaining edge pixels;
-  2. trim      crop to the alpha bbox, pad to a square with a small margin (subject centered);
-  3. --tile    tiles skip keying/trim: center-crop to square instead;
-  4. resize    LANCZOS down to --size (masters stay painterly; Godot filters/mipmaps from here);
-  5. --palette snap RGB to the shared palette (art/palette.json) without dithering — one palette across
-               every sprite is what makes 300+ independently generated images read as ONE world.
+Requires Pillow + numpy (`pip install pillow numpy`). Lessons from the first live batch (2026-11-04) are
+baked in — the model does NOT paint the requested #FF00FF: the muted-palette bible pulls the "magenta"
+to ~(190,50,112), adds a soft vignette and a darker cast shadow in the same hue. So keying is ADAPTIVE:
+
+  --key     1. estimate the real background from the 3-px border ring (robust mode, any flat color);
+            2. a pixel is background-family when its CHROMATICITY (r,g,b)/sum matches the bg — lighter
+               (vignette) or darker (cast shadow) variants of the same hue;
+               lit bg → alpha 0 · shadowed bg → soft black shadow (alpha ≤ 0.5);
+            3. anti-aliased rim (≤3 px from keyed area): alpha from RGB distance to bg, color UN-MIXED
+               (c - (1-a)·bg)/a — no magenta fringe;
+            then trim to the alpha bbox and pad to a centered square.
+  --tile    strip a uniform frame the model may copy from the swatch-card reference, inset, square-crop,
+            then cross-fade the edges so the texture wraps seamlessly (verified by --check-seam metric).
+  resize    premultiplied (RGBa) LANCZOS to --size, so transparent pixels never bleed dark halos.
+  --palette optional snap to art/palette.json (no dither). Off by default: on painterly renders it
+            posterizes; consistency comes from the style bible + reference anchors.
 
 Usage: python3 -I tools/art/post.py IN.png OUT.png --size 128 [--key] [--tile] [--palette art/palette.json]
-Pillow only; no other deps.
 """
 import argparse
 import json
-from collections import deque
+import sys
 
+import numpy as np
 from PIL import Image
 
-KEY_RGB = (255, 0, 255)
+CHROMA_TOL = 0.045   # L2 distance in chromaticity space that still counts as "same hue as bg"
+LIT_RATIO = 0.80     # luminance ratio vs bg above which a bg-hue pixel is plain background
+SHADOW_MAX = 0.5     # alpha ceiling for converted cast shadows
+RIM_PX = 3
+RIM_LO, RIM_HI = 28.0, 120.0  # RGB distance → alpha ramp on the anti-aliased rim
+TINT_PX, TINT_TOL = 24, 0.15  # despill band width / chroma reach (palette red & violet sit at ≥0.2)
 
 
-def is_key(px, tol):
-    r, g, b = px[0], px[1], px[2]
-    # magenta: red and blue high and close to each other, green clearly lower.
-    return r > 255 - tol * 2 and b > 255 - tol * 2 and g < tol * 2 + 40 and abs(r - b) < tol + 30
+def estimate_bg(rgb):
+    h, w, _ = rgb.shape
+    ring = np.concatenate([rgb[:3].reshape(-1, 3), rgb[-3:].reshape(-1, 3),
+                           rgb[:, :3].reshape(-1, 3), rgb[:, -3:].reshape(-1, 3)])
+    med = np.median(ring, axis=0)
+    d = np.linalg.norm(ring - med, axis=1)
+    core = ring[d <= np.percentile(d, 60)]
+    spread = float(np.percentile(d, 60))
+    return core.mean(axis=0), spread
 
 
-def chroma_key(img, tol=48):
-    img = img.convert("RGBA")
-    w, h = img.size
-    px = img.load()
-    seen = bytearray(w * h)
-    q = deque()
-    for x in range(w):
-        q.append((x, 0))
-        q.append((x, h - 1))
-    for y in range(h):
-        q.append((0, y))
-        q.append((w - 1, y))
-    while q:
-        x, y = q.popleft()
-        i = y * w + x
-        if seen[i]:
-            continue
-        seen[i] = 1
-        if not is_key(px[x, y], tol):
-            continue
-        px[x, y] = (0, 0, 0, 0)
-        if x > 0:
-            q.append((x - 1, y))
-        if x < w - 1:
-            q.append((x + 1, y))
-        if y > 0:
-            q.append((x, y - 1))
-        if y < h - 1:
-            q.append((x, y + 1))
-    # de-spill: pixels touching transparency lose the magenta cast and get a soft alpha edge.
-    for y in range(h):
-        for x in range(w):
-            r, g, b, a = px[x, y]
-            if a == 0:
-                continue
-            edge = any(
-                0 <= nx < w and 0 <= ny < h and px[nx, ny][3] == 0
-                for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1))
-            )
-            if not edge:
-                continue
-            m = min(r, b)
-            if m > g:
-                spill = m - g
-                r, b = r - spill, b - spill
-                a = max(0, 255 - int(spill * 1.4))
-            px[x, y] = (r, g, b, a)
-    return img
+def chroma(rgb):
+    s = rgb.sum(axis=-1, keepdims=True)
+    return rgb / np.maximum(s, 1.0)
+
+
+def dilate(mask, px):
+    m = mask.copy()
+    for _ in range(px):
+        g = m.copy()
+        g[1:] |= m[:-1]
+        g[:-1] |= m[1:]
+        g[:, 1:] |= m[:, :-1]
+        g[:, :-1] |= m[:, 1:]
+        m = g
+    return m
+
+
+def chroma_key(img):
+    rgb = np.asarray(img.convert("RGB"), dtype=np.float32)
+    bg, spread = estimate_bg(rgb)
+    if spread > 40:
+        print(f"post.py: warning — border is not a flat background (spread {spread:.0f}); keying may be partial",
+              file=sys.stderr)
+    cd = np.linalg.norm(chroma(rgb) - chroma(bg[None, None, :])[0, 0], axis=-1)
+    lum = rgb.sum(axis=-1) / max(float(bg.sum()), 1.0)
+    family = cd < CHROMA_TOL
+    lit = family & (lum >= LIT_RATIO)
+    shadow = family & (lum < LIT_RATIO)
+
+    out = np.dstack([rgb, np.full(rgb.shape[:2], 255.0, dtype=np.float32)])
+    out[lit, 3] = 0.0
+    out[shadow, :3] = 0.0
+    out[shadow, 3] = np.clip((LIT_RATIO - lum[shadow]) / LIT_RATIO, 0.0, SHADOW_MAX) * 255.0
+
+    rim = dilate(lit, RIM_PX) & ~family
+    if rim.any():
+        dist = np.linalg.norm(rgb[rim] - bg, axis=-1)
+        a = np.clip((dist - RIM_LO) / (RIM_HI - RIM_LO), 0.0, 1.0)
+        safe = np.maximum(a, 1e-3)[:, None]
+        unmixed = (rgb[rim] - (1.0 - a)[:, None] * bg) / safe
+        out[rim, :3] = np.clip(unmixed, 0, 255)
+        out[rim, 3] = a * 255.0
+
+    # Translucent wisps (smoke, steam, glow) composited over the key keep its hue. In a band near the keyed
+    # area, pixels still LEANING toward the bg chroma are re-read as grey of the same luminance and faded by
+    # how bg-like they are. Distance-gated, so purple/red details inside a subject are untouched.
+    lean = dilate(lit, TINT_PX) & ~family & ~rim & (cd < TINT_TOL)
+    if lean.any():
+        w = np.clip(1.0 - (cd[lean] - CHROMA_TOL) / (TINT_TOL - CHROMA_TOL), 0.0, 1.0)[:, None]
+        grey = rgb[lean].mean(axis=-1, keepdims=True)
+        out[lean, :3] = rgb[lean] * (1.0 - w) + grey * w
+        out[lean, 3] = 255.0 * (1.0 - 0.6 * w[:, 0])
+    return Image.fromarray(out.round().astype(np.uint8), "RGBA")
 
 
 def trim_square(img, margin=0.06):
     bbox = img.getchannel("A").point(lambda v: 255 if v > 16 else 0).getbbox()
     if not bbox:
-        raise SystemExit("post.py: chroma-key removed everything — background was not flat magenta?")
+        raise SystemExit("post.py: keying removed everything — background was not flat?")
     img = img.crop(bbox)
     w, h = img.size
     side = int(max(w, h) * (1 + margin * 2))
@@ -91,26 +113,86 @@ def trim_square(img, margin=0.06):
     return canvas
 
 
-def center_square(img):
-    w, h = img.size
-    s = min(w, h)
-    return img.crop(((w - s) // 2, (h - s) // 2, (w - s) // 2 + s, (h - s) // 2 + s))
+def strip_frame(rgb, max_frac=0.2, std_tol=9.0):
+    """Peel uniform rows/cols (a swatch-card frame/padding) off each side."""
+    lum = rgb.mean(axis=-1)
+    h, w = lum.shape
+    top, bot, left, right = 0, h, 0, w
+    while top < h * max_frac and lum[top].std() < std_tol:
+        top += 1
+    while h - bot < h * max_frac and lum[bot - 1].std() < std_tol:
+        bot -= 1
+    while left < w * max_frac and lum[:, left].std() < std_tol:
+        left += 1
+    while w - right < w * max_frac and lum[:, right - 1].std() < std_tol:
+        right -= 1
+    # frames are usually a dark card + a 1–2 px bevel: inset a little more once a frame was found
+    pad = int((0.035 if (top or left or h - bot or w - right) else 0.02) * min(h, w))
+    return rgb[top + pad:bot - pad, left + pad:right - pad]
+
+
+def seamless(rgb, frac=0.125):
+    """Cross-fade overlap: output is (n - o) wide, the first o columns blend in the last o, so col 0 continues
+    from col n-o-1. Applied per axis. Returns a strictly periodic texture."""
+    for axis in (1, 0):
+        n = rgb.shape[axis]
+        o = max(2, int(n * frac))
+        m = n - o
+        a = np.moveaxis(rgb, axis, 0)
+        t = a[:m].copy()
+        ramp = (np.arange(o, dtype=np.float32) / o)[(slice(None),) + (None,) * (a.ndim - 1)]
+        t[:o] = a[m:m + o] * (1.0 - ramp) + a[:o] * ramp
+        rgb = np.moveaxis(t, 0, axis)
+    return rgb
+
+
+def seam_score(rgb):
+    """Mean abs jump across the wrap boundary relative to the mean interior neighbour jump (≈1 = seamless)."""
+    f = rgb.astype(np.float32)
+    inner = (np.abs(np.diff(f, axis=1)).mean() + np.abs(np.diff(f, axis=0)).mean()) / 2
+    wrap = (np.abs(f[:, 0] - f[:, -1]).mean() + np.abs(f[0] - f[-1]).mean()) / 2
+    return float(wrap / max(inner, 1e-6))
+
+
+def tile(img):
+    rgb = np.asarray(img.convert("RGB"), dtype=np.float32)
+    rgb = strip_frame(rgb)
+    h, w, _ = rgb.shape
+    s = min(h, w)
+    rgb = rgb[(h - s) // 2:(h - s) // 2 + s, (w - s) // 2:(w - s) // 2 + s]
+    rgb = seamless(rgb)
+    return Image.fromarray(np.clip(rgb, 0, 255).round().astype(np.uint8), "RGB").convert("RGBA")
 
 
 def apply_palette(img, palette_path):
     with open(palette_path, encoding="utf-8") as f:
-        colors = json.load(f)["colors"]
+        colors = json.load(f)["colors"][:256]
     flat = []
-    for hx in colors[:256]:
+    for hx in colors:
         hx = hx.lstrip("#")
         flat += [int(hx[0:2], 16), int(hx[2:4], 16), int(hx[4:6], 16)]
     pal_img = Image.new("P", (1, 1))
-    pal_img.putpalette(flat + flat[:3] * (256 - len(flat) // 3))
-    rgba = img.convert("RGBA")
-    alpha = rgba.getchannel("A")
-    snapped = rgba.convert("RGB").quantize(palette=pal_img, dither=Image.Dither.NONE).convert("RGB")
+    pal_img.putpalette(flat + flat[:3] * (256 - len(colors)))  # pad by repeating color 0 — never a new color
+    alpha = img.getchannel("A")
+    snapped = img.convert("RGB").quantize(palette=pal_img, dither=Image.Dither.NONE).convert("RGB")
     snapped.putalpha(alpha)
     return snapped
+
+
+def resize_wrapped(img, size):
+    """Resize a periodic texture as a 3×3 mosaic and keep the center, so the filter sees wrapped neighbours
+    at the edges (a plain resize clamps at the border and re-opens the seam)."""
+    w, h = img.size
+    big = Image.new(img.mode, (w * 3, h * 3))
+    for i in range(3):
+        for j in range(3):
+            big.paste(img, (i * w, j * h))
+    big = big.resize((size * 3, size * 3), Image.LANCZOS)
+    return big.crop((size, size, size * 2, size * 2))
+
+
+def resize_premultiplied(img, size):
+    return img.convert("RGBa").resize((size, size), Image.LANCZOS).convert("RGBA")
 
 
 def main():
@@ -125,15 +207,18 @@ def main():
 
     img = Image.open(a.src)
     if a.tile:
-        img = center_square(img.convert("RGBA"))
+        img = tile(img)
     elif a.key:
         img = trim_square(chroma_key(img))
     else:
         img = img.convert("RGBA")
     if a.size > 0 and img.size[0] != a.size:
-        img = img.resize((a.size, a.size), Image.LANCZOS)
+        img = resize_wrapped(img, a.size) if a.tile else resize_premultiplied(img, a.size)
     if a.palette:
         img = apply_palette(img, a.palette)
+    if a.tile:
+        img = img.convert("RGB")
+        print(f"post.py: seam score {seam_score(np.asarray(img)):.2f} (≈1 seamless)", file=sys.stderr)
     img.save(a.dst, optimize=True)
 
 

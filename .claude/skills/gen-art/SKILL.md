@@ -5,12 +5,13 @@ description: Генерує ігрові асети RealWorld (спрайти б
 
 # gen-art — концептуальний арт-пайплайн
 
-Скоуп пайплайна: `art/style.md` (стиль-гайд, додається до КОЖНОГО промпту) → `art/refs/*.png` (затверджені якорі стилю, ≤3 йдуть image-input у кожен запит) → `art/manifest.json` (що малювати; виводиться з `godot/content/catalog.json`) → `tools/gen-art.mjs` (API) → `tools/art/post.py` (chroma-key → alpha, trim, resize, снеп до `art/palette.json`) → кандидати в `art/out/` (gitignored) → `approve` → `godot/assets/gen/<kind>/<id>.png` (комітиться).
+Скоуп пайплайна: `art/style.md` (стиль-гайд, додається до КОЖНОГО промпту) → `art/refs/*.png` (затверджені якорі стилю, ≤3 йдуть image-input у кожен запит) → `art/manifest.json` (що малювати; виводиться з `godot/content/catalog.json`) → `tools/gen-art.mjs` (API) → `tools/art/post.py` (Pillow+numpy: адаптивний keying фону → alpha, м'яка тінь, despill, trim, resize; тайли — зняття рамки + безшов; снеп до `art/palette.json` лише опційно `--palette`) → кандидати в `art/out/` (gitignored) → `approve` → `godot/assets/gen/<kind>/<id>.png` (комітиться).
 
 ## 0. Ключ (одноденний, від користувача)
 - Користувач дає ключ у чаті → одразу: `printf %s '<KEY>' | node tools/gen-art.mjs key`. Це запише `.env.local` (0600, gitignored), перевірить `git check-ignore` і валідність ключа на API.
 - НІКОЛИ не друкуй ключ (маскується `AIza…xxxx`), не клади його в код/коміт/PR/meta. Перед комітом `npm run lint` (secret-scan валить CI на `AIza…`).
 - Exit 2 або «ключ недійсний або прострочений» → попроси новий ключ. НЕ ретрай.
+- Exit 3 або «квота 0 на Free Tier» → у проєкту ключа нема білінгу (на Free Tier усі image-моделі мають `limit: 0`). Попроси користувача ввімкнути білінг, ключ лишається той самий.
 - Ключ живе лише в контейнері сесії. Новій сесії потрібен новий `key`.
 
 ## 1. Цикл
@@ -23,6 +24,8 @@ description: Генерує ігрові асети RealWorld (спрайти б
    - ракурс не top-down 3/4 (тайли — строго згори);
    - є текст/літери; палітра чи контур не як у refs;
    - предмет не той (перевір `label` у маніфесті).
+   Рожевий відлив/обрізка після keying → спершу тюн `tools/art/post.py` + `node tools/gen-art.mjs repost [--only id]` (без API, без витрат), а не перегенерація.
+   Дим/пара/сяйво (напівпрозоре поверх фону) → у спрайти не запікаємо, `notes: "no smoke plume — engine draws it"`.
 5. Погане → додай рядок `notes` у маніфест (напр. `"notes": "ручка коротша, без металу"`) → `gen --only <id>`. `style.md` НЕ правиш заради одного асета.
 6. Добре → `node tools/gen-art.mjs approve <id>@vN`. Approved не перегенеровується без `--only <id> --force`.
 7. `node tools/gen-art.mjs status` → підсумок. Коміть `godot/assets/gen/**` + `art/manifest.json` (+ `art/refs/**` для якорів).
@@ -41,5 +44,6 @@ description: Генерує ігрові асети RealWorld (спрайти б
 
 ## 3. Правила
 - Оригінальний IP: жодних «in the style of <гра/студія/художник>», брендів, чужих персонажів.
+- Обирай кандидат на тлі тайла трави або шахівниці, не на чорному: так видно залишки фону. Затверджені якорі: `ref_world`, `ref_ground`.
 - Модель: дефолт `gemini-2.5-flash-image` (дешевий). Для серій, де важлива консистентність, `--model gemini-3-pro-image-preview`.
 - Підключення асетів у рендер Godot (`world_view.gd`/HUD) — окрема задача зі своїми тестами (R3/R11 view-шару). Цей скіл лише виробляє асети.

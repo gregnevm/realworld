@@ -10,7 +10,9 @@
    "src": "extra/actor_hero",
    "label": "actor_hero",
    "size": 128,
-   "status": "todo"
+   "status": "approved",
+   "hash": "bbbeb011",
+   "approved": "v2"
   },
   {
    "id": "actor_patrol_robot",
@@ -20,7 +22,9 @@
    "src": "extra/actor_patrol_robot",
    "label": "actor_patrol_robot",
    "size": 128,
-   "status": "todo"
+   "status": "approved",
+   "hash": "17c44df4",
+   "approved": "v1"
   },
   {
    "id": "actor_raider",
@@ -30,7 +34,9 @@
    "src": "extra/actor_raider",
    "label": "actor_raider",
    "size": 128,
-   "status": "todo"
+   "status": "approved",
+   "hash": "65db58e0",
+   "approved": "v1"
   },
   {
    "id": "bld_advanced_fabrication_bench",
@@ -150,7 +156,10 @@
    "tier": 0,
    "subject": "campfire — a production structure built by survivors",
    "size": 128,
-   "status": "todo"
+   "status": "approved",
+   "hash": "f57711c5",
+   "notes": "small low flames inside the stone ring, NO smoke plume and no glow halo — smoke/light are drawn by the engine",
+   "approved": "v3"
   },
   {
    "id": "bld_chair",
@@ -820,7 +829,9 @@
    "tier": 3,
    "subject": "turret — a defense structure built by survivors",
    "size": 128,
-   "status": "todo"
+   "status": "approved",
+   "hash": "e0103901",
+   "approved": "v1"
   },
   {
    "id": "bld_uranium_slug_turret",
@@ -840,7 +851,9 @@
    "tier": 0,
    "subject": "wall — a structure structure built by survivors",
    "size": 128,
-   "status": "todo"
+   "status": "approved",
+   "hash": "94144e83",
+   "approved": "v1"
   },
   {
    "id": "bld_warehouse",
@@ -900,7 +913,9 @@
    "tier": 0,
    "subject": "workbench — a production structure built by survivors",
    "size": 128,
-   "status": "todo"
+   "status": "approved",
+   "hash": "fab48208",
+   "approved": "v1"
   },
   {
    "id": "item_archotech_arm",
@@ -1540,7 +1555,9 @@
    "tier": 0,
    "subject": "stone axe (tool)",
    "size": 128,
-   "status": "todo"
+   "status": "approved",
+   "hash": "c7d5aaee",
+   "approved": "v0"
   },
   {
    "id": "item_stone_pick",
@@ -1630,7 +1647,9 @@
    "src": "extra/node_rock",
    "label": "node_rock",
    "size": 128,
-   "status": "todo"
+   "status": "approved",
+   "hash": "bec742e2",
+   "approved": "v2"
   },
   {
    "id": "node_scrap",
@@ -1650,7 +1669,9 @@
    "src": "extra/node_tree",
    "label": "node_tree",
    "size": 128,
-   "status": "todo"
+   "status": "approved",
+   "hash": "2991e172",
+   "approved": "v0"
   },
   {
    "id": "ref_ground",
@@ -1660,7 +1681,9 @@
    "src": "extra/ref_ground",
    "label": "ref_ground",
    "size": 0,
-   "status": "todo"
+   "status": "approved",
+   "hash": "fa093883",
+   "approved": "v1"
   },
   {
    "id": "ref_world",
@@ -1670,7 +1693,9 @@
    "src": "extra/ref_world",
    "label": "ref_world",
    "size": 0,
-   "status": "todo"
+   "status": "approved",
+   "hash": "43a6c4c5",
+   "approved": "v2"
   },
   {
    "id": "res_advanced_component",
@@ -2420,7 +2445,9 @@
    "tier": 0,
    "subject": "wood — a stack or bundle of this raw/processed material",
    "size": 128,
-   "status": "todo"
+   "status": "approved",
+   "hash": "6dbc15b4",
+   "approved": "v0"
   },
   {
    "id": "res_wool",
@@ -2890,7 +2917,9 @@
    "tier": 0,
    "subject": "temperate meadow grass, patchy, a few small weeds",
    "size": 64,
-   "status": "todo"
+   "status": "approved",
+   "hash": "b878c1d4",
+   "approved": "v1"
   },
   {
    "id": "tile_road",

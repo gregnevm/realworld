@@ -73,23 +73,23 @@ export const KINDS = {
   },
   sprite: {
     size: 128, key: true, aspect: "1:1",
-    frame: "One game sprite of a placeable object seen from a top-down three-quarter view (camera ~60° above the ground). Centered, the whole object visible with a small margin, sitting on the ground plane. Background: perfectly flat solid magenta #FF00FF, no gradient, no floor, no cast shadow on the background.",
+    frame: "One game sprite of a placeable object seen from a top-down three-quarter view (camera ~60° above the ground). Centered, the whole object visible with a small margin, sitting on the ground plane. Background: a technical chroma-key that is NOT part of the art and is EXEMPT from the muted palette — exactly pure saturated magenta #FF00FF (RGB 255,0,255), perfectly flat, no vignette, no gradient, no floor, no cast shadow on it.",
   },
   actor: {
     size: 128, key: true, aspect: "1:1",
-    frame: "One character sprite seen from a top-down three-quarter view, standing, facing down-right, full body visible, readable silhouette. Background: perfectly flat solid magenta #FF00FF, no gradient, no floor, no cast shadow on the background.",
+    frame: "One character sprite seen from a top-down three-quarter view, standing, facing down-right, full body visible, readable silhouette. Background: a technical chroma-key that is NOT part of the art and is EXEMPT from the muted palette — exactly pure saturated magenta #FF00FF (RGB 255,0,255), perfectly flat, no vignette, no gradient, no floor, no cast shadow on it.",
   },
   icon: {
     size: 128, key: true, aspect: "1:1",
-    frame: "One inventory icon of a single object, slight three-quarter angle, centered, filling ~80% of the frame, bold clear silhouette readable at 32 px. Background: perfectly flat solid magenta #FF00FF, no gradient, no glow, no frame, no shadow on the background.",
+    frame: "One inventory icon of a single object, slight three-quarter angle, centered, filling ~80% of the frame, bold clear silhouette readable at 32 px. Background: a technical chroma-key that is NOT part of the art and is EXEMPT from the muted palette — exactly pure saturated magenta #FF00FF (RGB 255,0,255), perfectly flat, no vignette, no gradient, no glow, no frame, no shadow on it.",
   },
   tile: {
     size: 64, key: false, aspect: "1:1",
-    frame: "One seamless, tileable square ground texture seen strictly from directly above (orthographic). Uniform coverage edge to edge, no objects, no horizon, no vignette, no border, NO outlines (the outline rule applies to objects only); the left/right and top/bottom edges must wrap seamlessly.",
+    frame: "One seamless, tileable square ground texture seen strictly from directly above (orthographic). The texture fills the ENTIRE image edge to edge — no card, no frame, no padding, no swatch layout (even if a reference shows swatch cards); uniform coverage, no objects, no horizon, no vignette, no border, NO outlines (the outline rule applies to objects only); the left/right and top/bottom edges must wrap seamlessly.",
   },
   ui: {
     size: 64, key: true, aspect: "1:1",
-    frame: "One flat UI pictogram for a game HUD button, simple geometric shapes, 2–3 tones, centered, generous padding, readable at 20 px. Background: perfectly flat solid magenta #FF00FF.",
+    frame: "One flat UI pictogram for a game HUD button, simple geometric shapes, 2–3 tones, centered, generous padding, readable at 20 px. Background: a technical chroma-key that is NOT part of the art and is EXEMPT from the muted palette — exactly pure saturated magenta #FF00FF (RGB 255,0,255), perfectly flat, no vignette, no gradient, no cast shadow on it.",
   },
 };
 
@@ -189,8 +189,12 @@ export function buildManifest(cat, existing) {
 export function composePrompt(style, asset) {
   const kind = KINDS[asset.kind];
   if (!kind) throw new Error(`unknown kind "${asset.kind}" for ${asset.id}`);
+  // The bible is instructions, never content: without this wrapper the model rendered its title line
+  // ("ART BIBLE — RealWorld") as lettering on a reference sheet (observed on ref_world v1, 2026-11-04).
+  const bible = String(style || "").trim().split(/\r?\n/).filter((l) => !/^ART BIBLE\b/.test(l.trim())).join("\n").trim();
   return [
-    String(style || "").trim(),
+    "STYLE GUIDE (instructions only — never draw any of these words, titles or labels in the image):",
+    bible,
     "",
     `FRAME: ${kind.frame}`,
     `ERA: ${eraOf(asset.tier)}`,
