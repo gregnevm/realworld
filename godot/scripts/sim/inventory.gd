@@ -280,13 +280,19 @@ static func drop_bag(s) -> void:
 	s.bags.append({"x": int(s.player.px), "y": int(s.player.py), "slots": slots, "day": int(s.time.day)})
 	s.player.inv = empty_slots()
 
-# Walk-over pickup (called every tick): whatever fits comes back, the rest stays in the bag.
+# Walk-over pickup (called every tick): whatever fits comes back, the rest stays in the bag. A bag you just
+# DROPPED is unarmed until you step away from it (otherwise it would jump straight back into your hands).
 static func pickup_bags(s) -> void:
 	if s.bags.is_empty():
 		return
 	var at := Vector2(s.player.px, s.player.py)
 	for bag in s.bags.duplicate():
-		if at.distance_to(Vector2(int(bag.x) + 0.5, int(bag.y) + 0.5)) > BAG_REACH:
+		var d: float = at.distance_to(Vector2(int(bag.x) + 0.5, int(bag.y) + 0.5))
+		if not bool(bag.get("armed", true)):
+			if d > BAG_REACH + 1.0:
+				bag.armed = true
+			continue
+		if d > BAG_REACH:
 			continue
 		var left: Array = []
 		for sl in bag.slots:
@@ -324,3 +330,75 @@ static func craft_tool(s, item_id: String) -> Dictionary:
 	s.equip(item_id)
 	s._log("🛠 Скрафтив: %s → у рюкзак." % GameData.ITEMS[item_id].name, "good")
 	return {"ok": true}
+
+# ---- phase 2: sort · split · drop ----------------------------------------------------------------
+const SORT_ORDER := ["bld", "tool", "raw", "processed", "food", "other"]
+
+static func _sort_key(id: String) -> String:
+	var cat := "other"
+	if is_building(id):
+		cat = "bld"
+	elif GameData.ITEMS.has(id):
+		cat = "tool"
+	else:
+		match stack_max(id):
+			RAW_STACK: cat = "raw"
+			PROCESSED_STACK: cat = "processed"
+			FOOD_STACK: cat = "food"
+	return "%d:%s" % [SORT_ORDER.find(cat), id]
+
+# Backpack only (slots 8..31): merge equal stacks, then lay them out by category → id. The hotbar is the
+# player's own arrangement and is never touched. Deterministic (pure sort on a string key).
+static func sort_backpack(s) -> void:
+	var totals := {}
+	var order: Array = []
+	for i in range(HOTBAR, SLOTS):
+		var sl: Dictionary = s.player.inv[i]
+		var id := String(sl.id)
+		if id == "":
+			continue
+		if not totals.has(id):
+			totals[id] = 0
+			order.append(id)
+		totals[id] = int(totals[id]) + int(sl.n)
+		sl.id = ""
+		sl.n = 0
+	order.sort_custom(func(a: String, b: String) -> bool: return _sort_key(a) < _sort_key(b))
+	var i := HOTBAR
+	for id in order:
+		var left: int = int(totals[id])
+		var cap := stack_max(id)
+		while left > 0 and i < SLOTS:
+			var k: int = mini(cap, left)
+			s.player.inv[i] = {"id": id, "n": k}
+			left -= k
+			i += 1
+
+# Split a stack in half into the first empty slot (backpack first). The touch-friendly stand-in for a
+# quantity slider: repeat to make smaller piles.
+static func split(s, i: int) -> bool:
+	if i < 0 or i >= SLOTS:
+		return false
+	var sl: Dictionary = s.player.inv[i]
+	if String(sl.id) == "" or int(sl.n) < 2:
+		return false
+	var order: Array = range(HOTBAR, SLOTS) + range(0, HOTBAR)
+	for j in order:
+		if j != i and String(s.player.inv[j].id) == "":
+			var half: int = int(sl.n) / 2
+			sl.n = int(sl.n) - half
+			s.player.inv[j] = {"id": String(sl.id), "n": half}
+			return true
+	return false
+
+# Drop a whole slot on the ground as a small bag (unarmed until you walk away).
+static func drop(s, i: int) -> bool:
+	if i < 0 or i >= SLOTS:
+		return false
+	var sl: Dictionary = s.player.inv[i]
+	if String(sl.id) == "":
+		return false
+	s.bags.append({"x": int(s.player.px), "y": int(s.player.py), "slots": [{"id": String(sl.id), "n": int(sl.n)}],
+		"day": int(s.time.day), "armed": false})
+	s.player.inv[i] = {"id": "", "n": 0}
+	return true

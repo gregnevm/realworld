@@ -420,6 +420,10 @@ func _shot_step(dt: float) -> void:
 	if not _built and _t > 0.15 and session != null:
 		_built = true
 		_build_demo_base()
+		if "bag" in OS.get_cmdline_user_args():   # `shot bag`: a death bag nearby + one off screen (map markers)
+			var sb: Variant = session.sim
+			sb.bags.append({"x": int(sb.player.px) + 2, "y": int(sb.player.py) + 2, "slots": [{"id": "wood", "n": 9}, {"id": "stone", "n": 4}], "day": 1})
+			sb.bags.append({"x": 2, "y": 2, "slots": [{"id": "food", "n": 3}], "day": 1})
 		if "inv" in OS.get_cmdline_user_args():
 			preg.toggle(&"inventory")   # `shot inv`: the inventory screen (spec 0009)
 		if "drawer" in OS.get_cmdline_user_args():

@@ -33,6 +33,11 @@ static func install(ic) -> void:
 	ic.bind(&"craft_building", func(s, a):
 		var r: Dictionary = InventoryMod.craft_building(s.sim, String(a.kind))
 		if not r.ok: s.sim._flash(String(r.get("msg", ""))))
+	ic.bind(&"inv_sort",     func(s, _a): InventoryMod.sort_backpack(s.sim))
+	ic.bind(&"inv_split",    func(s, a):
+		if not InventoryMod.split(s.sim, int(a.i)): s.sim._flash("Нема куди розділити (потрібен вільний слот і стак ≥ 2)."))
+	ic.bind(&"inv_drop",     func(s, a):
+		if InventoryMod.drop(s.sim, int(a.i)): s.sim._flash("Викинуто — торба лежить поруч (підбереш, відійшовши й повернувшись)."))
 	ic.bind(&"stash_all",    func(s, _a):
 		var r: Dictionary = InventoryMod.stash_all(s.sim)
 		s.sim._flash(String(r.get("msg", ""))))

@@ -325,6 +325,26 @@ func _t_inventory() -> void:
 	var st0: int = InventoryMod.count(s, "stone")
 	var stock_st: int = s.res_amount("stone")
 	ok(s.repair(wall_spot.x, wall_spot.y).ok and InventoryMod.count(s, "stone") < st0 and s.res_amount("stone") == stock_st, "inv: repair pays from the backpack, not the storage")
+	# phase 2: sort · split · drop
+	for k in range(InventoryMod.HOTBAR, InventoryMod.SLOTS):
+		s.player.inv[k] = {"id": "", "n": 0}
+	s.player.inv[20] = {"id": "food", "n": 3}
+	s.player.inv[9] = {"id": "wood", "n": 30}
+	s.player.inv[15] = {"id": "wood", "n": 30}
+	s.player.inv[12] = {"id": "bld:wall", "n": 2}
+	InventoryMod.sort_backpack(s)
+	ok(String(s.player.inv[8].id) == "bld:wall" and String(s.player.inv[9].id) == "wood" and int(s.player.inv[9].n) == 50 and int(s.player.inv[10].n) == 10 and String(s.player.inv[11].id) == "food", "inv: sort merges stacks and lays out buildings → raw → food (backpack only)")
+	ok(InventoryMod.split(s, 9) and int(s.player.inv[9].n) == 25 and InventoryMod.count(s, "wood") >= 60, "inv: split halves a stack into a free slot, nothing lost")
+	var nbags: int = s.bags.size()
+	var food_before: int = InventoryMod.count(s, "food")
+	ok(InventoryMod.drop(s, 11) and s.bags.size() == nbags + 1 and InventoryMod.count(s, "food") == food_before - 3, "inv: drop puts the slot on the ground as a bag")
+	InventoryMod.pickup_bags(s)
+	ok(InventoryMod.count(s, "food") == food_before - 3, "inv: a freshly dropped bag does NOT jump back into the hands")
+	s.player.px += 4.0
+	InventoryMod.pickup_bags(s)
+	s.player.px -= 4.0
+	InventoryMod.pickup_bags(s)
+	ok(InventoryMod.count(s, "food") == food_before, "inv: step away and come back → picked up")
 	var twin = Sim.new()
 	twin.load_region(rec)
 	ok(twin.use_inventory and twin.bags.size() == 1 and (twin.player.inv as Array).size() == InventoryMod.SLOTS, "inv: load_region restores flag, bag and slots")

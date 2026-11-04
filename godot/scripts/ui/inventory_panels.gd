@@ -97,6 +97,7 @@ class InventoryPanel extends PanelBase.Base:
 	var _stash_btn: Button
 	var _store_rows: Array = []
 	var _hint: Label
+	var _tool_btns: Array = []         # sort · split · drop (split/drop act on the picked-up slot)
 	func _init() -> void:
 		panel_id = &"inventory"; dock = PanelBase.DOCK_LEFT; priority = 5; hotkey = KEY_TAB; default_open = false
 		menu_label = "🎒 Інвентар"; compact_open = 0
@@ -110,7 +111,7 @@ class InventoryPanel extends PanelBase.Base:
 		_hint = Label.new()
 		_hint.add_theme_font_size_override("font_size", 12)
 		_hint.add_theme_color_override("font_color", Tokens.MUT)
-		_hint.text = "Тап по слоту — взяти, тап по іншому — покласти. Ряд 1 — хотбар (1–8)."
+		_hint.text = "Тап по слоту — взяти, тап по іншому — покласти. Взятий слот можна розділити чи викинути. Ряд 1 — хотбар (1–8)."
 		_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_hint.custom_minimum_size = Vector2(440, 0)
 		vb.add_child(_hint)
@@ -124,6 +125,24 @@ class InventoryPanel extends PanelBase.Base:
 			b.pressed.connect(_on_slot.bind(i))
 			_grid.add_child(b)
 			_slots.append(b)
+		var tools := HBoxContainer.new()   # act on the picked-up slot (tap a slot first)
+		tools.add_theme_constant_override("separation", 6)
+		vb.add_child(tools)
+		for spec in [["⇅ Сортувати", &"inv_sort"], ["½ Розділити", &"inv_split"], ["⤓ Викинути", &"inv_drop"]]:
+			var tb := Button.new()
+			tb.text = String(spec[0])
+			tb.focus_mode = Control.FOCUS_NONE
+			tb.custom_minimum_size = Vector2(0, 38)
+			tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			var verb: StringName = spec[1]
+			tb.pressed.connect(func() -> void:
+				if verb == &"inv_sort":
+					emit_intent(verb, {})
+				elif _sel >= 0:
+					emit_intent(verb, {"i": _sel})
+					_sel = -1)
+			tools.add_child(tb)
+			_tool_btns.append(tb)
 		var ch := Widgets.H2Header.new()
 		vb.add_child(ch); ch.set_header("Крафт", "")
 		_craft_box = VBoxContainer.new()
@@ -206,6 +225,9 @@ class InventoryPanel extends PanelBase.Base:
 		if not bool(inv.get("enabled", false)):
 			return
 		var slots: Array = inv.slots
+		if _tool_btns.size() == 3:
+			_tool_btns[1].disabled = _sel < 0
+			_tool_btns[2].disabled = _sel < 0
 		for i in _slots.size():
 			SlotKit.fill_slot(_slots[i], slots[i], str(i + 1) if i < 8 else "")
 			_slots[i].set_pressed_no_signal(i == _sel or (i == int(inv.hand) and _sel < 0))

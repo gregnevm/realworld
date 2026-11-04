@@ -346,9 +346,12 @@ func _draw() -> void:
 		_draw_raider(sim.enemies[ei], ei)
 	_draw_intents()
 	_draw_action_target()
+	_draw_bags()
 	if cam:
 		var vr2: Vector2 = get_viewport_rect().size / cam.zoom
-		_draw_edge_threats(Rect2(cam.get_screen_center_position() - vr2 / 2.0, vr2), cam.zoom.x)
+		var vrect := Rect2(cam.get_screen_center_position() - vr2 / 2.0, vr2)
+		_draw_edge_threats(vrect, cam.zoom.x)
+		_draw_edge_bags(vrect, cam.zoom.x)
 	_draw_player()
 	_draw_fx()
 
@@ -536,6 +539,46 @@ func _draw_action_target() -> void:
 			[Vector2(r.position.x, r.end.y), Vector2(1, 0), Vector2(0, -1)], [r.end, Vector2(-1, 0), Vector2(0, -1)]]:
 		draw_line(corner[0], corner[0] + corner[1] * arm, col, w)
 		draw_line(corner[0], corner[0] + corner[2] * arm, col, w)
+
+# spec 0009: dropped / death bags on the map — the backpack art bobbing on the cell, an amber halo for a death
+# bag (your pawn's whole kit) — and an amber edge arrow when it is off screen (the «map marker»).
+const BAG_COL := Color(0.88, 0.69, 0.44, 1.0)
+func _draw_bags() -> void:
+	if sim.get("bags") == null:
+		return
+	var tex := art_texture("ui", "ui_carry")
+	for bag in sim.bags:
+		var c := Vector2((int(bag.x) + 0.5) * TILE, (int(bag.y) + 0.5) * TILE)
+		var bob: float = sin(_now() * 3.0 + float(bag.x)) * TILE * 0.06
+		var death: bool = (bag.slots as Array).size() > 1
+		if death:
+			draw_circle(c, TILE * (0.48 + 0.05 * sin(_now() * 4.0)), Color(BAG_COL.r, BAG_COL.g, BAG_COL.b, 0.22))
+		draw_contact_shadow(c + Vector2(0, TILE * 0.3), TILE * 0.28)
+		if tex != null:
+			draw_sprite_fit(tex, Rect2(c.x - TILE * 0.38, c.y - TILE * 0.5 - bob, TILE * 0.76, TILE * 0.76))
+		else:
+			draw_circle(c - Vector2(0, bob), TILE * 0.25, BAG_COL)
+
+func _draw_edge_bags(view: Rect2, zoom: float) -> void:
+	if sim.get("bags") == null:
+		return
+	var inner := view.grow(-26.0 / maxf(zoom, 0.01))
+	var ctr := view.get_center()
+	for bag in sim.bags:
+		var bp := Vector2((int(bag.x) + 0.5) * TILE, (int(bag.y) + 0.5) * TILE)
+		if view.has_point(bp):
+			continue
+		var dir: Vector2 = (bp - ctr).normalized()
+		var tmax := INF
+		if absf(dir.x) > 0.001:
+			tmax = minf(tmax, (inner.size.x * 0.5) / absf(dir.x))
+		if absf(dir.y) > 0.001:
+			tmax = minf(tmax, (inner.size.y * 0.5) / absf(dir.y))
+		var at: Vector2 = ctr + dir * tmax
+		var r: float = 9.0 / maxf(zoom, 0.01)
+		draw_circle(at, r, BAG_COL)
+		draw_arc(at, r, 0, TAU, 20, Color(0.05, 0.07, 0.09, 0.9), 1.5 / maxf(zoom, 0.01))
+		draw_line(at + dir * r, at + dir * r * 2.0, BAG_COL, 2.5 / maxf(zoom, 0.01))
 
 # Off-screen threats: a pulsing arrow on the screen edge pointing at each enemy outside the view (edge
 # indicators — the low-clutter alternative to a minimap). `view` is the camera rect in world px.
