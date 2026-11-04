@@ -7,6 +7,7 @@
 extends RefCounted
 
 const Tokens = preload("res://scripts/ui/tokens.gd")
+const UITheme = preload("res://scripts/ui/theme.gd")
 const LatLon = preload("res://scripts/ui/latlon.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
 const WidgetBase = preload("res://scripts/ui/widget.gd")
@@ -125,13 +126,15 @@ class SpawnScreen extends Control:
 
 		var title := Label.new()
 		title.text = "RealWorld"
-		title.add_theme_font_size_override("font_size", 56)
+		title.add_theme_font_override("font", UITheme.display_font())
+		title.add_theme_font_size_override("font_size", 72)
 		title.add_theme_color_override("font_color", Tokens.INK)
 		box.add_child(title)
 		arrivals.append(title)
 		var kicker := Label.new()
 		kicker.text = "СУРВАЙВАЛ · РЕАЛЬНА ГЕОГРАФІЯ · ПІСЛЯ КОЛАПСУ"
-		kicker.add_theme_font_size_override("font_size", 13)
+		kicker.add_theme_font_override("font", UITheme.display_font())
+		kicker.add_theme_font_size_override("font_size", 17)
 		kicker.add_theme_color_override("font_color", Tokens.AMBER)
 		box.add_child(kicker)
 		arrivals.append(kicker)
@@ -244,7 +247,8 @@ class SpawnScreen extends Control:
 	func _section(t: String) -> Label:
 		var l := Label.new()
 		l.text = t.to_upper()
-		l.add_theme_font_size_override("font_size", 13)
+		l.add_theme_font_override("font", UITheme.display_font())
+		l.add_theme_font_size_override("font_size", 16)
 		l.add_theme_color_override("font_color", Tokens.WARN)
 		return l
 
@@ -335,7 +339,8 @@ class DeathScreen extends Control:
 		center.add_child(vb)
 		var t := Label.new()
 		t.text = "☠  ТИ ЗАГИНУВ"
-		t.add_theme_font_size_override("font_size", 44)
+		t.add_theme_font_override("font", UITheme.display_font())
+		t.add_theme_font_size_override("font_size", 56)
 		t.add_theme_color_override("font_color", Tokens.CRIT)
 		t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vb.add_child(t)

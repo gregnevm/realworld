@@ -81,17 +81,55 @@ static func _load_emoji_font() -> Font:
 			return ff
 	return null
 
+# Typography (2026-11): Rubik (OFL, Cyrillic) is the body face, Oswald (OFL, condensed) the display face for
+# headers/titles/big numbers — the engine default read as «prototype». Chain: Rubik → built-in default (any
+# glyph Rubik lacks) → NotoEmoji (icons). Both faces are variable fonts; weight is set per variation.
+const BODY_FONT := "res://assets/fonts/Rubik-Variable.ttf"
+const DISPLAY_FONT := "res://assets/fonts/Oswald-Variable.ttf"
+static var _display: Font = null
+
 static func install_emoji_fallback() -> void:
 	var base: Font = ThemeDB.fallback_font
 	if base is FontVariation:
 		return   # already installed (scene reload / respawn re-enters _ready)
 	var emoji: Font = _load_emoji_font()
-	if emoji == null:
-		return
+	var chain: Array[Font] = [base]
+	if emoji != null:
+		chain.append(emoji)
+	var body: Font = _load_font(BODY_FONT)
 	var f := FontVariation.new()
-	f.base_font = base
-	f.fallbacks = [emoji]
+	if body != null:
+		f.base_font = body
+		f.variation_opentype = {"wght": 500}
+		f.fallbacks = chain
+	else:
+		f.base_font = base
+		f.fallbacks = [emoji] if emoji != null else []
 	ThemeDB.fallback_font = f
+	var disp: Font = _load_font(DISPLAY_FONT)
+	if disp != null:
+		var dv := FontVariation.new()
+		dv.base_font = disp
+		dv.variation_opentype = {"wght": 560}
+		dv.fallbacks = [f]
+		_display = dv
+
+# Display face (Oswald) for headers, titles and hero numbers; the body face when it is missing.
+static func display_font() -> Font:
+	if _display == null:
+		install_emoji_fallback()
+	return _display if _display != null else ThemeDB.fallback_font
+
+static func _load_font(path: String) -> Font:
+	if ResourceLoader.exists(path):
+		var res: Variant = load(path)
+		if res is Font:
+			return res
+	if FileAccess.file_exists(path):
+		var ff := FontFile.new()
+		if ff.load_dynamic_font(path) == OK:
+			return ff
+	return null
 
 # StyleBoxFlat factory (allowed in this file per R3).
 static func _sb(bg: Color, border: Color, radius: int, pad: int) -> StyleBoxFlat:

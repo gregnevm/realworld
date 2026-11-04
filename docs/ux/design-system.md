@@ -36,7 +36,7 @@ The living, rendered realization is [`hud.html`](hud.html) — every rule below 
 |---|---|---|
 | `--bg / --panel / --panel2` | `#0e1216 / #151b21 / #1b232b` | app bg / panel / raised panel |
 | `--line / --line2` | `#26313b / #33414d` | hairline / stronger border |
-| `--ink / --mut / --dim` | `#c9d4dc / #7c8b97 / #54636f` | primary / secondary / tertiary text |
+| `--ink / --mut / --dim` | `#c9d4dc / #9aa8b3 / #74838f` (2026-11: контраст ≥4.4:1 на PANEL) | primary / secondary / tertiary text |
 | `--good` `#6fae54` | green — safe, satisfied, ally, in-band |
 | `--warn / --amber` `#e0b070` | amber — wants attention, act soon, selection accent |
 | `--crit` `#e06a5a` | red — critical, hostile, blocked |

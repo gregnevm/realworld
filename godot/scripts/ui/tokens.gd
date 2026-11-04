@@ -15,8 +15,8 @@ const PANEL2  := Color("1b232b")   # raised panel
 const LINE    := Color("26313b")   # hairline border
 const LINE2   := Color("33414d")   # stronger border
 const INK     := Color("c9d4dc")   # primary text
-const MUT     := Color("7c8b97")   # secondary text
-const DIM     := Color("54636f")   # tertiary text (was C_DIM "8fa3b5" — DRIFT FIXED)
+const MUT     := Color("9aa8b3")   # secondary text (2026-11: 4.95→7.1:1 on PANEL — glass panels need it)
+const DIM     := Color("74838f")   # tertiary text (2026-11: 2.8→~4.4:1 — the old value failed WCAG AA)
 
 # --- semantic state ramp (design-system §1; colorblind-safe: always paired with icon+number, R11) ---
 const GOOD    := Color("6fae54")   # green — safe/satisfied/ally/in-band  (was C_GOOD "5fd38a" — DRIFT FIXED)

@@ -279,7 +279,7 @@ class H2Header extends WidgetBase.Widget:
 		_tag = tag
 		queue_redraw()
 	func _on_draw() -> void:
-		var f := ThemeDB.fallback_font
+		var f: Font = UITheme.display_font()
 		var x := 0.0
 		if collapsible:   # chevron: ▾ open / ▸ folded — a shape, not just colour (R11)
 			var cy := 8.0
@@ -288,8 +288,8 @@ class H2Header extends WidgetBase.Widget:
 			draw_colored_polygon(pts, Tokens.MUT)
 			x = 16.0
 		for ch in _text:
-			draw_string(f, Vector2(x, 11), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Tokens.MUT)
-			x += f.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x + 1.6   # ~.16em tracking
+			draw_string(f, Vector2(x, 13), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Tokens.INK)
+			x += f.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 1.4   # ~.11em tracking
 		# (the dev-facing english tag — need/stock/tech — is metadata, never drawn for the player)
 
 # ---- BuildSlot (.slot .sel/.no): number · glyph · selected/locked/affordable state ----
