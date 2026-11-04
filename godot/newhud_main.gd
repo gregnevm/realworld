@@ -337,6 +337,9 @@ func _demo_step(dt: float) -> void:
 			_start_game(50.4501, 30.5234, "Київ")
 			_build_demo_base()
 		return
+	if tc != null:   # touch demo: drive the REAL control layer (stick vector + action-button signals)
+		_demo_touch(dt)
+		return
 	var leg: int = int((_demo_t - 3.0) / 4.0)
 	if leg != _demo_leg:
 		_demo_leg = leg
@@ -375,6 +378,28 @@ func _demo_step(dt: float) -> void:
 				if done:
 					break
 	if _demo_t > 19.0:
+		get_tree().quit()
+
+# Touch demo script (t from landing): walk east with the stick, tap-chop the auto-target, switch to Build
+# (double tap), place what the drawer offers, then hold for the radial. Exercises the whole scheme.
+func _demo_touch(_dt: float) -> void:
+	var t: float = _demo_t - 3.0
+	var step: int = int(t * 10.0)
+	if step == _demo_leg:
+		return
+	_demo_leg = step
+	if step == 1:
+		session.sim.time.frac = 0.45
+	tc.move_vec = Vector2(1, 0.2).normalized() if (step >= 5 and step < 20) else Vector2.ZERO
+	if step == 22 or step == 40:
+		tc.action_tap.emit()
+	if step == 60:
+		tc.action_double.emit()
+	if step == 70:
+		tc.action_tap.emit()
+	if step == 85:
+		tc.action_hold.emit(tc.act_center())
+	if step >= 120:
 		get_tree().quit()
 
 # --- dev screenshot: build a base, toggle the Light overlay, capture the new HUD, quit ---
@@ -548,7 +573,9 @@ func _on_action_tap() -> void:
 
 func _on_action_double() -> void:
 	for e in session.sim.enemies:   # never re-mode mid-fight: a mashed attack button must not become «build»
-		if Vector2(e.px, e.py).distance_to(Vector2(session.sim.player.px, session.sim.player.py)) < 5.0:
+		# «fight» = an enemy that is actually coming for the hero (its intent hunts) and is close — a patrol
+		# bot idling nearby must not lock the player out of building
+		if bool(view.enemy_intent(e).hunt) and Vector2(e.px, e.py).distance_to(Vector2(session.sim.player.px, session.sim.player.py)) < 5.0:
 			tc.show_toast("У бою режим не змінюється")
 			return
 	_set_mode(AM.next_mode(act_mode))

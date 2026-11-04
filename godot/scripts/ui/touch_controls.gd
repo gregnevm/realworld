@@ -56,7 +56,7 @@ class TouchControls extends Control:
 	var _slot_bar: HBoxContainer
 	var _slot_btns: Array = []
 	var _inv_btn: Button
-	var _radial: Control
+	var _radial: ColorRect
 	var _radial_btns: Array = []
 	var _radial_opts: Array = []
 	var _toast: Label
@@ -92,7 +92,9 @@ class TouchControls extends Control:
 		_inv_btn.add_theme_font_size_override("font_size", 24)
 		_inv_btn.pressed.connect(func() -> void: inventory_pressed.emit())
 		_slot_bar.add_child(_inv_btn)
-		_radial = Control.new()
+		var veil := ColorRect.new()                           # dims the world under an open radial: one layer of focus
+		veil.color = Tokens.with_alpha(Tokens.BG, 0.45)
+		_radial = veil
 		_radial.mouse_filter = Control.MOUSE_FILTER_STOP     # a tap outside the options closes the menu
 		_radial.visible = false
 		_radial.gui_input.connect(func(ev: InputEvent) -> void:
@@ -177,6 +179,8 @@ class TouchControls extends Control:
 		_radial_opts = opts.slice(0, 6)
 		if _radial_opts.is_empty():
 			return
+		_radial.position = Vector2.ZERO
+		_radial.size = size                 # (re)fit every open: the layer may have been sized before the viewport
 		var n: int = _radial_opts.size()
 		var r := 96.0
 		var dirs := [Vector2(0, -1), Vector2(-1, 0), Vector2(1, 0), Vector2(0, 1), Vector2(-0.75, -0.75), Vector2(0.75, -0.75)]
