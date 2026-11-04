@@ -2213,6 +2213,30 @@
    "approved": "v0"
   },
   {
+   "id": "key_death",
+   "kind": "key",
+   "subject": "a quiet pre-dawn field of dead machine wrecks and moss, a small campfire reduced to embers with a bedroll beside it and a worn survivor backpack left behind, a distant tower silhouette, cool blue-grey light with a thin warm amber ember glow, solemn but not gory",
+   "status": "approved",
+   "manual": true,
+   "label": "key_death",
+   "size": 0,
+   "notes": "no characters facing camera, no text, no UI; leave a calm darker lower-left area",
+   "hash": "55cd9c34",
+   "approved": "v0"
+  },
+  {
+   "id": "key_spawn",
+   "kind": "key",
+   "subject": "dusk over a river valley of drowned old-world towers overgrown with moss, a lone survivor silhouette with a backpack on a ridge in the foreground right looking toward a distant patrol machine whose single cold teal eye glows on a bridge, warm amber campfire glow in the far lower right, toppled antenna masts, birds, calm and hopeful-harsh",
+   "status": "approved",
+   "manual": true,
+   "label": "key_spawn",
+   "size": 0,
+   "notes": "no characters facing camera, no text, no UI; leave a calm darker lower-left area",
+   "hash": "aa50e933",
+   "approved": "v2"
+  },
+  {
    "id": "node_bush",
    "kind": "sprite",
    "subject": "a wild berry bush with herbs at its base",

@@ -65,3 +65,7 @@ static func building(kind: String) -> Texture2D:
 				out = at
 	_crops[kind] = out
 	return out
+
+# Full-screen key art (assets/gen/key): spawn / death backdrops. null → the caller keeps a flat colour.
+static func key(id: String) -> Texture2D:
+	return _load("key:" + id, "res://assets/gen/key/%s.png" % id)

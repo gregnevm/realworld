@@ -295,6 +295,8 @@ func _shot_step(dt: float) -> void:
 		if "light" in OS.get_cmdline_user_args():
 			oreg.toggle(&"light")          # `shot light`: radio-on the L/Light overlay (default frame = what a player sees)
 		session.sim.time.frac = 0.86       # dusk so daylight darkening is visible
+		if "death" in OS.get_cmdline_user_args():
+			session.sim.dead = true        # `shot death`: capture the death screen
 	if _t > 1.6 and not _shot:
 		_shot = true
 		await RenderingServer.frame_post_draw
