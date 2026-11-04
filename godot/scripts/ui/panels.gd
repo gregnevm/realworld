@@ -358,6 +358,7 @@ class BuildBarPanel extends PanelBase.Base:
 		{"name": "Оборона", "icon": "turret", "keys": ["turret", "spike_trap"]},
 	]
 	var _touch := false
+	var external_drawer := false   # touch action scheme: no 🔨 FAB — the mode (Build) opens/closes the drawer
 	var _open := false             # touch drawer open?
 	var _cat := 0                  # touch: the category shown
 	var _fab: Button               # 🔨 build button (touch only)
@@ -380,7 +381,7 @@ class BuildBarPanel extends PanelBase.Base:
 	func _apply_layout() -> void:
 		if _tabs == null:
 			return
-		_fab.visible = _touch
+		_fab.visible = _touch and not external_drawer
 		_tabs.visible = _touch and _open
 		_scroll.visible = (not _touch) or _open
 		_fab.set_pressed_no_signal(_open)
@@ -491,7 +492,7 @@ class BuildBarPanel extends PanelBase.Base:
 		var touch := bool((vm.get("ui", {}) as Dictionary).get("touch", false))
 		if touch != _touch:
 			_touch = touch
-			_open = false
+			_open = _open and external_drawer
 			_apply_layout()
 		if _touch:
 			# guidance travels with the drawer: closed → the 🔨 pulses; open on another tab → that tab pulses
@@ -525,7 +526,7 @@ class GearPanel extends PanelBase.Base:
 	var _ids: Array = []       # current item id per row, refreshed in bind()
 	func _init() -> void:
 		panel_id = &"gear"; dock = PanelBase.DOCK_LEFT; priority = 80; hotkey = KEY_I; default_open = false
-		menu_label = "🎒 Спорядження"; compact_open = 0
+		menu_label = "🎒 Інвентар"; compact_open = 0
 	func _build() -> void:
 		rebuild_count += 1
 		var vb := VBoxContainer.new()

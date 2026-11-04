@@ -25,6 +25,8 @@ const WorldInputScript = preload("res://scripts/ui/world_input.gd")
 const Lifecycle = preload("res://scripts/ui/lifecycle.gd")
 const ViewGeom = preload("res://scripts/ui/view_geom.gd")
 const Widgets = preload("res://scripts/ui/widgets.gd")
+const TouchCtl = preload("res://scripts/ui/touch_controls.gd")
+const AM = preload("res://scripts/ui/action_model.gd")
 const TILE := ViewGeom.TILE
 
 var session: SessionScript
@@ -46,6 +48,15 @@ var panel_menu: Widgets.PanelMenu
 # canvas grows by a DPI-derived content scale so text/targets keep a physical size, the HUD goes
 # compact, and the keyboard/right-button/wheel get on-screen stand-ins (top-bar tools + ☰ menu).
 var touch_ui := false
+# --- touch action scheme (phones): VIEW state owned by the scene; the touch layer only emits signals ---
+var tc: TouchCtl.TouchControls = null
+var act_mode: StringName = &"gather"
+var act_slot := 0
+var act_build := "campfire"
+var act_overview := false
+var overview_pos := Vector2.ZERO
+var act_target: Dictionary = {}
+var _act_slots: Array = []
 var shot_mode := false
 var demo_mode := false             # `-- newhud demo`: spawn screen → auto-landing → hero walks a loop → quit (for --write-movie)
 var _demo_t := 0.0
@@ -53,6 +64,7 @@ var _demo_leg := -1
 var _t := 0.0
 var _built := false
 var _shot := false
+var _shot_acted := false
 # Autosave (continue): every AUTOSAVE_EVERY real seconds, at each new game day and on quit. Cheap —
 # one JSON write of the session; the store already holds every visited region.
 const AUTOSAVE_EVERY := 30.0
@@ -86,6 +98,10 @@ func _ready() -> void:
 	# view lives (entry-scene wiring, the same tier that installs the session verbs)
 	router.bind(&"select_build", func(_s, a: Dictionary) -> void:
 		var kind := String(a.kind)
+		if tc != null:   # touch scheme: the drawer picks WHAT the action button builds (no ghost to aim)
+			act_build = kind
+			_set_mode(&"build")
+			return
 		view.selected_build = "" if String(view.selected_build) == kind else kind)
 	# time speed is VIEW state too (the sim only ever sees scaled dt): the top-bar chips land here
 	router.bind(&"set_speed", func(_s, a: Dictionary) -> void:
@@ -185,6 +201,8 @@ func _enter_session() -> void:
 	spawn_screen.visible = false
 	hud_layer.visible = true
 	_saved_day = int(session.sim.time.day)
+	if touch_ui and tc == null:
+		_setup_action_controls()
 
 func _autosave() -> void:
 	if session == null or shot_mode or not session.autosave:
@@ -280,7 +298,9 @@ func _process(dt: float) -> void:
 	CatalogSim.shared().tick(sdt)     # advance the forward-engine catalogue model
 	# camera eases after the hero (exp. smoothing, frame-rate independent) instead of hard-locking to it;
 	# a jump (spawn/travel/respawn) larger than half a screen snaps
-	var cam_target := Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE)
+	if tc != null:
+		_tick_action(dt)
+	var cam_target := overview_pos if act_overview else Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE)
 	if cam.global_position.distance_to(cam_target) > 600.0:
 		cam.global_position = cam_target
 	else:
@@ -376,6 +396,14 @@ func _shot_step(dt: float) -> void:
 		var hp := Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE - TILE * 1.3)   # `shot fx`: show the floating texts
 		view.fx_add("+3", hp, Color(1.0, 0.95, 0.8), "res_wood")
 		view.fx_add("-7", hp + Vector2(TILE * 2.5, TILE * 0.3), Color(1.0, 0.85, 0.4))
+	if tc != null and _t > 1.2 and not _shot_acted:
+		_shot_acted = true
+		if "radial" in OS.get_cmdline_user_args():   # `shot radial`: the hold menu on the current target
+			_open_radial(act_target if not act_target.is_empty() else AM.target_at(session.sim, Vector2i(int(session.sim.player.px) + 1, int(session.sim.player.py)), act_mode, act_build), tc.act_center())
+		if "overview" in OS.get_cmdline_user_args() and not act_overview:
+			_on_overview()
+		if "buildmode" in OS.get_cmdline_user_args():
+			_set_mode(&"build")
 	if _t > 1.6 and not _shot:
 		_shot = true
 		await RenderingServer.frame_post_draw
@@ -429,3 +457,131 @@ func _build_demo_base() -> void:
 func _put(kind: String, x: int, y: int) -> void:
 	if session.sim.build_valid(x, y) and session.sim.afford(GameData.BUILDINGS[kind].cost):
 		router.dispatch(&"build", {"kind": kind, "x": x, "y": y}, session)
+
+
+# ================= touch action scheme (left stick · action button · quick slots · radial) =================
+# Research 2026-11 (Apple HIG game controls, AOSP ViewConfiguration, Brawl Stars auto-aim, Don't Starve PE /
+# Last Day on Earth action buttons, Terraria/Minecraft hotbars, Kurtenbach & Buxton radial menus).
+func _setup_action_controls() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 12
+	add_child(layer)
+	tc = TouchCtl.TouchControls.new()
+	tc.theme = hud_root.theme
+	layer.add_child(tc)
+	tc.gui_rects = func() -> Array: return hud_root.dock_rects()
+	winput.touch_block = func(p: Vector2) -> bool: return tc.claims(p)
+	tc.overview_toggled.connect(_on_overview)
+	tc.action_tap.connect(_on_action_tap)
+	tc.action_double.connect(_on_action_double)
+	tc.action_hold.connect(func(center: Vector2) -> void: _open_radial(act_target, center))
+	tc.zoom_step.connect(func(d: int) -> void: winput.zoom_step(1.15 if d > 0 else 1.0 / 1.15))
+	tc.slot_step.connect(func(d: int) -> void: _apply_slot(posmod(act_slot + d, maxi(1, _act_slots.size()))))
+	tc.slot_selected.connect(_apply_slot)
+	tc.inventory_pressed.connect(func() -> void: preg.toggle(&"gear"))
+	tc.option_chosen.connect(func(o: Dictionary) -> void: router.dispatch(StringName(o.verb), o.args, session))
+	winput.long_pressed.connect(func(cell: Vector2i, screen: Vector2) -> void:
+		_open_radial(AM.target_at(session.sim, cell, act_mode, act_build), screen))
+	var bb: Variant = preg.get_panel(&"build_bar")
+	if bb != null:
+		bb.external_drawer = true       # the action button replaces the 🔨 FAB; the drawer is PROACTIVE (mode-driven)
+	hud_root.set_bar_lift(68.0)          # the drawer sits above the quick bar, centred
+
+func _tick_action(dt: float) -> void:
+	var sim: Variant = session.sim
+	if act_overview:   # the stick drives the cursor (camera), not the hero
+		winput.stick_move = Vector2.ZERO
+		overview_pos += tc.move_vec * 12.0 * TILE * dt
+		overview_pos = overview_pos.clamp(Vector2.ZERO, Vector2(sim.n, sim.n) * TILE)
+	else:
+		winput.stick_move = tc.move_vec
+	_act_slots = AM.default_slots(sim, act_build)
+	act_slot = clampi(act_slot, 0, _act_slots.size() - 1)
+	var origin := Vector2(sim.player.px, sim.player.py)
+	var facing: float = float(sim.player.face)
+	if act_overview:
+		act_target = AM.target_at(sim, Vector2i(int(overview_pos.x / TILE), int(overview_pos.y / TILE)), act_mode, act_build)
+	elif not AM.keep_target(sim, act_target, act_mode, origin, facing):
+		act_target = AM.pick_target(sim, act_mode, origin, facing, act_build)
+	if not act_target.is_empty():
+		act_target["mode"] = act_mode
+	view.action_target = act_target
+	view.action_mode = act_mode
+	tc.bind_state({"mode": act_mode, "slots": _act_slots, "active": act_slot, "overview": act_overview,
+		"target": _target_label(act_target)})
+	var bb: Variant = preg.get_panel(&"build_bar")
+	if bb != null and bool(bb._open) != (act_mode == &"build"):
+		bb.set_drawer(act_mode == &"build")   # proactive drawer: Build mode opens it, any other mode closes it
+		if act_mode == &"build":
+			bb.set_category(bb.cat_of(act_build))   # …on the tab of the building the button will place
+
+func _target_label(t: Dictionary) -> String:
+	if t.is_empty():
+		return ""
+	var sim: Variant = session.sim
+	var v: Dictionary = AM.primary(act_mode, t, act_build)
+	var verb := String(v.get("verb", ""))
+	var what := ""
+	match StringName(t.kind):
+		&"node":
+			var nk := String(sim.map.nodes[int(t.y) * int(sim.n) + int(t.x)].kind)
+			what = String({"tree": "дерево", "rock": "камінь", "bush": "кущ", "scrap": "брухт"}.get(nk, nk))
+		&"enemy":
+			what = "робот" if String(t.ref.get("kind", "")) == "bot" else "рейдер"
+		&"building":
+			what = String(sim.building_def(String(t.ref.kind)).get("name", ""))
+		&"cell":
+			what = String(sim.building_def(act_build).get("name", act_build))
+	var verb_ua := {"order_gather": "Добути", "order_attack": "Атакувати", "build": "Збудувати", "repair": "Ремонт",
+		"order_move": "Іти", "deconstruct": "Розібрати"}
+	return ("%s · %s" % [String(verb_ua.get(verb, "")), what]).strip_edges().trim_prefix("· ").trim_suffix(" ·")
+
+func _on_action_tap() -> void:
+	var v: Dictionary = AM.primary(act_mode, act_target, act_build)
+	if v.is_empty():
+		var why := {&"gather": "Поруч нема що добувати", &"build": "Нема місця попереду",
+		&"repair": "Поруч нема пошкоджених будівель", &"fight": "Поруч нема ворогів"}
+		tc.show_toast(String(why.get(act_mode, "Нема цілі")))
+		return
+	router.dispatch(StringName(v.verb), v.args, session)
+	act_target = {}   # re-acquire next frame (the node/cell may be gone or taken)
+
+func _on_action_double() -> void:
+	for e in session.sim.enemies:   # never re-mode mid-fight: a mashed attack button must not become «build»
+		if Vector2(e.px, e.py).distance_to(Vector2(session.sim.player.px, session.sim.player.py)) < 5.0:
+			tc.show_toast("У бою режим не змінюється")
+			return
+	_set_mode(AM.next_mode(act_mode))
+
+func _set_mode(m: StringName) -> void:
+	act_mode = m
+	act_target = {}
+	for i in _act_slots.size():   # the bar follows the mode (auto-switch both ways)
+		if AM.mode_for_slot(_act_slots[i]) == m:
+			act_slot = i
+			break
+
+func _apply_slot(i: int) -> void:
+	if i < 0 or i >= _act_slots.size():
+		return
+	act_slot = i
+	var sl: Dictionary = _act_slots[i]
+	act_mode = AM.mode_for_slot(sl)
+	act_target = {}
+	if StringName(sl.type) in [&"tool", &"weapon"] and String(sl.id) != "":
+		router.dispatch(&"equip", {"id": String(sl.id)}, session)
+	if StringName(sl.type) == &"build":
+		act_build = String(sl.id)
+
+func _open_radial(t: Dictionary, at: Vector2) -> void:
+	var opts: Array = AM.options(session.sim, t, act_build)
+	if opts.is_empty():
+		tc.show_toast("Тут нічого робити")
+		return
+	tc.show_radial(at, opts)
+
+func _on_overview() -> void:
+	act_overview = not act_overview
+	overview_pos = Vector2(session.sim.player.px, session.sim.player.py) * TILE
+	act_target = {}
+	tc.show_toast("Огляд мапи — подвійний тап стіком, щоб повернутись" if act_overview else "Назад до героя")

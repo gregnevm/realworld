@@ -50,6 +50,9 @@ var _seen_b: Dictionary = {}        # building cells seen last frame
 var _b_baseline := false            # first observation = existing base: no pops on load
 var _last_epos: Array = []          # enemy world positions last frame (death poofs)
 var _poofs: Array = []              # {pos, age}
+var action_target: Dictionary = {}  # touch scheme: what the action button will act on (scene sets it each frame)
+var action_mode: StringName = &"gather"
+const ACTION_COL := {&"gather": Color(0.44, 0.68, 0.33, 1.0), &"build": Color(0.88, 0.69, 0.44, 1.0), &"repair": Color(0.53, 0.82, 0.84, 1.0), &"fight": Color(0.88, 0.42, 0.36, 1.0)}
 var shake := 0.0                    # TRAUMA 0..1 (Eiserloh): events add, decays 1/s; the scene offsets the camera by trauma²
 var hitstop := 0.0                  # seconds the RENDER holds its frame (Vlambeer/Dead Cells hit-stop) — the sim never pauses
 var _hero_flash := 0.0              # white flash on the hero for the first frames of a hit
@@ -340,6 +343,7 @@ func _draw() -> void:
 	for ei in sim.enemies.size():
 		_draw_raider(sim.enemies[ei], ei)
 	_draw_intents()
+	_draw_action_target()
 	if cam:
 		var vr2: Vector2 = get_viewport_rect().size / cam.zoom
 		_draw_edge_threats(Rect2(cam.get_screen_center_position() - vr2 / 2.0, vr2), cam.zoom.x)
@@ -511,6 +515,25 @@ func _draw_intents() -> void:
 		draw_rect(rr, Color(0.05, 0.07, 0.09, 0.85))
 		draw_rect(rr, it.col, false, 1.5)
 		draw_string(_font, Vector2(rr.position.x + 5.0, head.y), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, it.col)
+
+# The auto-target BEFORE the tap (Terraria smart-cursor square / Brawl auto-aim): corner brackets in the
+# mode colour, gently breathing, so the player always knows what the action button will hit.
+func _draw_action_target() -> void:
+	if action_target.is_empty():
+		return
+	var col: Color = ACTION_COL.get(action_mode, Color.WHITE)
+	var p := Vector2(float(action_target.x), float(action_target.y)) * TILE
+	if StringName(action_target.get("kind", &"")) == &"enemy" and action_target.ref is Dictionary:
+		p = Vector2(action_target.ref.px - 0.5, action_target.ref.py - 0.5) * TILE
+	var k: float = 0.5 + 0.5 * sin(_now() * 5.0)
+	var pad: float = TILE * (0.02 + 0.06 * k)
+	var r := Rect2(p - Vector2(pad, pad), Vector2(TILE + 2 * pad, TILE + 2 * pad))
+	var arm: float = TILE * 0.3
+	var w := 3.0
+	for corner in [[r.position, Vector2(1, 0), Vector2(0, 1)], [Vector2(r.end.x, r.position.y), Vector2(-1, 0), Vector2(0, 1)],
+			[Vector2(r.position.x, r.end.y), Vector2(1, 0), Vector2(0, -1)], [r.end, Vector2(-1, 0), Vector2(0, -1)]]:
+		draw_line(corner[0], corner[0] + corner[1] * arm, col, w)
+		draw_line(corner[0], corner[0] + corner[2] * arm, col, w)
 
 # Off-screen threats: a pulsing arrow on the screen edge pointing at each enemy outside the view (edge
 # indicators — the low-clutter alternative to a minimap). `view` is the camera rect in world px.

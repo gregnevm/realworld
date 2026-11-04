@@ -34,6 +34,7 @@ func _init() -> void:
 	_t_death_freeze()
 	_t_items()
 	_t_demolish()
+	_t_repair()
 	_t_osm_overlay()
 	_t_social()
 	_t_capsule()
@@ -217,6 +218,35 @@ func _t_items() -> void:
 	var wood_before: int = int(s.stock.wood)
 	ok(s.craft_item("axe").ok and s.player.equipped.tool == "axe" and int(s.stock.wood) == wood_before, "re-equipping owned item is free (no re-pay)")
 	ok(not s.craft_item("nope").ok, "unknown item rejected")
+
+# Repair (touch Repair mode): a damaged building is restored to full hp for a price scaled by the damage
+# (× 0.5, ≥ 1), paid through the stock seam; a full building / an empty cell / an unaffordable bill refuse.
+func _t_repair() -> void:
+	var s = Sim.new()
+	s.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
+	var c = s.base_center()
+	var wx := -1
+	var wy := -1
+	for dy in range(-2, 3):
+		for dx in range(-2, 3):
+			if wx < 0 and s.build_valid(c.x + dx, c.y + dy):
+				s.stock.stone = 200
+				s.try_build("wall", c.x + dx, c.y + dy)
+				wx = c.x + dx
+				wy = c.y + dy
+	var b: Dictionary = s.bgrid[wy * s.n + wx]
+	var max_hp := float(GameData.BUILDINGS["wall"].hp)
+	ok(not s.repair(wx, wy).ok, "repair: a full-hp wall refuses")
+	ok(not s.repair(0, 0).ok or s.bgrid.has(0), "repair: an empty cell refuses")
+	b.hp = max_hp * 0.5
+	var cost: Dictionary = s.repair_cost(b)
+	ok(int(cost.get("stone", 0)) == maxi(1, int(ceil(float(GameData.BUILDINGS["wall"].cost.stone) * 0.25))), "repair: price = cost × missing × 0.5 (ceil)")
+	var before: int = int(s.stock.stone)
+	ok(s.repair(wx, wy).ok and is_equal_approx(float(b.hp), max_hp), "repair: restores full hp")
+	ok(int(s.stock.stone) == before - int(cost.stone), "repair: paid through the stock seam")
+	b.hp = 1.0
+	s.stock.stone = 0
+	ok(not s.repair(wx, wy).ok and float(b.hp) == 1.0, "repair: unaffordable → refused, nothing changes")
 
 func _t_demolish() -> void:
 	var s = Sim.new()

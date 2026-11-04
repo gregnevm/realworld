@@ -197,3 +197,28 @@ func refresh(dt: float) -> void:
 		tip_w.bind(snap.get("inspect", {}) if bool(view_ctx.get("in_world", false)) else {})
 		var at: Vector2 = view_ctx.get("pointer", get_viewport().get_mouse_position())
 		tip_w.follow(at, size, bool(view_ctx.get("touch", false)))
+
+
+# Screen rects of the side/top docks (touch layer: the stick zone must not steal taps meant for panels).
+func dock_rects() -> Array:
+	var out: Array = []
+	for sc in [_left_scroll, _right_scroll]:
+		if sc != null and sc.visible and sc.size.y > 1.0:
+			out.append(Rect2(sc.position, sc.size))
+	for d in [2, 3]:
+		if _docks.has(d):
+			var c: Control = _docks[d]
+			var need: Vector2 = c.get_combined_minimum_size()
+			if d == 3:
+				out.append(Rect2(Vector2((size.x - need.x) * 0.5, c.position.y + c.size.y - need.y), need))
+			else:
+				out.append(Rect2(Vector2((size.x - need.x) * 0.5, c.position.y), need))
+	return out
+
+# Touch scheme: the build drawer floats centred ABOVE the quick bar instead of hugging the right thumb.
+func set_bar_lift(px: float) -> void:
+	if _docks.has(3):
+		var c: HBoxContainer = _docks[3]
+		c.alignment = BoxContainer.ALIGNMENT_CENTER
+		c.offset_bottom = -px
+		c.offset_top = -px

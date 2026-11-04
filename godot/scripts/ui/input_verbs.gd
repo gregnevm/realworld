@@ -25,6 +25,9 @@ static func install(ic) -> void:
 	ic.bind(&"deconstruct",  func(s, a):
 		var r: Dictionary = s.sim.demolish(int(a.x), int(a.y))
 		if not r.ok: s.sim._flash(String(r.get("msg", ""))))
+	ic.bind(&"repair",       func(s, a):
+		var r: Dictionary = s.sim.repair(int(a.x), int(a.y))
+		if not r.ok: s.sim._flash(String(r.get("msg", ""))))
 	ic.bind(&"craft",        func(s, a):
 		var r: Dictionary = s.sim.craft_item(String(a.id))
 		if not r.ok: s.sim._flash(String(r.get("msg", ""))))

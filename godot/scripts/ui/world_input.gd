@@ -15,6 +15,7 @@ const WorldViewScript = preload("res://scripts/world_view.gd")
 
 class WorldInput extends Node:
 	signal speed_changed(mult: float)
+	signal long_pressed(cell: Vector2i, screen: Vector2)   # finger held still on the map → radial options (touch)
 
 	const SPEEDS := [1.0, 2.0, 3.0]           # running speeds; pause is a separate toggle (Space)
 	const TILE := ViewGeom.TILE
@@ -43,6 +44,11 @@ class WorldInput extends Node:
 	var _painting := false                     # LMB held with a paintable ghost armed (§5 drag = run)
 	var _paint_last := Vector2i(-9999, -9999)
 	var touch_inspecting := false              # a finger is holding still on the map (tooltip shows)
+	var stick_move := Vector2.ZERO             # the touch layer's left stick (merged with WASD into move_input)
+	var touch_block := Callable()              # (screen_pos) -> bool: true where the touch layer owns the finger
+	var _claimed: Dictionary = {}              # finger indices the touch layer owns (never a pinch, never a click)
+	var _blocked := false                      # the current emulated-mouse gesture started on a touch control
+	var _long_fired := false
 	var inspect_linger := 0.0                  # s the inspect tooltip stays after the finger lifts
 	var _press_t := -1.0                       # s the current touch has been down (-1 = none)
 	var _press_pos := Vector2.ZERO
@@ -176,6 +182,9 @@ class WorldInput extends Node:
 			_press_t += dt
 			if _press_t >= LONG_PRESS and not _press_moved and not _multi and not _press_acted:
 				touch_inspecting = true             # the finger is «hovering»: show what is under it
+				if not _long_fired and not _blocked:
+					_long_fired = true
+					long_pressed.emit(_mouse_tile(), pointer_screen)
 		elif inspect_linger > 0.0:
 			inspect_linger = maxf(0.0, inspect_linger - dt)
 		if sim.dead or _typing():
@@ -192,7 +201,7 @@ class WorldInput extends Node:
 			mv.x -= 1
 		if Input.is_key_pressed(KEY_D):
 			mv.x += 1
-		sim.move_input = mv
+		sim.move_input = mv + stick_move
 
 	# true, коли фокус клавіатури — в текстовому полі HUD (LineEdit/TextEdit)
 	func _typing() -> bool:
@@ -314,7 +323,16 @@ class WorldInput extends Node:
 	# ---- touch grammar (emulated mouse events from a finger; desktop mice never reach here) ----
 	func _touch_button(mb: InputEventMouseButton) -> void:
 		var t := _mouse_tile()
+		if mb.pressed and touch_block.is_valid() and bool(touch_block.call(mb.position)):
+			_blocked = true                         # stick / action button own this finger: no click, no inspect
+			_press_t = -1.0
+			return
+		if _blocked:
+			if not mb.pressed:
+				_blocked = false
+			return
 		if mb.pressed:
+			_long_fired = false
 			if _touches.size() <= 1:
 				_multi = false                      # a fresh single finger starts a new gesture
 			_press_t = 0.0
@@ -339,6 +357,8 @@ class WorldInput extends Node:
 		_painting = false
 
 	func _touch_motion(mm: InputEventMouseMotion) -> void:
+		if _blocked:
+			return
 		if _press_t >= 0.0 and mm.position.distance_to(_press_pos) > TAP_SLOP:
 			_press_moved = true
 			touch_inspecting = false
@@ -349,6 +369,12 @@ class WorldInput extends Node:
 	func _track_fingers(event: InputEvent) -> void:
 		if event is InputEventScreenTouch:
 			var st := event as InputEventScreenTouch
+			if st.pressed and touch_block.is_valid() and bool(touch_block.call(st.position)):
+				_claimed[st.index] = true           # a stick/button finger is never half of a pinch
+				return
+			if not st.pressed and _claimed.has(st.index):
+				_claimed.erase(st.index)
+				return
 			if st.pressed:
 				_touches[st.index] = st.position
 			else:
@@ -363,6 +389,8 @@ class WorldInput extends Node:
 				_painting = false                   # every finger lifted: no run outlives the gesture
 		elif event is InputEventScreenDrag:
 			var sd := event as InputEventScreenDrag
+			if _claimed.has(sd.index):
+				return
 			_touches[sd.index] = sd.position
 			if _touches.size() >= 2:
 				var d := _pair_distance()

@@ -11,6 +11,8 @@ const Fmt = preload("res://scripts/ui/format.gd")
 const ViewGeom = preload("res://scripts/ui/view_geom.gd")
 const ArtIcons = preload("res://scripts/ui/art_icons.gd")
 const WorldViewScript = preload("res://scripts/world_view.gd")
+const AM = preload("res://scripts/ui/action_model.gd")
+const TouchCtl = preload("res://scripts/ui/touch_controls.gd")
 const LatLon = preload("res://scripts/ui/latlon.gd")
 const HudModel = preload("res://scripts/ui/hud_model.gd")
 const CatalogView = preload("res://scripts/ui/catalog_view.gd")
@@ -46,6 +48,8 @@ func _init() -> void:
 	_t_goal_guide()
 	_t_build_drawer()
 	_t_enemy_intent()
+	_t_action_model()
+	await _t_touch_controls()
 	_t_format()
 	_t_view_geom()
 	_t_latlon()
@@ -195,6 +199,97 @@ func _t_enemy_intent() -> void:
 	ok(String(a.glyph) == "⚔" and int(a.num) == int(round(float(near.dmg) * float(sim.armor_mult()))), "intent: adjacent raider telegraphs ⚔ + damage after armour")
 	ok(String(b.glyph) == "👁" and int(b.num) < 0, "intent: a distant patrol bot shows 👁 (searching), no number")
 	v.free()
+
+# Touch action scheme — the pure half: gestures, auto-target (cone/priority/sticky), verbs, radial, slots.
+func _t_action_model() -> void:
+	ok(AM.classify(0.1, Vector2.ZERO, INF) == &"tap", "gesture: a short still press is a tap")
+	ok(AM.classify(0.1, Vector2.ZERO, 0.2) == &"double", "gesture: a second tap within 300 ms is a double")
+	ok(AM.classify(0.5, Vector2(3, 2), INF) == &"hold", "gesture: ≥400 ms still is a hold")
+	ok(AM.classify(0.2, Vector2(4, -60), INF) == &"drag_v" and AM.classify(0.2, Vector2(70, 5), INF) == &"drag_h", "gesture: swipes split by axis")
+	ok(AM.classify(0.2, Vector2(20, 10), INF) == &"none", "gesture: a wobble past the slop is nothing")
+	ok(AM.next_mode(&"fight") == &"gather", "modes cycle gather → build → repair → fight → gather")
+	var nn := 16
+	var tiles := PackedByteArray()
+	tiles.resize(nn * nn)
+	tiles.fill(WorldGen.GRASS)
+	var nodes := {}
+	nodes[8 * nn + 10] = {"kind": "tree", "amount": 5}      # in front (east), 2 tiles
+	nodes[8 * nn + 6] = {"kind": "rock", "amount": 5}       # behind (west), 2 tiles
+	var sim = Sim.new()
+	sim.new_game({"n": nn, "tiles": tiles, "nodes": nodes, "spawn": Vector2i(8, 8), "lat": 50.4501, "lon": 30.5234})
+	var o := Vector2(8.5, 8.5)
+	var t: Dictionary = AM.pick_target(sim, &"gather", o, 0.0)
+	ok(StringName(t.get("kind", &"")) == &"node" and int(t.x) == 10, "auto-target: the node in front wins over an equally near one behind")
+	t["mode"] = &"gather"
+	ok(AM.keep_target(sim, t, &"gather", o, deg_to_rad(60.0)), "auto-target: a held target survives a 60° swing (sticky)")
+	ok(not AM.keep_target(sim, t, &"gather", o, PI), "auto-target: turning away drops it")
+	var v: Dictionary = AM.primary(&"gather", t)
+	ok(StringName(v.verb) == &"order_gather" and int(v.args.x) == 10, "primary: gather → order_gather on the target")
+	var bt: Dictionary = AM.pick_target(sim, &"build", o, 0.0, "campfire")
+	ok(StringName(bt.get("kind", &"")) == &"cell" and sim.build_valid(int(bt.x), int(bt.y)), "build mode: targets a valid cell next to the hero")
+	ok(StringName(AM.primary(&"build", bt, "campfire").verb) == &"build", "primary: build mode places the chosen building")
+	ok(AM.pick_target(sim, &"fight", o, 0.0).is_empty(), "fight mode with no enemy → no target (toast, no swing)")
+	var opts: Array = AM.options(sim, AM.target_at(sim, Vector2i(10, 8)))
+	ok(StringName(opts[0].verb) == &"order_gather" and StringName(opts[-1].verb) == &"order_move", "radial: primary first, «go here» last")
+	ok(AM.mode_for_slot({"type": &"weapon"}) == &"fight" and AM.mode_for_slot({"type": &"build"}) == &"build" and AM.mode_for_slot({"type": &"repair"}) == &"repair", "slots switch the mode automatically")
+	var slots: Array = AM.default_slots(sim, "wall")
+	ok(slots.size() >= 4 and StringName(slots[2].type) == &"build" and String(slots[2].id) == "wall", "quick bar: tool · weapon · armed building · repair")
+	sim.player.items.append("axe")
+	ok(String(AM.default_slots(sim, "wall")[0].id) == "axe", "quick bar: a crafted axe appears in the tool slot by itself")
+
+# The action button gestures through the real _input path (synthetic ScreenTouch/Drag).
+func _t_touch_controls() -> void:
+	var tcn = TouchCtl.TouchControls.new()
+	get_root().add_child(tcn)
+	await process_frame
+	var got := {"tap": 0, "double": 0, "hold": 0, "slot": 0, "zoom": 0, "over": 0}
+	tcn.action_tap.connect(func() -> void: got.tap += 1)
+	tcn.action_double.connect(func() -> void: got.double += 1)
+	tcn.action_hold.connect(func(_c: Vector2) -> void: got.hold += 1)
+	tcn.slot_step.connect(func(_d: int) -> void: got.slot += 1)
+	tcn.zoom_step.connect(func(_d: int) -> void: got.zoom += 1)
+	tcn.overview_toggled.connect(func() -> void: got.over += 1)
+	var c: Vector2 = tcn.act_center()
+	var touch := func(pos: Vector2, down: bool) -> void:
+		var e := InputEventScreenTouch.new()
+		e.index = 1
+		e.position = pos
+		e.pressed = down
+		tcn._input(e)
+	touch.call(c, true); touch.call(c, false)
+	ok(got.tap == 1, "action button: a tap acts at once")
+	touch.call(c, true); touch.call(c, false)
+	ok(got.double == 1 and got.tap == 1, "action button: a quick second tap is a double (mode cycle), not a 2nd act")
+	tcn._now += 1.0
+	touch.call(c, true)
+	tcn._process(0.5)
+	touch.call(c, false)
+	ok(got.hold == 1 and got.tap == 1, "action button: a 0.5 s hold opens the radial, no tap")
+	tcn._now += 1.0
+	touch.call(c, true)
+	var d := InputEventScreenDrag.new()
+	d.index = 1
+	d.position = c + Vector2(100, 0)
+	d.relative = Vector2(100, 0)
+	tcn._input(d)
+	touch.call(c + Vector2(100, 0), false)
+	ok(got.slot >= 1 and got.tap == 1, "action button: a horizontal swipe steps the quick slot")
+	var st := Vector2(60, tcn.size.y - 60)
+	for i in 2:
+		var e2 := InputEventScreenTouch.new()
+		e2.index = 0
+		e2.position = st
+		e2.pressed = true
+		tcn._input(e2)
+		e2 = InputEventScreenTouch.new()
+		e2.index = 0
+		e2.position = st
+		e2.pressed = false
+		tcn._input(e2)
+	ok(got.over == 1, "left stick: a strict double tap toggles the map overview")
+	ok(tcn.claims(c) and not tcn.claims(Vector2(tcn.size.x * 0.6, 40)), "touch layer claims its controls, never the open map")
+	tcn.queue_free()
+	await process_frame
 
 func _t_tokens() -> void:
 	ok(Tokens.GOOD == Color("6fae54"), "GOOD reconciled to locked --good (drift fixed from 5fd38a)")
