@@ -11,6 +11,7 @@ class Overlay extends RefCounted:
 	var hotkey: int = 0                 # KEY_R/T/L/P/G/Z/F/K/M (LOCKED, design-system §3)
 	var radio := true                   # false = an always-on marker layer (fire F, cover K)
 	var legend_rows: Array = []         # [{icon:String, label:String}] — Ukrainian legend rows
+	var menu_label := ""                # the touch ☰ menu toggle text (phones have no hotkeys)
 
 	# Draw into the world-space host (a CanvasItem) over the visible tile rect. Reads ONLY the snapshot
 	# (never a climate provider) so overlays are deterministic and one-way (R12).

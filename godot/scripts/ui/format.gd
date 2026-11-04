@@ -198,3 +198,20 @@ static func condition_text(row: Dictionary) -> String:
 		"scar": return "〰 шрам: %s" % part
 		"implant": return "🦾 %s: %s" % [label, part]
 	return "%s %d%%" % [label, pct]
+
+# Mouse/keyboard wording -> touch wording (phones): ONE ordered table so the tooltip, the goals and
+# the help never teach a key the player doesn't have. Longest phrases first.
+const TOUCH_WORDS := [
+	["затисни й веди — ряд", "веди пальцем — ряд"], ["Затисни ЛКМ — стіна ляже рядом", "Веди пальцем — стіна ляже рядом"],
+	["ПКМ/Esc — скасувати", "✖ — скасувати"], ["ПКМ — розібрати", "🗑 — розібрати"],
+	["ЛКМ —", "тап —"], ["ЛКМ", "тап"], ["Натисни ", "Вибери внизу "], ["натисни ", "вибери внизу "],
+	["і клікни", "і торкнись"], ["Клікни", "Торкнись"], ["клікни", "торкнись"], ["клік —", "тап —"],
+	["клавіша 0", "слот 0 внизу"], ["(I)", "(☰ → Спорядження)"], ["(J)", "(☰)"],
+	["Space — пауза, +/− — швидкість", "⏸ ×1 ×2 ×3 угорі"], ["Стрілка часу: ", ""],
+]
+
+static func touchify(text: String) -> String:
+	var out := text
+	for pair in TOUCH_WORDS:
+		out = out.replace(String(pair[0]), String(pair[1]))
+	return out

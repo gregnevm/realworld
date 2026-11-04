@@ -78,6 +78,7 @@ class LightOverlay extends OverlayBase.Overlay:
 	func _init() -> void:
 		overlay_id = &"light"
 		hotkey = KEY_L
+		menu_label = "💡 Світло (L)"
 		radio = true
 		legend_rows = [
 			{"icon": "🌙", "label": "темно · робота до +50% довше"},
@@ -104,6 +105,7 @@ class TemperatureOverlay extends OverlayBase.Overlay:
 	func _init() -> void:
 		overlay_id = &"temperature"
 		hotkey = KEY_T
+		menu_label = "🌡 Тепло (T)"
 		radio = true
 		legend_rows = [
 			{"icon": "🟦", "label": "холодно (нижче 12°C, без одягу)"},

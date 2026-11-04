@@ -35,6 +35,7 @@ static func snapshot(session, world: Dictionary, ctx: Dictionary, balance) -> Di
 		"heat":      _heat_slice(sim),
 		"inspect":   _inspect_slice(sim, ctx),
 		"speed":     float(ctx.get("speed", 1.0)),
+		"ui":        _ui_slice(ctx),
 		"goals":     _goals_slice(session),
 		"death":     _death_slice(sim),
 		"vitals":    _vitals_slice(p, sim),
@@ -534,6 +535,17 @@ static func _raid_slice(sim) -> Dictionary:
 const INSPECT_HIDDEN := {"shown": false}
 
 static func _inspect_slice(sim, ctx: Dictionary) -> Dictionary:
+	var vm: Dictionary = _inspect_raw(sim, ctx)
+	if bool(ctx.get("touch", false)) and bool(vm.get("shown", false)):
+		vm = vm.duplicate()
+		vm["hint"] = Fmt.touchify(String(vm.get("hint", "")))
+		var lines: Array = []
+		for l in vm.get("lines", []):
+			lines.append(Fmt.touchify(String(l)))
+		vm["lines"] = lines
+	return vm
+
+static func _inspect_raw(sim, ctx: Dictionary) -> Dictionary:
 	if sim == null or not sim.has_method("building_def") or not ctx.has("hover"):
 		return INSPECT_HIDDEN
 	var t: Vector2i = ctx.hover
@@ -542,6 +554,8 @@ static func _inspect_slice(sim, ctx: Dictionary) -> Dictionary:
 		return INSPECT_HIDDEN
 	var cell: int = t.y * n + t.x
 	var sel := String(ctx.get("selected_build", ""))
+	if sel == WorldInputScript.WorldInput.REMOVE_TOOL:
+		return _inspect_remove(sim, cell)
 	if sel != "":
 		return _inspect_ghost(sim, sel, t, cell)
 	var hw: Vector2 = ctx.get("hover_world", Vector2(t.x + 0.5, t.y + 0.5))
@@ -553,6 +567,36 @@ static func _inspect_slice(sim, ctx: Dictionary) -> Dictionary:
 	if sim.bgrid.has(cell):
 		return _inspect_building(sim, sim.bgrid[cell])
 	return _inspect_ground(sim, t, cell)
+
+# The touch remove tool's tooltip: what a tap here would take down and what it gives back.
+static func _inspect_remove(sim, cell: int) -> Dictionary:
+	if not sim.bgrid.has(cell):
+		return {"shown": true, "state": &"info", "title": "🗑 Розібрати", "lines": ["тут нічого розбирати"],
+			"hint": "торкнись своєї будівлі · ✖ — сховати інструмент"}
+	var b: Dictionary = sim.bgrid[cell]
+	var def: Dictionary = sim.building_def(String(b.kind))
+	var back: Dictionary = {}
+	for k in def.get("cost", {}):
+		var half: int = int(def.cost[k]) / 2
+		if half > 0:
+			back[k] = half
+	var lone: bool = String(b.kind) == "storage" and _count_kind(sim, "storage") <= 1
+	var refund := "нічого"
+	if not back.is_empty():
+		refund = GameData.cost_str(back) if not bool(sim.get("use_catalog") == true) else _catalog_cost(sim, back)
+	return {"shown": true, "state": &"crit" if lone else &"warn",
+		"title": "🗑 Розібрати: %s" % String(def.get("name", CatalogDefs.building_label(String(b.kind)))),
+		"lines": ["єдиний склад — не розібрати" if lone else "назад: %s" % refund],
+		"hint": "торкнись — розібрати · веди пальцем — ряд"}
+
+# --- ui (VIEW mode flags the frame's own panels read: touch layout, the armed tool) ---
+static func _ui_slice(ctx: Dictionary) -> Dictionary:
+	return {
+		"touch": bool(ctx.get("touch", false)),
+		"remove": String(ctx.get("selected_build", "")) == WorldInputScript.WorldInput.REMOVE_TOOL,
+		"armed": String(ctx.get("selected_build", "")) != "",
+		"menu": bool(ctx.get("menu_open", false)),
+	}
 
 static func _inspect_enemy(e: Dictionary) -> Dictionary:
 	var bot: bool = String(e.get("kind", "raider")) == "bot"

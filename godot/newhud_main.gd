@@ -24,6 +24,7 @@ const GameData = preload("res://scripts/data.gd")
 const WorldInputScript = preload("res://scripts/ui/world_input.gd")
 const Lifecycle = preload("res://scripts/ui/lifecycle.gd")
 const ViewGeom = preload("res://scripts/ui/view_geom.gd")
+const Widgets = preload("res://scripts/ui/widgets.gd")
 const TILE := ViewGeom.TILE
 
 var session: SessionScript
@@ -40,6 +41,11 @@ var router: InputController.InputController
 var winput: WorldInputScript.WorldInput
 var spawn_screen: Lifecycle.SpawnScreen
 var death_screen: Lifecycle.DeathScreen
+var panel_menu: Widgets.PanelMenu
+# Touch frame (phones): Android/iOS builds, or `-- touch [scale=1.7]` to drive it on a desktop. The
+# canvas grows by a DPI-derived content scale so text/targets keep a physical size, the HUD goes
+# compact, and the keyboard/right-button/wheel get on-screen stand-ins (top-bar tools + ☰ menu).
+var touch_ui := false
 var shot_mode := false
 var _t := 0.0
 var _built := false
@@ -53,6 +59,7 @@ var _saved_day := -1
 func _ready() -> void:
 	UITheme.install_emoji_fallback()       # web has no system emoji font — icons were boxes without it
 	var ui_theme := UITheme.build()        # ONE Theme resource from Tokens (§2.4)
+	_setup_touch()
 
 	# --- world space (WorldRoot): tilemap + overlays + camera ---
 	view = WorldViewScript.new()
@@ -79,6 +86,16 @@ func _ready() -> void:
 	# time speed is VIEW state too (the sim only ever sees scaled dt): the top-bar chips land here
 	router.bind(&"set_speed", func(_s, a: Dictionary) -> void:
 		winput.apply_speed(&"set", float(a.get("mult", 1.0))))
+	# touch tools — all VIEW state (menu, armed tool, camera), bound where the view lives
+	router.bind(&"toggle_menu", func(_s, _a: Dictionary) -> void: _set_menu(not panel_menu.visible))
+	router.bind(&"cancel_tool", func(_s, _a: Dictionary) -> void:
+		view.selected_build = ""
+		router.dispatch(&"cancel_action", {}, session))
+	router.bind(&"remove_tool", func(_s, _a: Dictionary) -> void:
+		var rt := String(WorldInputScript.WorldInput.REMOVE_TOOL)
+		view.selected_build = "" if String(view.selected_build) == rt else rt)
+	router.bind(&"zoom_in", func(_s, _a: Dictionary) -> void: winput.zoom_step(1.25))
+	router.bind(&"zoom_out", func(_s, _a: Dictionary) -> void: winput.zoom_step(0.8))
 	Mechanics.register_all(preg, oreg)     # mechanics register themselves — no controller edit (R4)
 	overlay_host.oreg = oreg
 
@@ -94,6 +111,7 @@ func _ready() -> void:
 	# ONE connection per panel — a second connect would double-dispatch every intent.
 	for p in preg.panels:
 		p.intent.connect(_route_intent)
+	_build_menu(ui_theme)
 
 	# --- world input adapter (clicks/keys -> verbs; inert until session exists) ---
 	winput = WorldInputScript.WorldInput.new()
@@ -151,6 +169,7 @@ func _enter_session() -> void:
 	view.sim = session.sim
 	winput.session = session
 	hud_root.setup(session, balance, bus, preg, oreg)
+	hud_root.set_compact(touch_ui)        # BEFORE mount: compact panels pick their phone defaults
 	hud_root.mount()
 	spawn_screen.visible = false
 	hud_layer.visible = true
@@ -166,6 +185,69 @@ func _autosave() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		_autosave()   # quitting keeps the world (the web build relies on the timed saves)
+	elif what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_autosave()   # a phone may kill a backgrounded app without another callback
+	elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		_on_back()
+
+# Android «back»: peel one layer — the menu, then an armed tool, then the game (saved) itself.
+func _on_back() -> void:
+	if panel_menu != null and panel_menu.visible:
+		_set_menu(false)
+	elif view != null and String(view.selected_build) != "":
+		view.selected_build = ""
+	else:
+		_autosave()
+		get_tree().quit()
+
+# --- touch frame ---------------------------------------------------------------------------------
+func _setup_touch() -> void:
+	var args := OS.get_cmdline_user_args()
+	touch_ui = OS.has_feature("mobile") or "touch" in args
+	if not touch_ui:
+		return
+	var sf: float = WorldInputScript.WorldInput.ui_scale(float(DisplayServer.screen_get_dpi()), Vector2(get_window().size))
+	for a in args:
+		if String(a).begins_with("scale="):
+			sf = clampf(float(String(a).substr(6)), 1.0, 3.0)
+	get_window().content_scale_factor = sf
+
+# The ☰ menu: one toggle per registered panel/overlay that carries a menu_label (generic — the
+# registries' own metadata, R4 spirit), flipping the SAME registry state the hotkeys flip.
+func _build_menu(ui_theme: Theme) -> void:
+	panel_menu = Widgets.PanelMenu.new()
+	panel_menu.theme = ui_theme   # a CanvasLayer breaks theme inheritance — hand it the frame's theme
+	Widgets.WidgetBase.Widget.pin_center(panel_menu)
+	panel_menu.visible = false
+	hud_layer.add_child(panel_menu)
+	var entries: Array = []
+	for p in preg.panels:
+		if String(p.menu_label) != "":
+			entries.append({"kind": &"panel", "id": p.panel_id, "label": String(p.menu_label)})
+	for o in oreg.overlays:
+		if String(o.menu_label) != "":
+			entries.append({"kind": &"overlay", "id": o.overlay_id, "label": String(o.menu_label)})
+	panel_menu.setup(entries)
+	panel_menu.chosen.connect(func(kind: StringName, id: StringName) -> void:
+		if kind == &"overlay":
+			oreg.toggle(id)
+		else:
+			preg.toggle(id)
+		_refresh_menu())
+	panel_menu.closed.connect(func() -> void: _set_menu(false))
+
+func _set_menu(on: bool) -> void:
+	panel_menu.visible = on
+	if on:
+		_refresh_menu()
+
+func _refresh_menu() -> void:
+	var states: Dictionary = {}
+	for p in preg.panels:
+		states["panel:%s" % String(p.panel_id)] = bool(p.visible)
+	for o in oreg.overlays:
+		states["overlay:%s" % String(o.overlay_id)] = bool(oreg.is_on(o.overlay_id))
+	panel_menu.bind(states)
 
 # A panel emitted an intent (e.g. the ResearchPanel's enqueue_research); dispatch it through the router.
 func _route_intent(verb: StringName, args: Dictionary) -> void:
@@ -185,8 +267,10 @@ func _process(dt: float) -> void:
 	view.queue_redraw()
 	# VIEW state for this frame's snapshot (hud_root runs after us: parent before child)
 	hud_root.view_ctx = {"hover": view.hover, "hover_world": winput.hover_world(),
-		"in_world": winput.mouse_in_world and not session.sim.dead,
-		"selected_build": String(view.selected_build), "speed": winput.speed}
+		"in_world": winput.tooltip_wanted(touch_ui) and not session.sim.dead and not panel_menu.visible,
+		"selected_build": String(view.selected_build), "speed": winput.speed,
+		"touch": touch_ui, "menu_open": panel_menu.visible,
+		"pointer": winput.pointer_screen if winput.pointer_is_touch else get_viewport().get_mouse_position()}
 	overlay_host.map_n = int(session.sim.n)   # keep in lockstep with the live region (survives travel)
 	overlay_host.snap = hud_root.last_snap
 	overlay_host.queue_redraw()

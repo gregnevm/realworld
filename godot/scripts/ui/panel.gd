@@ -28,6 +28,10 @@ class Base extends PanelContainer:
 	# the player owns its visibility (a hotkey/close never fights a re-reveal).
 	var reveal_once := false
 	var revealed := false
+	# Touch/compact frame (phones): the label its ☰ menu toggle shows, and whether the panel starts
+	# open there (-1 = same as default_open, 0 = closed, 1 = open) — a phone has room for less.
+	var menu_label := ""
+	var compact_open := -1
 	var rebuild_count := 0         # R2 enforcement: incremented ONLY inside _build()
 	var rebind_count := 0
 

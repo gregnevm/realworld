@@ -9,6 +9,8 @@ const TILE := ViewGeom.TILE
 var sim: Variant
 var hover := Vector2i(-9999, -9999)
 var selected_build := ""
+# The armed «remove» tool (touch's right-click): selected_build holds this id instead of a building.
+const REMOVE_TOOL := "__remove__"
 
 # one glyph table for the ghost preview AND the placed-building letters (content-pack complete)
 const BUILD_GLYPH := {"wall": "#", "door": "D", "floor": ".", "storage": "S", "workbench": "W",
@@ -57,7 +59,14 @@ func _draw() -> void:
 	if sim.player.action != null and sim.player.action.has("cell") and int(sim.player.action.cell) >= 0:
 		var cell: int = sim.player.action.cell
 		draw_rect(Rect2((cell % n) * TILE + 2, int(cell / n) * TILE + 2, TILE - 4, TILE - 4), Color(1, 0.81, 0.36, 0.9), false, 2.0)
-	if selected_build != "" and sim._in(hover.x, hover.y):
+	if selected_build == REMOVE_TOOL and sim._in(hover.x, hover.y):
+		var own: bool = sim.bgrid.has(hover.y * n + hover.x)
+		var rr := Rect2(hover.x * TILE + 3, hover.y * TILE + 3, TILE - 6, TILE - 6)
+		var rc := Color.html("ff6b6b") if own else Color(1, 0.42, 0.42, 0.45)
+		draw_rect(rr, Color(1, 0.35, 0.35, 0.25 if own else 0.1))
+		draw_line(rr.position, rr.end, rc, 3.0)
+		draw_line(Vector2(rr.end.x, rr.position.y), Vector2(rr.position.x, rr.end.y), rc, 3.0)
+	elif selected_build != "" and sim._in(hover.x, hover.y):
 		var sel_def: Dictionary = sim.building_def(selected_build)
 		var okb: bool = not sel_def.is_empty() and sim.build_valid(hover.x, hover.y) and sim.afford(sel_def.get("cost", {}))
 		var col := Color(0.35, 0.82, 0.55, 0.5) if okb else Color(1, 0.35, 0.35, 0.45)

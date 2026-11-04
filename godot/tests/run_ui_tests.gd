@@ -67,6 +67,8 @@ func _init() -> void:
 	_t_feedback_mounted()
 	_t_frame_panels()
 	_t_one_truth_overlays()
+	_t_touch_grammar()
+	_t_touch_frame()
 	_t_rule_tripwires()
 	# release the process-shared forward-engine model: its placed Things carry comp back-references
 	# (RefCounted cycles) that would otherwise show up as ObjectDB leaks at exit
@@ -784,6 +786,75 @@ func _session_of(sim) -> Variant:
 	var fs := _FakeSession.new()
 	fs.sim = sim
 	return fs
+
+# ================= мобільний UI (touch frame) — phones get the same game through fingers =================
+func _t_touch_grammar() -> void:
+	var WI := WorldInput.WorldInput
+	ok(WI.classify_release(0.12, false, false) == &"tap", "a short still touch is a tap (it acts)")
+	ok(WI.classify_release(0.8, false, false) == &"inspect", "a still hold past LONG_PRESS inspects instead of acting")
+	ok(WI.classify_release(0.12, true, false) == &"none" and WI.classify_release(0.12, false, true) == &"none",
+		"a drag or a pinch never acts")
+	ok(is_equal_approx(WI.ui_scale(96.0, Vector2(1280, 720)), 1.0), "desktop keeps the authored scale")
+	var phone: float = WI.ui_scale(400.0, Vector2(2400, 1080))
+	ok(phone > 1.5 and phone < 1.9, "a 400 dpi 20:9 phone scales the canvas up (×%.2f) so text keeps ~14sp" % phone)
+	ok(is_equal_approx(WI.ui_scale(280.0, Vector2(2560, 1600)), 1.0), "a 10\" tablet keeps the desktop layout")
+	var rt := String(WI.REMOVE_TOOL)
+	var d: Dictionary = WI.decide_click([], {2 * 8 + 3: {"kind": "tree"}}, 8, rt, Vector2i(3, 2), 3.5, 2.5)
+	ok(StringName(d.verb) == &"deconstruct", "the armed remove tool turns a tap into deconstruct (touch's right button)")
+	ok(WI.paintable(rt), "the remove tool sweeps runs like walls do")
+	ok(Fmt.touchify("ЛКМ — рубати · повну торбу пішак сам віднесе на склад").begins_with("тап — рубати"),
+		"tooltips speak touch on a phone (ЛКМ -> тап)")
+	ok(Fmt.touchify("Натисни 9 (Багаття) і клікни біля пішака.") == "Вибери внизу 9 (Багаття) і торкнись біля пішака.",
+		"goal hints name the bottom bar and a touch, not a key and a click")
+
+func _t_touch_frame() -> void:
+	var sess = SessionScript.new()
+	sess.autosave = false
+	sess.start(50.4501, 30.5234, "Київ")
+	var preg = PanelReg.PanelRegistry.new()
+	var oreg = OverlayReg.OverlayRegistry.new()
+	Mechanics.register_all(preg, oreg)
+	var hr = HudRootScript.new()
+	hr._build_zones()   # headless: no _ready (not in the tree) — build the dock zones the mount fills
+	hr.setup(sess, Balance.Balance.new(), FeedbackBus.FeedbackBus.new(), preg, oreg)
+	hr.set_compact(true)
+	hr.mount()
+	ok(hr.dock_top > 40.0, "compact docks start under the top strip")
+	ok(not preg.get_panel(&"balance").visible and preg.get_panel(&"stock").visible and preg.get_panel(&"goals").visible,
+		"a phone opens the essentials (stock/vitals/goals) and keeps the threat gauge in the menu")
+	var labelled := 0
+	for p in preg.panels:
+		if String(p.menu_label) != "":
+			labelled += 1
+	var menu = Widgets.PanelMenu.new()
+	var entries: Array = []
+	for p in preg.panels:
+		if String(p.menu_label) != "":
+			entries.append({"kind": &"panel", "id": p.panel_id, "label": String(p.menu_label)})
+	for o in oreg.overlays:
+		entries.append({"kind": &"overlay", "id": o.overlay_id, "label": String(o.menu_label)})
+	menu.setup(entries)
+	ok(labelled >= 15 and menu.entry_count() == entries.size(), "the ☰ menu offers every labelled panel + both overlays (%d)" % menu.entry_count())
+	var snap: Dictionary = HudModel.snapshot(sess, HudModel.world_of(sess.sim), {"day": 1, "touch": true, "selected_build": String(WorldInput.WorldInput.REMOVE_TOOL)}, null)
+	ok(bool(snap.ui.touch) and bool(snap.ui.remove), "the ui slice carries the touch flag and the armed remove tool")
+	var top = preg.get_panel(&"top_bar")
+	top.bind(snap)
+	ok(top._tool_box.visible and not top._region.visible, "touch top strip shows the tools (☰ ✖ 🗑 − +) and drops the region label")
+	ok(top._tools[2].button_pressed, "the 🗑 tool reads armed")
+	var vit = preg.get_panel(&"vitals")
+	vit.bind(snap)
+	ok(vit._bar_grid.columns == 2 and not vit._carry.visible, "phone vitals pair their bars and drop the carry row")
+	var c := Vector2i(int(sess.sim.player.px), int(sess.sim.player.py))
+	var store: Vector2i = sess.sim.base_center()
+	var rm: Dictionary = HudModel._inspect_slice(sess.sim, {"hover": store, "touch": true, "selected_build": String(WorldInput.WorldInput.REMOVE_TOOL)})
+	ok("єдиний склад" in " ".join(rm.lines), "the remove tool warns before the last storage")
+	sess.sim._place_building("bed", c.x + 2, c.y + 2, -1)
+	rm = HudModel._inspect_slice(sess.sim, {"hover": Vector2i(c.x + 2, c.y + 2), "touch": true, "selected_build": String(WorldInput.WorldInput.REMOVE_TOOL)})
+	ok("назад:" in " ".join(rm.lines) and "торкнись" in String(rm.hint), "the remove tool shows the refund and the touch verb")
+	menu.free()
+	hr.free()
+	sess.sim.dispose_farm()
+	sess.sim.dispose_power()
 
 # ---------------- Rule tripwires: R1/R3/R4/R7/R9/R10 as literal grep tests (the spec's whole point) ----------------
 func _t_rule_tripwires() -> void:
