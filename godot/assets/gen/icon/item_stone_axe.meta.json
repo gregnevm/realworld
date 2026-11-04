@@ -1,17 +1,17 @@
 {
  "id": "item_stone_axe",
  "kind": "icon",
- "variant": 5,
- "model": "gemini-2.5-flash-image",
- "hash": "05b37606",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "f390c2c2",
  "refs": [
   "ref_ground.png",
   "ref_world.png"
  ],
  "usage": {
-  "promptTokenCount": 1294,
-  "candidatesTokenCount": 1290,
-  "totalTokenCount": 2584,
+  "promptTokenCount": 3018,
+  "candidatesTokenCount": 1494,
+  "totalTokenCount": 4512,
   "promptTokensDetails": [
    {
     "modality": "TEXT",
@@ -19,17 +19,17 @@
    },
    {
     "modality": "IMAGE",
-    "tokenCount": 516
+    "tokenCount": 2240
    }
   ],
   "candidatesTokensDetails": [
    {
     "modality": "IMAGE",
-    "tokenCount": 1290
+    "tokenCount": 1120
    }
   ],
   "serviceTier": "standard"
  },
- "approved_from": "v5",
+ "approved_from": "v1",
  "prompt_chars": 3314
 }

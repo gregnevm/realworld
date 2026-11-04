@@ -11,8 +11,8 @@
    "label": "actor_hero",
    "size": 128,
    "status": "approved",
-   "hash": "66e1a170",
-   "approved": "v3",
+   "hash": "719a77cb",
+   "approved": "v1",
    "auto": "a lone survivor in patched layered clothing, scarf, backpack with bedroll, improvised tools on belt"
   },
   {
@@ -24,8 +24,8 @@
    "label": "actor_patrol_robot",
    "size": 128,
    "status": "approved",
-   "hash": "ca6aae88",
-   "approved": "v4",
+   "hash": "63b533ec",
+   "approved": "v0",
    "notes": "sensor eye glows but casts NO beam or scan cone",
    "auto": "an original AI-era autonomous patrol machine still enforcing its pre-collapse protocol: weathered multi-legged chassis, moss in its joints, one cold teal sensor eye scanning, hostile"
   },
@@ -38,8 +38,8 @@
    "label": "actor_raider",
    "size": 128,
    "status": "approved",
-   "hash": "36b2db28",
-   "approved": "v3",
+   "hash": "7bd96bc3",
+   "approved": "v0",
    "auto": "a hostile clan raider with mismatched armor cut from machine plating, painted mask, crude spear"
   },
   {
@@ -105,8 +105,9 @@
    "tier": 0,
    "subject": "bed — a piece of furniture, built by survivors",
    "size": 128,
-   "status": "todo",
-   "auto": "bed — a piece of furniture, built by survivors"
+   "status": "draft",
+   "auto": "bed — a piece of furniture, built by survivors",
+   "hash": "ec703888"
   },
   {
    "id": "bld_bedroll",
@@ -172,9 +173,9 @@
    "subject": "campfire — a production station, built by survivors",
    "size": 128,
    "status": "approved",
-   "hash": "3817f3d0",
+   "hash": "6e094e7c",
    "notes": "small low flames inside the stone ring, NO smoke plume and no glow halo — smoke/light are drawn by the engine",
-   "approved": "v5",
+   "approved": "v0",
    "auto": "campfire — a production station, built by survivors"
   },
   {
@@ -262,8 +263,9 @@
    "tier": 0,
    "subject": "door — a structural piece, built by survivors",
    "size": 128,
-   "status": "todo",
-   "auto": "door — a structural piece, built by survivors"
+   "status": "draft",
+   "auto": "door — a structural piece, built by survivors",
+   "hash": "17ac9a87"
   },
   {
    "id": "bld_dresser",
@@ -350,8 +352,9 @@
    "tier": 0,
    "subject": "floor — a structural piece, seen as the surface it covers",
    "size": 64,
-   "status": "todo",
-   "auto": "floor — a structural piece, seen as the surface it covers"
+   "status": "draft",
+   "auto": "floor — a structural piece, seen as the surface it covers",
+   "hash": "7f3c7a4a"
   },
   {
    "id": "bld_fridge",
@@ -416,8 +419,9 @@
    "tier": 1,
    "subject": "grow zone — a farming installation, seen as the surface it covers",
    "size": 64,
-   "status": "todo",
-   "auto": "grow zone — a farming installation, seen as the surface it covers"
+   "status": "draft",
+   "auto": "grow zone — a farming installation, seen as the surface it covers",
+   "hash": "1f18c50b"
   },
   {
    "id": "bld_heater",
@@ -427,8 +431,9 @@
    "tier": 5,
    "subject": "heater — a piece of furniture, built by survivors",
    "size": 128,
-   "status": "todo",
-   "auto": "heater — a piece of furniture, built by survivors"
+   "status": "draft",
+   "auto": "heater — a piece of furniture, built by survivors",
+   "hash": "25566ced"
   },
   {
    "id": "bld_hi_tech_research_bench",
@@ -493,8 +498,9 @@
    "tier": 5,
    "subject": "lamp — a piece of furniture, built by survivors",
    "size": 128,
-   "status": "todo",
-   "auto": "lamp — a piece of furniture, built by survivors"
+   "status": "draft",
+   "auto": "lamp — a piece of furniture, built by survivors",
+   "hash": "2864c45f"
   },
   {
    "id": "bld_large_battery",
@@ -592,8 +598,9 @@
    "tier": 0,
    "subject": "research bench — a production station, built by survivors",
    "size": 128,
-   "status": "todo",
-   "auto": "research bench — a production station, built by survivors"
+   "status": "draft",
+   "auto": "research bench — a production station, built by survivors",
+   "hash": "3e18fcc5"
   },
   {
    "id": "bld_royal_bed",
@@ -790,8 +797,9 @@
    "tier": 6,
    "subject": "spike trap — a defensive installation, a single 1×1 grid-cell segment designed to repeat in a row",
    "size": 128,
-   "status": "todo",
-   "auto": "spike trap — a defensive installation, a single 1×1 grid-cell segment designed to repeat in a row"
+   "status": "draft",
+   "auto": "spike trap — a defensive installation, a single 1×1 grid-cell segment designed to repeat in a row",
+   "hash": "5b4a911c"
   },
   {
    "id": "bld_standing_lamp",
@@ -823,8 +831,9 @@
    "tier": 1,
    "subject": "stone floor — a structural piece, seen as the surface it covers",
    "size": 64,
-   "status": "todo",
-   "auto": "stone floor — a structural piece, seen as the surface it covers"
+   "status": "draft",
+   "auto": "stone floor — a structural piece, seen as the surface it covers",
+   "hash": "b38bc8ac"
   },
   {
    "id": "bld_stone_wall",
@@ -867,8 +876,9 @@
    "tier": 0,
    "subject": "storage — a storage container, built by survivors",
    "size": 128,
-   "status": "todo",
-   "auto": "storage — a storage container, built by survivors"
+   "status": "draft",
+   "auto": "storage — a storage container, built by survivors",
+   "hash": "549c47b4"
   },
   {
    "id": "bld_tailoring_bench",
@@ -901,7 +911,8 @@
    "subject": "torch — a utility installation, built by survivors",
    "size": 128,
    "auto": "torch — a utility installation, built by survivors",
-   "status": "todo"
+   "status": "draft",
+   "hash": "5306ea79"
   },
   {
    "id": "bld_torch_lamp",
@@ -923,8 +934,8 @@
    "subject": "turret — a defensive installation, built by survivors",
    "size": 128,
    "status": "approved",
-   "hash": "78e58d0e",
-   "approved": "v2",
+   "hash": "41e199ef",
+   "approved": "v0",
    "auto": "turret — a defensive installation, built by survivors"
   },
   {
@@ -947,8 +958,8 @@
    "subject": "wall — a structural piece, a single 1×1 grid-cell segment designed to repeat in a row",
    "size": 128,
    "status": "approved",
-   "hash": "0478598e",
-   "approved": "v2",
+   "hash": "898c9387",
+   "approved": "v1",
    "auto": "wall — a structural piece, a single 1×1 grid-cell segment designed to repeat in a row"
   },
   {
@@ -1015,8 +1026,8 @@
    "subject": "workbench — a production station, built by survivors",
    "size": 128,
    "status": "approved",
-   "hash": "b6fe81e5",
-   "approved": "v2",
+   "hash": "8ce6a36f",
+   "approved": "v1",
    "auto": "workbench — a production station, built by survivors"
   },
   {
@@ -1083,7 +1094,8 @@
    "subject": "axe (tool)",
    "size": 128,
    "auto": "axe (tool)",
-   "status": "todo"
+   "status": "draft",
+   "hash": "12882718"
   },
   {
    "id": "item_bionic_arm",
@@ -1237,7 +1249,8 @@
    "subject": "club (weapon)",
    "size": 128,
    "auto": "club (weapon)",
-   "status": "todo"
+   "status": "draft",
+   "hash": "62909804"
   },
   {
    "id": "item_devilstrand_duster",
@@ -1600,7 +1613,8 @@
    "subject": "pick (tool)",
    "size": 128,
    "auto": "pick (tool)",
-   "status": "todo"
+   "status": "draft",
+   "hash": "b26f38fa"
   },
   {
    "id": "item_plasteel_sword",
@@ -1622,7 +1636,8 @@
    "subject": "plate (armor)",
    "size": 128,
    "auto": "plate (armor)",
-   "status": "todo"
+   "status": "draft",
+   "hash": "18534ca0"
   },
   {
    "id": "item_plate_armor",
@@ -1710,7 +1725,8 @@
    "subject": "sledge (tool)",
    "size": 128,
    "auto": "sledge (tool)",
-   "status": "todo"
+   "status": "draft",
+   "hash": "2a198e77"
   },
   {
    "id": "item_smokepop_belt",
@@ -1743,7 +1759,8 @@
    "subject": "spear (weapon)",
    "size": 128,
    "auto": "spear (weapon)",
-   "status": "todo"
+   "status": "draft",
+   "hash": "a58f9c03"
   },
   {
    "id": "item_steel_axe",
@@ -1787,8 +1804,8 @@
    "subject": "stone axe (tool)",
    "size": 128,
    "status": "approved",
-   "hash": "05b37606",
-   "approved": "v5",
+   "hash": "f390c2c2",
+   "approved": "v1",
    "notes": "just the axe — no berries, no leaves, nothing else in frame",
    "auto": "stone axe (tool)"
   },
@@ -1845,7 +1862,8 @@
    "subject": "vest (armor)",
    "size": 128,
    "auto": "vest (armor)",
-   "status": "todo"
+   "status": "draft",
+   "hash": "1c615377"
   },
   {
    "id": "item_warhammer",
@@ -1888,8 +1906,9 @@
    "src": "extra/node_bush",
    "label": "node_bush",
    "size": 128,
-   "status": "todo",
-   "auto": "a wild berry bush with herbs at its base"
+   "status": "draft",
+   "auto": "a wild berry bush with herbs at its base",
+   "hash": "ac25381c"
   },
   {
    "id": "node_rock",
@@ -1900,8 +1919,8 @@
    "label": "node_rock",
    "size": 128,
    "status": "approved",
-   "hash": "fbc43717",
-   "approved": "v3",
+   "hash": "f3b7043f",
+   "approved": "v1",
    "auto": "a mineable boulder outcrop with visible ore streaks"
   },
   {
@@ -1913,8 +1932,8 @@
    "label": "node_scrap",
    "size": 128,
    "status": "approved",
-   "hash": "02607186",
-   "approved": "v0",
+   "hash": "b74b13d7",
+   "approved": "v1",
    "auto": "the wreck of a fallen AI machine half-sunk in the ground — rusted armor plates, torn cables, dead sensor cluster — a salvage site for scrap and components"
   },
   {
@@ -1926,8 +1945,8 @@
    "label": "node_tree",
    "size": 128,
    "status": "approved",
-   "hash": "dec7a6a5",
-   "approved": "v2",
+   "hash": "da13681d",
+   "approved": "v1",
    "auto": "a temperate deciduous tree, harvestable for wood"
   },
   {
@@ -1940,7 +1959,7 @@
    "size": 0,
    "status": "approved",
    "hash": "7eeafe09",
-   "approved": "v1",
+   "approved": "v4",
    "auto": "ground swatches arranged as a grid: grass, forest floor, water, old asphalt, rubble, snow — each a square swatch seen from above",
    "notes": "STRICT orthographic top-down: camera looks straight down (90°), every swatch is a perfectly flat square texture seen from directly above, filling its cell edge to edge, like seamless 2D game ground textures. NO isometric or three-quarter view, NO 3D soil blocks, NO side faces or cross-sections, NO perspective, NO drop shadows, NO thick borders between swatches."
   },
@@ -2197,7 +2216,8 @@
    "subject": "raw food as freshly gathered — a small pile or bundle",
    "size": 128,
    "auto": "raw food as freshly gathered — a small pile or bundle",
-   "status": "todo"
+   "status": "draft",
+   "hash": "e747f68c"
   },
   {
    "id": "res_gear_wheel",
@@ -2791,8 +2811,8 @@
    "subject": "raw wood as freshly gathered — a small pile or bundle",
    "size": 128,
    "status": "approved",
-   "hash": "db48527b",
-   "approved": "v2",
+   "hash": "cf2acc28",
+   "approved": "v0",
    "auto": "raw wood as freshly gathered — a small pile or bundle"
   },
   {
@@ -3287,8 +3307,9 @@
    "tier": null,
    "subject": "bare packed soil with pebbles",
    "size": 64,
-   "status": "todo",
-   "auto": "bare packed soil with pebbles"
+   "status": "draft",
+   "auto": "bare packed soil with pebbles",
+   "hash": "7bf2bcf3"
   },
   {
    "id": "tile_forest",
@@ -3298,8 +3319,9 @@
    "tier": null,
    "subject": "forest floor: moss, needles, leaf litter, small roots",
    "size": 64,
-   "status": "todo",
-   "auto": "forest floor: moss, needles, leaf litter, small roots"
+   "status": "draft",
+   "auto": "forest floor: moss, needles, leaf litter, small roots",
+   "hash": "562711d3"
   },
   {
    "id": "tile_grass",
@@ -3310,8 +3332,8 @@
    "subject": "temperate meadow grass, patchy, a few small weeds",
    "size": 64,
    "status": "approved",
-   "hash": "3067295a",
-   "approved": "v2",
+   "hash": "715d0be9",
+   "approved": "v1",
    "auto": "temperate meadow grass, patchy, a few small weeds"
   },
   {
@@ -3322,8 +3344,9 @@
    "tier": null,
    "subject": "cracked old asphalt road surface with faded paint fragments and weeds in cracks",
    "size": 64,
-   "status": "todo",
-   "auto": "cracked old asphalt road surface with faded paint fragments and weeds in cracks"
+   "status": "draft",
+   "auto": "cracked old asphalt road surface with faded paint fragments and weeds in cracks",
+   "hash": "66d6963b"
   },
   {
    "id": "tile_rock",
@@ -3333,8 +3356,9 @@
    "tier": null,
    "subject": "exposed grey bedrock with cracks and lichen",
    "size": 64,
-   "status": "todo",
-   "auto": "exposed grey bedrock with cracks and lichen"
+   "status": "draft",
+   "auto": "exposed grey bedrock with cracks and lichen",
+   "hash": "1b145928"
   },
   {
    "id": "tile_ruins",
@@ -3345,9 +3369,10 @@
    "subject": "rubble of collapsed concrete buildings, broken bricks, rebar, scattered dead circuit boards and cable",
    "size": 64,
    "status": "approved",
-   "hash": "16669792",
+   "hash": "e42d7a85",
    "approved": "v0",
-   "auto": "rubble of collapsed concrete buildings, broken bricks, rebar, scattered dead circuit boards and cable"
+   "auto": "rubble of collapsed concrete buildings, broken bricks, rebar, scattered dead circuit boards and cable",
+   "notes": "Strictly flat top-down rubble field: evenly scattered concrete chunks, bricks, short rebar pieces and small dead circuit boards. NO tools, NO axe or hammer, NO handles or sticks, no single large prop, no dark central patch — it must tile invisibly."
   },
   {
    "id": "tile_sand",
@@ -3357,8 +3382,9 @@
    "tier": null,
    "subject": "coarse river sand with small shells and pebbles",
    "size": 64,
-   "status": "todo",
-   "auto": "coarse river sand with small shells and pebbles"
+   "status": "draft",
+   "auto": "coarse river sand with small shells and pebbles",
+   "hash": "19df91e1"
   },
   {
    "id": "tile_snow",
@@ -3368,8 +3394,9 @@
    "tier": null,
    "subject": "trampled old snow with icy patches",
    "size": 64,
-   "status": "todo",
-   "auto": "trampled old snow with icy patches"
+   "status": "draft",
+   "auto": "trampled old snow with icy patches",
+   "hash": "9dcbdbb7"
   },
   {
    "id": "tile_water",
@@ -3379,8 +3406,9 @@
    "tier": null,
    "subject": "shallow murky river water, subtle ripples",
    "size": 64,
-   "status": "todo",
-   "auto": "shallow murky river water, subtle ripples"
+   "status": "draft",
+   "auto": "shallow murky river water, subtle ripples",
+   "hash": "89cabff7"
   }
  ]
 }

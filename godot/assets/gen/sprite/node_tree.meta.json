@@ -1,35 +1,36 @@
 {
  "id": "node_tree",
  "kind": "sprite",
- "variant": 2,
- "model": "gemini-2.5-flash-image",
- "hash": "dec7a6a5",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "da13681d",
  "refs": [
   "ref_ground.png",
   "ref_world.png"
  ],
  "usage": {
-  "promptTokenCount": 1219,
-  "candidatesTokenCount": 1290,
-  "totalTokenCount": 2509,
+  "promptTokenCount": 2966,
+  "candidatesTokenCount": 1594,
+  "totalTokenCount": 5516,
   "promptTokensDetails": [
    {
-    "modality": "TEXT",
-    "tokenCount": 703
+    "modality": "IMAGE",
+    "tokenCount": 2240
    },
    {
-    "modality": "IMAGE",
-    "tokenCount": 516
+    "modality": "TEXT",
+    "tokenCount": 726
    }
   ],
   "candidatesTokensDetails": [
    {
     "modality": "IMAGE",
-    "tokenCount": 1290
+    "tokenCount": 1120
    }
   ],
+  "thoughtsTokenCount": 956,
   "serviceTier": "standard"
  },
- "approved_from": "v2",
- "prompt_chars": 3045
+ "approved_from": "v1",
+ "prompt_chars": 3157
 }

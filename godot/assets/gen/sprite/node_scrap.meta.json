@@ -1,35 +1,36 @@
 {
  "id": "node_scrap",
  "kind": "sprite",
- "variant": 0,
- "model": "gemini-2.5-flash-image",
- "hash": "02607186",
+ "variant": 1,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "b74b13d7",
  "refs": [
   "ref_ground.png",
   "ref_world.png"
  ],
  "usage": {
-  "promptTokenCount": 1237,
-  "candidatesTokenCount": 1290,
-  "totalTokenCount": 2527,
+  "promptTokenCount": 2990,
+  "candidatesTokenCount": 1556,
+  "totalTokenCount": 5535,
   "promptTokensDetails": [
    {
-    "modality": "TEXT",
-    "tokenCount": 721
+    "modality": "IMAGE",
+    "tokenCount": 2240
    },
    {
-    "modality": "IMAGE",
-    "tokenCount": 516
+    "modality": "TEXT",
+    "tokenCount": 750
    }
   ],
   "candidatesTokensDetails": [
    {
     "modality": "IMAGE",
-    "tokenCount": 1290
+    "tokenCount": 1120
    }
   ],
+  "thoughtsTokenCount": 989,
   "serviceTier": "standard"
  },
- "approved_from": "v0",
- "prompt_chars": 3135
+ "approved_from": "v1",
+ "prompt_chars": 3263
 }
