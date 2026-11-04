@@ -13,6 +13,7 @@ Survival-MMORPG із симуляційною глибиною RimWorld на **�
 | `GDD_BOOK/` | Інтерактивний Game Design Document (джерело істини — `gdd.json`) |
 | `tests/` | Тести детермінованого ядра симуляції + валідація дерева контенту (`node --test`) |
 | `specs/` | Специфікації фіч (цикл Specify → Plan → Tasks → Implement) |
+| `docs/` | Довідники: [`rimworld-reference.md`](docs/rimworld-reference.md) — дизайн-канон RimWorld (формули, числа, вердикти «беремо / адаптуємо / ні»), [`catalog.md`](docs/catalog.md), [`mechanics-status.md`](docs/mechanics-status.md) |
 
 ## Запуск
 ```bash
