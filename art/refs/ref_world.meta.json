@@ -1,0 +1,28 @@
+{
+ "id": "ref_world",
+ "kind": "ref",
+ "variant": 0,
+ "model": "gemini-2.5-flash-image",
+ "hash": "43a6c4c5",
+ "refs": [],
+ "usage": {
+  "promptTokenCount": 578,
+  "candidatesTokenCount": 1290,
+  "totalTokenCount": 1868,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 578
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1290
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 2432
+}
