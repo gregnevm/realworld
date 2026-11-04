@@ -2289,6 +2289,42 @@
    "auto": "a temperate deciduous tree, harvestable for wood"
   },
   {
+   "id": "promo_convoy",
+   "kind": "key",
+   "subject": "a small convoy of three hand-built cargo carts pulled by survivors along a cracked old highway through a green overgrown ruined city at dawn, a distant teal-eyed patrol robot silhouette on an overpass, hopeful and adventurous",
+   "status": "approved",
+   "manual": true,
+   "label": "promo_convoy",
+   "size": 0,
+   "notes": "no text, no UI, cinematic composition, rule of thirds",
+   "hash": "8247f21d",
+   "approved": "v1"
+  },
+  {
+   "id": "promo_machine",
+   "kind": "key",
+   "subject": "a colossal dormant old-world machine monolith half-buried in a mossy valley at golden hour, a tiny survivor with a backpack standing at its base looking up, thin amber sunbeams through haze, rusted mast towers on the horizon, awe and scale",
+   "status": "approved",
+   "manual": true,
+   "label": "promo_machine",
+   "size": 0,
+   "notes": "no text, no UI, cinematic composition, rule of thirds",
+   "hash": "6c137006",
+   "approved": "v1"
+  },
+  {
+   "id": "promo_raid",
+   "kind": "key",
+   "subject": "night defense of a small survivor camp built from salvaged machine plating and wood: a stone-and-plank wall with a hand-built turret and a bright amber torch line, two old-world patrol robots with cold teal sensor eyes approaching through mist across a moonlit field, survivors silhouette behind the wall, tense and cinematic",
+   "status": "approved",
+   "manual": true,
+   "label": "promo_raid",
+   "size": 0,
+   "notes": "no text, no UI, cinematic composition, rule of thirds",
+   "hash": "34dd2052",
+   "approved": "v1"
+  },
+  {
    "id": "ref_ground",
    "kind": "ref",
    "subject": "ground swatches arranged as a grid: grass, forest floor, water, old asphalt, rubble, snow — each a square swatch seen from above",

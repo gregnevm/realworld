@@ -47,6 +47,9 @@ var panel_menu: Widgets.PanelMenu
 # compact, and the keyboard/right-button/wheel get on-screen stand-ins (top-bar tools + ☰ menu).
 var touch_ui := false
 var shot_mode := false
+var demo_mode := false             # `-- newhud demo`: spawn screen → auto-landing → hero walks a loop → quit (for --write-movie)
+var _demo_t := 0.0
+var _demo_leg := -1
 var _t := 0.0
 var _built := false
 var _shot := false
@@ -143,6 +146,7 @@ func _ready() -> void:
 		_autosave())
 	life.add_child(death_screen)
 
+	demo_mode = "newhud" in OS.get_cmdline_user_args() and "demo" in OS.get_cmdline_user_args()
 	if shot_mode and not ("spawn" in OS.get_cmdline_user_args()):   # `-- newhud shot spawn` captures the spawn screen
 		_start_game(50.4501, 30.5234, "Київ")
 
@@ -255,6 +259,8 @@ func _route_intent(verb: StringName, args: Dictionary) -> void:
 	router.dispatch(verb, args, session)
 
 func _process(dt: float) -> void:
+	if demo_mode:
+		_demo_step(dt)
 	if session == null:
 		if shot_mode:
 			_shot_step(dt)   # `shot spawn`: the spawn screen itself is the subject
@@ -286,6 +292,25 @@ func _process(dt: float) -> void:
 		_autosave()
 	if shot_mode:
 		_shot_step(dt)
+
+# --- dev demo (for `--write-movie`): the spawn screen breathes for 3 s, then a landing, a base, and a walking loop ---
+func _demo_step(dt: float) -> void:
+	_demo_t += dt
+	if session == null:
+		if _demo_t > 3.0:
+			_start_game(50.4501, 30.5234, "Київ")
+			_build_demo_base()
+		return
+	var leg: int = int((_demo_t - 3.0) / 2.6)
+	if leg != _demo_leg:
+		_demo_leg = leg
+		var sx: int = int(session.sim.player.px)
+		var sy: int = int(session.sim.player.py)
+		var offs := [Vector2i(5, 1), Vector2i(5, 5), Vector2i(-2, 5), Vector2i(-3, -1)]
+		var o: Vector2i = offs[leg % offs.size()]
+		session.sim.order_move(clampi(sx + o.x, 1, session.sim.n - 2), clampi(sy + o.y, 1, session.sim.n - 2))
+	if _demo_t > 15.0:
+		get_tree().quit()
 
 # --- dev screenshot: build a base, toggle the Light overlay, capture the new HUD, quit ---
 func _shot_step(dt: float) -> void:
