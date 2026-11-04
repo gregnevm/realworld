@@ -51,7 +51,7 @@ class StockPanel extends PanelBase.Base:
 		for i in _extra.size():
 			if i < extra.size():
 				var e: Dictionary = extra[i]
-				_extra[i].set_row(String(e.icon), String(e.label), str(int(e.amt)))
+				_extra[i].set_row(String(e.icon), String(e.label), str(int(e.amt)), String(e.get("id", "")))
 				_extra[i].visible = true
 			else:
 				_extra[i].visible = false

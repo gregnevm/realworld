@@ -11,22 +11,32 @@ const Tokens = preload("res://scripts/ui/tokens.gd")
 const UITheme = preload("res://scripts/ui/theme.gd")
 const GameData = preload("res://scripts/data.gd")
 const Fmt = preload("res://scripts/ui/format.gd")
+const ArtIcons = preload("res://scripts/ui/art_icons.gd")
 
 
 # ---- StatRow (.stock .r): glyph · label · right-aligned mono value (Stock / Equipment / Agents) ----
 class StatRow extends WidgetBase.Widget:
 	var _glyph: Label
+	var _icon: TextureRect         # generated art icon; replaces the emoji glyph when a PNG exists
 	var _label: Label
 	var _value: Label
 	var value := ""
 	func _build() -> void:
-		custom_minimum_size = Vector2(0, 20)
+		custom_minimum_size = Vector2(0, 24)
 		var hb := HBoxContainer.new()
 		hb.set_anchors_preset(Control.PRESET_FULL_RECT)
 		hb.add_theme_constant_override("separation", 6)
 		add_child(hb)
 		_glyph = Label.new()
 		hb.add_child(_glyph)
+		_icon = TextureRect.new()
+		_icon.custom_minimum_size = Vector2(22, 22)
+		_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		_icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_icon.visible = false
+		hb.add_child(_icon)
 		_label = Label.new()
 		_label.add_theme_color_override("font_color", Tokens.MUT)
 		hb.add_child(_label)
@@ -44,13 +54,20 @@ class StatRow extends WidgetBase.Widget:
 		build_once()
 		var info: Dictionary = GameData.RES[res]
 		_glyph.text = String(info.icon)
+		_show_icon(ArtIcons.res(res))
 		_label.text = String(info.label)
 		_value.add_theme_color_override("font_color", Tokens.res(res))
-	func set_row(glyph: String, label: String, val: String) -> void:
+	func set_row(glyph: String, label: String, val: String, icon_id: String = "") -> void:
 		build_once()
 		_glyph.text = glyph
+		_show_icon(ArtIcons.res(icon_id) if icon_id != "" else null)
 		_label.text = label
 		set_value(val)
+	# Art icon when we have one (glyph hidden), emoji glyph otherwise (R11 fallback).
+	func _show_icon(tex: Texture2D) -> void:
+		_icon.texture = tex
+		_icon.visible = tex != null
+		_glyph.visible = tex == null
 	func set_value(v) -> void:
 		build_once()
 		value = str(v)
