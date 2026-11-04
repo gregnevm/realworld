@@ -69,6 +69,7 @@ func _ready() -> void:
 	cam = Camera2D.new()
 	add_child(cam)
 	cam.make_current()
+	cam.zoom = Vector2(1.5, 1.5)   # generated sprites are detailed: default to ~42 px tiles, not 28
 
 	# --- registries + feedback bus + router (session-independent wiring) ---
 	preg = PanelReg.PanelRegistry.new()

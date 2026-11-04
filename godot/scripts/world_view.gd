@@ -25,6 +25,10 @@ const ART_DIR := "res://assets/gen/"
 const TERRAIN_TILE := ["tile_water", "tile_grass", "tile_forest", "tile_rock", "tile_road", "tile_dirt", "tile_ruins", "tile_sand", "tile_snow"]
 const HIT_FLASH := Color(1.7, 1.7, 1.7, 1.0)
 var _tex_cache := {}
+var _crop_cache := {}   # path-less: Texture2D instance id → opaque Rect2i (generated sprites carry ~20% transparent padding)
+# Ground is muted (lower value contrast, slight desaturation) so objects/actors — kept at full strength — pop.
+const GROUND_TINT := Color(0.80, 0.82, 0.82, 1.0)
+const SHADOW := Color(0, 0, 0, 0.30)
 var _tile_tex: Array = []
 
 func _ready() -> void:
@@ -51,6 +55,38 @@ func art_texture(dir: String, id: String) -> Texture2D:
 			tex = ImageTexture.create_from_image(img)
 	_tex_cache[path] = tex
 	return tex
+
+# Opaque bounding rect of a sprite (cached). Drawing only this region removes the transparent margin the
+# generator leaves, so a "1-tile" sprite actually fills its tile instead of looking tiny.
+func content_rect(tex: Texture2D) -> Rect2:
+	var key := tex.get_instance_id()
+	if _crop_cache.has(key):
+		return _crop_cache[key]
+	var r := Rect2(Vector2.ZERO, tex.get_size())
+	var img := tex.get_image()
+	if img != null and not img.is_empty() and img.detect_alpha() != Image.ALPHA_NONE:
+		var u := img.get_used_rect()
+		if u.size.x > 0 and u.size.y > 0:
+			r = Rect2(u)
+	_crop_cache[key] = r
+	return r
+
+# Draw `tex` cropped to its content, fitted into `box` (aspect kept), bottom-centred on the box.
+func draw_sprite_fit(tex: Texture2D, box: Rect2, tint: Color = Color.WHITE, flip_x: bool = false) -> void:
+	var src := content_rect(tex)
+	var sc := minf(box.size.x / src.size.x, box.size.y / src.size.y)
+	var sz := src.size * sc
+	var pos := Vector2(box.position.x + (box.size.x - sz.x) * 0.5, box.end.y - sz.y)
+	var dst := Rect2(pos, sz)
+	if flip_x:
+		dst = Rect2(Vector2(dst.end.x, dst.position.y), Vector2(-sz.x, sz.y))
+	draw_texture_rect_region(tex, dst, src, tint)
+
+# Soft elliptical contact shadow (cheap ambient occlusion) under an object standing at `foot`.
+func draw_contact_shadow(foot: Vector2, radius: float) -> void:
+	draw_set_transform(foot, 0.0, Vector2(1.0, 0.38))
+	draw_circle(Vector2.ZERO, radius, SHADOW)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 # Building art: sprites dir first, floors/zones live in tile dir (bld_ prefix in both).
 func building_texture(kind: String) -> Texture2D:
@@ -80,12 +116,15 @@ func _draw() -> void:
 			var tr := Rect2(x * TILE, y * TILE, TILE + 1, TILE + 1)
 			var ttex: Texture2D = _tile_tex[tiles[i]] if tiles[i] < _tile_tex.size() else null
 			if ttex != null:
-				draw_texture_rect(ttex, tr, false)
+				draw_texture_rect(ttex, tr, false, GROUND_TINT)
 			else:
 				draw_rect(tr, terrain_colors[tiles[i]])
 				if (x + y) % 2 == 1:
 					draw_rect(tr, Color(0, 0, 0, 0.05))
-	for key in sim.map.nodes:
+	# painter's order (row-major = top to bottom) so tall sprites overlap the tile behind them correctly
+	var node_keys: Array = sim.map.nodes.keys()
+	node_keys.sort()
+	for key in node_keys:
 		var nx: int = key % n
 		var ny: int = int(key / n)
 		if nx < x0 or nx > x1 or ny < y0 or ny > y1:
@@ -128,7 +167,10 @@ func _draw_node(node, x: int, y: int) -> void:
 	var r := TILE * 0.36
 	var ntex := art_texture("sprite", "node_" + String(node.kind))
 	if ntex != null:
-		draw_texture_rect(ntex, Rect2(c - Vector2(TILE, TILE) * 0.5, Vector2(TILE, TILE)), false)
+		var tall: bool = String(node.kind) == "tree"
+		var box := Rect2((x + 0.5) * TILE - TILE * (0.62 if tall else 0.5), (y + 1.0) * TILE - TILE * (1.5 if tall else 0.95), TILE * (1.24 if tall else 1.0), TILE * (1.5 if tall else 0.95))
+		draw_contact_shadow(Vector2(c.x, (y + 0.92) * TILE), TILE * (0.34 if tall else 0.36))
+		draw_sprite_fit(ntex, box)
 		return
 	match node.kind:
 		"tree":
@@ -153,7 +195,11 @@ func _draw_building(b) -> void:
 	if btex != null:
 		var floorlike: bool = String(b.kind) == "floor" or String(b.kind).ends_with("_floor") or String(b.kind) == "grow_zone"
 		var inset := 0.0 if (floorlike or blocking_wall) else 1.0
-		draw_texture_rect(btex, Rect2(p.x + inset, p.y + inset, TILE - 2 * inset, TILE - 2 * inset), false)
+		if floorlike:
+			draw_texture_rect(btex, Rect2(p.x, p.y, TILE + 1, TILE + 1), false)
+		else:
+			draw_contact_shadow(Vector2(c.x, p.y + TILE * 0.92), TILE * 0.40)
+			draw_sprite_fit(btex, Rect2(p.x + inset, p.y - TILE * 0.12, TILE - 2 * inset, TILE * 1.08))
 		if float(def.get("range", 0.0)) > 0.0:
 			draw_line(c, c + Vector2(cos(b.aim), sin(b.aim)) * TILE * 0.45, Color.html("2a2f36"), maxf(2.0, TILE * 0.12))
 	elif blocking_wall:
@@ -195,10 +241,9 @@ func _draw_raider(e) -> void:
 
 # Actor sprite: ~1.5 tiles, feet near the pawn's position, mirrored when facing left.
 func _draw_actor(tex: Texture2D, c: Vector2, face_x: float, tint: Color) -> void:
-	var sz := TILE * 1.5
-	var w := -sz if face_x < -0.2 else sz
-	var x := c.x + sz * 0.5 if w < 0.0 else c.x - sz * 0.5
-	draw_texture_rect(tex, Rect2(x, c.y - sz * 0.72, w, sz), false, tint)
+	var sz := TILE * 1.9
+	draw_contact_shadow(c + Vector2(0, TILE * 0.36), TILE * 0.32)
+	draw_sprite_fit(tex, Rect2(c.x - sz * 0.5, c.y + TILE * 0.40 - sz, sz, sz), tint, face_x < -0.2)
 
 func _draw_player() -> void:
 	var p: Dictionary = sim.player
