@@ -9,6 +9,8 @@
     "lint": "node tools/lint.mjs",
     "smoke": "node tools/smoke.mjs",
     "sync-catalog": "node tools/sync-catalog.mjs",
-    "sync": "node tools/sync-catalog.mjs && node tools/gen-art.mjs sync"
+    "sync": "node tools/sync-catalog.mjs && node tools/gen-art.mjs sync",
+    "process": "node tools/process/report.mjs",
+    "process:pr": "node tools/process/check-pr.mjs"
   }
 }

@@ -50,15 +50,19 @@ realworld/
     content/catalog.json  335 def; валідовано catalog.gd ↔ tests/catalog.test.js
     tests/                headless-сьюти Godot (run_*.gd)
   GDD_BOOK/            інтерактивний GDD; правда — gdd.json
-  tests/               Node-тести (node --test): sim-ядро (вкл. drag-build/двері/ремонт/рейд-спавн/смерть), catalog, progression
-  tools/               sync-catalog.mjs · lint.mjs (контракт no-build + secret-scan) · smoke.mjs (Playwright-прохід гри, CI job browser-smoke) · gen-art.mjs + art/ (арт-пайплайн Nano Banana)
+  tests/               Node-тести (node --test): sim-ядро (вкл. drag-build/двері/ремонт/рейд-спавн/смерть), catalog, progression, process (гейт процесу)
+  tools/               sync-catalog.mjs · lint.mjs (контракт no-build + secret-scan) · smoke.mjs (Playwright-прохід гри, CI job browser-smoke) · gen-art.mjs + art/ (арт-пайплайн Nano Banana) · process/ (PR-гейт check-pr.mjs, звіт report.mjs, Godot-3 tripwire — lib.mjs)
   art/                 style.md (арт-біблія) · palette.json · refs/ (якорі стилю) · manifest.json (виводиться з catalog.json) · out/ (gitignored кандидати)
   .claude/skills/gen-art/  скіл генерації арту (/gen-art)
   .claude/skills/gamedev/  шлюз цілісності гри (/gamedev): ворота 0–6, правило доказу, тест Ніколая, FTUE — вхід для будь-якої механіки/фічі/плейтесту
   .claude/skills/godot-game-uiux-designer/  цикл UX/UI (аудит кадрами → код → анімація → кадр після)
-  specs/               специфікації фіч (0001…0008)
+  .claude/agents/      ролі процесу: designer · developer · integrity (вердикти воріт, лише читання) · qa-adversary (тести від REQ) · fresh-eyes (тест Ніколая, лише кадри)
+  specs/               специфікації фіч (0001…0009) + _TEMPLATE.md (REQ-ID)
   docs/                довідники: catalog.md, mechanics-status.md, rimworld-reference.md, ux/
-  .github/workflows/   CI: ci.yml (Node) + godot.yml (Godot headless)
+  docs/process/        процес розробки: README (принципи P1–P10, цикл, ролі, ритми) · game-design (метод, реєстр D/M) · automation (драбина доказів, радар, LLM Week) · playtest · rework-log · ai-use-log
+  docs/design/         стан дизайну — рішення ВЛАСНИКА: pillars.md · scope.md · decisions.md (OD-n)
+  .github/workflows/   CI: ci.yml (Node) + godot.yml (Godot headless) + process.yml (PR-гейт + звіт процесу)
+  .github/pull_request_template.md  контракт PR-гейта (інтент · тип · стовп · підстава · докази · що прибрано)
   .claude/launch.json  dev-сервер прев'ю
 ```
 
@@ -110,7 +114,7 @@ realworld/
 ## Команди
 - **Запуск гри (dev):** `cd game && python -m http.server 8765` → http://localhost:8765
 - **Запуск GDD:** `python "C:\Users\gregn\.claude\skills\gdd_build\scripts\serve.py" "O:\realworld\GDD_BOOK"`
-- **Тести:** `npm test` (Node `node --test` — детерміноване sim-ядро + валідація `catalog.json`/пайплайну прогресії + чиста половина арт-пайплайну `tests/art.test.js`); `npm run lint` (tools/lint.mjs: порядок скриптів = контракт, strict-IIFE, без ES-модулів, без `Math.random` у sim-файлах); `npm run smoke` (tools/smoke.mjs: Playwright + Chromium — спавн → drag-build → вибір/демонтаж → модалки → дослідження → рейд → смерть → reload/continue; падає на будь-якому console.error; у CI — job `browser-smoke` з артефактом скриншотів); headless-сьюти Godot — `test.cmd` у корені (перелік — у розділі «Godot-порт» вище). Обидва набори ганяються в CI (`.github/workflows/ci.yml` + `godot.yml`).
+- **Тести:** `npm test` (Node `node --test` — детерміноване sim-ядро + валідація `catalog.json`/пайплайну прогресії + чиста половина арт-пайплайну `tests/art.test.js`); `npm run lint` (tools/lint.mjs: порядок скриптів = контракт, strict-IIFE, без ES-модулів, без `Math.random` у sim-файлах, без Godot-3 API у `.gd`); `npm run smoke` (tools/smoke.mjs: Playwright + Chromium — спавн → drag-build → вибір/демонтаж → модалки → дослідження → рейд → смерть → reload/continue; падає на будь-якому console.error; у CI — job `browser-smoke` з артефактом скриншотів); headless-сьюти Godot — `test.cmd` у корені (перелік — у розділі «Godot-порт» вище). Обидва набори ганяються в CI (`.github/workflows/ci.yml` + `godot.yml`).
 - **Білд/деплой:** білду немає; статичний хостинг (GitHub Pages / Railway / itch.io).
 
 ## Ключові рішення (ADR-лайт)
@@ -119,6 +123,13 @@ realworld/
 - **Глобальний `RW` + classic scripts** — простота; ціна — дисципліна щодо порядку підключення (зафіксована вище).
 - **Один персонаж + MMO** — це survival-RPG із ДНК RimWorld, а не колонія-сим (деталі — `GDD_BOOK/gdd.json`).
 - **Фаза 1: authoritative-сервер = Godot headless (spec 0006, option A, затверджено 2026-07-05)** — той самий тестований кернел і є сервером; Node-порт — лише fallback за виміряної нестачі RAM/пропускної здатності (дублювання сима = ризик дрейфу). Межа авторитету, wire-шви (`HudModel.snapshot`/verbs/`social.new_graph`/hash-chain/`ClimateProvider`) і доля `game/` (заморожений рендер-прототип, не другий сим) — у спеці. Детермінізм-хребет: `Persistence.world_hash` + `run_determinism_tests`.
+
+## Процес розробки (docs/process/README.md)
+- **Агент пропонує, власник вирішує (P1):** стовпи, scope, модель вводу, баланс, політика ШІ-арту, великі рефактори — лише через `docs/design/decisions.md` (OD-n). Відкрите питання — додай рядок `open` з варіантами; не закривай сам.
+- **Без доказу нема «готово» (P2):** PR за `.github/pull_request_template.md`; CI `process.yml` блокує PR без інтенту/типу/стовпа, без доказів для продуктових файлів, без кадру для видимого, без REQ/OD/spec для зміни правил гри (`feat/balance/content`).
+- **Нічого без стовпа (P7):** фіча посилається на S1–S3 (`docs/design/pillars.md`); інакше — «заморожено» у `scope.md`.
+- Ігрова задача починається з `/gamedev`; нова спека — з `specs/_TEMPLATE.md` (стабільні REQ-ID); ролі — `.claude/agents/`.
+- Правка власника/плейтесту після «готово» → рядок у `docs/process/rework-log.md`. Стан процесу — `npm run process` (`-- --brief` — дайджест).
 
 ## Правила для агента
 - Перед зміною — звірся з цим файлом і структурою; не вигадуй конвенції.
