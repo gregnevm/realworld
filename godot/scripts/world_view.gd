@@ -53,6 +53,7 @@ var _last_epos: Array = []          # enemy world positions last frame (death po
 var _poofs: Array = []              # {pos, age}
 var action_target: Dictionary = {}  # touch scheme: what the action button will act on (scene sets it each frame)
 var action_mode: StringName = &"gather"
+var action_build := ""              # build mode: the building the button will place (its ghost fills the brackets)
 const ACTION_COL := {&"gather": Color(0.44, 0.68, 0.33, 1.0), &"build": Color(0.88, 0.69, 0.44, 1.0), &"repair": Color(0.53, 0.82, 0.84, 1.0), &"fight": Color(0.88, 0.42, 0.36, 1.0)}
 var shake := 0.0                    # TRAUMA 0..1 (Eiserloh): events add, decays 1/s; the scene offsets the camera by trauma²
 var hitstop := 0.0                  # seconds the RENDER holds its frame (Vlambeer/Dead Cells hit-stop) — the sim never pauses
@@ -541,6 +542,10 @@ func _draw_action_target() -> void:
 	var k: float = 0.5 + 0.5 * sin(_now() * 5.0)
 	var pad: float = TILE * (0.02 + 0.06 * k)
 	var r := Rect2(p - Vector2(pad, pad), Vector2(TILE + 2 * pad, TILE + 2 * pad))
+	if action_mode == &"build" and action_build != "":   # empty brackets did not say WHAT lands there (3rd read)
+		var gtex := building_texture(action_build)
+		if gtex != null:
+			draw_texture_rect(gtex, Rect2(p, Vector2(TILE, TILE)), false, Color(1, 1, 1, 0.8 + 0.2 * k))
 	var arm: float = TILE * 0.3
 	var w := 3.0
 	for corner in [[r.position, Vector2(1, 0), Vector2(0, 1)], [Vector2(r.end.x, r.position.y), Vector2(-1, 0), Vector2(0, 1)],

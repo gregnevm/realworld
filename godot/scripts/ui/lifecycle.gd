@@ -393,6 +393,7 @@ class DeathScreen extends Control:
 		var b := Button.new()
 		b.text = "Новий виживальник"
 		b.custom_minimum_size = Vector2(260, 48)
+		b.theme_type_variation = UITheme.V_PRIMARY   # the only way forward must out-weigh the text above it
 		b.pressed.connect(func() -> void: respawn_chosen.emit())
 		Chrome.pop_button(b)
 		vb.add_child(b)

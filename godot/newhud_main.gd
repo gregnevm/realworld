@@ -556,6 +556,9 @@ func _guide_slot() -> int:
 			return i
 	return -1
 
+var _act_hand := -1                 # last seen hotbar hand (inventory world) — a change re-derives the mode
+var _act_hand_type: StringName = &""
+
 func _tick_action(dt: float) -> void:
 	var sim: Variant = session.sim
 	if act_overview:   # the stick drives the cursor (camera), not the hero
@@ -570,6 +573,14 @@ func _tick_action(dt: float) -> void:
 		var hs: Dictionary = _act_slots[act_slot]
 		if StringName(hs.type) == &"build":
 			act_build = String(hs.id)
+		if act_slot != _act_hand or StringName(hs.type) != _act_hand_type:
+			# the hand changed by ANY path (hotbar panel, digit key, a new game holding the campfire, the slot
+			# emptied): the action button follows what you hold — owner rule «picking a specific item switches
+			# the mode». 3rd independent read: campfire in hand, button still offered «Добути · брухт».
+			_act_hand = act_slot
+			_act_hand_type = StringName(hs.type)
+			act_mode = AM.mode_for_slot(hs)
+			act_target = {}
 	else:
 		_act_slots = AM.default_slots(sim, act_build)
 	act_slot = clampi(act_slot, 0, _act_slots.size() - 1)
@@ -583,6 +594,7 @@ func _tick_action(dt: float) -> void:
 		act_target["mode"] = act_mode
 	view.action_target = act_target
 	view.action_mode = act_mode
+	view.action_build = act_build
 	tc.bind_state({"mode": act_mode, "slots": _act_slots, "active": act_slot, "overview": act_overview,
 		"target": _target_label(act_target), "guide": _guide_slot()})
 	var bb: Variant = preg.get_panel(&"build_bar")
