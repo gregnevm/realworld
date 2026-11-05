@@ -26,6 +26,11 @@ func _init() -> void:
 	_t_stats()
 	_t_systems()
 	_t_climate()
+	_t_climate_provider_defaults()
+	_t_climate_temperature_model()
+	_t_climate_daylight_model()
+	_t_climate_season_calendar()
+	_t_climate_weather_model()
 	_t_needs()
 	_t_deprivation()
 	_t_health()
@@ -157,6 +162,305 @@ func _t_climate() -> void:
 	ok(cm.daylight(50.45, 180, 0.0) < cm.daylight(50.45, 180, 0.5), "midnight darker than noon")
 	# deterministic
 	ok(cm.temperature_c(50.45, 30.52, 100, 0.4) == cm.temperature_c(50.45, 30.52, 100, 0.4), "temperature is deterministic")
+
+# ---------------- Climate model contract (mutation-hardened, 2026-11) ----------------
+# The climate kernel/climate.gd PROMISES in its header, measured from the model's OUTPUTS (no formula is
+# re-derived here): a 360-day calendar (day 1 = northern mid-winter, day 181 = mid-summer, hemispheres
+# half a year apart, the equator on the northern calendar); annual mean 30 °C at the equator falling
+# 0.55 °C per degree of latitude; seasonal half-swing 2 °C + 0.30 °C/degree; diurnal half-swing
+# 4 °C + 0.05 °C/degree, coldest at midnight and warmest at noon; a lit window of ±0.30 day at the
+# equator/equinox stretched up to ±0.18 day at the poles (linear in |lat|), full light at noon, exact
+# dark outside it; weather odds clear 62 / rain 18 / fog 10 / cold_snap 10 %, and strictly below −5 °C
+# snow 35 / clear 65 %. Climate numbers are balance (owner's call, P1): drift here must be deliberate.
+# Before this block gdmutant scored climate.gd at 36.5 % (e.g. deleting `return &"fog"` broke nothing).
+
+func _near(a: float, b: float, tol: float) -> bool:
+	return absf(a - b) <= tol
+
+# Reference table: [lat, annual mean °C, seasonal half-swing °C, diurnal half-swing °C].
+const CLIMATE_TABLE := [
+	[0.0, 30.0, 2.0, 4.0],
+	[50.45, 2.2525, 17.135, 6.5225],   # Kyiv
+	[60.0, -3.0, 20.0, 7.0],
+	[-60.0, -3.0, 20.0, 7.0],
+	[90.0, -19.5, 29.0, 8.5],
+]
+
+# The bare interface is the SEAM's neutral fallback: a provider that overrides only part of it (like
+# _StubClimate, or a future weather-API provider) must leave a mild, lit, summer world — never a
+# lethal or pitch-dark one.
+func _t_climate_provider_defaults() -> void:
+	var base := Climate.ClimateProvider.new()
+	ok(base.temperature_c(50.45, 30.52, 1, 0.0) == 20.0, "base ClimateProvider: neutral 20 °C")
+	ok(base.season(-33.9, 1) == 2, "base ClimateProvider: neutral season = літо (2)")
+	ok(base.daylight(50.45, 1, 0.0) == 0.5, "base ClimateProvider: neutral half daylight")
+	ok(base.weather(50.45, 30.52, 1, 0.5, _rng(7)) == &"clear", "base ClimateProvider: clear sky")
+	var stub := _StubClimate.new(&"rain")
+	ok(stub.temperature_c(85.0, 0.0, 1, 0.0) == 20.0 and stub.season(85.0, 1) == 2 and stub.daylight(85.0, 1, 0.0) == 0.5,
+		"a weather-only provider inherits the neutral temperature / season / daylight")
+
+func _t_climate_temperature_model() -> void:
+	var cm := Climate.ClimateModel_Deterministic.new()
+	var bad_mean := ""
+	var bad_season := ""
+	var bad_diurnal := ""
+	var bad_equinox := ""
+	for row: Array in CLIMATE_TABLE:
+		var lat: float = row[0]
+		# annual mean: midnight + noon readings averaged over the whole 360-day year
+		var sum := 0.0
+		for d in range(1, 361):
+			sum += cm.temperature_c(lat, 0.0, d, 0.0) + cm.temperature_c(lat, 0.0, d, 0.5)
+		var mean: float = sum / 720.0
+		if not _near(mean, float(row[1]), 1e-6):
+			bad_mean += " lat %s: %.4f≠%s" % [lat, mean, row[1]]
+		# seasonal half-swing: mid-summer vs mid-winter at the same hour (hemisphere-agnostic magnitude)
+		for f: float in [0.0, 0.5]:
+			var swing: float = absf(cm.temperature_c(lat, 0.0, 181, f) - cm.temperature_c(lat, 0.0, 1, f)) / 2.0
+			if not _near(swing, float(row[2]), 1e-6):
+				bad_season += " lat %s f %s: %.4f≠%s" % [lat, f, swing, row[2]]
+		# diurnal half-swing: noon minus midnight on any day (signed — noon is the warm side)
+		for d: int in [1, 91, 181, 271]:
+			var dswing: float = (cm.temperature_c(lat, 0.0, d, 0.5) - cm.temperature_c(lat, 0.0, d, 0.0)) / 2.0
+			if not _near(dswing, float(row[3]), 1e-6):
+				bad_diurnal += " lat %s day %d: %.4f≠%s" % [lat, d, dswing, row[3]]
+		# equinoxes: the seasonal term crosses zero, so the day's mean IS the annual mean
+		for d: int in [91, 271]:
+			var day_mean: float = (cm.temperature_c(lat, 0.0, d, 0.0) + cm.temperature_c(lat, 0.0, d, 0.5)) / 2.0
+			if not _near(day_mean, float(row[1]), 1e-6):
+				bad_equinox += " lat %s day %d: %.6f≠%s" % [lat, d, day_mean, row[1]]
+	ok(bad_mean == "", "annual mean: 30 °C at the equator, −0.55 °C per degree of latitude" + bad_mean)
+	ok(bad_season == "", "seasonal half-swing: 2 °C at the equator, +0.30 °C per degree" + bad_season)
+	ok(bad_diurnal == "", "diurnal half-swing: 4 °C at the equator, +0.05 °C per degree, noon warm" + bad_diurnal)
+	ok(bad_equinox == "", "equinox days (91, 271) sit exactly on the annual mean (360-day year)" + bad_equinox)
+
+	# Daily shape: coldest at midnight, warmest at noon (48 half-hour samples, Kyiv, three seasons).
+	var shape_ok := true
+	for d: int in [1, 91, 181]:
+		var cold_f := -1.0
+		var warm_f := -1.0
+		var cold_t := INF
+		var warm_t := -INF
+		for k in 48:
+			var f: float = float(k) / 48.0
+			var t: float = cm.temperature_c(50.45, 30.52, d, f)
+			if t < cold_t:
+				cold_t = t
+				cold_f = f
+			if t > warm_t:
+				warm_t = t
+				warm_f = f
+		shape_ok = shape_ok and cold_f == 0.0 and warm_f == 0.5
+	ok(shape_ok, "daily cycle: coldest at midnight (frac 0), warmest at noon (frac 0.5)")
+
+	# Calendar: day 1 is the coldest day of the northern year, day 181 the warmest; the year repeats.
+	var coldest_day := 0
+	var warmest_day := 0
+	var cold_noon := INF
+	var warm_noon := -INF
+	var periodic := true
+	for d in range(1, 361):
+		var t: float = cm.temperature_c(50.45, 30.52, d, 0.5)
+		if t < cold_noon:
+			cold_noon = t
+			coldest_day = d
+		if t > warm_noon:
+			warm_noon = t
+			warmest_day = d
+		periodic = periodic and t == cm.temperature_c(50.45, 30.52, d + 360, 0.5)
+	ok(coldest_day == 1 and warmest_day == 181,
+		"northern year: day 1 is the coldest day, day 181 the warmest (got %d / %d)" % [coldest_day, warmest_day])
+	ok(periodic, "the climate year is exactly 360 days long (day d == day d+360)")
+
+	# Hemispheres: the south is the north half a year later — right down to just either side of the
+	# equator — and the equator itself (lat 0.0) is on the NORTHERN calendar (flip is BELOW it).
+	var mirror_bad := ""
+	for lat: float in [0.05, 33.9, 60.0, 90.0]:
+		for d: int in [1, 46, 91, 136, 181, 271]:
+			for f: float in [0.0, 0.5]:
+				var south: float = cm.temperature_c(-lat, 0.0, d, f)
+				var north_later: float = cm.temperature_c(lat, 0.0, d + 180, f)
+				if not _near(south, north_later, 1e-9):
+					mirror_bad += " ±%s d%d f%s: %.4f≠%.4f" % [lat, d, f, south, north_later]
+	ok(mirror_bad == "", "southern temperature = northern temperature 180 days later" + mirror_bad)
+	ok(_near(cm.temperature_c(0.0, 0.0, 1, 0.5), cm.temperature_c(1e-9, 0.0, 1, 0.5), 1e-6)
+		and cm.temperature_c(-0.05, 0.0, 1, 0.5) > cm.temperature_c(0.05, 0.0, 1, 0.5),
+		"the equator follows the northern calendar; day 1 is warm season just south of it")
+
+func _t_climate_daylight_model() -> void:
+	var cm := Climate.ClimateModel_Deterministic.new()
+	# Noon is full light and every reading is a brightness in [0, 1], everywhere, all year.
+	var noon_full := true
+	var in_range := true
+	for lat_i in range(-90, 91, 15):
+		var lat := float(lat_i)
+		for d in range(1, 361, 30):
+			noon_full = noon_full and cm.daylight(lat, d, 0.5) == 1.0
+			for k in 21:
+				var b: float = cm.daylight(lat, d, float(k) / 20.0)
+				in_range = in_range and b >= 0.0 and b <= 1.0
+	ok(noon_full, "daylight is exactly 1.0 at noon at every latitude, every day")
+	ok(in_range, "daylight is a brightness in [0, 1] (never negative, never above full)")
+	# Outside the lit window it is exactly dark — including midnight of a polar summer (window < ±0.5).
+	ok(cm.daylight(0.0, 1, 0.0) == 0.0 and cm.daylight(50.45, 181, 0.0) == 0.0 and cm.daylight(90.0, 181, 0.0) == 0.0
+		and cm.daylight(50.45, 1, 0.1) == 0.0,
+		"night is exactly 0.0 (equator, Kyiv summer, polar summer midnight, Kyiv winter dawn)")
+
+	# Lit half-window H (fraction of a day), read off the light curve itself: brightness ramps linearly
+	# from 1.0 at noon, so a probe dt before/after noon reads 1 - dt/H. Two probes, both sides of noon,
+	# must agree (the ramp is linear and symmetric) and match the table.
+	# [lat, day, H]: equator ±0.30 all year; equinoxes ±0.30 anywhere; poles 0.48 summer / 0.12
+	# winter (south flipped); lat 45 gets half the polar stretch.
+	var table := [
+		[0.0, 1, 0.30], [0.0, 91, 0.30], [0.0, 181, 0.30], [0.0, 271, 0.30],
+		[50.45, 91, 0.30], [-60.0, 271, 0.30], [90.0, 91, 0.30],
+		[90.0, 181, 0.48], [90.0, 1, 0.12], [-90.0, 1, 0.48], [-90.0, 181, 0.12],
+		[45.0, 181, 0.39], [45.0, 1, 0.21], [-45.0, 1, 0.39],
+	]
+	var bad := ""
+	for row: Array in table:
+		var lat: float = row[0]
+		var day: int = row[1]
+		var want: float = row[2]
+		for probe: float in [-0.10, -0.05, 0.05, 0.10]:
+			var h: float = absf(probe) / (1.0 - cm.daylight(lat, day, 0.5 + probe))
+			if not _near(h, want, 1e-9):
+				bad += " lat %s day %d probe %s: H %.6f≠%s" % [lat, day, probe, h, want]
+	ok(bad == "", "lit window: ±0.30 day at equator/equinox, 0.48/0.12 at the poles, linear ramp from noon" + bad)
+	# Kyiv: summer days are longer than winter days (count lit 10-minute slots).
+	var lit_summer := 0
+	var lit_winter := 0
+	for k in 144:
+		var f: float = float(k) / 144.0
+		lit_summer += 1 if cm.daylight(50.45, 181, f) > 0.0 else 0
+		lit_winter += 1 if cm.daylight(50.45, 1, f) > 0.0 else 0
+	ok(lit_summer > lit_winter, "Kyiv: a summer day is lit longer than a winter day (%d > %d slots)" % [lit_summer, lit_winter])
+
+# Day-of-year runs of the season label over one year: [[season, first_day], ...] starting at day 1.
+func _season_runs(cm: Climate.ClimateModel_Deterministic, lat: float) -> Array:
+	var runs: Array = []
+	var prev := -1
+	for d in range(1, 361):
+		var s: int = cm.season(lat, d)
+		if s != prev:
+			runs.append([s, d])
+			prev = s
+	return runs
+
+func _t_climate_season_calendar() -> void:
+	var cm := Climate.ClimateModel_Deterministic.new()
+	var runs := _season_runs(cm, 50.45)
+	# One full cycle in order: winter → spring → summer → autumn → winter (the year opens and closes in winter).
+	var in_order := runs.size() == 5
+	if in_order:
+		for i in range(1, runs.size()):
+			in_order = in_order and int(runs[i][0]) == (int(runs[i - 1][0]) + 1) % 4
+	ok(in_order and int(runs[0][0]) == 0, "season labels cycle winter→spring→summer→autumn→winter once a year %s" % [runs])
+	ok(cm.season(50.45, 1) == 0 and cm.season(50.45, 181) == 2, "north: day 1 is зима, day 181 is літо")
+	if runs.size() == 5:
+		var spring: int = runs[1][1]
+		var summer: int = runs[2][1]
+		var autumn: int = runs[3][1]
+		var winter: int = runs[4][1]
+		# Equinox seasons begin where the seasonal term crosses the annual mean (day 91 / 271, ±1 day).
+		ok(absi(spring - 91) <= 1 and absi(autumn - 271) <= 1,
+			"spring/autumn begin at the equinoxes (day %d≈91, day %d≈271)" % [spring, autumn])
+		# Solstice seasons begin when the temperature turns; the forward-looking probe may flip the label up
+		# to a week before the solstice, never after it.
+		ok(summer >= 174 and summer <= 181 and winter >= 354 and winter <= 360,
+			"summer/winter begin in the week before the solstice (day %d∈[174,181], day %d∈[354,360])" % [summer, winter])
+		# The annual curve is a symmetric wave, so the calendar is too: winter lasts as long as summer and
+		# spring as long as autumn (both solstices are anticipated by the same lead).
+		var len_winter: int = (spring - 1) + (361 - winter)
+		var len_spring: int = summer - spring
+		var len_summer: int = autumn - summer
+		var len_autumn: int = winter - autumn
+		ok(len_winter == len_summer and len_spring == len_autumn,
+			"opposite seasons last equally long (winter %d = summer %d, spring %d = autumn %d days)" % [len_winter, len_summer, len_spring, len_autumn])
+	# Hemispheres: the south runs half a year behind; the equator keeps the northern calendar; the year repeats.
+	var south_ok := true
+	var equator_ok := true
+	var periodic := true
+	for d in range(1, 361):
+		south_ok = south_ok and cm.season(-33.9, d) == cm.season(33.9, d + 180)
+		equator_ok = equator_ok and cm.season(0.0, d) == cm.season(50.45, d)
+		periodic = periodic and cm.season(50.45, d) == cm.season(50.45, d + 360)
+	ok(south_ok, "southern season = northern season 180 days later (day 1 is літо in Sydney)")
+	ok(equator_ok, "the equator (lat 0.0) keeps the northern season calendar")
+	ok(periodic, "the season calendar repeats every 360 days")
+
+# Weather mix over n seeded draws at one place and time: {weather: count}.
+func _weather_mix(cm: Climate.ClimateModel_Deterministic, lat: float, day: int, frac: float, seed_val: int, n: int) -> Dictionary:
+	var rng := _rng(seed_val)
+	var counts := {}
+	for i in n:
+		var w: StringName = cm.weather(lat, 0.0, day, frac, rng)
+		counts[w] = int(counts.get(w, 0)) + 1
+	return counts
+
+# Latitude (0..90) where the model's own reading at (day, frac) equals `target` °C — bisection over the
+# model's OUTPUT (day-1 noon cools monotonically poleward), not an inversion of its formula.
+func _lat_at_temp(cm: Climate.ClimateModel_Deterministic, day: int, frac: float, target: float) -> float:
+	var lo := 0.0
+	var hi := 90.0
+	for i in 80:
+		var mid: float = (lo + hi) * 0.5
+		if cm.temperature_c(mid, 0.0, day, frac) > target:
+			lo = mid
+		else:
+			hi = mid
+	return (lo + hi) * 0.5
+
+func _t_climate_weather_model() -> void:
+	var cm := Climate.ClimateModel_Deterministic.new()
+	const N := 100000
+	const TOL := 0.004   # ~2.6 σ for the 62 % share at N=100k; a 1-point odds drift is ≥ 6 σ
+	# Mild climate (Kyiv mid-summer noon, ~26 °C): clear 62 / rain 18 / fog 10 / cold_snap 10 %.
+	var mild := _weather_mix(cm, 50.45, 181, 0.5, 2026, N)
+	var want_mild := {&"clear": 0.62, &"rain": 0.18, &"fog": 0.10, &"cold_snap": 0.10}
+	var mild_bad := ""
+	for w: StringName in want_mild:
+		var share: float = float(mild.get(w, 0)) / float(N)
+		if not _near(share, float(want_mild[w]), TOL):
+			mild_bad += " %s %.4f≠%s" % [w, share, want_mild[w]]
+	ok(mild_bad == "" and not mild.has(&"snow"),
+		"mild weather odds: clear 62 / rain 18 / fog 10 / cold_snap 10 %%, never snow %s%s" % [mild, mild_bad])
+	# Deep cold (85°N, mid-winter noon, ~−36 °C): snow 35 / clear 65 %, nothing else.
+	var cold := _weather_mix(cm, 85.0, 1, 0.5, 2027, N)
+	var snow_share: float = float(cold.get(&"snow", 0)) / float(N)
+	var clear_share: float = float(cold.get(&"clear", 0)) / float(N)
+	ok(_near(snow_share, 0.35, TOL) and _near(clear_share, 0.65, TOL) and cold.size() == 2,
+		"cold weather odds: snow 35 / clear 65 %%, no rain/fog/cold_snap %s" % [cold])
+
+	# Snow needs STRICTLY below −5 °C, judged on the same temperature temperature_c() reports.
+	# Probe just either side of the line (−5.05 / −4.95 °C) and exactly on it: (78°N, day 271, noon)
+	# lands on −5.0 °C to the last bit in IEEE doubles (asserted, so a model change can't silently
+	# turn this into a non-boundary probe).
+	var lat_below := _lat_at_temp(cm, 1, 0.5, -5.05)
+	var lat_above := _lat_at_temp(cm, 1, 0.5, -4.95)
+	ok(_near(cm.temperature_c(lat_below, 0.0, 1, 0.5), -5.05, 1e-6) and _near(cm.temperature_c(lat_above, 0.0, 1, 0.5), -4.95, 1e-6),
+		"snow-line probes sit at −5.05 / −4.95 °C (lat %.4f / %.4f)" % [lat_below, lat_above])
+	ok(cm.temperature_c(78.0, 0.0, 271, 0.5) == -5.0, "boundary fixture: 78°N, day 271, noon is exactly −5.0 °C")
+	var below := _weather_mix(cm, lat_below, 1, 0.5, 11, 400)
+	var above := _weather_mix(cm, lat_above, 1, 0.5, 11, 400)
+	var on_line := _weather_mix(cm, 78.0, 271, 0.5, 11, 400)
+	ok(below.has(&"snow") and not below.has(&"rain") and not below.has(&"fog"), "−5.05 °C is snow weather %s" % [below])
+	ok(not above.has(&"snow") and above.has(&"rain") and above.has(&"fog") and above.has(&"cold_snap"),
+		"−4.95 °C is ordinary weather — no snow %s" % [above])
+	ok(not on_line.has(&"snow") and on_line.has(&"rain"), "exactly −5.0 °C is ordinary weather — no snow %s" % [on_line])
+
+	# Determinism / stream contract: one weather query consumes exactly one draw of the world's rng, and
+	# the same seed replays the same weather (environment.gd relies on both for twin-hash parity).
+	var a := _rng(99)
+	var b := _rng(99)
+	var same := true
+	for i in 64:
+		same = same and cm.weather(50.45, 30.52, 1 + i * 5, 0.5, a) == cm.weather(50.45, 30.52, 1 + i * 5, 0.5, b)
+	var c := _rng(5)
+	var c_ref := _rng(5)
+	cm.weather(50.45, 30.52, 181, 0.5, c)
+	c_ref.randf()
+	ok(same and c.state == c_ref.state, "weather is seed-deterministic and consumes exactly one rng draw per query")
 
 # ---------------- Needs ----------------
 func _t_needs() -> void:

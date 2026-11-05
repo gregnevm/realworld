@@ -51,8 +51,8 @@ class ClimateModel_Deterministic extends ClimateProvider:
 		# Quadrant from the seasonal value and its direction of travel (rising -> spring/summer).
 		var here: float = _seasonal(lat, day)
 		var ahead: float = _seasonal(lat, day + 15)
-		var rising: bool = ahead >= here
-		if here >= 0.0:
+		var rising: bool = ahead >= here   # gdmutant: ignore[comparison] ahead == here needs day+7.5 on a solstice — never for an int day
+		if here >= 0.0:   # gdmutant: ignore[comparison] >= vs >: -cos(k·TAU/360) is never exactly 0.0 in doubles (±1e-16 at 91/271)
 			return 2 if not rising else 1   # high & falling = summer, high & rising = late spring
 		return 3 if not rising else 0   # low & falling = autumn, low & rising = winter easing
 		# (a coarse but stable mapping; exact solstice math is not needed for gameplay). The low half
@@ -61,6 +61,9 @@ class ClimateModel_Deterministic extends ClimateProvider:
 	func daylight(lat: float, day: int, frac: float) -> float:
 		# Longer summer days / shorter winter days, exaggerated toward the poles.
 		var swing: float = _seasonal(lat, day) * (abs(lat) / 90.0)
+		# |lat| <= 90 (LatLon.parse) keeps 0.30 + 0.18·swing in [0.12, 0.48] (0.48 only at a pole's solstice): the 0.08
+		# floor, the maxf(0.05) guard and the 1.0 cap never bind, and a higher cap changes nothing — guards that gdmutant
+		# reports as equivalent survivors (6; not ignorable per-mutant: they share lines with killable constants).
 		var half_day: float = clampf(0.30 + 0.18 * swing, 0.08, 0.48)   # half-length of the lit window
 		var noon_dist: float = abs(frac - 0.5)
 		return clampf(1.0 - noon_dist / maxf(0.05, half_day), 0.0, 1.0)
@@ -70,11 +73,11 @@ class ClimateModel_Deterministic extends ClimateProvider:
 		var t: float = temperature_c(lat, lon, day, frac)
 		var r: float = rng.randf()
 		if t < -5.0:
-			return &"snow" if r < 0.35 else &"clear"
-		if r < 0.62:
+			return &"snow" if r < 0.35 else &"clear"   # gdmutant: ignore[comparison] every rng draw r is a float32; 0.35 is not float32-representable, so r == 0.35 never
+		if r < 0.62:   # gdmutant: ignore[comparison] float32 draw can never equal 0.62 (as for 0.35)
 			return &"clear"
-		if r < 0.80:
+		if r < 0.80:   # gdmutant: ignore[comparison] float32 draw can never equal 0.80 (as for 0.35)
 			return &"rain"
-		if r < 0.90:
+		if r < 0.90:   # gdmutant: ignore[comparison] float32 draw can never equal 0.90 (as for 0.35)
 			return &"fog"
 		return &"cold_snap"
