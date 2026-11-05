@@ -135,6 +135,7 @@
 | Звіт здоров'я процесу (job summary) | `tools/process/report.mjs` · `npm run process` | P10 |
 | Дайджест стану на старті сесії й після компактації | SessionStart-хук — сніпет у `automation.md` §5, **вмикає власник** | втрату контексту |
 | Godot-3 API tripwire (F1) | `tools/lint.mjs` ← `tools/process/lib.mjs` `godotDrift` | R1 |
+| Sim-годинник tripwire (spec 0012 REQ-10): sim не читає `Time.*`/`OS.get_*time*`/системний RNG | `tools/lint.mjs` ← `lib.mjs` `simClockDrift`/`unseededRng` + `run_tests::_t_no_wallclock_in_sim` (список звіряє `tests/process.test.js`) | детермінізм, R1 |
 | Шаблон PR = контракт гейта | `.github/pull_request_template.md` | P2, P9 |
 | Шаблон спеки з REQ-ID | `specs/_TEMPLATE.md` | F6, трасованість |
 

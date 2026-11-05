@@ -41,6 +41,16 @@ func _init() -> void:
 	_t_off_capsule_untouched()
 	_t_off_legacy_save_loads_off()
 	_t_off_flag_default_off()
+	# --- WAVE 0012-W1: Clock + the ban on wall-clock / system RNG in the sim (REQ-0012-10/11, REQ-0012-68 helper) ---
+	_t_no_wallclock_in_sim()
+	_t_no_unseeded_rng_in_sim()
+	_t_sim_has_no_clock_back_door()
+	_t_clock_os_reads_only_in_system_clock()
+	_t_clock_providers()
+	_t_clock_state_isolated()
+	_t_clock_wire_int64()
+	_t_clock_wire_rejects_garbage()
+	_t_clock_monotonic()
 	chk.skip_banner()
 	finish()
 
@@ -191,3 +201,613 @@ func _t_off_flag_default_off() -> void:
 		ok(not on, "REQ-0012-1/4: %s defaults to OFF on a fresh Session and Sim" % f)
 	sim.dispose_farm()
 	sim.dispose_power()
+
+
+# =====================================================================================================
+# WAVE 0012-W1 — Clock interface + the ban on the wall clock / system RNG in the sim.
+# Written from the REQ rows (REQ-0012-10, REQ-0012-11, REQ-0012-68 helper) and the owner's wire rule (spec
+# header R3: absolute times are int64 UTC-ms, in JSON a decimal STRING like the RNG cursors) — NOT from
+# clock.gd. The scanner below is this suite's own (independent of run_tests `_code_of` / lint lib.mjs): a
+# tripwire is only worth its sensitivity, so it is first proved on planted snippets, then run on the tree.
+# Not testable yet (later waves): «Sim.set_clock(now) is the only way now enters» and «a provider swap
+# changes frac without touching sim» need Sim.set_clock / TimeModel (W3/W4).
+# =====================================================================================================
+const Clock = preload("res://scripts/clock.gd")
+
+const INT64_MAX := 9223372036854775807
+const INT64_MIN := -9223372036854775807 - 1
+const TWO53 := 9007199254740992
+const NOW_1P8E12 := 1800000000000   # 2027-01-15T08:00:00Z: the magnitude the spec names («≈1.8e12, int64»)
+const MS_PER_HOUR := 3600000
+const CLOCK_HOME := "res://scripts/clock.gd"
+const SESSION_HOME := "res://scripts/session.gd"
+
+# The sim corpus = every script under godot/scripts MINUS the view layer (brief of the wave: clock.gd itself,
+# ui/**, world_view.gd, main.gd, map_widget.gd; newhud_main.gd lives outside scripts/). Walked recursively HERE,
+# so a script in a brand-new directory is in the corpus by default.
+const SCRIPTS_ROOT := "res://scripts"
+const VIEW_DIR_PREFIXES := ["ui/"]
+const VIEW_FILES := ["clock.gd", "world_view.gd", "map_widget.gd", "main.gd"]
+const MUST_SCAN := ["sim.gd", "session.gd", "persistence.gd", "goals.gd", "social.gd", "world_gen.gd", "data.gd", "catalog_sim.gd",
+	"sim/threats.gd", "sim/director.gd", "sim/hero_health.gd", "sim/environment.gd", "kernel/needs.gd", "kernel/gear.gd", "net/command.gd"]
+
+# The spec's list (REQ-0012-10): Time.*, OS.get_*time*, Engine.get_ticks_*, Engine.time_scale, DateTime,
+# randomize(), randf*/randi*. A method on a SEEDED RandomNumberGenerator (`rng.randf()`) is the sanctioned way.
+const BANNED := [
+	["Time.*", "\\bTime\\s*\\."],
+	["OS.get_*time*", "\\bOS\\s*\\.\\s*get_\\w*time\\w*"],
+	["Engine.get_ticks_*", "\\bEngine\\s*\\.\\s*get_ticks_\\w+"],
+	["Engine.time_scale", "\\bEngine\\s*\\.\\s*time_scale"],
+	["DateTime", "\\bDateTime\\b"],
+	["randomize()", "(^|[^\\w])randomize\\s*\\("],
+	["randf*/randi*", "(^|[^.\\w])(randf|randi)\\w*\\s*\\("],
+]
+# Hidden system randomness the spec's names do not spell out but its headline («системного RNG») covers:
+# Array.shuffle()/pick_random() draw from the GLOBAL generator.
+const HIDDEN_GLOBAL_RNG := "\\.(shuffle|pick_random)\\s*\\("
+
+const SCANNER_MUST_HIT := [
+	"var t: int = Time.get_ticks_msec()",
+	"var t: float = Time.get_unix_time_from_system()",
+	"var d: Dictionary = Time.get_datetime_dict_from_system()",
+	"var t: int = OS.get_system_time_msecs()",
+	"var t: int = OS.get_unix_time()",
+	"var d: Dictionary = OS.get_datetime()",
+	"var t: int = Engine.get_ticks_msec()",
+	"Engine.time_scale = 3.0",
+	"var d := DateTime.new()",
+	"rng.randomize()",
+	"randomize()",
+	"var x: float = randf()",
+	"var x: float = randf_range(0.0, 1.0)",
+	"var n: int = randi() % 6",
+	"var n: int = randi_range(1, 6)",
+	"var g: float = randfn(0.0, 1.0)",
+	"if absf(randf() - 0.5) > 0.1: pass",
+	"print(\"#\", Time.get_ticks_msec())",                                   # a '#' in a string must not hide code after it
+	"var s: String = \"it's \" + str(Time.get_ticks_msec())",               # an apostrophe inside a double-quoted string
+	"var s: String = \"a\\\"b\" + str(Time.get_ticks_msec())",              # an escaped quote
+	"var t: int = Time.get_ticks_msec()   # \"quote and 'apostrophe",       # a comment never hides the code BEFORE it
+]
+const SCANNER_MUST_PASS := [
+	"# Time.get_ticks_msec() randomize() DateTime Engine.time_scale",
+	"\t## OS.get_system_time_secs() in a doc comment",
+	"var s: String = \"Time.get_ticks_msec() randf() DateTime\"",
+	"var s: String = 'OS.get_datetime() randomize()'",
+	"var r: float = rng.randf()",
+	"var r: int = rng.randi_range(0, 3)",
+	"var r: float = s.env_rng.randfn(0.0, 1.0)",
+	"var r: int = rand_from_seed(seed_val)[0]",
+	"var tm: Timer = Timer.new()",
+	"var p: float = s.time.frac",
+	"var q: int = float_time_of_day()",
+	"func randomized_pick(arr: Array) -> int:",
+	"var z: int = errand() + brandf() + grandfather_randi()",
+	"var f: int = Engine.get_frames_drawn()",
+	"rng.seed = hash_seed",
+]
+
+
+# ---- own scanner -------------------------------------------------------------------------------------
+
+func _read(path: String) -> String:
+	return FileAccess.get_file_as_string(path)
+
+
+# One source line as executable code: the trailing comment is dropped; with blank_strings the CONTENT of string
+# literals is dropped too (so "Time." in a message is not a call), otherwise strings are kept (to read preload paths).
+func _code_of(line: String, blank_strings: bool) -> String:
+	var out := ""
+	var quote := ""
+	var i := 0
+	var n := line.length()
+	while i < n:
+		var ch: String = line[i]
+		if quote != "":
+			if ch == "\\" and i + 1 < n:
+				if not blank_strings:
+					out += ch + line[i + 1]
+				i += 2
+				continue
+			if ch == quote:
+				quote = ""
+				out += ch
+			elif not blank_strings:
+				out += ch
+		elif ch == "\"" or ch == "'":
+			quote = ch
+			out += ch
+		elif ch == "#":
+			break
+		else:
+			out += ch
+		i += 1
+	return out
+
+
+func _banned_res() -> Array:
+	var out: Array = []
+	for row: Array in BANNED:
+		var re := RegEx.new()
+		re.compile(String(row[1]))
+		out.append([String(row[0]), re])
+	return out
+
+
+func _labels_in(code: String, res: Array) -> Array:
+	var labels: Array = []
+	for row: Array in res:
+		if (row[1] as RegEx).search(code) != null:
+			labels.append(String(row[0]))
+	return labels
+
+
+# -> ["line:label", ...] for every banned call in the executable code of `src`
+func _scan_source(src: String, res: Array) -> Array:
+	var hits: Array = []
+	var no := 0
+	for line: String in src.split("\n"):
+		no += 1
+		for lbl: String in _labels_in(_code_of(line, true), res):
+			hits.append("%d:%s" % [no, lbl])
+	return hits
+
+
+func _walk_gd(dir_path: String, out: Array) -> void:
+	var dir := DirAccess.open(dir_path)
+	if dir == null:
+		return
+	for f: String in dir.get_files():
+		if f.ends_with(".gd"):
+			out.append(dir_path + "/" + f)
+	for d: String in dir.get_directories():
+		_walk_gd(dir_path + "/" + d, out)
+
+
+func _is_view(rel: String) -> bool:
+	if rel in VIEW_FILES:
+		return true
+	for pre: String in VIEW_DIR_PREFIXES:
+		if rel.begins_with(pre):
+			return true
+	return false
+
+
+func _sim_corpus() -> Array:
+	var all: Array = []
+	_walk_gd(SCRIPTS_ROOT, all)
+	all.sort()
+	var out: Array = []
+	for p: String in all:
+		if not _is_view(p.trim_prefix(SCRIPTS_ROOT + "/")):
+			out.append(p)
+	return out
+
+
+func _rel(p: String) -> String:
+	return p.trim_prefix(SCRIPTS_ROOT + "/")
+
+
+# ---- REQ-0012-10 -------------------------------------------------------------------------------------
+
+# REQ-0012-10: «Sim не звертається до годинника й системного RNG» — заборонені API; Time.get_unix_time_from_system
+# живе лише в clock.gd.
+func _t_no_wallclock_in_sim() -> void:
+	var res: Array = _banned_res()
+	# (a) the scanner is not blind, and not trigger-happy
+	var missed: Array = []
+	for s: String in SCANNER_MUST_HIT:
+		if _scan_source(s, res).is_empty():
+			missed.append(s)
+	ok(missed.is_empty(), "REQ-0012-10: the scanner flags every banned API on planted lines (missed: %s)" % str(missed))
+	var noisy: Array = []
+	for s: String in SCANNER_MUST_PASS:
+		if not _scan_source(s, res).is_empty():
+			noisy.append(s)
+	ok(noisy.is_empty(), "REQ-0012-10: the scanner ignores comments, string contents, seeded rng methods and look-alikes (false hits: %s)" % str(noisy))
+	# (b) the corpus is what the brief says: everything under scripts/ except the view layer
+	var corpus: Array = _sim_corpus()
+	var rels: Array = []
+	for p: String in corpus:
+		rels.append(_rel(p))
+	var missing: Array = []
+	for m: String in MUST_SCAN:
+		if not rels.has(m):
+			missing.append(m)
+	ok(corpus.size() >= 30 and missing.is_empty(), "REQ-0012-10: the sim corpus has %d scripts and includes the sim/kernel/session/persistence/net core (missing: %s)" % [corpus.size(), str(missing)])
+	ok(not rels.has("clock.gd") and not rels.has("ui/panels.gd") and not rels.has("world_view.gd"), "REQ-0012-10: clock.gd and the view layer are outside the corpus (so a false red cannot hide a real one)")
+	# (c) the verdict: no banned API in the executable code of any corpus script
+	var offenders: Array = []
+	for p: String in corpus:
+		for h: String in _scan_source(_read(p), res):
+			offenders.append("%s:%s" % [_rel(p), h])
+	ok(offenders.is_empty(), "REQ-0012-10: no Time.*/OS.get_*time*/Engine.get_ticks_*/Engine.time_scale/DateTime/randomize()/randf*/randi* in %d sim scripts%s"
+		% [corpus.size(), "" if offenders.is_empty() else " — " + ", ".join(PackedStringArray(offenders))])
+	# (d) Array.shuffle()/pick_random() = the global generator = system randomness
+	var hidden := RegEx.new()
+	hidden.compile(HIDDEN_GLOBAL_RNG)
+	var shuffles: Array = []
+	for p: String in corpus:
+		var no := 0
+		for line: String in _read(p).split("\n"):
+			no += 1
+			if hidden.search(_code_of(line, true)) != null:
+				shuffles.append("%s:%d" % [_rel(p), no])
+	ok(shuffles.is_empty(), "REQ-0012-10 (headline «системного RNG»): no Array.shuffle()/pick_random() (global generator) in the sim%s" % ("" if shuffles.is_empty() else " — " + ", ".join(PackedStringArray(shuffles))))
+	# (e) the one allowed reader of the device clock is clock.gd — looked for in EVERY product script, view layer included
+	var every: Array = []
+	_walk_gd(SCRIPTS_ROOT, every)
+	every.append("res://newhud_main.gd")
+	every.sort()
+	var homes: Array = []
+	for p: String in every:
+		for line: String in _read(p).split("\n"):
+			if _code_of(line, true).find("Time.get_unix_time_from_system") >= 0:
+				homes.append(p)
+				break
+	ok(homes == [CLOCK_HOME], "REQ-0012-10: Time.get_unix_time_from_system is called in clock.gd and nowhere else (found: %s)" % str(homes))
+
+
+# REQ-0012-10 «RandomNumberGenerator без явного seed»: a Godot 4 generator that is never given a seed/state is
+# seeded from the system. Stricter than a by-name lint: a FUNCTION-LOCAL generator must be seeded later in the SAME
+# function; a member (class-level `var`, or `obj.name = ...`) must be seeded somewhere in the corpus.
+func _t_no_unseeded_rng_in_sim() -> void:
+	var corpus: Array = _sim_corpus()
+	var sources: Dictionary = {}
+	var seeded_anywhere: String = ""
+	for p: String in corpus:
+		var lines: Array = []
+		for line: String in _read(p).split("\n"):
+			lines.append(_code_of(line, true))
+		sources[p] = lines
+		seeded_anywhere += "\n".join(PackedStringArray(lines)) + "\n"
+	var create_re := RegEx.new()
+	create_re.compile("(?:^(\\s*)var\\s+(\\w+)\\s*(?::\\s*[\\w.]+\\s*)?:?=|(?:(\\w+)\\.)?(\\w+)\\s*=)\\s*RandomNumberGenerator\\.new\\s*\\(\\s*\\)\\s*$")
+	var bad: Array = []
+	var created := 0
+	for p: String in corpus:
+		var lines: Array = sources[p]
+		for i in lines.size():
+			var code: String = String(lines[i])
+			if code.find("RandomNumberGenerator.new") < 0:
+				continue
+			created += 1
+			var m: RegExMatch = create_re.search(code.strip_edges(false, true))
+			if m == null:
+				bad.append("%s:%d unbound/unusual RandomNumberGenerator.new()" % [_rel(p), i + 1])
+				continue
+			var is_var: bool = m.get_string(2) != ""
+			var name: String = m.get_string(2) if is_var else m.get_string(4)
+			var is_member: bool = (is_var and m.get_string(1) == "") or m.get_string(3) != ""
+			var seed_re := RegEx.new()
+			seed_re.compile("\\b%s\\.(seed|state)\\s*=[^=]" % name)
+			if is_member:
+				if seed_re.search(seeded_anywhere) == null:
+					bad.append("%s:%d member %s is never seeded anywhere" % [_rel(p), i + 1, name])
+			else:
+				var ok_local := false
+				for j in range(i + 1, lines.size()):
+					var nxt: String = String(lines[j]).strip_edges()
+					if nxt.begins_with("func ") or nxt.begins_with("static func "):
+						break
+					if seed_re.search(String(lines[j])) != null:
+						ok_local = true
+						break
+				if not ok_local:
+					bad.append("%s:%d local %s is not seeded in its own function" % [_rel(p), i + 1, name])
+	ok(created >= 6, "REQ-0012-10: found the RandomNumberGenerator.new() sites of the sim (%d) — the scan is not vacuous" % created)
+	ok(bad.is_empty(), "REQ-0012-10: every RandomNumberGenerator in the sim is explicitly seeded%s" % ("" if bad.is_empty() else " — " + "; ".join(PackedStringArray(bad))))
+
+
+# REQ-0012-10 «now приходить лише аргументом Session → Sim.set_clock(now)»: the ban list names APIs, and the one
+# provider that reads the OS is clock.gd's SystemClock — so a sim module could read the device clock through
+# `SystemClock.new().now_ms()` without tripping any banned name. Two back doors: (1) naming SystemClock anywhere
+# but Session; (2) a view-layer file the corpus pulls in (net/command.gd preloads ui/input_*.gd) is exempt from
+# the scan by directory — but the code path is the sim's.
+func _t_sim_has_no_clock_back_door() -> void:
+	var corpus: Array = _sim_corpus()
+	var users: Array = []
+	for p: String in corpus:
+		if p == SESSION_HOME:
+			continue
+		var no := 0
+		for line: String in _read(p).split("\n"):
+			no += 1
+			if _code_of(line, true).find("SystemClock") >= 0:
+				users.append("%s:%d" % [_rel(p), no])
+	ok(users.is_empty(), "REQ-0012-10: only Session may name SystemClock — the sim receives now as an argument%s" % ("" if users.is_empty() else " — " + ", ".join(PackedStringArray(users))))
+	# (2) transitive closure over preload()/load() paths from the corpus into the exempt files
+	var path_re := RegEx.new()
+	path_re.compile("res://scripts/[\\w/]+\\.gd")
+	var in_corpus: Dictionary = {}
+	for p: String in corpus:
+		in_corpus[p] = true
+	var queue: Array = corpus.duplicate()
+	var reached: Array = []
+	var seen: Dictionary = {}
+	while not queue.is_empty():
+		var cur: String = queue.pop_back()
+		for line: String in _read(cur).split("\n"):
+			for m: RegExMatch in path_re.search_all(_code_of(line, false)):
+				var dep: String = m.get_string()
+				if in_corpus.has(dep) or seen.has(dep):
+					continue
+				seen[dep] = true
+				reached.append(dep)
+				queue.append(dep)
+	reached.sort()
+	var res: Array = _banned_res()
+	var dirty: Array = []
+	for dep: String in reached:
+		if dep == CLOCK_HOME:
+			continue   # the sanctioned reader; its own shape is checked below
+		for h: String in _scan_source(_read(dep), res):
+			dirty.append("%s:%s" % [_rel(dep), h])
+	print("  note: exempt files reachable from the sim corpus: ", ", ".join(PackedStringArray(reached.map(func(x: String) -> String: return _rel(x)))))
+	ok(dirty.is_empty(), "REQ-0012-10: exempt (view-layer) scripts that the sim corpus preloads read no clock/system RNG%s" % ("" if dirty.is_empty() else " — " + ", ".join(PackedStringArray(dirty))))
+
+
+# REQ-0012-11: SystemClock is THE provider that reads the OS («системний = годинник пристрою»); Fixed/Fake/Monotonic
+# and the wire helpers must not — otherwise a «fixed» test clock would drift with the machine.
+func _t_clock_os_reads_only_in_system_clock() -> void:
+	var res: Array = _banned_res()
+	var cur := ""
+	var no := 0
+	var hits: Array = []
+	for line: String in _read(CLOCK_HOME).split("\n"):
+		no += 1
+		if line.begins_with("class "):
+			cur = line.get_slice(" ", 1).trim_suffix(":")
+		elif line != "" and not line.begins_with("\t") and not line.begins_with("#"):
+			cur = ""   # a top-level statement ends the class body
+		for lbl: String in _labels_in(_code_of(line, true), res):
+			hits.append([cur, no, lbl])
+	var outside: Array = []
+	for h: Array in hits:
+		if String(h[0]) != "SystemClock":
+			outside.append("%s@%d %s" % [str(h[0]), int(h[1]), str(h[2])])
+	ok(not hits.is_empty(), "REQ-0012-11: clock.gd reads the OS clock somewhere (SystemClock is not a stub)")
+	ok(outside.is_empty(), "REQ-0012-11: only class SystemClock touches Time/OS/Engine/rng — Fixed/Fake/Monotonic/wire helpers are pure (offending: %s)" % str(outside))
+
+
+# ---- REQ-0012-11: providers ----------------------------------------------------------------------------
+
+# a provider written by a TEST: anything that implements the interface drops in with no sim change
+class StepClock extends Clock.ClockBase:
+	var t: int = 1800000000000
+
+	func now_ms() -> int:
+		t += 1000
+		return t
+
+
+# stands in for the one reader of Clock (Session hands the result to the sim as an argument): it knows ONLY the interface
+func _read_now(c: Clock.ClockBase) -> int:
+	return c.now_ms()
+
+
+# REQ-0012-11: «єдиний інтерфейс Clock з провайдерами системний/фіксований/фейк, підмінюваний без редагування sim»
+func _t_clock_providers() -> void:
+	var fixed := Clock.FixedClock.new(NOW_1P8E12)
+	var fake := Clock.FakeClock.new(NOW_1P8E12)
+	var sys := Clock.SystemClock.new()
+	var step := StepClock.new()
+	var all: Array = [fixed, fake, sys, step]
+	var not_base: Array = []
+	var not_int: Array = []
+	for p in all:
+		var pv: Variant = p
+		if not (pv is Clock.ClockBase):
+			not_base.append(str(pv))
+		elif typeof((pv as Clock.ClockBase).now_ms()) != TYPE_INT:
+			not_int.append(str(pv))
+	ok(not_base.is_empty(), "REQ-0012-11: Fixed, Fake, System and a test-defined provider are all ClockBase (one interface)")
+	ok(not_int.is_empty(), "REQ-0012-11: now_ms() is a whole number (int64) for every provider — never a float")
+	# the swap: one variable typed as the interface; the reader's code never changes
+	var held: Clock.ClockBase = fixed
+	var a: int = _read_now(held)
+	held = Clock.FixedClock.new(NOW_1P8E12 + Clock.MS_PER_DAY)
+	var b: int = _read_now(held)
+	ok(a == NOW_1P8E12 and b - a == 86400000, "REQ-0012-11: swapping the provider changes now by exactly the difference between the two instants (MS_PER_DAY = 86 400 000)")
+	ok(Clock.MS_PER_DAY == 86400000, "REQ-0012-11/69: MS_PER_DAY is 86 400 000 ms (the 24-h immunity of OD-24 is that many ms)")
+	held = step
+	var s1: int = _read_now(held)
+	var s2: int = _read_now(held)
+	ok(s2 - s1 == 1000, "REQ-0012-11: a provider defined outside clock.gd works through the same call (no registry, no edit of the reader)")
+	# epoch semantics: UTC milliseconds since 1970 — 1.8e12 ms is exactly 08:00:00 UTC of its day
+	ok(_read_now(fixed) % Clock.MS_PER_DAY == 8 * MS_PER_HOUR, "REQ-0012-11: 1.8e12 is UTC-ms since the epoch (≡ 08:00:00 UTC) — not seconds, not local time")
+	# FixedClock: «фіксований (тести)» — it does not move, however often it is read
+	var moved := false
+	for i in 1000:
+		if fixed.now_ms() != NOW_1P8E12:
+			moved = true
+	ok(not moved, "REQ-0012-11: FixedClock never moves (1000 reads, one value)")
+	ok(Clock.FixedClock.new().now_ms() == 0, "REQ-0012-11: FixedClock() without an argument is the epoch (0), not 'now'")
+	# FakeClock: «фейк (dev)» — settable, forwards AND backwards, exact in int64
+	var fk := Clock.FakeClock.new(NOW_1P8E12)
+	fk.advance(86400000)
+	ok(fk.now_ms() == NOW_1P8E12 + 86400000, "REQ-0012-11: FakeClock.advance(+1 day)")
+	fk.advance(0)
+	ok(fk.now_ms() == NOW_1P8E12 + 86400000, "REQ-0012-11: FakeClock.advance(0) is a no-op")
+	fk.advance(-2 * 86400000)
+	ok(fk.now_ms() == NOW_1P8E12 - 86400000, "REQ-0012-11: FakeClock.advance(negative) winds the clock BACK (the REQ-0012-68 rewind scenario needs it)")
+	for target in [0, -1, NOW_1P8E12, TWO53 + 1, INT64_MAX, INT64_MIN]:
+		fk.set_ms(target)
+		if fk.now_ms() != target:
+			ok(false, "REQ-0012-11: FakeClock.set_ms(%d) reads back %d" % [target, fk.now_ms()])
+	ok(fk.now_ms() == INT64_MIN, "REQ-0012-11: FakeClock.set_ms reads back exactly at the int64 extremes")
+	fk.set_ms(TWO53 + 1)
+	fk.advance(1)
+	ok(fk.now_ms() == TWO53 + 2, "REQ-0012-11: FakeClock arithmetic is integer — 2^53+1 plus 1 is 2^53+2 (a float clock would stall at 2^53)")
+	# SystemClock: «годинник пристрою» in UTC milliseconds — bracketed by the engine's own clock
+	var t0: float = Time.get_unix_time_from_system()
+	var n: int = sys.now_ms()
+	var t1: float = Time.get_unix_time_from_system()
+	ok(n >= int(floor(t0 * 1000.0)) and n <= int(ceil(t1 * 1000.0)), "REQ-0012-11: SystemClock.now_ms() is the device clock in MILLISECONDS (%d within [%d, %d])" % [n, int(floor(t0 * 1000.0)), int(ceil(t1 * 1000.0))])
+	ok(n > 1600000000000 and n < 3000000000000, "REQ-0012-11: SystemClock reads like UTC-ms since 1970 (between 2020 and 2065)")
+	var n2: int = sys.now_ms()
+	ok(absi(n2 - n) < 2000, "REQ-0012-11: two consecutive SystemClock reads are within 2 s of each other (same clock, same unit)")
+
+
+# REQ-0012-63 (the Clock part): no static/global state — ON→OFF→ON in one process shares nothing — and no ObjectDB
+# growth from providers.
+func _t_clock_state_isolated() -> void:
+	var src: String = _read(CLOCK_HOME)
+	var statics := RegEx.new()
+	statics.compile("(?m)^\\s*static\\s+var\\b")
+	ok(statics.search(src) == null, "REQ-0012-63: clock.gd declares no `static var` (no process-wide state)")
+	ok(not ("class_name " in src) and not ("Engine.register_singleton" in src), "REQ-0012-63: clock.gd is neither a class_name global nor a registered singleton")
+	var proj: String = _read("res://project.godot")
+	ok(proj.find("clock.gd") < 0, "REQ-0012-63: clock.gd is not an autoload (AGENTS.md: no autoloads)")
+	# two instances are independent; a fresh one does not inherit what another was set to
+	var a := Clock.FakeClock.new(100)
+	var b := Clock.FakeClock.new(100)
+	a.advance(5000)
+	ok(a.now_ms() == 5100 and b.now_ms() == 100, "REQ-0012-63: advancing one FakeClock does not move another")
+	var c := Clock.FakeClock.new()
+	ok(c.now_ms() == 0, "REQ-0012-63: a fresh FakeClock starts at 0, not at what a previous instance was set to")
+	var m1 := Clock.Monotonic.new()
+	var m2 := Clock.Monotonic.new()
+	m1.observe(NOW_1P8E12)
+	ok(m2.last_seen == 0 and m2.observe(5) == 5, "REQ-0012-63: two Monotonic guards share no last_seen")
+	# providers are RefCounted: churn must not grow the object count (warm-up first so script loading is not counted)
+	var warm: Array = [Clock.FixedClock.new(), Clock.FakeClock.new(), Clock.SystemClock.new(), Clock.Monotonic.new(), StepClock.new()]
+	warm.clear()
+	var before: int = int(Performance.get_monitor(Performance.OBJECT_COUNT))
+	for i in 2000:
+		var f := Clock.FixedClock.new(i)
+		var k := Clock.FakeClock.new(i)
+		var s := Clock.SystemClock.new()
+		var g := Clock.Monotonic.new()
+		g.observe(f.now_ms() + k.now_ms() + (s.now_ms() & 1))
+	var after: int = int(Performance.get_monitor(Performance.OBJECT_COUNT))
+	ok(after == before, "REQ-0012-63: 8000 provider/guard instances created and dropped leave the object count unchanged (%d -> %d)" % [before, after])
+
+
+# ---- wire: int64 UTC-ms as a JSON string (spec header R3) ----------------------------------------------------
+
+# spec header R3: «ціле: UTC-мілісекунди епохи (int64, у JSON рядком, як курсори RNG)» — 1.8e12 -> string -> int without loss
+func _t_clock_wire_int64() -> void:
+	var samples: Array = [0, 1, -1, 86400000, NOW_1P8E12, NOW_1P8E12 + 123, TWO53 - 1, TWO53, TWO53 + 1, TWO53 + 2, 1 << 62, INT64_MAX - 1, INT64_MAX, INT64_MIN + 1, INT64_MIN]
+	var sentinel := -4242424242   # no sample equals it, so a lazy `return fallback` cannot pass
+	var digits := RegEx.new()
+	digits.compile("^-?[0-9]+$")
+	var bad_form: Array = []
+	var bad_back: Array = []
+	var bad_json: Array = []
+	for v in samples:
+		var w: Variant = Clock.to_wire(v)
+		if typeof(w) != TYPE_STRING or digits.search(String(w)) == null or String(w) != str(v):
+			bad_form.append(str(v))
+		if Clock.from_wire(w, sentinel) != v:
+			bad_back.append("%s -> %s -> %d" % [str(v), str(w), Clock.from_wire(w, sentinel)])
+		var text: String = JSON.stringify({"saved_at": w, "n": 1})
+		var parsed: Variant = JSON.parse_string(text)
+		var back: Variant = (parsed as Dictionary).get("saved_at") if parsed is Dictionary else null
+		if typeof(back) != TYPE_STRING or Clock.from_wire(back, sentinel) != v or text.find("\"%s\"" % str(v)) < 0:
+			bad_json.append(str(v))
+	ok(bad_form.is_empty(), "wire: to_wire(int) is a canonical decimal STRING (no exponent/point/grouping), == str(v) like the RNG cursors (bad: %s)" % str(bad_form))
+	ok(bad_back.is_empty(), "wire: from_wire(to_wire(v)) == v at 0, ±1, 1.8e12, 2^53±1 and both int64 extremes (bad: %s)" % str(bad_back))
+	ok(bad_json.is_empty(), "wire: the value survives JSON.stringify -> JSON.parse_string as a quoted string and decodes exactly (bad: %s)" % str(bad_json))
+	ok(Clock.to_wire(1800000000000) == "1800000000000", "wire: 1.8e12 is written as the 13-digit string \"1800000000000\"")
+	# the premise of the rule (informational — it is a fact about the engine, not about the product, so not an assertion):
+	# a bare JSON NUMBER above 2^53 does not survive Godot's parser, a string does
+	var lossy: Variant = JSON.parse_string(JSON.stringify({"t": TWO53 + 1}))
+	var lossy_back: int = Clock.from_wire((lossy as Dictionary).get("t"), sentinel) if lossy is Dictionary else sentinel
+	print("  note: premise of the string rule — 2^53+1 as a bare JSON number reads back as %d (%s)" % [lossy_back, "corrupted" if lossy_back != TWO53 + 1 else "survived on this engine build"])
+	# a number that DID come through JSON as a float (an older/hand-edited save) is still read back exactly below 2^53
+	ok(Clock.from_wire(1.8e12) == NOW_1P8E12 and Clock.from_wire(float(TWO53)) == TWO53, "wire: a float from JSON.parse_string decodes exactly while it is exactly representable (1.8e12, 2^53)")
+	ok(typeof(Clock.from_wire("1800000000000")) == TYPE_INT and typeof(Clock.from_wire(1.8e12)) == TYPE_INT, "wire: from_wire always returns an int")
+	# the same convention as the RNG cursors: every 64-bit generator state (negative ones included) round-trips
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261105
+	var drift: Array = []
+	for i in 300:
+		rng.randi()
+		var st: int = rng.state
+		if Clock.from_wire(Clock.to_wire(st), sentinel) != st or Clock.to_wire(st) != str(st):
+			drift.append(str(st))
+	ok(drift.is_empty(), "wire: 300 full-range 64-bit RNG states round-trip and match the persistence.gd str(state) format (bad: %s)" % str(drift.slice(0, 3)))
+
+
+# «NaN/inf/нечисло -> fallback» (contract) — and a corrupt save must never invent a time
+func _t_clock_wire_rejects_garbage() -> void:
+	var fb := -7
+	var junk: Array = [NAN, INF, -INF, "", " ", "abc", "12abc", "1,800,000,000,000", "--5", "0x1F", "NaN", "nan", "inf", "-inf", "Infinity",
+		null, true, false, [], {}, Vector2(1, 2), [1800000000000]]
+	var accepted: Array = []
+	for j in junk:
+		if Clock.from_wire(j, fb) != fb:
+			accepted.append("%s=%s" % [var_to_str(j), str(Clock.from_wire(j, fb))])
+	ok(accepted.is_empty(), "wire: NaN, ±inf, empty/blank/non-numeric text, null, bool, containers -> the fallback (accepted: %s)" % str(accepted))
+	# beyond int64 is not an int64: no wrap-around, no clamp to the extremes — a corrupt save must not become a far-future `now`
+	var over: Array = ["9223372036854775808", "-9223372036854775809", "99999999999999999999", "18446744073709551615", "1" + "0".repeat(30),
+		9.3e18, -9.3e18, 1.0e30, -1.0e30, 9223372036854775808.0]
+	var wrapped: Array = []
+	for o in over:
+		if Clock.from_wire(o, fb) != fb:
+			wrapped.append("%s=%s" % [str(o), str(Clock.from_wire(o, fb))])
+	ok(wrapped.is_empty(), "wire: values outside int64 (strings and floats) -> the fallback, never wrapped or clamped (accepted: %s)" % str(wrapped))
+	ok(Clock.from_wire("9223372036854775807", fb) == INT64_MAX and Clock.from_wire("-9223372036854775808", fb) == INT64_MIN, "wire: the int64 extremes themselves are valid")
+	ok(Clock.from_wire("x", 12345) == 12345 and Clock.from_wire(NAN, -9) == -9 and Clock.from_wire("x", INT64_MAX) == INT64_MAX, "wire: the fallback argument is honoured (including a huge one)")
+	ok(Clock.from_wire("x") == 0 and Clock.from_wire(null) == 0, "wire: the default fallback is 0")
+	ok(Clock.from_wire("1800000000000", fb) == NOW_1P8E12 and Clock.from_wire("-5", fb) == -5, "wire: ordinary decimal strings still decode (garbage handling does not eat valid input)")
+
+
+# ---- REQ-0012-68 helper: Monotonic ----------------------------------------------------------------------------
+
+# REQ-0012-68 (helper): «now < last_seen_now не відновлює, не нараховує і не скорочує кулдаун» — observe(now)
+# returns max(now, last_seen) and never lets the remembered value go down.
+func _t_clock_monotonic() -> void:
+	var mono := Clock.Monotonic.new()
+	var mv: Variant = mono
+	ok(not (mv is Clock.ClockBase), "REQ-0012-68: Monotonic is a guard around a clock, not a fourth provider")
+	# the last_seen is restored from a save («last_seen_now», a wire string) and is the floor
+	mono.last_seen = Clock.from_wire(Clock.to_wire(NOW_1P8E12), -1)
+	ok(mono.observe(NOW_1P8E12 - MS_PER_HOUR) == NOW_1P8E12, "REQ-0012-68: a clock wound back 1 h below the restored last_seen is read as last_seen")
+	ok(mono.observe(0) == NOW_1P8E12 and mono.observe(-5) == NOW_1P8E12 and mono.observe(INT64_MIN) == NOW_1P8E12, "REQ-0012-68: a clock at 0, negative or INT64_MIN never lowers it")
+	ok(mono.last_seen == NOW_1P8E12, "REQ-0012-68: last_seen did not move on a rewound reading")
+	ok(mono.observe(NOW_1P8E12) == NOW_1P8E12, "REQ-0012-68: an equal reading returns the same value")
+	ok(mono.observe(NOW_1P8E12 + 1) == NOW_1P8E12 + 1 and mono.last_seen == NOW_1P8E12 + 1, "REQ-0012-68: a later reading advances last_seen to exactly that value")
+	# exact beyond 2^53 (the whole point of int64 over float64 time)
+	var big := Clock.Monotonic.new()
+	big.observe(TWO53)
+	ok(big.observe(TWO53 + 1) == TWO53 + 1 and big.observe(TWO53) == TWO53 + 1, "REQ-0012-68: ordering is exact at 2^53 — 2^53+1 is later than 2^53")
+	var top := Clock.Monotonic.new()
+	top.observe(INT64_MAX)
+	ok(top.observe(NOW_1P8E12) == INT64_MAX, "REQ-0012-68: at INT64_MAX nothing is later")
+	# property: against a reference running maximum, over a seeded random walk with forward steps, small rewinds and huge rewinds
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261105
+	var m := Clock.Monotonic.new()
+	var ref := 0
+	var raw := NOW_1P8E12
+	var prev := -1
+	var wrong: Array = []
+	for i in 3000:
+		var step: int = rng.randi_range(-86400000, 86400000)
+		if rng.randf() < 0.05:
+			step = -rng.randi_range(0, 2000000000) * 500   # a violent rewind (up to ~1e12 ms)
+		raw += step
+		var got: int = m.observe(raw)
+		ref = maxi(ref, raw)
+		if got != ref or got < prev or m.last_seen != got or got < raw:
+			wrong.append("step %d raw=%d got=%d ref=%d" % [i, raw, got, ref])
+			if wrong.size() > 2:
+				break
+		prev = got
+	ok(wrong.is_empty(), "REQ-0012-68: 3000 random observations == the running maximum; never below the previous result, never below `now`, last_seen == result (%s)" % str(wrong))
+	# the exploit this exists for: wind the device clock back, act, return — the stored timestamp must not move EARLIER,
+	# or the cooldown it starts would be shorter than the one it replaced
+	var fake := Clock.FakeClock.new(NOW_1P8E12)
+	var guard := Clock.Monotonic.new()
+	var cooldown: int = 5 * 60 * 1000   # the 5-minute clone cooldown named in REQ-0012-28
+	var start1: int = guard.observe(fake.now_ms())
+	fake.advance(-MS_PER_HOUR)
+	var start2: int = guard.observe(fake.now_ms())   # the action happens while the clock is wound back
+	ok(start2 >= start1, "REQ-0012-68: an action taken after winding the clock back is stamped no earlier than the previous stamp (%d vs %d)" % [start2, start1])
+	fake.set_ms(start1 + cooldown - 1)   # real time catches up to 1 ms before the first cooldown ends
+	var remaining: int = (start2 + cooldown) - guard.observe(fake.now_ms())
+	ok(remaining == 1, "REQ-0012-68: the cooldown is not shortened (nor stretched) by the rewind — 1 ms remains, got %d" % remaining)
+	fake.advance(1)
+	ok(guard.observe(fake.now_ms()) >= start2 + cooldown, "REQ-0012-68: and it ends exactly when the real cooldown ends")
