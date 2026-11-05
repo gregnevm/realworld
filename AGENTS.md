@@ -54,6 +54,8 @@ realworld/
   tools/               sync-catalog.mjs · lint.mjs (контракт no-build + secret-scan) · smoke.mjs (Playwright-прохід гри, CI job browser-smoke) · gen-art.mjs + art/ (арт-пайплайн Nano Banana)
   art/                 style.md (арт-біблія) · palette.json · refs/ (якорі стилю) · manifest.json (виводиться з catalog.json) · out/ (gitignored кандидати)
   .claude/skills/gen-art/  скіл генерації арту (/gen-art)
+  .claude/skills/gamedev/  шлюз цілісності гри (/gamedev): ворота 0–6, правило доказу, тест Ніколая, FTUE — вхід для будь-якої механіки/фічі/плейтесту
+  .claude/skills/godot-game-uiux-designer/  цикл UX/UI (аудит кадрами → код → анімація → кадр після)
   specs/               специфікації фіч (0001…0008)
   docs/                довідники: catalog.md, mechanics-status.md, rimworld-reference.md, ux/
   .github/workflows/   CI: ci.yml (Node) + godot.yml (Godot headless)
