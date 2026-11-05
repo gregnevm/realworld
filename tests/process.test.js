@@ -159,7 +159,7 @@ test("state files parse: decisions, scope, rework log, pillars, LLM Week date", 
   const scope = mdTable(read("docs/design/scope.md"), /\|\s*Система\s*\|/);
   assert.ok(scope.length >= 10 && scope.every((r) => "Вердикт власника" in r));
 
-  const cats = [...DESIGN_CATS, ...CODE_CATS, "art"];
+  const cats = [...DESIGN_CATS, ...CODE_CATS, "art", "process"];
   const rw = mdTable(read("docs/process/rework-log.md"), /\|\s*Категорія\s*\|/);
   assert.ok(rw.length > 0 && rw.every((r) => cats.includes(r["Категорія"])), "rework categories from the closed set");
   assert.ok(reworkVerdict(rw.map((r) => ({ category: r["Категорія"] }))).n === rw.length);
@@ -172,7 +172,7 @@ test("report --brief runs, stays short and never fails", () => {
   const out = execFileSync(process.execPath, [path.join(ROOT, "tools/process/report.mjs"), "--brief"], { encoding: "utf8" });
   const lines = out.trim().split("\n");
   assert.ok(lines.length <= 12, `brief digest is ${lines.length} lines`);
-  assert.match(out, /Відкриті рішення власника \(\d+\)/);
+  assert.match(out, /Чекають рішення власника \(\d+\) → \/decide/);
 });
 
 test("agents: every role has a name, a description and least-privilege tools", () => {
@@ -187,4 +187,16 @@ test("agents: every role has a name, a description and least-privilege tools", (
   for (const r of ["designer", "developer", "integrity", "qa-adversary", "fresh-eyes"]) assert.ok(roles[r], `role ${r}`);
   assert.deepStrictEqual(roles["fresh-eyes"], ["Read"], "independent eye sees only the frames");
   assert.ok(!roles.integrity.includes("Edit") && !roles.integrity.includes("Write"), "gatekeeper cannot edit");
+});
+
+test("skills: /decide exists and owner-facing docs promise only three owner actions", () => {
+  const skill = read(".claude/skills/decide/SKILL.md");
+  const fm = skill.match(/^---\n([\s\S]*?)\n---/)[1];
+  assert.match(fm, /^name: decide$/m);
+  assert.match(fm, /^description: .{80,}$/m, "description says when to trigger");
+  assert.match(skill, /AskUserQuestion/, "decisions are asked as buttons, not file edits");
+  assert.match(read("docs/process/README.md"), /## Для власника — три дії/);
+  const agents = read("AGENTS.md");
+  assert.match(agents, /\| Старт сесії[^|]*\| `npm run process -- --brief`/, "session-start trigger");
+  for (const t of ["/gamedev", "/decide", "rework-log", "плейтест", "LLM Week"]) assert.ok(agents.includes(t), `trigger ${t}`);
 });

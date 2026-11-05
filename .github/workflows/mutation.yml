@@ -1,0 +1,84 @@
+name: Mutation (trial)
+
+# docs/process/automation.md — radar «Trial»: gdmutant (MIT, 0.1.x) on the kernel/sim files a PR changes.
+# Catches «green but empty» tests (F3). INFORMATIONAL: never blocks a merge (continue-on-error).
+# Our suites are hand-rolled (godot/tests/harness.gd quits 1 on failure), so gdmutant runs them through
+# `--runner command` — no GUT/gdUnit4 migration. Exit criterion lives in the radar.
+on:
+  pull_request:
+    paths:
+      - "godot/scripts/kernel/**.gd"
+      - "godot/scripts/sim/**.gd"
+      - "godot/scripts/sim.gd"
+      - ".github/workflows/mutation.yml"
+  workflow_dispatch:
+    inputs:
+      files:
+        description: "Space-separated .gd paths to mutate (repo-relative)"
+        required: true
+        default: "godot/scripts/kernel/climate.gd"
+
+permissions:
+  contents: read
+
+jobs:
+  mutate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # pull_request = merge commit: HEAD^1..HEAD is this PR's diff
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install gdmutant (0.x — minor pinned on purpose)
+        run: pip install 'gdmutant==0.1.4'
+      - name: Download Godot 4.7
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
+          unzip -q Godot_v4.7-stable_linux.x86_64.zip
+          mv Godot_v4.7-stable_linux.x86_64 godot-bin
+          chmod +x godot-bin
+      - name: Pick files (≤ 2 per run — keeps the trial cheap)
+        id: pick
+        env:
+          INPUT_FILES: ${{ github.event.inputs.files }}
+        run: |
+          if [ -n "$INPUT_FILES" ]; then files="$INPUT_FILES"
+          else
+            files=$(git diff --name-only HEAD^1 HEAD -- 'godot/scripts/kernel/*.gd' 'godot/scripts/sim/*.gd' 'godot/scripts/sim.gd' | head -2 | tr '\n' ' ')
+            # a PR that only touches this workflow still proves the wiring on a small kernel file
+            [ -n "$files" ] || files="godot/scripts/kernel/climate.gd"
+          fi
+          echo "files=$files" >> "$GITHUB_OUTPUT"
+      - name: Mutate
+        env:
+          FILES: ${{ steps.pick.outputs.files }}
+        run: |
+          mkdir -p mutation
+          echo "## Mutation trial (gdmutant 0.1.4)" >> "$GITHUB_STEP_SUMMARY"
+          G="$GITHUB_WORKSPACE/godot-bin --headless --path ."
+          for f in $FILES; do
+            # a mutant counts as killed if ANY suite that exercises the file catches it: kernel code is
+            # also driven by the live-sim suite, so judging it by run_kernel_tests alone under-reports
+            # (first trial, climate.gd vs kernel suite only: 18.3%)
+            case "$f" in
+              godot/scripts/kernel/*) suite="run_kernel_tests+run_tests"; cmd="$G -s res://tests/run_kernel_tests.gd && $G -s res://tests/run_tests.gd" ;;
+              *) suite=run_tests; cmd="$G -s res://tests/run_tests.gd" ;;
+            esac
+            name=$(basename "$f" .gd)
+            echo "=== $f (suites: $suite) ==="
+            gdmutant run "$f" --project godot --runner command \
+              --command "sh -c '$cmd'" \
+              --timeout 300 --jobs auto --json "mutation/$name.json" 2>&1 | tee "mutation/$name.log" || true
+            { echo "### \`$f\` → $suite"; echo '```'; grep -A8 "^Mutation score" "mutation/$name.log" || tail -5 "mutation/$name.log"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          done
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-trial
+          path: mutation
+          retention-days: 14
