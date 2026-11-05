@@ -36,6 +36,10 @@
 # save stays OFF), 83 (save between death and respawn; an ON save without its capsule is refused explicitly),
 # 92 (time enters only through Sim.set_clock; monotone; not hashed), 98 (ONE landing seam). Fields of the record
 # that later waves add (invested W2a; immune_until / token / raid cursor W3a) are NOT attacked here — they do not exist yet.
+#
+# CLOSEOUT of the integrity blockers on W1a/W1b (guards that survived deletion — F3): `_t_on_patrol_not_spawned`,
+# `_t_on_director_raid_dropped`, `_t_on_session_travel_refused` (after `_t_no_eternal_siege`) and the respawn_anchor WIRING
+# checks inside `_t_respawn_seams` (REQ-0010-09: what Session.respawn hands to sim.respawn_new_pawn). Each fails when its guard is removed.
 extends "res://tests/harness.gd"
 
 const Sim = preload("res://scripts/sim.gd")
@@ -99,6 +103,9 @@ func _init() -> void:
 	_t_no_delete_paths_scan()
 	_t_region_changes_keep_capsule_consistent()
 	_t_no_eternal_siege()
+	_t_on_patrol_not_spawned()
+	_t_on_director_raid_dropped()
+	_t_on_session_travel_refused()
 	_t_capsule_fuzz()
 	# --- wave 0010-W1b ---
 	_t_flag_persist()
@@ -1247,6 +1254,131 @@ func _t_no_eternal_siege() -> void:
 		ok(not bool(r.active), "D8/critique-0010 #2 [%s]: after 300 s of sim the raid is over — it is not an endless siege (active=%s, %d raiders still alive, %d idling within 2 cells of the capsule, banner «%s»)" % [String(kind), str(r.active), int(r.enemies), int(r.near), String(r.banner)])
 
 
+# ---------------------------------------------------------------------------------------------
+# W1a closeout (integrity blocker, F3): three guards of the indestructible capsule had NO test that could fail — deleting
+# any of them left the suite green. Each test below has an OFF control (the probe must be able to SEE the thing the guard
+# suppresses) and was checked against the guard's removal on a scratch copy of the tree. Expectations come from OD-58
+# («перший NPC-рейд — лише після першої прокачки»; no upgrade exists in W1, so every capsule is level 0), REQ-0010-65
+# (level 0 is never raided), REQ-0010-34 (the flag does not shift the threat stream), D4/D8 (no signal without a cause),
+# REQ-0010-04/75 (the capsule is one and is never wiped by a region swap) — not from the guards' bodies.
+# ---------------------------------------------------------------------------------------------
+# The patrol channel. A patrol robot is a machine that marches on base_center() = the capsule; at level 0 that is a machine
+# raid on a capsule that cannot be hurt (critique-0010 #2: an endless siege), and OD-58 gives level 0 no NPC raid at all.
+# `_quiet` parks patrol.next at 1e9, so no other test ever sees a patrol: here its roll falls due on the first tick.
+func _patrol_probe(capsule: bool) -> Dictionary:
+	var s: Variant = _sim_with(_pad_map(PAD_N, Vector2i(8, 8)), true, true, capsule)
+	_quiet(s)
+	var away: Vector2i = _far_cell(s, Vector2i(8, 8), 6)
+	s.player.px = float(away.x) + 0.5
+	s.player.py = float(away.y) + 0.5
+	s.patrol.timer = 0.0
+	s.patrol.next = 0.0
+	var bots_peak: int = 0
+	for t in 600:
+		s.update(Scenarios.DT)
+		_topup(s)
+		var bots: int = 0
+		for e in s.enemies:
+			if String(e.get("kind", "raider")) == "bot":
+				bots += 1
+		bots_peak = maxi(bots_peak, bots)
+	var out: Dictionary = {"bots_peak": bots_peak, "wave": int(s.patrol.wave), "next": float(s.patrol.next), "enemies": s.enemies.size()}
+	_dispose(s)
+	return out
+
+
+func _t_on_patrol_not_spawned() -> void:
+	var off: Dictionary = _patrol_probe(false)
+	var rolled: bool = float(off.next) > 0.0 and float(off.next) < 1.0e9
+	ok(int(off.bots_peak) >= 1 and int(off.wave) >= 1 and rolled,
+		"OD-58 control (OFF): the same 600 ticks DO bring a patrol and re-arm its roll — the probe can see one (bots peak %d, wave %d, next=%s)" % [int(off.bots_peak), int(off.wave), str(off.next)])
+	var on: Dictionary = _patrol_probe(true)
+	ok(int(on.bots_peak) == 0 and int(on.wave) == 0 and int(on.enemies) == 0,
+		"OD-58/REQ-0010-65/critique-0010 #2: at ON no patrol robot ever enters a level-0 capsule's region (bots peak %d, wave %d, enemies %d)" % [int(on.bots_peak), int(on.wave), int(on.enemies)])
+	ok(is_equal_approx(float(on.next), float(off.next)),
+		"REQ-0010-34: ... yet the seeded roll still happened, with the SAME value as at OFF — the threat stream does not fork on the flag (ON next=%s, OFF next=%s)" % [str(on.next), str(off.next)])
+
+
+# The director channel. D8 «немає субстрату — нема ефекту: payload скидається, не імітується»: at ON a raid incident has no
+# raider to bring (OD-58), so it must not arm the alarm either — a «НАБЛИЖАЄТЬСЯ РЕЙД» banner with no raid behind it is a
+# false signal (D4/D8, REQ-0010-19 «найгучніший сигнал відповідає цьому рейду») that nothing would ever retire.
+func _director_probe(capsule: bool) -> Dictionary:
+	var s: Variant = _sim_with(_pad_map(PAD_N, Vector2i(8, 8)), true, true, capsule)
+	_quiet(s)
+	s.time.day = 6
+	s.time.frac = 0.5
+	Director.apply(s, {"incident": "raid", "count": 3, "faction": "Тестові мародери"})
+	var said: bool = false
+	for line in _texts(s):
+		if String(line).contains("Режисер: рейдери на підході"):
+			said = true
+	# read right after apply: at OFF the wave itself (spawn_wave) consumes the stored payload a few seconds later
+	var out: Dictionary = {"banner0": String(s.banner), "warned": bool(s.raid.get("warned", false)), "has_director": (s.raid as Dictionary).has("director"), "said": said}
+	for t in 300:
+		s.update(Scenarios.DT)
+		_topup(s)
+	out["banner"] = String(s.banner)
+	_dispose(s)
+	return out
+
+
+func _t_on_director_raid_dropped() -> void:
+	var off: Dictionary = _director_probe(false)
+	ok(String(off.banner0) != "" and bool(off.warned) and bool(off.has_director) and bool(off.said),
+		"D8 control (OFF): Director.apply(raid) arms the legacy cycle — banner «%s», warned=%s, payload=%s, feed line=%s" % [String(off.banner0), str(off.warned), str(off.has_director), str(off.said)])
+	var on: Dictionary = _director_probe(true)
+	ok(String(on.banner0) == "", "D4/D8: at ON a directed raid raises NO «НАБЛИЖАЄТЬСЯ РЕЙД» banner (banner «%s»)" % String(on.banner0))
+	ok(String(on.banner) == "", "D4/D8: ... and after 30 s of sim there is still no banner — a false alarm would sit there forever (banner «%s»)" % String(on.banner))
+	ok(not bool(on.warned), "D8: ... raid.warned stays false (nothing armed)")
+	ok(not bool(on.has_director), "D8: ... the payload is dropped, not stored for later (no hidden queue that a future raid gate could pop)")
+	ok(not bool(on.said), "D8: ... and the feed has no «Режисер: рейдери на підході» line (a fake signal)")
+
+
+# The session channel. travel_to at ON is refused (REQ-0010-04 «рівно одна капсула», REQ-0010-75: a region swap wipes the
+# buildings and with them the capsule). The second layer, Sim.arrive_region, refuses too — so the world itself stays intact
+# even if the Session guard is gone; what only the Session guard prevents is the SIDE EFFECTS of a half-run travel: the
+# region committed into the store (hash chain advanced), the false «🛬 Нова місцевість» success line, the missing error.
+# A refused command must be a no-op with a reason.
+func _travel_session(capsule: bool) -> Variant:
+	var sess: Variant = SessionScript.new()
+	sess.autosave = false
+	sess.store = Persistence.store_new()
+	sess.sim = _sim_with(_gen(Scenarios.LAT, Scenarios.LON), capsule, capsule, capsule)
+	sess.sim.messages.clear()
+	return sess
+
+
+func _arrival_line(s: Variant) -> bool:
+	for line in _texts(s):
+		if String(line).contains("🛬") or String(line).contains("↩"):
+			return true
+	return false
+
+
+func _t_on_session_travel_refused() -> void:
+	var off: Variant = _travel_session(false)
+	var lat_off: float = float(off.sim.map.lat)
+	off.travel_to(Scenarios.LAT2, Scenarios.LON2, "Львів")
+	ok(not is_equal_approx(float(off.sim.map.lat), lat_off) and _arrival_line(off.sim) and off.last_error == &"" and (off.store.regions as Dictionary).size() == 1,
+		"REQ-0010-04 control (OFF): travel_to commits the old region, flies to the other one and logs the arrival — the probe can see a travel (last_error=%s)" % str(off.last_error))
+	_dispose(off.sim)
+	var on: Variant = _travel_session(true)
+	var tile: Vector2i = _cap_tile(on.sim)
+	var before: Dictionary = {"hash": Persistence.world_hash(on.sim), "buildings": var_to_str(on.sim.buildings), "bgrid": var_to_str(on.sim.bgrid), "capsule": var_to_str(on.sim.main_capsule),
+		"store": var_to_str(on.store), "regions": var_to_str(on.sim.regions), "map": float(on.sim.map.lat)}
+	on.travel_to(Scenarios.LAT2, Scenarios.LON2, "Львів")
+	ok(Persistence.world_hash(on.sim) == String(before.hash), "REQ-0010-04/75: at ON travel_to leaves world_hash unchanged")
+	ok(var_to_str(on.sim.buildings) == String(before.buildings) and var_to_str(on.sim.bgrid) == String(before.bgrid), "REQ-0010-75: ... buildings and bgrid untouched (the capsule is not wiped)")
+	ok(var_to_str(on.sim.main_capsule) == String(before.capsule) and _cap_problem(on.sim, tile) == "", "REQ-0010-75: ... main_capsule record untouched and consistent (%s)" % _cap_problem(on.sim, tile))
+	ok(var_to_str(on.sim.regions) == String(before.regions) and is_equal_approx(float(on.sim.map.lat), float(before.map)), "REQ-0010-04: ... regions and the active map did not change")
+	var committed: int = (on.store.regions as Dictionary).size()
+	ok(var_to_str(on.store) == String(before.store) and committed == 0, "REQ-0010-04: ... a refused travel commits nothing — the store and its hash chain are untouched (store regions %d)" % committed)
+	ok(_texts(on.sim).has(MainCapsule.MSG_NO_TRAVEL), "REQ-0010-04/06: ... the feed carries the refusal reason (MainCapsule.MSG_NO_TRAVEL)")
+	ok(on.last_error != &"", "REQ-0010-04/06: ... and the caller gets the reason as an error (Session.last_error=%s)" % str(on.last_error))
+	ok(not _arrival_line(on.sim), "REQ-0010-04: ... and NO false «🛬 Нова місцевість» / «↩ Повернення» success line")
+	_dispose(on.sim)
+
+
 # the fuzz: random verbs aimed at the capsule a third of the time + forced raids + a death; invariants every 25 ticks
 func _fuzz_on(seed_val: int, ticks: int) -> Dictionary:
 	var sim: Variant = _sim_with(_gen(Scenarios.LAT, Scenarios.LON), true, true, true)
@@ -1358,6 +1490,11 @@ const NO_CELL := Vector2i(-1, -1)
 # capsule — where the hero ends up must come from landing, WHOSE body it is must come from the source.
 class StubSim extends "res://scripts/sim.gd":
 	var source_calls: int = 0
+	var anchors: Array = []   # every anchor that reached respawn_new_pawn — the wiring of the respawn_anchor seam (REQ-0010-09)
+
+	func respawn_new_pawn(anchor: Dictionary = {}) -> void:
+		anchors.append(anchor.duplicate(true))
+		super.respawn_new_pawn(anchor)
 
 	func respawn_source() -> Dictionary:
 		source_calls += 1
@@ -1809,9 +1946,19 @@ func _t_respawn_seams() -> void:
 		ok(pos != tile and _cheb(pos, tile) == want and not sim.is_blocked(pos.x, pos.y),
 			"%s: «при ON повертає клітинку біля капсули» — pos is a passable free cell of the nearest ring (ring %d), got %s for a capsule on %s" % [label, want, str(pos), str(tile)])
 		_kill(sim)
+		ok((sim.anchors as Array).is_empty(), "%s setup: nothing has respawned yet (anchors seen %d)" % [label, (sim.anchors as Array).size()])
 		sess.respawn()
 		ok(not bool(sim.dead) and _hero_cell(sim) == pos, "%s: Session.respawn puts the hero exactly on the cell the anchor announced (D9: one truth) — hero %s, anchor %s" % [label, str(_hero_cell(sim)), str(pos)])
 		ok(_cap_problem(sim, tile) == "" and int(sim.source_calls) == 1, "%s: the capsule is intact and the body came through the seam" % label)
+		# the WIRING: «Місце респавну задає шов respawn_anchor» — Session.respawn must hand the sim exactly that anchor, once.
+		# The position check above cannot see a dropped anchor (the sim falls back to the capsule tile and the nearest free ring
+		# is the same cell), so the argument itself is recorded at the sim's door.
+		var seen: Array = sim.anchors
+		ok(seen.size() == 1, "%s: Session.respawn reaches sim.respawn_new_pawn exactly once (%d calls)" % [label, seen.size()])
+		var got: Dictionary = seen[0] if seen.size() > 0 else {}
+		ok(String(got.get("region_key", "")) != "", "%s: the anchor handed over has a non-empty region_key (%s)" % [label, str(got.get("region_key", ""))])
+		ok(got.get("pos") is Vector2i and got.get("pos") != NO_CELL, "%s: ... and a real Vector2i cell, not the NO_CELL «no position» sentinel (%s)" % [label, str(got.get("pos"))])
+		ok(var_to_str(got) == var_to_str(anchor), "%s: ... and it IS MainCapsule.respawn_anchor(session) (handed %s, seam %s)" % [label, str(got), str(anchor)])
 		_dispose(sim)
 	# OFF: the anchor is the home coordinate and announces no cell
 	var off: Variant = SessionScript.new()
