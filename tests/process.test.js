@@ -196,5 +196,7 @@ test("skills: /decide exists and owner-facing docs promise only three owner acti
   assert.match(fm, /^description: .{80,}$/m, "description says when to trigger");
   assert.match(skill, /AskUserQuestion/, "decisions are asked as buttons, not file edits");
   assert.match(read("docs/process/README.md"), /## Для власника — три дії/);
-  assert.match(read("AGENTS.md"), /Перша дія кожної сесії:\*\* `npm run process -- --brief`/);
+  const agents = read("AGENTS.md");
+  assert.match(agents, /\| Старт сесії[^|]*\| `npm run process -- --brief`/, "session-start trigger");
+  for (const t of ["/gamedev", "/decide", "rework-log", "плейтест", "LLM Week"]) assert.ok(agents.includes(t), `trigger ${t}`);
 });
