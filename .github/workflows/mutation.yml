@@ -59,12 +59,19 @@ jobs:
         run: |
           mkdir -p mutation
           echo "## Mutation trial (gdmutant 0.1.4)" >> "$GITHUB_STEP_SUMMARY"
+          G="$GITHUB_WORKSPACE/godot-bin --headless --path ."
           for f in $FILES; do
-            case "$f" in godot/scripts/kernel/*) suite=run_kernel_tests ;; *) suite=run_tests ;; esac
+            # a mutant counts as killed if ANY suite that exercises the file catches it: kernel code is
+            # also driven by the live-sim suite, so judging it by run_kernel_tests alone under-reports
+            # (first trial, climate.gd vs kernel suite only: 18.3%)
+            case "$f" in
+              godot/scripts/kernel/*) suite="run_kernel_tests+run_tests"; cmd="$G -s res://tests/run_kernel_tests.gd && $G -s res://tests/run_tests.gd" ;;
+              *) suite=run_tests; cmd="$G -s res://tests/run_tests.gd" ;;
+            esac
             name=$(basename "$f" .gd)
-            echo "=== $f (suite: $suite) ==="
+            echo "=== $f (suites: $suite) ==="
             gdmutant run "$f" --project godot --runner command \
-              --command "$GITHUB_WORKSPACE/godot-bin --headless --path . -s res://tests/$suite.gd" \
+              --command "sh -c '$cmd'" \
               --timeout 300 --jobs auto --json "mutation/$name.json" 2>&1 | tee "mutation/$name.log" || true
             { echo "### \`$f\` → $suite"; echo '```'; grep -A8 "^Mutation score" "mutation/$name.log" || tail -5 "mutation/$name.log"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           done
