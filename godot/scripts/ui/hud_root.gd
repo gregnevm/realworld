@@ -112,8 +112,21 @@ func _fit_one(sc: ScrollContainer, right_edge: bool, cap: float) -> void:
 	var need: Vector2 = box.get_combined_minimum_size()
 	var w: float = maxf(box.custom_minimum_size.x, need.x) + (10.0 if need.y > cap else 0.0)   # + scrollbar
 	var inset: Vector2 = safe_insets()
-	sc.position = Vector2((size.x - 12.0 - inset.y - w) if right_edge else 12.0 + inset.x, dock_top)
-	sc.size = Vector2(w, minf(need.y, cap))
+	var x: float = (size.x - 12.0 - inset.y - w) if right_edge else 12.0 + inset.x
+	var y: float = maxf(dock_top, _top_clearance(x, w))   # a wide panel (inventory) slides under the top strip, not behind it
+	sc.position = Vector2(x, y)
+	sc.size = Vector2(w, minf(need.y, cap - (y - dock_top)))
+
+# The y a side dock spanning [x, x+w] must start at to clear the centred TOP dock (0 = no overlap).
+func _top_clearance(x: float, w: float) -> float:
+	if not _docks.has(2):
+		return 0.0
+	var top: Control = _docks[2]
+	var need: Vector2 = top.get_combined_minimum_size()
+	var x0: float = (size.x - need.x) * 0.5
+	if need.y <= 1.0 or x + w <= x0 or x >= x0 + need.x:
+		return 0.0
+	return top.position.y + need.y + 6.0
 
 # Phone safe area (camera cutout / rounded corners, often on a SHORT side in landscape): returns the
 # (left, right) insets in this Control's logical px. Desktop/windowed → (0, 0).

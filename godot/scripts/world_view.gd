@@ -552,7 +552,9 @@ func _draw_bags() -> void:
 		var bob: float = sin(_now() * 3.0 + float(bag.x)) * TILE * 0.06
 		var death: bool = (bag.slots as Array).size() > 1
 		if death:
-			draw_circle(c, TILE * (0.48 + 0.05 * sin(_now() * 4.0)), Color(BAG_COL.r, BAG_COL.g, BAG_COL.b, 0.22))
+			var rr: float = TILE * (0.48 + 0.05 * sin(_now() * 4.0))
+			draw_circle(c, rr, Color(BAG_COL.r, BAG_COL.g, BAG_COL.b, 0.22))
+			draw_arc(c, rr, 0.0, TAU, 32, Color(BAG_COL.r, BAG_COL.g, BAG_COL.b, 0.85), 2.0, true)   # reads on dark rock too
 		draw_contact_shadow(c + Vector2(0, TILE * 0.3), TILE * 0.28)
 		if tex != null:
 			draw_sprite_fit(tex, Rect2(c.x - TILE * 0.38, c.y - TILE * 0.5 - bob, TILE * 0.76, TILE * 0.76))

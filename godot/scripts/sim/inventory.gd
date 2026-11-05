@@ -226,7 +226,7 @@ static func craft_building(s, kind: String) -> Dictionary:
 		return {"ok": false, "msg": "Потрібен верстак поруч."}
 	var at := Vector2(s.player.px, s.player.py)
 	if not can_pay(s, rc.cost, at):
-		return {"ok": false, "msg": "Бракує: " + s._cost_str(missing(s, rc.cost, at))}
+		return {"ok": false, "msg": "%s — бракує: %s" % [String(rc.name), s._cost_str(missing(s, rc.cost, at))]}
 	if room(s, BLD + kind) < 1:
 		return {"ok": false, "msg": "Рюкзак повний."}
 	pay(s, rc.cost, at)
@@ -321,7 +321,7 @@ static func craft_tool(s, item_id: String) -> Dictionary:
 	var recipe: Dictionary = GameData.ITEMS[item_id].recipe
 	var at := Vector2(s.player.px, s.player.py)
 	if not can_pay(s, recipe, at):
-		return {"ok": false, "msg": "Бракує: " + s._cost_str(missing(s, recipe, at))}
+		return {"ok": false, "msg": "%s — бракує: %s" % [String(GameData.ITEMS[item_id].get("name", item_id)), s._cost_str(missing(s, recipe, at))]}
 	if room(s, item_id) < 1:
 		return {"ok": false, "msg": "Рюкзак повний."}
 	pay(s, recipe, at)

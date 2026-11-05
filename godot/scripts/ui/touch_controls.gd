@@ -348,7 +348,8 @@ class TouchControls extends Control:
 		else:
 			# idle hint where the stick lives (discoverability without a text wall)
 			var hint := Vector2(110, size.y - 120)
-			draw_arc(hint, STICK_R * 0.7, 0, TAU, 40, Tokens.with_alpha(Tokens.INK, 0.12), 2.0, true)
+			if not _over_gui(hint):   # an open panel (inventory) covers the stick zone: no ring drawn over it
+				draw_arc(hint, STICK_R * 0.7, 0, TAU, 40, Tokens.with_alpha(Tokens.INK, 0.12), 2.0, true)
 		var c: Vector2 = act_center()
 		var col: Color = MODE_COLOR.get(mode, Tokens.INK)
 		var r: float = ACT_R * _press_scale

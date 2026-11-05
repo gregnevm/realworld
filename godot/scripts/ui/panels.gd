@@ -80,7 +80,6 @@ class VitalsPanel extends PanelBase.Base:
 	var _carry: Widgets.Medallion
 	var _row: HBoxContainer
 	var _cond: Label               # active afflictions only; hidden when healthy
-	var _touch := false
 	func _init() -> void:
 		panel_id = &"vitals"; dock = PanelBase.DOCK_LEFT; priority = 10; default_open = true; bare = true
 		menu_label = "❤ Життєві"; compact_open = 1
@@ -140,9 +139,9 @@ class VitalsPanel extends PanelBase.Base:
 		_cond.visible = _cond.text != ""
 		_cond.tooltip_text = "\n".join(conds)
 		var touch := bool((vm.get("ui", {}) as Dictionary).get("touch", false))
-		if touch != _touch:
-			_touch = touch
-			_carry.visible = not touch             # the haul loop runs itself; a phone has no spare width
+		# spec 0009: in an inventory world the backpack medallion (top-right) IS the load — «ноша» would repeat it
+		var inv_on := bool((vm.get("inventory", {}) as Dictionary).get("enabled", false))
+		_carry.visible = not touch and not inv_on   # the haul loop runs itself; a phone has no spare width
 
 # ---- PowerPanel (RIGHT dock) — the grid readout (Batch 8c): supply/draw/battery + brownout state ----
 class PowerPanel extends PanelBase.Base:
