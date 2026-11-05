@@ -4,7 +4,8 @@
 //   • every module wraps itself in a "use strict" IIFE over the RW namespace;
 //   • no Math.random in sim paths (determinism: only the seeded G.rng / worldgen rng may roll);
 //   • secret-scan: no Google API key (AIza…/AQ.…) in any tracked file, and .env.local stays gitignored
-//     (tools/gen-art.mjs keeps the one-day Gemini key there).
+//     (tools/gen-art.mjs keeps the one-day Gemini key there);
+//   • Godot-3 API tripwire over every tracked .gd (F1 — docs/process/automation.md).
 import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
@@ -47,5 +48,16 @@ for (const f of tracked) {
 try { execFileSync("git", ["check-ignore", "-q", ".env.local"], { cwd: root }); }
 catch { problems.push(".env.local is not gitignored — the Gemini key would be committable"); }
 
+// F1 tripwire: models still emit Godot-3 API (yield, rand_range, export var, …) — the engine is pinned to 4.7.
+// Patterns + Godot-4 replacements live in tools/process/lib.mjs (pinned by tests/process.test.js).
+const { godotDrift } = await import("./process/lib.mjs");
+let gdFiles = 0;
+for (const f of tracked) {
+  if (!f.endsWith(".gd")) continue;
+  gdFiles++;
+  let src; try { src = fs.readFileSync(path.join(root, f), "utf8"); } catch { continue; }
+  for (const d of godotDrift(src)) problems.push(`${f}:${d.line} Godot-3 API (${d.hint}) — engine is 4.7; mark a false positive with "# drift-ok"`);
+}
+
 if (problems.length) { console.error("LINT FAILED:\n - " + problems.join("\n - ")); process.exit(1); }
-console.log(`lint ok: ${ORDER.length} modules, contract order intact, ${tracked.length} files secret-scanned`);
+console.log(`lint ok: ${ORDER.length} modules, contract order intact, ${tracked.length} files secret-scanned, ${gdFiles} .gd free of Godot-3 API`);

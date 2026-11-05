@@ -1,0 +1,31 @@
+name: Process
+
+# The process gate (docs/process/README.md). Separate from ci.yml so that editing a PR description
+# re-runs only this cheap job, not the whole test matrix.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # pull_request checks out the merge commit: HEAD^1 = base tip, so HEAD^1..HEAD = this PR
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: PR gate — intent, type, pillar, evidence, basis (P1/P2/P6/P7)
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}   # untrusted text: env only, never interpolated into the script
+        run: node tools/process/check-pr.mjs
+      - name: Process health report (informational, job summary)
+        if: always()
+        run: node tools/process/report.mjs
