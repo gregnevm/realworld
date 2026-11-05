@@ -14,6 +14,7 @@ const Progression = preload("res://scripts/kernel/progression.gd")
 const Catalog = preload("res://scripts/kernel/catalog.gd")
 const GameData = preload("res://scripts/data.gd")
 const Goals = preload("res://scripts/goals.gd")
+const MainCapsule = preload("res://scripts/sim/capsule.gd")
 const MAP_N := 56
 const STORE_PATH := "user://world.json"
 const SAVE_PATH := "user://save.json"   # the whole session (continue): store + live region + account
@@ -70,6 +71,9 @@ func commit_region() -> void:
 # Persist the current region, fly the pawn to (lat,lon), then load it (if visited) or generate it.
 func travel_to(lat: float, lon: float, place_name: String) -> void:
 	if sim == null:
+		return
+	if sim.use_main_capsule:   # spec 0010: капсула одна й лишається у своєму регіоні (REQ-0010-04/75) — відмова ДО commit_region/стирання
+		sim._log(MainCapsule.MSG_NO_TRAVEL, "warn")
 		return
 	commit_region()
 	var pawn: Dictionary = sim.extract_pawn()

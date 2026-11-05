@@ -16,6 +16,7 @@ const Director = preload("res://scripts/sim/director.gd")
 const DataBridge = preload("res://scripts/data_bridge.gd")
 const CatalogDefs = preload("res://scripts/catalog_defs.gd")
 const Catalog = preload("res://scripts/kernel/catalog.gd")
+const MainCapsule = preload("res://scripts/sim/capsule.gd")
 
 var map: Dictionary
 var n: int = 0
@@ -39,6 +40,11 @@ var use_catalog := false   # spec 0008 phase 2: OFF = stock живе на 6 data
                            # байт-у-байт, його сьюти це доводять); ON = ключі stock — catalogue-ids через
                            # data_bridge, тож каталожні рецепти можуть afford-итись проти живого складу.
                            # Прапор ставиться ДО new_game і не фліпається посеред сейва (§5.2 spec 0008).
+var use_main_capsule: bool = false:   # spec 0010: ON = Основна капсула (дім/склад/орієнтир); ДО new_game, далі замкнений
+	set(v):
+		use_main_capsule = MainCapsule.set_flag(self, v)
+var main_capsule: Dictionary = {}   # {} при OFF/до посадки; запис — MainCapsule.new_record (tile живе тут)
+var config_error: StringName = &""  # непорожнє => new_game нічого не створив (див. MainCapsule.preflight)
 var convoys: Array = []
 var regions: Array = []
 var convoy_seq := 0
@@ -121,6 +127,9 @@ func _default_capsule() -> Dictionary:
 	return {"charges": GameData.CAPSULE_DAILY_CHARGES, "radius_km": GameData.CAPSULE_BASE_RADIUS_KM, "last_day": int(time.day)}
 
 func new_game(m: Dictionary, hint: bool = true) -> void:
+	config_error = MainCapsule.preflight(use_main_capsule, use_inventory, use_catalog, m)   # &"" при OFF
+	if config_error != &"":
+		return   # ДО будь-якої мутації: порожній світ + явна причина (REQ-0010-03/59)
 	map = m
 	n = m.n
 	var sp: Vector2i = m.spawn
@@ -134,12 +143,15 @@ func new_game(m: Dictionary, hint: bool = true) -> void:
 	capsule = _default_capsule()
 	invites = []
 	_build_astar()
-	var lx := sp.x + 1
-	var ly := sp.y
-	if not build_valid(lx, ly):
-		lx = sp.x
-		ly = sp.y + 1
-	_place_building("storage", lx, ly, -1)
+	if use_main_capsule:
+		MainCapsule.landing(self, WorldGen.canon_coord(float(m.lat), float(m.lon)), sp)   # капсула = склад + дім
+	else:
+		var lx := sp.x + 1
+		var ly := sp.y
+		if not build_valid(lx, ly):
+			lx = sp.x
+			ly = sp.y + 1
+		_place_building("storage", lx, ly, -1)
 	_init_regions()
 	_env_init()
 	HeroHealth.reset(self)
@@ -153,6 +165,8 @@ func spawn_hint() -> void:
 
 # Arrive in a NEW region by capsule: your pawn + full personal inventory, but no base/stock here.
 func arrive_region(m: Dictionary, pawn: Dictionary) -> void:
+	if MainCapsule.refuses_region_swap(self):
+		return   # ON: капсула одна й лишається у своєму регіоні (REQ-0010-04/75) — нічого не стираємо
 	map = m
 	n = int(m.n)
 	_build_astar()
@@ -298,6 +312,8 @@ func after_map_change() -> void:
 	for b in buildings:
 		if building_def(String(b.kind)).get("blocks", false):
 			_refresh_solid(b.x, b.y)
+	if MainCapsule.on_map_change(self):
+		return   # ON: герой біля капсули (map.spawn = її непрохідна клітинка), склад не переносимо (REQ-0010-06/75)
 	var sp: Vector2i = map.spawn
 	player.px = sp.x + 0.5
 	player.py = sp.y + 0.5
@@ -382,6 +398,8 @@ func deposit(res: String, amt: int, quiet: bool = false) -> int:
 # path (blocks/heat/light/traps/turrets/capacity/hp) serves both vocabularies without caring.
 # {} == unknown/not-live-buildable (try_build refuses it).
 func building_def(kind: String) -> Dictionary:
+	if use_main_capsule and kind == MainCapsule.KIND:
+		return MainCapsule.DEF
 	if GameData.BUILDINGS.has(kind):
 		return GameData.BUILDINGS[kind]
 	return CatalogDefs.building(kind) if use_catalog else {}
@@ -408,7 +426,13 @@ func cost_keys(cost: Dictionary) -> Dictionary:
 func afford(cost: Dictionary) -> bool:
 	return GameData.can_afford(stock, cost_keys(cost))
 
+# «Склад» як можливість, не id: data.gd-склад і (при ON) def з `storage: true` — капсула (REQ-0010-05).
+func has_storage_cap(kind: String) -> bool:
+	return kind == "storage" or (use_main_capsule and bool(building_def(kind).get("storage", false)))
+
 func base_center() -> Vector2i:
+	if not main_capsule.is_empty():
+		return MainCapsule.tile(self)
 	for b in buildings:
 		if b.kind == "storage":
 			return Vector2i(b.x, b.y)
@@ -426,7 +450,7 @@ func _nearest_enemy(x: float, y: float, maxr: float):
 
 func _near_storage(r: float) -> bool:
 	for b in buildings:
-		if b.kind == "storage" and _dist(player.px, player.py, b.x + 0.5, b.y + 0.5) < r:
+		if has_storage_cap(String(b.kind)) and _dist(player.px, player.py, b.x + 0.5, b.y + 0.5) < r:
 			return true
 	return false
 
@@ -596,8 +620,8 @@ func try_build(kind: String, x: int, y: int) -> void:
 	# ONE def seam serves both vocabularies: data.gd ids always; catalogue-only ids when the flag is
 	# on ({} refusal covers unknown ids AND catalogue ids while the flag is off).
 	var def: Dictionary = building_def(kind)
-	if def.is_empty():
-		_flash("Тут не можна будувати.")
+	if def.is_empty() or bool(def.get("landmark", false)):   # landmark (капсула) не будується: вона одна (REQ-0010-06)
+		_flash("Тут не можна будувати." if def.is_empty() else "Основна капсула одна.")
 		return
 	if not research_ok(def):
 		_flash("🔒 Потребує дослідження: %s." % _research_label(def))
@@ -620,6 +644,8 @@ func demolish(x: int, y: int) -> Dictionary:
 	if not _in(x, y) or not bgrid.has(y * n + x):
 		return {"ok": false, "msg": "Тут немає будівлі."}
 	var b: Dictionary = bgrid[y * n + x]
+	if bool(building_def(String(b.kind)).get("indestructible", false)):
+		return {"ok": false, "reason": &"indestructible", "msg": "Капсулу не можна розібрати."}
 	if b.kind == "storage":
 		var storages := 0
 		for o in buildings:
@@ -903,7 +929,8 @@ func update(dt: float) -> void:
 		time.frac -= 1.0
 		time.day += 1
 		_log("🌅 Новий день: %d" % time.day)
-		_grant_daily_capsule()
+		if not use_main_capsule:
+			_grant_daily_capsule()   # щоденний заряд spec 0002 — лише OFF (REQ-0010-41)
 	_update_environment(dt / time.day_len)
 	SimPower.update(self, dt)   # after environment (solar reads daylight, wind reads weather)
 	SimFarm.update(self, dt)    # after power (hydroponics grows only when the net delivered)
@@ -1108,7 +1135,7 @@ func _nearest_storage() -> Variant:
 	var best: Variant = null
 	var bd := INF
 	for b in buildings:
-		if String(b.kind) != "storage":
+		if not has_storage_cap(String(b.kind)):
 			continue
 		var d := _dist(player.px, player.py, b.x + 0.5, b.y + 0.5)
 		if d < bd:

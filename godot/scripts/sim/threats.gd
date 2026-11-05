@@ -14,9 +14,12 @@ const GameData = preload("res://scripts/data.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
 const Social = preload("res://scripts/social.gd")
 const HeroHealth = preload("res://scripts/sim/hero_health.gd")
+const MainCapsule = preload("res://scripts/sim/capsule.gd")
 
 # ---------------- raids ----------------
 static func update_raids(s, dt: float) -> void:
+	if MainCapsule.holds_npc_threats(s):
+		return   # ON (spec 0010 OD-58/D8): легасі-цикл рейду не армується — вічна облога неруйнівної капсули (до W3)
 	var r: Dictionary = s.raid
 	if r.active:
 		# рейд завершено, коли не лишилось РЕЙДЕРІВ: патрульний робот (kind "bot") живе в тому ж
@@ -109,6 +112,8 @@ static func update_patrols(s, dt: float) -> void:
 	pt.next = 420.0 + s.threat_rng.randf() * 300.0
 	if s.raid.active:
 		return   # одна битва за раз: під час рейду патруль не накладаємо
+	if MainCapsule.holds_npc_threats(s):
+		return   # ON (critique-0010 #2): роботи, що довбуть неруйнівну капсулу, — до вимірювання/рішення власника; кидок RNG вище лишився
 	spawn_patrol(s)
 
 static func spawn_patrol(s) -> void:
@@ -225,6 +230,8 @@ static func update_turrets(s, dt: float) -> void:
 # ---------------- damage + death ----------------
 # destroyer: хто зніс будівлю — для чесного фіда ("рейдерами"/"роботом"); "" = самозношення пастки.
 static func damage_building(s, b, amt: float, steal: bool, destroyer: String = "рейдерами") -> void:
+	if bool(s.building_def(String(b.kind)).get("indestructible", false)):
+		return   # Основна капсула (spec 0010): без HP-до-видалення й без крадіжки складу; хук ядра рейду — хвиля W3
 	b.hp -= amt
 	if steal and b.kind == "storage":
 		var keys := []

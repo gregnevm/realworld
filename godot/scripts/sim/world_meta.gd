@@ -9,6 +9,7 @@ extends RefCounted
 
 const GameData = preload("res://scripts/data.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
+const MainCapsule = preload("res://scripts/sim/capsule.gd")
 
 # ---------------- capsules & invites (spec 0002) ----------------
 static func grant_daily_capsule(s) -> void:
@@ -31,6 +32,8 @@ static func capsule_can_reach(s, lat: float, lon: float) -> Dictionary:
 
 # Validate + consume a charge. Returns a travel intent for the session (main.travel_to).
 static func try_launch_capsule(s, lat: float, lon: float, place_name: String) -> Dictionary:
+	if s.get("use_main_capsule") == true:   # REQ-0010-41: при ON щоденного запуску нема (запуск = лише OFF)
+		return {"ok": false, "msg": MainCapsule.MSG_NO_TRAVEL}
 	var chk := capsule_can_reach(s, lat, lon)
 	if not chk.ok:
 		return {"ok": false, "msg": chk.msg}
