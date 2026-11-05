@@ -394,6 +394,9 @@ static func _inventory_slice(sim) -> Dictionary:
 			why2 = "бракує " + String(sim._cost_str(InventoryMod.missing(sim, it.recipe, at)))
 		craft.append({"type": "item", "id": iid, "label": String(it.name), "cost": GameData.cost_str(it.recipe),
 			"ok": why2 == "", "why": why2, "have": int(InventoryMod.count(sim, iid))})
+	# what you CAN make right now comes first (Terraria-style), the rest keeps catalogue order below it
+	var ready: Array = craft.filter(func(c: Dictionary) -> bool: return bool(c.ok))
+	craft = ready + craft.filter(func(c: Dictionary) -> bool: return not bool(c.ok))
 	var near := InventoryMod.near_storage(sim)
 	var storage: Array = []
 	if near:
@@ -792,9 +795,22 @@ static func _goals_slice(session) -> Dictionary:
 
 # --- death (the death screen's value data: cause + how long this pawn lived) ---
 static func _death_slice(sim) -> Dictionary:
+	var inv_on: bool = sim.get("use_inventory") == true
+	var bag: int = _death_bag_items(sim) if inv_on else 0
 	var ld: Variant = sim.get("last_death")
 	if not (ld is Dictionary) or (ld as Dictionary).is_empty():
-		return {"cause": "", "day": int(sim.time.day), "lived": 0}
+		return {"cause": "", "day": int(sim.time.day), "lived": 0, "inventory": inv_on, "bag_items": bag}
 	var d: Dictionary = ld
 	return {"cause": String(d.get("cause", "")), "day": int(d.get("day", 0)),
-		"lived": maxi(0, int(d.get("day", 0)) - int(d.get("born", int(d.get("day", 0)))) + 1)}
+		"lived": maxi(0, int(d.get("day", 0)) - int(d.get("born", int(d.get("day", 0)))) + 1),
+		"inventory": inv_on, "bag_items": bag}
+
+# spec 0009: the bag the pawn left where it fell (the newest multi-slot bag) — the death screen tells the truth about it
+static func _death_bag_items(sim) -> int:
+	var bags: Variant = sim.get("bags")
+	if not (bags is Array) or (bags as Array).is_empty():
+		return 0
+	var n := 0
+	for sl in ((bags as Array).back() as Dictionary).get("slots", []):
+		n += int((sl as Dictionary).get("n", 0))
+	return n

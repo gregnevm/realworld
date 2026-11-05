@@ -172,7 +172,8 @@ func tick_goals(dt: float) -> void:
 	# several goals can close in one check (a loaded base, a big build): ONE toast, not a stack of repeats
 	var nxt: Dictionary = _current_goal()
 	var tail: String = (" · далі — %s" % String(nxt.title)) if not nxt.is_empty() else " · усі цілі виконано!"
-	var head: String = ("Ціль виконано: " + String(titles[0])) if titles.size() == 1 else ("Цілі виконано (%d): %s" % [titles.size(), ", ".join(titles)])
+	# one line in the feed: a big batch is a count, not a list (the chip and the goals panel hold the details)
+	var head: String = ("Ціль виконано: " + String(titles[0])) if titles.size() == 1 else ("Виконано цілей: %d" % titles.size())
 	sim._log("✔ %s%s" % [head, tail], "good")
 
 func _current_goal() -> Dictionary:

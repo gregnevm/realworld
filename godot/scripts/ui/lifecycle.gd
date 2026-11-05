@@ -118,6 +118,7 @@ class SpawnScreen extends Control:
 	var _lat_edit: LineEdit
 	var _lon_edit: LineEdit
 	var _status: Label
+	var _more: VBoxContainer   # every secondary way in, folded under «Інше місце…»
 
 	func _ready() -> void:
 		# hud_root gotcha: під CanvasLayer Control НЕ успадковує розмір в'юпорта — FULL_RECT колапсує
@@ -172,51 +173,63 @@ class SpawnScreen extends Control:
 		box.add_child(sub)
 		arrivals.append(sub)
 
+		# ONE primary action (gamedev §6: «one choice at a time») — continue the saved world, else play the
+		# first preset; every other way in (cities, coordinates, GPS, invite) waits behind «Інше місце…».
+		var primary := Button.new()
+		var p0: Dictionary = GameData.SPAWN_PRESETS[0]
 		if not continue_meta.is_empty():
-			var cont := Button.new()
-			cont.text = "▶  Продовжити: %s · день %d%s" % [String(continue_meta.get("place", "")),
-				int(continue_meta.get("day", 1)), " (☠ пішак загинув)" if bool(continue_meta.get("dead", false)) else ""]
-			cont.custom_minimum_size = Vector2(0, 56)
-			cont.add_theme_font_size_override("font_size", 18)
-			cont.pressed.connect(func() -> void: continue_chosen.emit())
-			Chrome.pop_button(cont)
-			box.add_child(cont)
-			arrivals.append(cont)
+			primary.text = "Продовжити · %s · день %d%s" % [String(continue_meta.get("place", "")),
+				int(continue_meta.get("day", 1)), " (виживальник загинув)" if bool(continue_meta.get("dead", false)) else ""]
+			primary.pressed.connect(func() -> void: continue_chosen.emit())
+		else:
+			primary.text = "Грати · %s" % String(p0.name)
+			primary.pressed.connect(_choose.bind(float(p0.lat), float(p0.lon), String(p0.name)))
+		primary.custom_minimum_size = Vector2(0, 64)
+		primary.add_theme_font_override("font", UITheme.display_font())
+		primary.add_theme_font_size_override("font_size", 24)
+		primary.add_theme_color_override("font_color", Tokens.AMBER)
+		Chrome.pop_button(primary)
+		box.add_child(primary)
+		arrivals.append(primary)
+		var more_btn := Button.new()
+		more_btn.text = "Інше місце  ▾"
+		more_btn.flat = true
+		more_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		more_btn.custom_minimum_size = Vector2(0, 40)
+		box.add_child(more_btn)
+		arrivals.append(more_btn)
+		_more = VBoxContainer.new()
+		_more.add_theme_constant_override("separation", 6)
+		_more.visible = false
+		box.add_child(_more)
+		more_btn.pressed.connect(func() -> void:
+			_more.visible = not _more.visible
+			more_btn.text = "Сховати  ▴" if _more.visible else "Інше місце  ▾")
+		if not continue_meta.is_empty():
 			var warn := Label.new()
-			warn.text = "Нова висадка нижче почне інший світ і перезапише це збереження."
+			warn.text = "Нова висадка почне інший світ і перезапише це збереження."
 			warn.add_theme_font_size_override("font_size", 12)
-			warn.add_theme_color_override("font_color", Tokens.MUT)
-			box.add_child(warn)
-
-		var h1 := _section("Обери точку висадки")
-		box.add_child(h1)
-		arrivals.append(h1)
+			warn.add_theme_color_override("font_color", Tokens.WARN)
+			_more.add_child(warn)
 		var grid := GridContainer.new()
-		grid.columns = 2
+		grid.columns = 3
 		grid.add_theme_constant_override("h_separation", 8)
 		grid.add_theme_constant_override("v_separation", 8)
-		box.add_child(grid)
+		_more.add_child(grid)
 		for pr in GameData.SPAWN_PRESETS:
 			var btn := Button.new()
-			btn.text = "%s\n(%.2f, %.2f) · seed %s" % [String(pr.name), float(pr.lat), float(pr.lon),
-				Fmt.seed_hex(WorldGen.hash_seed(float(pr.lat), float(pr.lon)))]
-			btn.custom_minimum_size = Vector2(246, 60)
+			btn.text = String(pr.name)      # a place name; the seed is a dev word — it lives in the tooltip
+			btn.tooltip_text = "%.2f, %.2f · seed %s" % [float(pr.lat), float(pr.lon), Fmt.seed_hex(WorldGen.hash_seed(float(pr.lat), float(pr.lon)))]
+			btn.custom_minimum_size = Vector2(160, 48)
 			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			btn.pressed.connect(_choose.bind(float(pr.lat), float(pr.lon), String(pr.name)))
-			Chrome.pop_button(btn)
 			grid.add_child(btn)
-			arrivals.append(btn)
 		var note := Label.new()
-		note.text = "🌍 Координати — це seed: ті самі координати завжди дають той самий світ. Це адреса, якою ділишся з друзями."   # gdlint: ignore=max-line-length
+		note.text = "Ті самі координати завжди дають той самий світ — цією адресою можна ділитися з друзями."
 		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		note.add_theme_font_size_override("font_size", 12)
-		note.add_theme_color_override("font_color", Tokens.GOOD)
-		box.add_child(note)
-
-		var h2 := _section("Свої координати")
-		box.add_child(h2)
-		arrivals.append(h2)
+		note.add_theme_color_override("font_color", Tokens.MUT)
+		_more.add_child(note)
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 8)
 		_lat_edit = LineEdit.new()
@@ -227,36 +240,29 @@ class SpawnScreen extends Control:
 		_lon_edit.custom_minimum_size = Vector2(150, 40)
 		row.add_child(_lat_edit)
 		row.add_child(_lon_edit)
-		box.add_child(row)
-		arrivals.append(row)
+		var go := Button.new()
+		go.text = "Висадка"
+		go.custom_minimum_size = Vector2(0, 40)
+		go.pressed.connect(_start_from_coords)
+		row.add_child(go)
+		_more.add_child(row)
 		var btns := HBoxContainer.new()
 		btns.add_theme_constant_override("separation", 8)
 		var gps := Button.new()
 		gps.text = "📍 Моя GPS-локація"
-		gps.custom_minimum_size = Vector2(0, 44)
+		gps.custom_minimum_size = Vector2(0, 40)
 		gps.pressed.connect(_use_real_gps)
-		Chrome.pop_button(gps)
 		btns.add_child(gps)
-		var go := Button.new()
-		go.text = "🛬 Висадка за координатами"
-		go.custom_minimum_size = Vector2(0, 44)
-		go.pressed.connect(_start_from_coords)
-		Chrome.pop_button(go)
-		btns.add_child(go)
-		box.add_child(btns)
-		arrivals.append(btns)
-
 		var demo := Button.new()
-		demo.text = "✉ Висадка до друга (демо-інвайт): Бровари"
+		demo.text = "✉ До друга: Бровари"
+		demo.tooltip_text = "Демо-інвайт: висадка поруч із базою друга"
 		demo.custom_minimum_size = Vector2(0, 40)
-		demo.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		demo.pressed.connect(_choose.bind(50.5109, 30.7909, "Інвайт: Бровари"))
-		Chrome.pop_button(demo)
-		box.add_child(demo)
-		arrivals.append(demo)
+		btns.add_child(demo)
+		_more.add_child(btns)
 
 		var hint := Label.new()
-		hint.text = "ЛКМ — іти/добувати · колесо — зум · WASD · 1–0 будувати (затисни — ряд) · Space пауза · J цілі · H довідка"   # gdlint: ignore=max-line-length
+		hint.text = "ЛКМ — іти й добувати · WASD · колесо — зум · 1–8 — хотбар · Tab — рюкзак · Space — пауза"
 		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		hint.add_theme_font_size_override("font_size", 12)
 		hint.add_theme_color_override("font_color", Tokens.MUT)
@@ -270,14 +276,6 @@ class SpawnScreen extends Control:
 
 	func _fit_viewport() -> void:
 		WidgetBase.Widget.fit_viewport(self)
-
-	func _section(t: String) -> Label:
-		var l := Label.new()
-		l.text = t.to_upper()
-		l.add_theme_font_override("font", UITheme.display_font())
-		l.add_theme_font_size_override("font_size", 16)
-		l.add_theme_color_override("font_color", Tokens.WARN)
-		return l
 
 	func _choose(lat: float, lon: float, place_name: String) -> void:
 		spawn_chosen.emit(lat, lon, place_name)
@@ -312,6 +310,7 @@ class DeathScreen extends Control:
 	signal respawn_chosen
 
 	var _epitaph: Label
+	var _what: Label
 	var cause := ""
 
 	# The death's value data (HudModel death slice): WHY and HOW LONG — a death you can read is a
@@ -321,19 +320,27 @@ class DeathScreen extends Control:
 			return
 		cause = String(vm.get("cause", ""))
 		var lived: int = int(vm.get("lived", 0))
-		var lines: Array = []
+		var head: Array = []
 		if cause != "":
-			lines.append("Причина: %s." % cause)
+			head.append("Причина: %s" % cause)
 		if lived > 0:
-			lines.append("Прожито днів: %d (до дня %d)." % [lived, int(vm.get("day", 0))])
-		lines.append(_lesson(cause))
-		_epitaph.text = "\n".join(lines)
+			head.append("прожито днів: %d" % lived)
+		_what.text = (" · ".join(head) + "\n" if not head.is_empty() else "") + _fate(vm)
+		_epitaph.text = _lesson(cause)
+
+	# What survives the death — the truth per world rules (spec 0009 bag vs the classic "all carried is lost").
+	static func _fate(vm: Dictionary) -> String:
+		if bool(vm.get("inventory", false)):
+			var n: int = int(vm.get("bag_items", 0))
+			var bag: String = ("Торба (%d предм.) лежить на місці загибелі — її можна забрати." % n) if n > 0 else "Рюкзак був порожній — втрачати нічого."
+			return bag + "\nПоселення й склад лишаються. Новий виживальник прибуде без навичок."
+		return "Усе, що було при собі, втрачено.\nПоселення й склад лишаються. Новий виживальник прибуде без навичок."
 
 	static func _lesson(c: String) -> String:
-		if "замерз" in c:
-			return "Порада: багаття (9) + стіни (1) з дверима (2) навколо — у приміщенні тепло тримається."
+		if "переохолод" in c:
+			return "Порада: багаття, а навколо — стіни з дверима: у приміщенні тепло тримається."
 		if "голод" in c:
-			return "Порада: збирай ягоди з кущів і тримай їжу на складі — біля складу пішак їсть сам."
+			return "Порада: збирай ягоди з кущів і носи їжу з собою — голодний виживальник їсть сам."
 		if "тепловий" in c:
 			return "Порада: у спеку ховайся в приміщенні, не стій біля вогню."
 		if "кров" in c or "рани" in c:
@@ -365,18 +372,18 @@ class DeathScreen extends Control:
 		vb.add_theme_constant_override("separation", 12)
 		center.add_child(vb)
 		var t := Label.new()
-		t.text = "☠  ТИ ЗАГИНУВ"
+		t.text = "ЗАГИБЕЛЬ"   # no gendered «ти загинув», no emoji beside the painted art
 		t.add_theme_font_override("font", UITheme.display_font())
 		t.add_theme_font_size_override("font_size", 56)
 		t.add_theme_color_override("font_color", Tokens.CRIT)
 		t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vb.add_child(t)
-		var s := Label.new()
-		s.text = "Одне життя, глибока симуляція. Героя й усе, що він ніс, втрачено.\nПоселення лишається: нова пішка прибуде туди — з нуля, без прокачки."   # gdlint: ignore=max-line-length
-		s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		s.custom_minimum_size = Vector2(460, 0)
-		vb.add_child(s)
+		_what = Label.new()
+		_what.text = _fate({})
+		_what.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_what.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_what.custom_minimum_size = Vector2(460, 0)
+		vb.add_child(_what)
 		_epitaph = Label.new()
 		_epitaph.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_epitaph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -384,7 +391,7 @@ class DeathScreen extends Control:
 		_epitaph.add_theme_color_override("font_color", Tokens.WARN)
 		vb.add_child(_epitaph)
 		var b := Button.new()
-		b.text = "🧬  Респавн — нова пішка"
+		b.text = "Новий виживальник"
 		b.custom_minimum_size = Vector2(260, 48)
 		b.pressed.connect(func() -> void: respawn_chosen.emit())
 		Chrome.pop_button(b)

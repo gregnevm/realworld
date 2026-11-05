@@ -508,6 +508,17 @@ class FlashWidget extends WidgetBase.Widget:
 				modulate = Tokens.with_alpha(Tokens.WHITE, _t / 0.5)   # a short fade, not a pop
 			if _t == 0.0:
 				visible = false
+	# Anchor the refusal to WHO it is about (gamedev §5: a flash floating mid-screen «I didn't point at
+	# anything» — and it covered the enemy's intent badge): centred just above the hero's head, clamped
+	# on screen. A negative anchor keeps the authored pin (fakes / tests / no hero on screen).
+	func follow(anchor: Vector2, screen: Vector2) -> void:
+		if not visible or anchor.x < 0.0:
+			return
+		var sz: Vector2 = (_card.panel as Control).get_combined_minimum_size()
+		var p := anchor - Vector2(sz.x * 0.5, sz.y + 10.0)
+		p.x = clampf(p.x, 4.0, maxf(4.0, screen.x - sz.x - 4.0))
+		p.y = clampf(p.y, 56.0, maxf(56.0, screen.y - sz.y - 4.0))
+		WidgetBase.Widget.pin_at(self, p)
 	func _exit_tree() -> void:
 		if _bus != null and _bus.flash.is_connected(_on_flash):
 			_bus.flash.disconnect(_on_flash)
@@ -753,10 +764,14 @@ class Medallion extends WidgetBase.Widget:
 	var badge := true
 	var quiet_when_good := false        # needs: in the normal band the token is a dim icon, no number (The Long Dark / Don't Starve)
 	var trend := 0                      # -1 falling / 0 steady / +1 rising (vs a ~3 s moving average) — direction beats the exact number
+	# A word under the token (gamedev §5: icons+numbers alone were not decodable — «5/0/8/0, which
+	# resources?»). The panel decides WHEN: names during the first days, then only while the state is off.
+	var caption := ""
 	var _ema := NAN
 	var _pulse := 0.0
+	const CAP_H := 15.0
 	func _build() -> void:
-		custom_minimum_size = Vector2(D, D + 12.0)
+		custom_minimum_size = Vector2(D + 12.0, D + 12.0 + CAP_H)
 		mouse_filter = Control.MOUSE_FILTER_PASS
 		draw.connect(_on_draw)
 		set_process(true)
@@ -772,6 +787,7 @@ class Medallion extends WidgetBase.Widget:
 			return
 		value = str(vm.get("value", value))
 		state = StringName(vm.get("state", state))
+		caption = String(vm.get("caption", ""))
 		var num: float = value.get_slice("/", 0).to_float() if value.is_valid_float() or value.get_slice("/", 0).replace("°", "").is_valid_float() else NAN
 		if value.ends_with("°"):
 			num = value.trim_suffix("°").to_float()
@@ -826,3 +842,11 @@ class Medallion extends WidgetBase.Widget:
 			draw_rect(pr, ring if state != &"good" else Tokens.LINE2, false, 1.0)
 			draw_string(f, Vector2(pr.position.x + (pw - tw) * 0.5, pr.position.y + 13.5), value, HORIZONTAL_ALIGNMENT_LEFT, -1, fs,
 				Tokens.urgency(state) if state != &"good" and state != &"info" else Tokens.INK)
+		if caption != "":
+			var cf: Font = UITheme.display_font()
+			var cs := 12
+			var cw: float = cf.get_string_size(caption, HORIZONTAL_ALIGNMENT_LEFT, -1, cs).x
+			var cp := Vector2(c.x - cw * 0.5, D + 12.0 + 12.0)
+			var ccol: Color = Tokens.urgency(state) if state == &"warn" or state == &"crit" else Tokens.MUT
+			draw_string_outline(cf, cp, caption, HORIZONTAL_ALIGNMENT_LEFT, -1, cs, 4, Tokens.BG)
+			draw_string(cf, cp, caption, HORIZONTAL_ALIGNMENT_LEFT, -1, cs, ccol)

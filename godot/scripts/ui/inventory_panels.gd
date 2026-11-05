@@ -39,6 +39,32 @@ class SlotKit extends RefCounted:
 		b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		return b
 
+	# Onboarding guide (gamedev §6: the goal points at a PLACE, not only at the corner chip): the hotbar slot
+	# holding the current goal's building, -2 = the goal needs a building that is not in the hotbar, -1 = none.
+	static func guide_slot(vm: Dictionary, slots: Array) -> int:
+		var gl: Variant = vm.get("goals", {})
+		if not (gl is Dictionary):
+			return -1
+		var kind := String(((gl as Dictionary).get("current", {}) as Dictionary).get("build", ""))
+		if kind == "":
+			return -1
+		for i in mini(8, slots.size()):
+			if String((slots[i] as Dictionary).get("id", "")) == BLD + kind:
+				return i
+		return -2
+
+	# The amber breath the build bar uses for the goal slot (shape + motion, not colour alone — R11).
+	static func pulse(b: Button, on: bool) -> void:
+		if b == null:
+			return
+		if on:
+			var k: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
+			b.modulate = b.modulate.lerp(Tokens.AMBER, 0.45 * k)
+			b.pivot_offset = b.size * 0.5
+			b.scale = Vector2.ONE * (1.0 + 0.05 * k)
+		elif b.scale != Vector2.ONE:
+			b.scale = Vector2.ONE
+
 	static func fill_slot(b: Button, sl: Dictionary, hotkey: String = "") -> void:
 		var id := String(sl.get("id", ""))
 		b.icon = SlotKit.slot_tex(id)
@@ -51,6 +77,7 @@ class SlotKit extends RefCounted:
 # ---- the hotbar (desktop BAR dock; the touch layer shows the same 8 slots in its quick bar) ----
 class InventoryBarPanel extends PanelBase.Base:
 	var _btns: Array = []
+	var _bag_btn: Button
 	func _init() -> void:
 		panel_id = &"hotbar"; dock = PanelBase.DOCK_BAR; priority = 5; default_open = false
 	func _build() -> void:
@@ -71,6 +98,7 @@ class InventoryBarPanel extends PanelBase.Base:
 		inv.add_theme_font_size_override("font_size", 24)
 		inv.pressed.connect(func() -> void: emit_intent(&"toggle_inventory", {}))
 		hb.add_child(inv)
+		_bag_btn = inv
 	func bind(vm) -> void:
 		rebind_count += 1
 		build_once()
@@ -81,13 +109,20 @@ class InventoryBarPanel extends PanelBase.Base:
 			return
 		var slots: Array = inv.slots
 		var hand: int = int(inv.hand)
+		var guide: int = SlotKit.guide_slot(vm, slots)
 		for i in _btns.size():
 			SlotKit.fill_slot(_btns[i], slots[i], str(i + 1))
 			_btns[i].set_pressed_no_signal(i == hand)
+			SlotKit.pulse(_btns[i], i == guide and i != hand)
+		# the goal's building is not in the hotbar yet → the backpack button breathes (craft it there)
+		_bag_btn.modulate = Tokens.WHITE
+		SlotKit.pulse(_bag_btn, guide == -2)
 
 # ---- the inventory screen: 8×4 grid (row 1 = hotbar) · craft list · the storage you stand at ----
 class InventoryPanel extends PanelBase.Base:
 	const COLS := 8
+	const HINT_IDLE := "Вибери предмет, щоб узяти. Верхній ряд — хотбар."
+	const HINT_HELD := "Вибери інший слот, щоб покласти, — або розділи чи викинь."
 	var _grid: GridContainer
 	var _slots: Array = []
 	var _sel := -1                     # «picked up» slot (tap one, tap another = move/merge/swap)
@@ -111,7 +146,7 @@ class InventoryPanel extends PanelBase.Base:
 		_hint = Label.new()
 		_hint.add_theme_font_size_override("font_size", 12)
 		_hint.add_theme_color_override("font_color", Tokens.MUT)
-		_hint.text = "Тап по слоту — взяти, тап по іншому — покласти. Взятий слот можна розділити чи викинути. Ряд 1 — хотбар (1–8)."
+		_hint.text = HINT_IDLE
 		_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_hint.custom_minimum_size = Vector2(440, 0)
 		vb.add_child(_hint)
@@ -225,6 +260,7 @@ class InventoryPanel extends PanelBase.Base:
 		if not bool(inv.get("enabled", false)):
 			return
 		var slots: Array = inv.slots
+		_hint.text = HINT_IDLE if _sel < 0 else HINT_HELD   # one short line that answers «what now?» for the current step
 		if _tool_btns.size() == 3:
 			_tool_btns[1].disabled = _sel < 0
 			_tool_btns[2].disabled = _sel < 0
@@ -243,7 +279,8 @@ class InventoryPanel extends PanelBase.Base:
 			r.row.visible = true
 			r.icon.texture = SlotKit.slot_tex((BLD + String(c.id)) if String(c.type) == "building" else String(c.id))
 			var have: int = int(c.get("have", 0))
-			r.label.text = "%s  %s%s" % [String(c.label), String(c.cost), ("   · є %d" % have) if have > 0 else ""]
+			# «є 1» read as «ε 1» in the independent read — say it in words: how many you already CARRY
+			r.label.text = "%s  %s%s" % [String(c.label), String(c.cost), ("   · у рюкзаку: %d" % have) if have > 0 else ""]
 			r.btn.text = "Скрафтити" if bool(c.ok) else String(c.why)
 			r.btn.disabled = not bool(c.ok)
 			r.btn.tooltip_text = String(c.why)

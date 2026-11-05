@@ -17,10 +17,10 @@ class StockPanel extends PanelBase.Base:
 	# Mobile-HUD redesign (2026-11): a bare row of resource medallions (icon + count badge, name in the
 	# tooltip) — Clash/Boom-Beach-style counters, no box, no header, no labels. Storage fill is the last token.
 	const EXTRA_POOL := 8          # fixed pool of catalogue-stock tokens (R2; slice caps to match)
-	const HOT := ["wood", "stone", "food", "scrap"]
 	var _rows: Dictionary = {}     # res id -> Medallion
 	var _extra: Array = []         # Medallion pool for catalogue-only resources (spec 0008 phase 4)
 	var _total: Widgets.Medallion
+	var _pack := false
 	func _init() -> void:
 		panel_id = &"stock"; dock = PanelBase.DOCK_RIGHT; priority = 10; default_open = true; bare = true
 		menu_label = "📦 Склад"; compact_open = 1
@@ -52,11 +52,15 @@ class StockPanel extends PanelBase.Base:
 			return
 		var st: Dictionary = vm.stock
 		var rows: Dictionary = st.rows
+		var learning: bool = int((vm.get("clock", {}) as Dictionary).get("day", 1)) <= VitalsPanel.LEARN_DAYS
 		for res in _rows:
 			var n: int = int(rows.get(res, 0))
-			_rows[res].bind({"value": str(n), "state": &"crit" if (res == "food" and n < 10) else &"good"})
-			# hot resources always; the rest only once you actually hold some (contextual, mobile «subtraction»)
-			_rows[res].visible = HOT.has(String(res)) or n > 0
+			var low: bool = res == "food" and n < 10
+			var cap: String = "Мало їжі" if low else (String(GameData.RES[res].label) if learning else "")
+			_rows[res].bind({"value": str(n), "state": &"crit" if low else &"good", "caption": cap})
+			# what you hold, plus food always (running out of it is the news); a «0» medallion was noise
+			# that the independent read could not decode (gamedev §5)
+			_rows[res].visible = n > 0 or res == "food"
 		var extra: Array = st.get("extra", [])
 		for i in _extra.size():
 			if i < extra.size():
@@ -68,13 +72,24 @@ class StockPanel extends PanelBase.Base:
 			else:
 				_extra[i].visible = false
 		var fill: float = float(st.total) / maxf(1.0, float(st.cap))
-		_total.bind({"value": "%d/%d" % [int(st.total), int(st.cap)], "state": &"crit" if fill >= 0.98 else (&"warn" if fill >= 0.85 else &"good")})
+		var pack: bool = bool(st.get("backpack", false))
+		if pack != _pack:   # spec 0009: the counter is the BACKPACK's slots, not the storage — say so with the right icon
+			_pack = pack
+			_total.set_token(ArtIcons.for_glyph("🎒") if pack else ArtIcons.building("storage"), "🎒" if pack else "Σ",
+				"Рюкзак: зайнято слотів" if pack else "Склад заповнено")
+		var tstate: StringName = &"crit" if fill >= 0.98 else (&"warn" if fill >= 0.85 else &"good")
+		var tcap: String = ("Повний" if tstate == &"crit" else ("Майже повний" if tstate == &"warn" else ("Рюкзак" if pack else "Склад") if learning else ""))
+		_total.bind({"value": "%d/%d" % [int(st.total), int(st.cap)], "state": tstate, "caption": tcap})
 
 # ---- VitalsPanel (LEFT dock) — hero need bars (HP/hunger/rest/blood) + located-health readout ----
 class VitalsPanel extends PanelBase.Base:
 	# Mobile-HUD redesign (2026-11): no bars, no header, no box. A row of medallions — health, hunger,
 	# rest, warmth (+ carry) — whose ring colour/shape/number says the state; blood and afflictions appear
 	# ONLY while active (The Long Dark pattern). Fixed widget pool, bind() swaps values (R2).
+	# captions: the need's NAME during the first days (learning window), afterwards only the ALERT word while off
+	const LEARN_DAYS := 2
+	const NAMES := ["Здоров'я", "Ситість", "Сон", "Кров"]
+	const ALERTS := ["Поранено", "Голод", "Втома", "Кровотеча"]
 	var _meds: Array = []          # Medallion per need bar (hp, hunger, rest, blood) in slice order
 	var _warm: Widgets.Medallion   # felt °C + comfort state
 	var _carry: Widgets.Medallion
@@ -99,7 +114,7 @@ class VitalsPanel extends PanelBase.Base:
 		_warm = Widgets.Medallion.new()
 		_warm.quiet_when_good = true
 		_row.add_child(_warm)
-		_warm.set_token(ArtIcons.for_glyph("🌡"), "🌡", "Відчуття")
+		_warm.set_token(ArtIcons.for_glyph("🌡"), "🌡", "Відчуття тепла (з одягом)")
 		_carry = Widgets.Medallion.new()
 		_row.add_child(_carry)
 		_carry.set_token(ArtIcons.for_glyph("🎒"), "🎒", "Несе")
@@ -117,19 +132,23 @@ class VitalsPanel extends PanelBase.Base:
 			return
 		var v: Dictionary = vm.vitals
 		var bars: Array = v.bars
+		var learning: bool = int((vm.get("clock", {}) as Dictionary).get("day", 1)) <= LEARN_DAYS
 		for i in mini(_meds.size(), bars.size()):
 			var bar: Dictionary = bars[i]
 			var pct: int = int(bar.get("pct", 0))
 			if _meds[i].label == "":
 				_meds[i].set_token(ArtIcons.for_glyph(String(bar.get("icon", ""))), String(bar.get("icon", "")), String(bar.get("label", "")))
-			_meds[i].bind({"value": "%d" % pct, "state": bar.get("state", &"good")})
+			var st: StringName = bar.get("state", &"good")
+			var cap: String = (ALERTS[i] if st == &"warn" or st == &"crit" else (NAMES[i] if learning else "")) if i < NAMES.size() else ""
+			_meds[i].bind({"value": "%d" % pct, "state": st, "caption": cap})
 			# blood is an affliction channel: shown only while bleeding/low (index 3 in the slice)
 			if i == 3:
 				_meds[i].visible = pct < 100
 		var felt := float(v.get("felt_c", 20.0))
 		var comfort := StringName(v.get("comfort", &"ok"))
 		var wstate: StringName = &"good" if comfort == &"ok" else (&"crit" if absf(felt - 18.0) > 22.0 else &"warn")
-		_warm.bind({"value": "%d°" % int(round(felt)), "state": wstate})
+		var wcap: String = ("Холодно" if comfort == &"cold" else "Спекотно") if comfort != &"ok" else ("Тепло" if learning else "")
+		_warm.bind({"value": "%d°" % int(round(felt)), "state": wstate, "caption": wcap})
 		var carry: Dictionary = v.carry
 		_carry.bind({"value": "%d/%d" % [int(carry.cur), int(carry.cap)], "state": &"info" if int(carry.cur) > 0 else &"good"})
 		var conds: Array = v.get("conditions", [])
@@ -597,8 +616,11 @@ class TopBarPanel extends PanelBase.Base:
 	const CHIPS := [0.0, 1.0, 2.0, 3.0]
 	# touch tools (phones have no keyboard / right button / wheel): ☰ panels menu · ✖ cancel ·
 	# 🗑 remove tool · zoom out/in. Built once, shown only when vm.ui.touch (R2).
-	const TOOLS := [["☰", &"toggle_menu", "Панелі та оверлеї"], ["✖", &"cancel_tool", "Скасувати"],
-		["🗑", &"remove_tool", "Розібрати: торкнись своєї будівлі"], ["−", &"zoom_out", "Віддалити"], ["+", &"zoom_in", "Наблизити"]]
+	# 2026-11 independent read (gamedev §5): unlabelled ✖/🗑 read as destructive, −/+ as speed. Zoom left
+	# the strip (pinch + the action button's vertical swipe do it), ✖ shows only while a tool is armed,
+	# and the remove tool says what it does in words.
+	const TOOLS := [["☰", &"toggle_menu", "Панелі та оверлеї"], ["✖", &"cancel_tool", "Скасувати інструмент"],
+		["🗑 Розібрати", &"remove_tool", "Розібрати: торкнись своєї будівлі"]]
 	var _clock: Label
 	var _season: Label
 	var _weather: Label
@@ -697,6 +719,7 @@ class TopBarPanel extends PanelBase.Base:
 		if touch:
 			_tools[0].set_pressed_no_signal(bool(ui.get("menu", false)))
 			_tools[2].set_pressed_no_signal(bool(ui.get("remove", false)))
+			_tools[1].visible = bool(ui.get("armed", false))   # nothing armed → nothing to cancel → no ✖
 
 # ---- GoalsPanel (LEFT dock, J) — the onboarding chain made visible: the current goal, HOW to do it
 # (keys named), its live progress and what comes next. Reads vm.goals (session goals_view, R8). ----
@@ -757,14 +780,18 @@ class GoalsPanel extends PanelBase.Base:
 		# objective CHIP: one line (title · n/N); the how-to lives in the tooltip and the pulsing build slot
 		_count.visible = false
 		_hint.visible = false
-		tooltip_text = _hint.text
-		_title.tooltip_text = _hint.text
+		var nxt := String(g.get("next", ""))
+		# the chip shows THIS goal's own progress; the chain step lives in the tooltip — «5/10» beside
+		# «Розпали багаття» read as «5 of 10 logs» in the first independent read (gamedev §5)
+		var tip: String = "Крок %d з %d · %s" % [int(g.get("done", 0)) + 1, int(g.get("total", 0)), _hint.text]
+		if nxt != "":
+			tip += "\nДалі: " + nxt
+		tooltip_text = tip
+		_title.tooltip_text = tip
 		_title.mouse_filter = Control.MOUSE_FILTER_PASS
 		var pct: int = int(round(float(cur.get("pct", 0.0)) * 100.0))
 		_bar.visible = false   # no progress bar (HUD diet): progress rides the title as a number when it means something
 		if pct > 0 and pct < 100:
 			_title.text += "  ·  %d%%" % pct
-		var nxt := String(g.get("next", ""))
 		_next.text = ("далі: " + nxt) if nxt != "" else ""
 		_next.visible = false
-		_title.text += "   %d/%d" % [int(g.get("done", 0)), int(g.get("total", 0))]

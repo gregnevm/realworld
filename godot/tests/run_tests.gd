@@ -1010,7 +1010,7 @@ func _t_cold_exposure() -> void:
 	ok(s2.dead, "unsheltered −45°C anomaly eventually kills")
 	var froze := false
 	for m in s2.messages:
-		if "замерз" in String(m.text):
+		if "переохолодження" in String(m.text):
 			froze = true
 	ok(froze, "the verdict names the cold")
 
@@ -2066,7 +2066,7 @@ func _t_death_epitaph() -> void:
 		s.player.hunger = 100.0
 		s.player.rest = 100.0
 		guard += 1
-	ok(s.dead and String(s.last_death.get("cause", "")) == "замерз", "the death records its cause for the death screen")
+	ok(s.dead and String(s.last_death.get("cause", "")) == "переохолодження", "the death records its cause for the death screen")
 	ok(int(s.last_death.born) == 1 and int(s.last_death.day) >= 2, "…and the pawn's lifespan (born day 1, died day %d)" % int(s.last_death.day))
 	ok(int(s.player.born) == 1, "a pawn carries the day it arrived")
 	s.respawn_new_pawn()

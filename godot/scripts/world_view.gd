@@ -501,6 +501,13 @@ func enemy_intent(e) -> Dictionary:
 		return {"glyph": "⚔", "num": int(round(float(e.dmg) * float(sim.armor_mult()))), "col": INTENT_WARN, "hunt": true}
 	return {"glyph": "👁" if String(e.get("kind", "raider")) == "bot" else "⚑", "num": -1, "col": Color(0.53, 0.82, 0.84, 1.0), "hunt": false}
 
+static func _intent_word(it: Dictionary) -> String:
+	match String(it.glyph):
+		"⚔": return "удар −%d" % int(it.num)
+		"🔨": return "ламає стіну"
+		"👁": return "патруль"
+	return "блукає"
+
 func _draw_intents() -> void:
 	for e in sim.enemies:
 		var it := enemy_intent(e)
@@ -514,7 +521,8 @@ func _draw_intents() -> void:
 					draw_circle(prev.lerp(q, (j + 0.5) / 3.0), TILE * 0.06, Color(it.col.r, it.col.g, it.col.b, 0.75))
 				prev = q
 		var fs := int(TILE * 0.42)
-		var label: String = String(it.glyph) + ("%d" % int(it.num) if int(it.num) >= 0 else "")
+		# glyph + a WORD: «🔨11» read as «level? HP?» in the independent read (gamedev §5) — say the intent
+		var label: String = String(it.glyph) + " " + _intent_word(it)
 		var tw: float = _font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 		var rr := Rect2(head.x - tw * 0.5 - 5.0, head.y - fs * 0.95, tw + 10.0, fs * 1.25)
 		draw_rect(rr, Color(0.05, 0.07, 0.09, 0.85))

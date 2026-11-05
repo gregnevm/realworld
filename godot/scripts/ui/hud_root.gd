@@ -206,6 +206,8 @@ func refresh(dt: float) -> void:
 	var snap: Dictionary = HudModel.snapshot(session, world, ctx, balance)
 	last_snap = snap
 	registry.bind_visible(snap)
+	if flash_w != null:
+		flash_w.follow(view_ctx.get("hero_screen", Vector2(-1, -1)), size)
 	if tip_w != null:
 		tip_w.bind(snap.get("inspect", {}) if bool(view_ctx.get("in_world", false)) else {})
 		var at: Vector2 = view_ctx.get("pointer", get_viewport().get_mouse_position())

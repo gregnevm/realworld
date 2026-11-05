@@ -328,7 +328,8 @@ func _process(dt: float) -> void:
 		"in_world": winput.tooltip_wanted(touch_ui) and not session.sim.dead and not panel_menu.visible,
 		"selected_build": String(view.selected_build), "speed": winput.speed,
 		"touch": touch_ui, "menu_open": panel_menu.visible,
-		"pointer": winput.pointer_screen if winput.pointer_is_touch else get_viewport().get_mouse_position()}
+		"pointer": winput.pointer_screen if winput.pointer_is_touch else get_viewport().get_mouse_position(),
+		"hero_screen": view.get_global_transform_with_canvas() * Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE - TILE * 1.1)}
 	overlay_host.map_n = int(session.sim.n)   # keep in lockstep with the live region (survives travel)
 	overlay_host.snap = hud_root.last_snap
 	overlay_host.queue_redraw()
@@ -433,8 +434,11 @@ func _shot_step(dt: float) -> void:
 		if "light" in OS.get_cmdline_user_args():
 			oreg.toggle(&"light")          # `shot light`: radio-on the L/Light overlay (default frame = what a player sees)
 		session.sim.time.frac = 0.86       # dusk so daylight darkening is visible
-		if "death" in OS.get_cmdline_user_args():
-			session.sim.dead = true        # `shot death`: capture the death screen
+		if "death" in OS.get_cmdline_user_args():   # `shot death`: a REAL death (epitaph + bag), not a bare flag
+			session.sim.player.born = 1
+			session.sim.time.day = 3
+			session.sim.last_death = {"cause": "переохолодження", "day": 3, "born": 1}
+			session.sim._on_death()
 	if "fx" in OS.get_cmdline_user_args() and _t > 1.45 and _t < 1.5:
 		var hp := Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE - TILE * 1.3)   # `shot fx`: show the floating texts
 		view.fx_add("+3", hp, Color(1.0, 0.95, 0.8), "res_wood")
@@ -535,6 +539,19 @@ func _setup_action_controls() -> void:
 		bb.external_drawer = true       # the action button replaces the 🔨 FAB; the drawer is PROACTIVE (mode-driven)
 	hud_root.set_bar_lift(68.0)          # the drawer sits above the quick bar, centred
 
+# The quick-bar slot holding the current onboarding goal's building (-1 = none) — the touch twin of
+# InventoryBarPanel's pulse (value data from the last snapshot; the scene owns the slot list).
+func _guide_slot() -> int:
+	var cur: Dictionary = ((hud_root.last_snap.get("goals", {}) as Dictionary).get("current", {}) as Dictionary)
+	var kind := String(cur.get("build", ""))
+	if kind == "":
+		return -1
+	for i in _act_slots.size():
+		var sl: Dictionary = _act_slots[i]
+		if StringName(sl.get("type", &"")) == &"build" and String(sl.get("id", "")) == kind:
+			return i
+	return -1
+
 func _tick_action(dt: float) -> void:
 	var sim: Variant = session.sim
 	if act_overview:   # the stick drives the cursor (camera), not the hero
@@ -563,7 +580,7 @@ func _tick_action(dt: float) -> void:
 	view.action_target = act_target
 	view.action_mode = act_mode
 	tc.bind_state({"mode": act_mode, "slots": _act_slots, "active": act_slot, "overview": act_overview,
-		"target": _target_label(act_target)})
+		"target": _target_label(act_target), "guide": _guide_slot()})
 	var bb: Variant = preg.get_panel(&"build_bar")
 	if bb != null and not bool(sim.use_inventory) and bool(bb._open) != (act_mode == &"build"):
 		bb.set_drawer(act_mode == &"build")   # proactive drawer: Build mode opens it, any other mode closes it
@@ -648,7 +665,7 @@ func _on_overview() -> void:
 	act_overview = not act_overview
 	overview_pos = Vector2(session.sim.player.px, session.sim.player.py) * TILE
 	act_target = {}
-	tc.show_toast("Огляд мапи — подвійний тап стіком, щоб повернутись" if act_overview else "Назад до героя")
+	tc.show_toast("Огляд мапи · 2× тап стіка — назад" if act_overview else "Назад до героя")
 
 # Desktop inventory world: holding a building item arms its ghost (click/drag places it, consuming items);
 # holding anything else clears a ghost we armed. The 🗑 remove tool is left alone.

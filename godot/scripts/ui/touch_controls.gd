@@ -127,7 +127,9 @@ class TouchControls extends Control:
 		_slot_bar.size = bar
 		_radial.position = Vector2.ZERO
 		_radial.size = sz
-		_toast.position = Vector2(0, sz.y * 0.30)
+		# the one «hint slot» of the channel contract: bottom-centre just above the quick bar — never the
+		# upper-middle, where the flash (above the hero) and the threat banner live
+		_toast.position = Vector2(0, _slot_bar.position.y - 44.0)
 		_toast.size = Vector2(sz.x, 34)
 
 	func act_center() -> Vector2:
@@ -143,6 +145,7 @@ class TouchControls extends Control:
 		overview = bool(st.get("overview", false))
 		var slots: Array = st.get("slots", [])
 		var active: int = int(st.get("active", 0))
+		var guide: int = int(st.get("guide", -1))
 		for i in _slot_btns.size():
 			var b: Button = _slot_btns[i]
 			if i < slots.size():
@@ -154,6 +157,10 @@ class TouchControls extends Control:
 				b.icon = tex
 				var cnt: int = int(sl.get("n", 0))
 				b.text = ("%d" % cnt if cnt > 1 else "") if tex != null else String(sl.get("glyph", "•"))
+				b.modulate = Tokens.WHITE
+				if i == guide and i != active:   # the onboarding goal's building breathes amber (as on the desktop hotbar)
+					var k: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
+					b.modulate = Tokens.WHITE.lerp(Tokens.AMBER, 0.45 * k)
 			else:
 				b.visible = false
 		queue_redraw()
@@ -364,7 +371,11 @@ class TouchControls extends Control:
 		draw_string(f, c + Vector2(-ACT_R, 12.0), g, HORIZONTAL_ALIGNMENT_CENTER, ACT_R * 2.0, 34, Tokens.INK)
 		if target_label != "":
 			var df: Font = UITheme.display_font()
-			draw_string_outline(df, c + Vector2(-140, -r - 14.0), target_label, HORIZONTAL_ALIGNMENT_CENTER, 280, 15, 5, Tokens.BG)
+			# a pill under the words: bare green text was lost on grass (independent read, gamedev §5)
+			var tw: float = df.get_string_size(target_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+			var pill := Rect2(c.x - tw * 0.5 - 10.0, c.y - r - 33.0, tw + 20.0, 26.0)
+			draw_rect(pill, Tokens.with_alpha(Tokens.PANEL, 0.88))
+			draw_rect(pill, Tokens.with_alpha(col, 0.7), false, 1.5)
 			draw_string(df, c + Vector2(-140, -r - 14.0), target_label, HORIZONTAL_ALIGNMENT_CENTER, 280, 15, col)
 		if overview:
 			var m := size * 0.5
