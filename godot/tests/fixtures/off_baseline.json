@@ -1,0 +1,4241 @@
+{
+	"baseline_commit": "df9de45271bc4a328a068f7eaebec6662e4d0034",
+	"captured_by": "godot/tests/capture_baseline.gd",
+	"godot_version": "4.7-stable (official)",
+	"legacy_saves": {
+		"catalog": {
+			"gz_b64": "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",
+			"raw_length": 57102,
+			"restore": {
+				"numeric": {
+					"continue_world_hash": "edae36e3c768a7f7",
+					"resave_sha256": "3104b6a4fdc071d94c0cc5871e42ee3aa6316a2ea0be4d7624e43ac49419ca9b",
+					"world_hash": "a6e3320adf026761"
+				},
+				"portable": {
+					"bags": 0,
+					"buildings": [
+						"storage@29,34:90.0",
+						"campfire@29,33:30.0",
+						"wall@29,35:120.0",
+						"workbench@28,32:100.0"
+					],
+					"capsule": {
+						"charges": 1,
+						"last_day": 1,
+						"radius_km": 100.0
+					},
+					"chain_head": "e38c74034e63b2aa",
+					"day": 1,
+					"day_len": 150.0,
+					"dead": false,
+					"flags": {
+						"future_flags_off": true,
+						"use_catalog": true,
+						"use_inventory": false
+					},
+					"goals_done": [
+						"fire"
+					],
+					"has_home": true,
+					"home": {
+						"lat": 50.4501,
+						"lon": 30.5234,
+						"name": "Київ"
+					},
+					"invites": 0,
+					"resave_paths_equal": true,
+					"restored": true,
+					"stored_regions": 2
+				}
+			},
+			"sha256": "c2e4872877e81bf9e9e2163addba05f6c0b4ad5d4d12ba1ec137a6b3472a52b5"
+		},
+		"inventory": {
+			"gz_b64": "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",
+			"raw_length": 59285,
+			"restore": {
+				"numeric": {
+					"continue_world_hash": "9bf5b68b866bc50f",
+					"resave_sha256": "7937e00b2fbe509ec7b63ed1c239d1ef89d49f5d4cfcf971cd39ddd2f10476c5",
+					"world_hash": "d1272cafb0c09d9e"
+				},
+				"portable": {
+					"bags": 0,
+					"buildings": [
+						"storage@29,34:90.0",
+						"campfire@29,33:30.0",
+						"wall@29,35:120.0",
+						"workbench@28,32:100.0"
+					],
+					"capsule": {
+						"charges": 1,
+						"last_day": 1,
+						"radius_km": 100.0
+					},
+					"chain_head": "2c33551d838c3410",
+					"day": 1,
+					"day_len": 150.0,
+					"dead": false,
+					"flags": {
+						"future_flags_off": true,
+						"use_catalog": false,
+						"use_inventory": true
+					},
+					"goals_done": [
+						"fire"
+					],
+					"has_home": true,
+					"home": {
+						"lat": 50.4501,
+						"lon": 30.5234,
+						"name": "Київ"
+					},
+					"invites": 3,
+					"resave_paths_equal": true,
+					"restored": true,
+					"stored_regions": 2
+				}
+			},
+			"sha256": "2d9779f278584dc706aaa0eb29816a647f77cb2010742716443800347444fefd"
+		},
+		"stock": {
+			"gz_b64": "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",
+			"raw_length": 57558,
+			"restore": {
+				"numeric": {
+					"continue_world_hash": "5213fce18c7fc0bf",
+					"resave_sha256": "179572bca6bbd4c05465e9e659a6baea1ae079a9d6e940184132455b35e5b015",
+					"world_hash": "b45b4bd6398d653f"
+				},
+				"portable": {
+					"bags": 0,
+					"buildings": [
+						"storage@29,34:90.0",
+						"campfire@29,33:30.0",
+						"wall@29,35:120.0",
+						"workbench@28,32:100.0"
+					],
+					"capsule": {
+						"charges": 1,
+						"last_day": 1,
+						"radius_km": 100.0
+					},
+					"chain_head": "0696a0df258991f6",
+					"day": 1,
+					"day_len": 150.0,
+					"dead": false,
+					"flags": {
+						"future_flags_off": true,
+						"use_catalog": false,
+						"use_inventory": false
+					},
+					"goals_done": [
+						"fire"
+					],
+					"has_home": true,
+					"home": {
+						"lat": 50.4501,
+						"lon": 30.5234,
+						"name": "Київ"
+					},
+					"invites": 3,
+					"resave_paths_equal": true,
+					"restored": true,
+					"stored_regions": 2
+				}
+			},
+			"sha256": "da5b8a3c36276cd0e3033c4e7f55f3b0a15813eac2b4cb167fbc93121b421a3c"
+		}
+	},
+	"numeric": {
+		"capsule_day_transition": {
+			"buildings": [
+				"storage@29,34:90.0"
+			],
+			"day": 2,
+			"dead": false,
+			"enemies": 0,
+			"frac": 2.220446049250313e-14,
+			"kyiv_capsule": {
+				"charges": 1,
+				"last_day": 2,
+				"radius_km": 100.0
+			},
+			"kyiv_ticks_to_next_day": 1080,
+			"messages_hash": "fa054fe1d4c3113f",
+			"patrol_wave": 0,
+			"player": [
+				28.5,
+				34.5,
+				100.0,
+				100.0,
+				100.0
+			],
+			"raid": [
+				false,
+				false,
+				0,
+				107.99999999999814
+			],
+			"region_hash": "2f5f9e3059ed0969",
+			"rng_cursors": [
+				"3274845956512503331",
+				"-2163328600011083594",
+				"-5982561265780406697"
+			],
+			"runtime_hash": "0acd8796c35c356e",
+			"stock": {
+				"components": 2,
+				"food": 18,
+				"planks": 0,
+				"scrap": 16,
+				"stone": 30,
+				"wood": 50
+			},
+			"world_hash": "4c50d692b0b28fcb"
+		},
+		"capsule_launch": {
+			"far_km": 467.53039166718685,
+			"far_msg": "Задалеко: 467 км > ліміт 100 км.",
+			"launch_lines_km": [
+				"🚀 Капсула запущена → Недалеко (28 км).",
+				"🚀 Капсула запущена → Місце (28 км)."
+			],
+			"near_msg": "Готова до запуску (28 км)."
+		},
+		"capsule_panel_off": {},
+		"catalog_on_300": {
+			"buildings": [
+				"storage@29,34:90.0",
+				"kiln@27,34:140.0"
+			],
+			"day": 1,
+			"dead": false,
+			"enemies": 0,
+			"frac": 0.47999999999999465,
+			"messages_hash": "340bf9b2859c8d8c",
+			"patrol_wave": 0,
+			"player": [
+				28.5,
+				34.5,
+				100.0,
+				100.0,
+				100.0
+			],
+			"raid": [
+				false,
+				false,
+				0,
+				30.000000000000156
+			],
+			"region_hash": "7d6a5e92d4bef0f3",
+			"rng_cursors": [
+				"2564435455463813531",
+				"-2163328600011083594",
+				"-7014773202439343441"
+			],
+			"runtime_hash": "a9fcd72e04b74149",
+			"stock": {
+				"charcoal": 2,
+				"clay": 8.0,
+				"components": 2,
+				"planks": 0,
+				"raw_food": 18,
+				"scrap": 16,
+				"stone": 32.0,
+				"wood": 56.0
+			},
+			"world_hash": "731e1f0cac0d0d72"
+		},
+		"catalog_power_farm": {
+			"buildings": [
+				"storage@9,8:90.0",
+				"electric_smelter@3,3:170.0",
+				"wood_generator@5,3:130.0",
+				"power_conduit@4,3:30.0",
+				"grow_zone@3,6:20.0"
+			],
+			"day": 196,
+			"dead": false,
+			"enemies": 0,
+			"frac": 0.8333333333333262,
+			"gen_fuel": 7.6666666666665435,
+			"messages_hash": "025b254208bb9f71",
+			"patrol_wave": 0,
+			"player": [
+				8.5,
+				8.5,
+				100.0,
+				100.0,
+				100.0
+			],
+			"power_net": {
+				"brownout": false,
+				"draw": 300.0,
+				"stored": 0.0,
+				"supply": 400.0
+			},
+			"raid": [
+				false,
+				false,
+				0,
+				200.0
+			],
+			"region_hash": "f921ea4140b0a60a",
+			"rng_cursors": [
+				"-8307199118582029873",
+				"-2163328600011083594",
+				"-2403746949241493945"
+			],
+			"runtime_hash": "ecbd747ecfb681fe",
+			"stock": {
+				"chemfuel": 40,
+				"circuit": 38.0,
+				"clay": 40,
+				"components": 30.0,
+				"copper_wire": 39.0,
+				"planks": 20.0,
+				"raw_food": 18,
+				"scrap": 16,
+				"steel": 28.0,
+				"stone": 40,
+				"wood": 33.0
+			},
+			"temp_offset_days": 0.0,
+			"weather": "clear",
+			"weather_t": 0.17247302671273554,
+			"world_hash": "1257f79df4d3a37c",
+			"zone_growth": 0.18036213636795623,
+			"zone_harvests": -1
+		},
+		"death_respawn": {
+			"buildings": [
+				"storage@29,34:90.0"
+			],
+			"day": 2,
+			"dead": false,
+			"enemies": 0,
+			"frac": 0.3079999999999993,
+			"messages_hash": "b5fe09ea25746978",
+			"patrol_wave": 0,
+			"player": [
+				28.5,
+				33.5,
+				100.0,
+				82.0,
+				92.0
+			],
+			"raid": [
+				false,
+				false,
+				0,
+				0.0
+			],
+			"region_hash": "cd43eece191658cb",
+			"rng_cursors": [
+				"2564435455463813531",
+				"4833179898328439340",
+				"5475651830821160691"
+			],
+			"runtime_hash": "b1c5d4dda8fe98f1",
+			"stock": {
+				"components": 2,
+				"food": 18,
+				"planks": 0,
+				"scrap": 16,
+				"stone": 30,
+				"wood": 54
+			},
+			"world_hash": "987926218058edaa"
+		},
+		"death_respawn_away": {
+			"buildings": [
+				"storage@29,34:90.0"
+			],
+			"chain_head": "d2dec443c90c8b0e",
+			"day": 1,
+			"dead": false,
+			"enemies": 0,
+			"frac": 0.306666666666666,
+			"messages_hash": "e4dcb5630526c29d",
+			"patrol_wave": 0,
+			"player": [
+				28.5,
+				33.5,
+				100.0,
+				82.0,
+				92.0
+			],
+			"raid": [
+				false,
+				false,
+				0,
+				0.0
+			],
+			"region_hash": "74cd533f42e4c1b8",
+			"rng_cursors": [
+				"2564435455463813531",
+				"-2163328600011083594",
+				"-2403746949241493945"
+			],
+			"runtime_hash": "3d12a3a3183e6e91",
+			"stock": {
+				"components": 2,
+				"food": 18,
+				"planks": 0,
+				"scrap": 16,
+				"stone": 30,
+				"wood": 50
+			},
+			"world_hash": "8d3b50ecabce4153"
+		},
+		"death_respawn_inventory": {
+			"buildings": [
+				"storage@29,34:90.0"
+			],
+			"day": 2,
+			"dead": false,
+			"enemies": 0,
+			"frac": 0.3079999999999993,
+			"messages_hash": "d5f3cf2aab84089c",
+			"patrol_wave": 0,
+			"player": [
+				28.5,
+				33.5,
+				100.0,
+				82.0,
+				92.0
+			],
+			"raid": [
+				false,
+				false,
+				0,
+				0.0
+			],
+			"region_hash": "ca13c4dd3bdfcf4c",
+			"rng_cursors": [
+				"2564435455463813531",
+				"4833179898328439340",
+				"5475651830821160691"
+			],
+			"runtime_hash": "b1c5d4dda8fe98f1",
+			"stock": {
+				"components": 2,
+				"food": 18,
+				"planks": 0,
+				"scrap": 16,
+				"stone": 30,
+				"wood": 50
+			},
+			"world_hash": "da821b4870f6676b"
+		},
+		"demolish_base_center": {
+			"buildings": [],
+			"day": 195,
+			"dead": false,
+			"enemies": 0,
+			"frac": 0.5,
+			"inv_world_hash": "ef548011d7066695",
+			"messages_hash": "9bb4dd172e47017a",
+			"patrol_wave": 0,
+			"player": [
+				2.5,
+				3.5,
+				100.0,
+				82.0,
+				92.0
+			],
+			"raid": [
+				false,
+				false,
+				0,
+				0.0
+			],
+			"region_hash": "322f4617a4094507",
+			"rng_cursors": [
+				"2564435455463813531",
+				"-2163328600011083594",
+				"-2403746949241493945"
+			],
+			"runtime_hash": "cac8e9fb0cc39cac",
+			"stock": {
+				"components": 2,
+				"food": 18,
+				"planks": 0,
+				"scrap": 16,
+				"stone": 27,
+				"wood": 45
+			},
+			"world_hash": "20899bb83d569345"
+		},
+		"director_grace": {},
+		"director_long": {
+			"buildings": [],
+			"day": 54,
+			"dead": false,
+			"enemies": 0,
+			"frac": 0.6133333333332622,
+			"kinds": {
+				"cargo": 3,
+				"cold_snap": 2,
+				"death": 47,
+				"director_raid": 2,
+				"disease": 5,
+				"patrol": 11,
+				"raid_wave": 30
+			},
+			"messages_hash": "608ba6b4d3ed3840",
+			"messages_seq": 480,
+			"patrol_wave": 11,
+			"player": [
+				26.5,
+				32.5,
+				100.0,
+				100.0,
+				100.0
+			],
+			"raid": [
+				false,
+				false,
+				30,
+				10.0
+			],
+			"region_hash": "f91f1a45c557ff81",
+			"rng_cursors": [
+				"138697111347551483",
+				"4259831511024181684",
+				"-1487271847659321013"
+			],
+			"runtime_hash": "bdf2da58fb0eeeca",
+			"stock": {
+				"components": 9,
+				"food": 16,
+				"planks": 0,
+				"scrap": 98,
+				"stone": 30,
+				"wood": 47
+			},
+			"world_hash": "9f604c0faa4f2e41"
+		},
+		"flash_hints": {},
+		"flat_100": {
+			"buildings": [
+				"storage@9,8:90.0"
+			],
+			"day": 195,
+			"dead": false,
+			"enemies": 0,
+			"frac": 0.5666666666666704,
+			"messages_hash": "741638a51af79d2d",
+			"patrol_wave": 0,
+			"player": [
+				8.5,
+				8.5,
+				100.0,
+				77.79999999999984,
+				88.99999999999989
+			],
+			"raid": [
+				false,
+				false,
+				0,
+				9.99999999999998
+			],
+			"region_hash": "d8cdaabf34f362fb",
+			"rng_cursors": [
+				"2564435455463813531",
+				"-2163328600011083594",
+				"-2403746949241493945"
+			],
+			"runtime_hash": "3aea8f2e16d3a4d4",
+			"stock": {
+				"components": 2,
+				"food": 18,
+				"planks": 0,
+				"scrap": 16,
+				"stone": 30,
+				"wood": 50
+			},
+			"world_hash": "521633d7b98c723b"
+		},
+		"fuzz_verbs": {
+			"inventory_world": {
+				"buildings": [
+					"campfire@30,39:30.0",
+					"workbench@26,32:100.0",
+					"bed@29,37:60.0",
+					"door@25,34:80.0",
+					"campfire@22,38:30.0",
+					"wall@22,40:120.0",
+					"bed@24,34:60.0"
+				],
+				"counts": {
+					"build": 7,
+					"convoy_ok": 0,
+					"craft_ok": 3,
+					"demolish_ok": 0,
+					"raid": 2,
+					"repair_ok": 2,
+					"respawn": 0,
+					"stash_ok": 7,
+					"take_ok": 7
+				},
+				"day": 2,
+				"dead": false,
+				"enemies": 0,
+				"frac": 0.8800000000000385,
+				"messages_hash": "96c91fe0da537822",
+				"patrol_wave": 0,
+				"player": [
+					33.021452120402074,
+					46.5,
+					100.0,
+					100.0,
+					100.0
+				],
+				"raid": [
+					false,
+					false,
+					2,
+					45.20000000000037
+				],
+				"region_hash": "1a2a58beca60c8dd",
+				"rng_cursors": [
+					"-8077163546930435533",
+					"3951506474220446463",
+					"-7862683514431509757"
+				],
+				"runtime_hash": "e5a91ce23a5fb8bc",
+				"stock": {
+					"components": 0,
+					"food": 24,
+					"planks": 37,
+					"scrap": 22,
+					"stone": 25,
+					"wood": 1
+				},
+				"world_hash": "977f65f08ecde2a1"
+			},
+			"stock_world": {
+				"buildings": [
+					"torch@22,39:15.0",
+					"workbench@26,32:100.0",
+					"bed@30,32:60.0",
+					"wall@29,37:110.0"
+				],
+				"counts": {
+					"build": 4,
+					"convoy_ok": 5,
+					"craft_ok": 0,
+					"demolish_ok": 1,
+					"raid": 2,
+					"repair_ok": 0,
+					"respawn": 1,
+					"stash_ok": 0,
+					"take_ok": 0
+				},
+				"day": 2,
+				"dead": false,
+				"enemies": 3,
+				"frac": 0.8800000000000385,
+				"messages_hash": "4de5af99401592b8",
+				"patrol_wave": 0,
+				"player": [
+					30.22717826427848,
+					32.5,
+					100.0,
+					100.0,
+					100.0
+				],
+				"raid": [
+					true,
+					true,
+					3,
+					24.200000000000074
+				],
+				"region_hash": "ef2099f0e46c1157",
+				"rng_cursors": [
+					"-8077163546930435533",
+					"-4966093847667594745",
+					"-8056729018602242327"
+				],
+				"runtime_hash": "648ddbd394554337",
+				"stock": {
+					"components": 1,
+					"food": 3,
+					"planks": 1,
+					"scrap": 35,
+					"stone": 0,
+					"wood": 0
+				},
+				"world_hash": "ead7a039141af345"
+			}
+		},
+		"gather_haul": {
+			"buildings": [
+				"storage@29,34:90.0"
+			],
+			"carry": 3,
+			"day": 2,
+			"dead": false,
+			"enemies": 0,
+			"frac": 0.946666666666709,
+			"gather_skill": 14.39999999999998,
+			"messages_hash": "369c899ae4b3de35",
+			"nodes_hash": "b98436f80c47e184",
+			"patrol_wave": 0,
+			"player": [
+				28.5,
+				36.041504174640124,
+				100.0,
+				100.0,
+				100.0
+			],
+			"raid": [
+				false,
+				false,
+				0,
+				249.99999999999008
+			],
+			"region_hash": "e12746d44fe23bc9",
+			"rng_cursors": [
+				"-8077163546930435533",
+				"-2163328600011083594",
+				"-6312453203193352705"
+			],
+			"runtime_hash": "3d50b58d788ce640",
+			"stock": {
+				"components": 2,
+				"food": 18,
+				"planks": 0,
+				"scrap": 16,
+				"stone": 30,
+				"wood": 119
+			},
+			"world_hash": "b6beaa838a7fb135"
+		},
+		"goals_speeds": {},
+		"hud_and_strings": {
+			"invites": [
+				{
+					"clan": "Клан «Залізний Кулак»",
+					"id": "inv_fr_0",
+					"inviter": "Ярина",
+					"lat": 49.9572,
+					"lon": 30.981,
+					"name": "Редут Пд-Сх"
+				},
+				{
+					"clan": "Клан «Північна Зоря»",
+					"id": "inv_fr_1",
+					"inviter": "Дмитро",
+					"lat": 50.2718,
+					"lon": 30.9999,
+					"name": "Редут Пд-Сх"
+				},
+				{
+					"clan": "Клан «Залізний Кулак»",
+					"id": "inv_fr_2",
+					"inviter": "Зоряна",
+					"lat": 50.3772,
+					"lon": 29.6077,
+					"name": "Табір Зх"
+				}
+			],
+			"snapshot_hash": "20520776f4868308"
+		},
+		"inventory_on_300": {
+			"buildings": [
+				"storage@29,34:90.0",
+				"campfire@29,33:30.0"
+			],
+			"day": 1,
+			"dead": false,
+			"enemies": 0,
+			"frac": 0.47999999999999465,
+			"messages_hash": "6ab94f9cb1421257",
+			"pack": {
+				"campfire_item": 0,
+				"food": 8,
+				"gather_skill": 3.800000000000001,
+				"stone": 10,
+				"wood": 39
+			},
+			"patrol_wave": 0,
+			"player": [
+				26.5,
+				37.838690815358326,
+				100.0,
+				100.0,
+				100.0
+			],
+			"raid": [
+				false,
+				false,
+				0,
+				30.000000000000156
+			],
+			"region_hash": "6f05ae42bc3291de",
+			"rng_cursors": [
+				"2564435455463813531",
+				"-2163328600011083594",
+				"-7014773202439343441"
+			],
+			"runtime_hash": "58b81b0e0ede7b4c",
+			"stock": {
+				"components": 2,
+				"food": 18,
+				"planks": 0,
+				"scrap": 16,
+				"stone": 30,
+				"wood": 50
+			},
+			"world_hash": "2ce911ba73cf02dd"
+		},
+		"needs_pace": {},
+		"osm_overlay": {
+			"reload_region_hash": "9080fc95ca1ae936",
+			"world_hash": "17e9062068d0d8ef"
+		},
+		"patrol_fight": {
+			"buildings": [
+				"storage@29,34:70.4",
+				"turret@28,33:90.0"
+			],
+			"day": 2,
+			"dead": false,
+			"enemies": 0,
+			"frac": 0.08000000000002222,
+			"messages_hash": "4312b37d430f173a",
+			"patrol_wave": 1,
+			"player": [
+				28.5,
+				34.5,
+				100.0,
+				100.0,
+				100.0
+			],
+			"raid": [
+				false,
+				false,
+				0,
+				119.99999999999746
+			],
+			"region_hash": "3ee8258d7b2a6459",
+			"rng_cursors": [
+				"3274845956512503331",
+				"5454142756556510866",
+				"-6127395666962792985"
+			],
+			"runtime_hash": "0324ca21edf805e0",
+			"shots": 0,
+			"stock": {
+				"components": 8,
+				"food": 16,
+				"planks": 0,
+				"scrap": 48,
+				"stone": 30,
+				"wood": 50
+			},
+			"world_hash": "baeb2e882629a56b"
+		},
+		"raid_director_apply": {
+			"buildings": [],
+			"day": 7,
+			"dead": false,
+			"died_at": 323,
+			"enemies": 8,
+			"frac": 0.3000000000000284,
+			"messages_hash": "13ff169ee86b0d1b",
+			"patrol_wave": 0,
+			"player": [
+				26.5,
+				32.5,
+				100.0,
+				100.0,
+				100.0
+			],
+			"raid": [
+				true,
+				true,
+				4,
+				12.099999999999973
+			],
+			"region_hash": "6f21cfd1aaac1922",
+			"respawns": 3,
+			"rng_cursors": [
+				"3274845956512503331",
+				"-5582568271982756786",
+				"-2270447677686405131"
+			],
+			"runtime_hash": "62ffc553f1f2b183",
+			"stock": {
+				"components": 2,
+				"food": 15,
+				"planks": 0,
+				"scrap": 18,
+				"stone": 27,
+				"wood": 50
+			},
+			"world_hash": "c3915fc62c8c5d8d"
+		},
+		"raid_forced_building": {
+			"buildings": [
+				"wall@27,32:120.0",
+				"wall@28,32:120.0",
+				"wall@29,32:120.0",
+				"wall@30,32:120.0",
+				"wall@27,33:120.0",
+				"wall@27,34:120.0",
+				"wall@31,34:120.0",
+				"wall@27,35:29.8",
+				"wall@31,35:120.0"
+			],
+			"day": 2,
+			"dead": false,
+			"enemies": 0,
+			"frac": 0.28000000000002295,
+			"messages_hash": "fd73097cb0dba9c1",
+			"min_wall_hp": 5.199999999999974,
+			"patrol_wave": 0,
+			"player": [
+				47.5,
+				46.88207955681498,
+				100.0,
+				100.0,
+				100.0
+			],
+			"raid": [
+				false,
+				false,
+				1,
+				61.500000000000604
+			],
+			"region_hash": "895623be83600d12",
+			"rng_cursors": [
+				"-648696924813315157",
+				"6465497075050961535",
+				"7640301757193015143"
+			],
+			"runtime_hash": "57ccc02c979b1963",
+			"stock": {
+				"components": 0,
+				"food": 14,
+				"planks": 0,
+				"scrap": 10,
+				"stone": 328,
+				"wood": 50
+			},
+			"stock_lost": 19,
+			"storage_alive": false,
+			"walls_after": 9,
+			"walls_before": 13,
+			"world_hash": "a3f8aeb6c96985c5"
+		},
+		"record_keys": {},
+		"save_continue": {
+			"catalog": {
+				"content_hash_of_text": "94cab8d7c0b4e8a2",
+				"length": 57102,
+				"resave_sha256": "3104b6a4fdc071d94c0cc5871e42ee3aa6316a2ea0be4d7624e43ac49419ca9b",
+				"restored_world_hash": "a6e3320adf026761",
+				"sha256": "c2e4872877e81bf9e9e2163addba05f6c0b4ad5d4d12ba1ec137a6b3472a52b5",
+				"world_hash": "7a8a227f2e92ae94"
+			},
+			"inventory": {
+				"content_hash_of_text": "5e825ac891e8da8e",
+				"length": 59285,
+				"resave_sha256": "7937e00b2fbe509ec7b63ed1c239d1ef89d49f5d4cfcf971cd39ddd2f10476c5",
+				"restored_world_hash": "d1272cafb0c09d9e",
+				"sha256": "2d9779f278584dc706aaa0eb29816a647f77cb2010742716443800347444fefd",
+				"world_hash": "9f7852926d168499"
+			},
+			"stock": {
+				"content_hash_of_text": "9f62c8e08634b6c4",
+				"length": 57558,
+				"resave_sha256": "179572bca6bbd4c05465e9e659a6baea1ae079a9d6e940184132455b35e5b015",
+				"restored_world_hash": "b45b4bd6398d653f",
+				"sha256": "da5b8a3c36276cd0e3033c4e7f55f3b0a15813eac2b4cb167fbc93121b421a3c",
+				"world_hash": "6cf6f58d8d09a95c"
+			}
+		},
+		"session_feed": {
+			"inventory": {
+				"away": [
+					"warn|❄ Тут холодно (-13°C): постав багаття з хотбару (слот 1), потім стіни з дверима навколо — у приміщенні тепло тримається.",
+					"good|🛬 Нова місцевість: Львів · біом помірний."
+				],
+				"back": [
+					"good|↩ Повернення в Київ."
+				],
+				"continue": [
+					"good|▶ Продовжено: Київ · день 1."
+				],
+				"start": [
+					"good|Висадка: Київ · біом помірний",
+					"|Клан: Твій клан «Вовки» · рейди від ворожих фракцій.",
+					"|✉ Друзі надіслали інвайтів: 3 — капсула (V) долетить до них.",
+					"warn|❄ Тут холодно (-14°C): постав багаття з хотбару (слот 1), потім стіни з дверима навколо — у приміщенні тепло тримається."
+				]
+			},
+			"stock": {
+				"away": [
+					"warn|❄ Тут холодно (-13°C): розпали багаття (9), а тоді обнеси клітинку стінами (1) з дверима (2) — у приміщенні тепло тримається.",
+					"good|🛬 Нова місцевість: Львів · біом помірний."
+				],
+				"back": [
+					"good|↩ Повернення в Київ."
+				],
+				"continue": [
+					"good|▶ Продовжено: Київ · день 1."
+				],
+				"start": [
+					"good|Висадка: Київ · біом помірний",
+					"|Клан: Твій клан «Вовки» · рейди від ворожих фракцій.",
+					"|✉ Друзі надіслали інвайтів: 3 — капсула (V) долетить до них.",
+					"warn|❄ Тут холодно (-14°C): розпали багаття (9), а тоді обнеси клітинку стінами (1) з дверима (2) — у приміщенні тепло тримається."
+				]
+			}
+		},
+		"spawn_presets": {},
+		"storage_reach": {},
+		"travel_regions": {
+			"buildings": [
+				"storage@29,34:90.0",
+				"campfire@29,33:30.0",
+				"wall@28,35:120.0"
+			],
+			"chain_head": "140e0b2b08844886",
+			"day": 1,
+			"dead": false,
+			"enemies": 0,
+			"frac": 0.3599999999999979,
+			"messages_hash": "2ea7f82baaee38dc",
+			"patrol_wave": 0,
+			"player": [
+				29.5,
+				35.5,
+				100.0,
+				100.0,
+				100.0
+			],
+			"raid": [
+				false,
+				false,
+				0,
+				0.0
+			],
+			"region_hash": "124e253b62ba27c4",
+			"regions": "8995d4c7c58e7322",
+			"rng_cursors": [
+				"2564435455463813531",
+				"-2163328600011083594",
+				"-2403746949241493945"
+			],
+			"runtime_hash": "3d12a3a3183e6e91",
+			"stock": {
+				"components": 2,
+				"food": 18,
+				"planks": 0,
+				"scrap": 16,
+				"stone": 25,
+				"wood": 42
+			},
+			"world_hash": "9baac43c36ab7226"
+		},
+		"twin_ambient_300": {
+			"buildings": [
+				"storage@29,34:90.0"
+			],
+			"day": 1,
+			"dead": false,
+			"enemies": 0,
+			"frac": 0.47999999999999465,
+			"messages_hash": "340bf9b2859c8d8c",
+			"patrol_wave": 0,
+			"player": [
+				28.5,
+				34.5,
+				100.0,
+				100.0,
+				100.0
+			],
+			"raid": [
+				false,
+				false,
+				0,
+				30.000000000000156
+			],
+			"region_hash": "d39ad1f6d6d608ab",
+			"rng_cursors": [
+				"2564435455463813531",
+				"-2163328600011083594",
+				"-7014773202439343441"
+			],
+			"runtime_hash": "123093b65ab39589",
+			"stock": {
+				"components": 2,
+				"food": 18,
+				"planks": 0,
+				"scrap": 16,
+				"stone": 30,
+				"wood": 50
+			},
+			"world_hash": "c4dbef44fe0f95d6"
+		},
+		"workbench_craft": {
+			"buildings": [
+				"storage@9,8:90.0",
+				"workbench@5,8:100.0",
+				"workbench@5,10:100.0"
+			],
+			"craft_timer": 5.284661597215745e-14,
+			"day": 195,
+			"dead": false,
+			"enemies": 0,
+			"frac": 0.966666666666693,
+			"inv_world_hash": "520bfc8953e08ec6",
+			"messages_hash": "faadd1c0c67034f2",
+			"patrol_wave": 0,
+			"planks": 14,
+			"player": [
+				8.5,
+				8.5,
+				100.0,
+				90.59999999999889,
+				70.9999999999992
+			],
+			"raid": [
+				false,
+				false,
+				0,
+				70.0000000000003
+			],
+			"region_hash": "e87da382f56be4eb",
+			"rng_cursors": [
+				"-1127595919137562945",
+				"-2163328600011083594",
+				"-2403746949241493945"
+			],
+			"runtime_hash": "cc9a1e77569be482",
+			"stock": {
+				"components": 2,
+				"food": 17,
+				"planks": 14,
+				"scrap": 16,
+				"stone": 12,
+				"wood": 1
+			},
+			"wood": 1,
+			"world_hash": "715a072357aacb79"
+		}
+	},
+	"platform": "Linux",
+	"portable": {
+		"capsule_day_transition": {
+			"capsule_after": {
+				"charges": 1,
+				"last_day": 196,
+				"radius_km": 100.0
+			},
+			"capsule_keys": [
+				"charges",
+				"last_day",
+				"radius_km"
+			],
+			"consts": [
+				1,
+				100.0
+			],
+			"day_after": 196,
+			"day_len": 150.0,
+			"default_capsule": {
+				"charges": 1,
+				"last_day": 196,
+				"radius_km": 100.0
+			},
+			"lines": [
+				"🌅 Новий день: 196",
+				"🚀 Щоденна капсула готова (радіус 100 км)."
+			],
+			"second_boundary_capsule": {
+				"charges": 1,
+				"last_day": 197,
+				"radius_km": 100.0
+			},
+			"second_boundary_new_lines": 1,
+			"second_boundary_ticks": 1500,
+			"ticks_to_next_day": 750,
+			"time_keys": [
+				"day",
+				"day_len",
+				"frac"
+			]
+		},
+		"capsule_launch": {
+			"accept_denied": {
+				"msg": "Інвайт не дозволяє прийом капсули.",
+				"ok": false
+			},
+			"accept_missing": {
+				"msg": "Інвайт не знайдено.",
+				"ok": false
+			},
+			"accept_ok": true,
+			"charges_after": 0,
+			"charges_after_accept": 0,
+			"far_ok": false,
+			"invites_after_accept": 0,
+			"invites_after_dup": 1,
+			"launch_keys": [
+				"km",
+				"lat",
+				"lon",
+				"name",
+				"ok"
+			],
+			"launch_lines": [],
+			"launch_ok": true,
+			"launch_too_far_after_use": {
+				"msg": "Капсула вже використана — чекай нового дня.",
+				"ok": false
+			},
+			"near_ok": true,
+			"second_launch": {
+				"msg": "Капсула вже використана — чекай нового дня.",
+				"ok": false
+			},
+			"second_reach": {
+				"km": 28.336511429749706,
+				"msg": "Капсула вже використана — чекай нового дня.",
+				"ok": false
+			}
+		},
+		"capsule_panel_off": {
+			"drained_vm": {
+				"launch": "🚀 Запуск за координатами",
+				"launch_dimmed": true,
+				"launch_disabled": true,
+				"rows": [
+					{
+						"button": "Прийняти",
+						"button_dimmed": true,
+						"button_disabled": true,
+						"label": "✉ Друг (К) → Місце",
+						"visible": true
+					},
+					{
+						"visible": false
+					},
+					{
+						"visible": false
+					},
+					{
+						"visible": false
+					}
+				],
+				"status": "Зарядів: 0 · радіус 100 км"
+			},
+			"full_vm": {
+				"launch": "🚀 Запуск за координатами",
+				"launch_dimmed": false,
+				"launch_disabled": false,
+				"rows": [
+					{
+						"button": "Прийняти",
+						"button_dimmed": false,
+						"button_disabled": false,
+						"label": "✉ Друг (К) → Місце",
+						"visible": true
+					},
+					{
+						"button": "Прийняти",
+						"button_dimmed": false,
+						"button_disabled": false,
+						"label": "✉ Інший (—) → Пункт",
+						"visible": true
+					},
+					{
+						"button": "Прийняти",
+						"button_dimmed": false,
+						"button_disabled": false,
+						"label": "✉ Третій (Л) → Брід",
+						"visible": true
+					},
+					{
+						"button": "Прийняти",
+						"button_dimmed": false,
+						"button_disabled": false,
+						"label": "✉ Четвертий (М) → Гай",
+						"visible": true
+					}
+				],
+				"status": "Зарядів: 1 · радіус 100 км"
+			},
+			"headers": [
+				"КАПСУЛА",
+				"ІНВАЙТИ"
+			],
+			"intents": [
+				{
+					"args": {
+						"id": "inv_a"
+					},
+					"verb": "take_invite"
+				},
+				{
+					"args": {
+						"lat": 50.2,
+						"lon": 30.6,
+						"name": "Свої координати"
+					},
+					"verb": "launch_capsule"
+				}
+			],
+			"meta": {
+				"compact_open": 0,
+				"default_open": false,
+				"dock": 1,
+				"hotkey": 86,
+				"invite_max": 4,
+				"menu_label": "🚀 Капсула",
+				"panel_id": "capsule_bay",
+				"priority": 70
+			},
+			"placeholders": [
+				"широта (lat)",
+				"довгота (lon)"
+			],
+			"real_session_fresh": {
+				"launch": "🚀 Запуск за координатами",
+				"launch_dimmed": false,
+				"launch_disabled": false,
+				"rows": [
+					{
+						"button": "Прийняти",
+						"button_dimmed": false,
+						"button_disabled": false,
+						"label": "✉ Ярина (Клан «Залізний Кулак») → Редут Пд-Сх",
+						"visible": true
+					},
+					{
+						"button": "Прийняти",
+						"button_dimmed": false,
+						"button_disabled": false,
+						"label": "✉ Дмитро (Клан «Північна Зоря») → Редут Пд-Сх",
+						"visible": true
+					},
+					{
+						"button": "Прийняти",
+						"button_dimmed": false,
+						"button_disabled": false,
+						"label": "✉ Зоряна (Клан «Залізний Кулак») → Табір Зх",
+						"visible": true
+					},
+					{
+						"visible": false
+					}
+				],
+				"sim_charges": 1,
+				"sim_invites": 3,
+				"sim_radius_km": 100,
+				"status": "Зарядів: 1 · радіус 100 км",
+				"status_is_sim_truth": true
+			},
+			"real_session_spent": {
+				"launch": "🚀 Запуск за координатами",
+				"launch_dimmed": true,
+				"launch_disabled": true,
+				"launch_ok": true,
+				"rows": [
+					{
+						"button": "Прийняти",
+						"button_dimmed": true,
+						"button_disabled": true,
+						"label": "✉ Ярина (Клан «Залізний Кулак») → Редут Пд-Сх",
+						"visible": true
+					},
+					{
+						"button": "Прийняти",
+						"button_dimmed": true,
+						"button_disabled": true,
+						"label": "✉ Дмитро (Клан «Північна Зоря») → Редут Пд-Сх",
+						"visible": true
+					},
+					{
+						"button": "Прийняти",
+						"button_dimmed": true,
+						"button_disabled": true,
+						"label": "✉ Зоряна (Клан «Залізний Кулак») → Табір Зх",
+						"visible": true
+					},
+					{
+						"visible": false
+					}
+				],
+				"sim_charges": 0,
+				"status": "Зарядів: 0 · радіус 100 км",
+				"status_is_sim_truth": true
+			},
+			"refusals": {
+				"empty": "Зарядів: 0 · радіус 100 км\n⚠ Введи координати (напр. 50.4501, 30.5234).",
+				"out_of_range": "Зарядів: 0 · радіус 100 км\n⚠ Поза межами: широта ±90°, довгота ±180°.",
+				"status_before": "Зарядів: 0 · радіус 100 км"
+			}
+		},
+		"catalog_on_300": {
+			"craft_added": 2,
+			"craft_label": "Випалити вугілля",
+			"craft_ok": true,
+			"kiln_built": true,
+			"region_keys": [
+				"buildings",
+				"day",
+				"frac",
+				"health",
+				"key",
+				"lat",
+				"lon",
+				"n",
+				"nodes",
+				"place_name",
+				"player",
+				"seed",
+				"source",
+				"stock",
+				"use_catalog"
+			],
+			"use_catalog_in_record": true
+		},
+		"catalog_power_farm": {
+			"built": [
+				"storage",
+				"electric_smelter",
+				"wood_generator",
+				"power_conduit",
+				"grow_zone"
+			]
+		},
+		"death_respawn": {
+			"after": {
+				"bags": 0,
+				"banner": "",
+				"base_center": [
+					29,
+					34
+				],
+				"born_before": 1,
+				"born_is_today": true,
+				"carry_total": 0,
+				"dead": false,
+				"enemies": 0,
+				"gather_skill": 0.0,
+				"hediffs": 0,
+				"inv_wood": -1,
+				"items": 0,
+				"pos": [
+					28.5,
+					33.5
+				],
+				"pre_center": [
+					29,
+					34
+				],
+				"raid_active": false
+			},
+			"death_lines_hash": "3a0e50497044bcc1",
+			"died": {
+				"bag_slots": "741638a51af79d2d",
+				"bags": 0,
+				"cause": "смертельні рани (тулуб)",
+				"dead": true
+			},
+			"respawn_lines": [
+				"Новий виживальник прибув у поселення — навички з нуля."
+			]
+		},
+		"death_respawn_away": {
+			"away_key": "49.8397,24.0297",
+			"base_center": [
+				29,
+				34
+			],
+			"cur_key_after": "50.4501,30.5234",
+			"dead_after": false,
+			"has_home": true,
+			"home_key": "50.4501,30.5234",
+			"pos": [
+				28.5,
+				33.5
+			],
+			"stored_regions": 2,
+			"was_dead": true
+		},
+		"death_respawn_inventory": {
+			"after": {
+				"bags": 1,
+				"banner": "",
+				"base_center": [
+					29,
+					34
+				],
+				"born_before": 1,
+				"born_is_today": true,
+				"carry_total": 0,
+				"dead": false,
+				"enemies": 0,
+				"gather_skill": 0.0,
+				"hediffs": 0,
+				"inv_wood": 0,
+				"items": 0,
+				"pos": [
+					28.5,
+					33.5
+				],
+				"pre_center": [
+					29,
+					34
+				],
+				"raid_active": false
+			},
+			"death_lines_hash": "ada86089327c8109",
+			"died": {
+				"bag_slots": "b159122738005ea9",
+				"bags": 1,
+				"cause": "смертельні рани (тулуб)",
+				"dead": true
+			},
+			"respawn_lines": [
+				"Новий виживальник прибув у поселення — навички з нуля."
+			]
+		},
+		"demolish_base_center": {
+			"bc_after_first_gone": [
+				9,
+				10
+			],
+			"bc_initial": [
+				9,
+				8
+			],
+			"bc_no_storage": [
+				3,
+				4
+			],
+			"bc_two_storages": [
+				9,
+				8
+			],
+			"demolish_empty": {
+				"msg": "Тут немає будівлі.",
+				"ok": false
+			},
+			"demolish_first_storage": {
+				"ok": true
+			},
+			"demolish_last_storage": {
+				"msg": "Не можна знести єдиний склад.",
+				"ok": false
+			},
+			"demolish_wall": {
+				"ok": true
+			},
+			"inv_demolish_last_storage": {
+				"msg": "Не можна знести єдиний склад.",
+				"ok": false
+			},
+			"inv_demolish_wall": {
+				"ok": true
+			},
+			"inv_messages": [
+				"♻ Стіна → у рюкзак."
+			],
+			"inv_pack_walls_after_demolish": 2,
+			"inv_pack_walls_after_place": 1,
+			"inv_wall_placed": true,
+			"messages": [
+				"♻ Склад розібрано (+🪵5).",
+				"♻ Стіна розібрано (+🪨2).",
+				"💥 Склад зруйновано рейдерами.",
+				"Новий виживальник прибув у поселення — навички з нуля."
+			],
+			"respawn_no_storage_pos": [
+				2.5,
+				3.5
+			],
+			"second_storage_built": true,
+			"stock_after_demolish": {
+				"components": 2,
+				"food": 18,
+				"planks": 0,
+				"scrap": 16,
+				"stone": 30,
+				"wood": 45
+			},
+			"stock_before_demolish": {
+				"components": 2,
+				"food": 18,
+				"planks": 0,
+				"scrap": 16,
+				"stone": 30,
+				"wood": 40
+			},
+			"storage_gone_by_damage": true,
+			"wall_cell_free_again": true,
+			"wall_refund_stock": {
+				"components": 2,
+				"food": 18,
+				"planks": 0,
+				"scrap": 16,
+				"stone": 27,
+				"wood": 45
+			},
+			"wall_stock": {
+				"components": 2,
+				"food": 18,
+				"planks": 0,
+				"scrap": 16,
+				"stone": 25,
+				"wood": 45
+			}
+		},
+		"director_grace": {
+			"forced": {
+				"cargo": {
+					"banner": "",
+					"cargo_wood": 5,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"cold_snap": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": true,
+					"disease": false,
+					"raid_armed": false
+				},
+				"disease": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": true,
+					"raid_armed": false
+				},
+				"infestation": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"manhunter": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"quest": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"raid": {
+					"banner": "⚠ НАБЛИЖАЄТЬСЯ РЕЙД",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": true
+				}
+			},
+			"grace": {
+				"cold_snap": 3,
+				"disease": 3,
+				"raid": 5
+			},
+			"live": [
+				"raid",
+				"disease",
+				"cold_snap",
+				"cargo"
+			],
+			"rolled": {
+				"cargo@day1": {
+					"banner": "",
+					"cargo_wood": 5,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"cargo@day2": {
+					"banner": "",
+					"cargo_wood": 5,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"cargo@day3": {
+					"banner": "",
+					"cargo_wood": 5,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"cargo@day4": {
+					"banner": "",
+					"cargo_wood": 5,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"cargo@day5": {
+					"banner": "",
+					"cargo_wood": 5,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"cargo@day6": {
+					"banner": "",
+					"cargo_wood": 5,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"cargo@day7": {
+					"banner": "",
+					"cargo_wood": 5,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"cold_snap@day1": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"cold_snap@day2": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"cold_snap@day3": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": true,
+					"disease": false,
+					"raid_armed": false
+				},
+				"cold_snap@day4": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": true,
+					"disease": false,
+					"raid_armed": false
+				},
+				"cold_snap@day5": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": true,
+					"disease": false,
+					"raid_armed": false
+				},
+				"cold_snap@day6": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": true,
+					"disease": false,
+					"raid_armed": false
+				},
+				"cold_snap@day7": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": true,
+					"disease": false,
+					"raid_armed": false
+				},
+				"disease@day1": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"disease@day2": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"disease@day3": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": true,
+					"raid_armed": false
+				},
+				"disease@day4": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": true,
+					"raid_armed": false
+				},
+				"disease@day5": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": true,
+					"raid_armed": false
+				},
+				"disease@day6": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": true,
+					"raid_armed": false
+				},
+				"disease@day7": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": true,
+					"raid_armed": false
+				},
+				"infestation@day1": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"infestation@day2": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"infestation@day3": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"infestation@day4": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"infestation@day5": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"infestation@day6": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"infestation@day7": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"manhunter@day1": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"manhunter@day2": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"manhunter@day3": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"manhunter@day4": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"manhunter@day5": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"manhunter@day6": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"manhunter@day7": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"quest@day1": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"quest@day2": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"quest@day3": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"quest@day4": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"quest@day5": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"quest@day6": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"quest@day7": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"raid@day1": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"raid@day2": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"raid@day3": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"raid@day4": {
+					"banner": "",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": false
+				},
+				"raid@day5": {
+					"banner": "⚠ НАБЛИЖАЄТЬСЯ РЕЙД",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": true
+				},
+				"raid@day6": {
+					"banner": "⚠ НАБЛИЖАЄТЬСЯ РЕЙД",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": true
+				},
+				"raid@day7": {
+					"banner": "⚠ НАБЛИЖАЄТЬСЯ РЕЙД",
+					"cargo_wood": 0,
+					"cold_snap": false,
+					"disease": false,
+					"raid_armed": true
+				}
+			},
+			"threat_big_weight": 0.25,
+			"warn_lead": 12.0
+		},
+		"director_long": {},
+		"flash_hints": {
+			"build_stock_world": {
+				"affordable": {
+					"flash": "",
+					"placed": true
+				},
+				"occupied": {
+					"flash": "Тут не можна будувати.",
+					"placed": false
+				},
+				"off_map": {
+					"flash": "Тут не можна будувати.",
+					"placed": false
+				},
+				"research_gated": {
+					"flash": "🔒 Потребує дослідження: Механіка.",
+					"placed": false
+				},
+				"unaffordable": {
+					"flash": "Бракує: 🪨5",
+					"placed": false
+				},
+				"unknown_kind": {
+					"flash": "Тут не можна будувати.",
+					"placed": false
+				}
+			},
+			"full_storage": {
+				"action_cleared": true,
+				"carry_full": true,
+				"seen": [
+					"📦 Склад повний — збудуй ще один склад (4)."
+				]
+			},
+			"inventory_world": {
+				"no_item": {
+					"flash": "Нема «Стіна» у рюкзаку — скрафти (🎒).",
+					"placed": false
+				},
+				"pack_full_gather": {
+					"action_cleared": true,
+					"carry_full": false,
+					"seen": [
+						"🎒 Рюкзак повний — розклади на складі."
+					]
+				},
+				"pack_room_for_wood": 0
+			},
+			"no_storage": {
+				"action_cleared": true,
+				"carry_full": true,
+				"seen": [
+					"Несеш максимум — збудуй склад (4)."
+				]
+			},
+			"storage_gone": true,
+			"storage_unreachable": {
+				"action_cleared": true,
+				"carry_full": true,
+				"seen": [
+					"Склад недосяжний — віднеси вантаж сам."
+				]
+			},
+			"walled_ring": [
+				16,
+				16
+			]
+		},
+		"flat_100": {},
+		"fuzz_verbs": {},
+		"gather_haul": {},
+		"goals_speeds": {
+			"day_len_at_start": 150.0,
+			"goal_consts": [
+				30,
+				15,
+				6
+			],
+			"goal_count": 10,
+			"goal_hints_hash": "1e44b2130cc6dc4f",
+			"goal_ids": [
+				"fire",
+				"gather",
+				"shelter",
+				"bed",
+				"tools",
+				"food",
+				"bench",
+				"tech",
+				"defense",
+				"survive"
+			],
+			"goal_progress_at_start": {
+				"bed": 0.0,
+				"bench": 0.0,
+				"defense": 0.0,
+				"fire": 0.0,
+				"food": 0.6,
+				"gather": 0.0,
+				"shelter": 0.6,
+				"survive": 0.0,
+				"tech": 0.0,
+				"tools": 0.0
+			},
+			"goal_titles_hash": "d8fbd9f9ac8ee6b7",
+			"goals_view_at_start": {
+				"all_done": false,
+				"available": true,
+				"current": {
+					"build": "campfire",
+					"hint": "Натисни 9 (Багаття) і клікни біля пішака. Вогонь гріє +4°C на 6 клітин і світить уночі.",
+					"id": "fire",
+					"pct": 0.0,
+					"title": "🔥 Розпали багаття"
+				},
+				"done": 0,
+				"next": "🪵 Добудь ресурси",
+				"total": 10
+			},
+			"inv_hint_hash": "0a28f01247918cf9",
+			"speed_matrix": {
+				"0.0/1.0/faster": {
+					"last": 2.0,
+					"speed": 2.0
+				},
+				"0.0/1.0/noop": {
+					"last": 1.0,
+					"speed": 0.0
+				},
+				"0.0/1.0/set": {
+					"last": 1.0,
+					"speed": 0.0
+				},
+				"0.0/1.0/slower": {
+					"last": 1.0,
+					"speed": 1.0
+				},
+				"0.0/1.0/toggle_pause": {
+					"last": 1.0,
+					"speed": 1.0
+				},
+				"0.0/2.0/faster": {
+					"last": 3.0,
+					"speed": 3.0
+				},
+				"0.0/2.0/noop": {
+					"last": 2.0,
+					"speed": 0.0
+				},
+				"0.0/2.0/set": {
+					"last": 2.0,
+					"speed": 0.0
+				},
+				"0.0/2.0/slower": {
+					"last": 1.0,
+					"speed": 1.0
+				},
+				"0.0/2.0/toggle_pause": {
+					"last": 2.0,
+					"speed": 2.0
+				},
+				"0.0/3.0/faster": {
+					"last": 3.0,
+					"speed": 3.0
+				},
+				"0.0/3.0/noop": {
+					"last": 3.0,
+					"speed": 0.0
+				},
+				"0.0/3.0/set": {
+					"last": 3.0,
+					"speed": 0.0
+				},
+				"0.0/3.0/slower": {
+					"last": 2.0,
+					"speed": 2.0
+				},
+				"0.0/3.0/toggle_pause": {
+					"last": 3.0,
+					"speed": 3.0
+				},
+				"1.0/1.0/faster": {
+					"last": 2.0,
+					"speed": 2.0
+				},
+				"1.0/1.0/noop": {
+					"last": 1.0,
+					"speed": 1.0
+				},
+				"1.0/1.0/set": {
+					"last": 1.0,
+					"speed": 0.0
+				},
+				"1.0/1.0/slower": {
+					"last": 1.0,
+					"speed": 1.0
+				},
+				"1.0/1.0/toggle_pause": {
+					"last": 1.0,
+					"speed": 0.0
+				},
+				"1.0/2.0/faster": {
+					"last": 2.0,
+					"speed": 2.0
+				},
+				"1.0/2.0/noop": {
+					"last": 2.0,
+					"speed": 1.0
+				},
+				"1.0/2.0/set": {
+					"last": 1.0,
+					"speed": 0.0
+				},
+				"1.0/2.0/slower": {
+					"last": 1.0,
+					"speed": 1.0
+				},
+				"1.0/2.0/toggle_pause": {
+					"last": 1.0,
+					"speed": 0.0
+				},
+				"1.0/3.0/faster": {
+					"last": 2.0,
+					"speed": 2.0
+				},
+				"1.0/3.0/noop": {
+					"last": 3.0,
+					"speed": 1.0
+				},
+				"1.0/3.0/set": {
+					"last": 1.0,
+					"speed": 0.0
+				},
+				"1.0/3.0/slower": {
+					"last": 1.0,
+					"speed": 1.0
+				},
+				"1.0/3.0/toggle_pause": {
+					"last": 1.0,
+					"speed": 0.0
+				},
+				"2.0/1.0/faster": {
+					"last": 3.0,
+					"speed": 3.0
+				},
+				"2.0/1.0/noop": {
+					"last": 1.0,
+					"speed": 2.0
+				},
+				"2.0/1.0/set": {
+					"last": 2.0,
+					"speed": 0.0
+				},
+				"2.0/1.0/slower": {
+					"last": 1.0,
+					"speed": 1.0
+				},
+				"2.0/1.0/toggle_pause": {
+					"last": 2.0,
+					"speed": 0.0
+				},
+				"2.0/2.0/faster": {
+					"last": 3.0,
+					"speed": 3.0
+				},
+				"2.0/2.0/noop": {
+					"last": 2.0,
+					"speed": 2.0
+				},
+				"2.0/2.0/set": {
+					"last": 2.0,
+					"speed": 0.0
+				},
+				"2.0/2.0/slower": {
+					"last": 1.0,
+					"speed": 1.0
+				},
+				"2.0/2.0/toggle_pause": {
+					"last": 2.0,
+					"speed": 0.0
+				},
+				"2.0/3.0/faster": {
+					"last": 3.0,
+					"speed": 3.0
+				},
+				"2.0/3.0/noop": {
+					"last": 3.0,
+					"speed": 2.0
+				},
+				"2.0/3.0/set": {
+					"last": 2.0,
+					"speed": 0.0
+				},
+				"2.0/3.0/slower": {
+					"last": 1.0,
+					"speed": 1.0
+				},
+				"2.0/3.0/toggle_pause": {
+					"last": 2.0,
+					"speed": 0.0
+				},
+				"3.0/1.0/faster": {
+					"last": 3.0,
+					"speed": 3.0
+				},
+				"3.0/1.0/noop": {
+					"last": 1.0,
+					"speed": 3.0
+				},
+				"3.0/1.0/set": {
+					"last": 3.0,
+					"speed": 0.0
+				},
+				"3.0/1.0/slower": {
+					"last": 2.0,
+					"speed": 2.0
+				},
+				"3.0/1.0/toggle_pause": {
+					"last": 3.0,
+					"speed": 0.0
+				},
+				"3.0/2.0/faster": {
+					"last": 3.0,
+					"speed": 3.0
+				},
+				"3.0/2.0/noop": {
+					"last": 2.0,
+					"speed": 3.0
+				},
+				"3.0/2.0/set": {
+					"last": 3.0,
+					"speed": 0.0
+				},
+				"3.0/2.0/slower": {
+					"last": 2.0,
+					"speed": 2.0
+				},
+				"3.0/2.0/toggle_pause": {
+					"last": 3.0,
+					"speed": 0.0
+				},
+				"3.0/3.0/faster": {
+					"last": 3.0,
+					"speed": 3.0
+				},
+				"3.0/3.0/noop": {
+					"last": 3.0,
+					"speed": 3.0
+				},
+				"3.0/3.0/set": {
+					"last": 3.0,
+					"speed": 0.0
+				},
+				"3.0/3.0/slower": {
+					"last": 2.0,
+					"speed": 2.0
+				},
+				"3.0/3.0/toggle_pause": {
+					"last": 3.0,
+					"speed": 0.0
+				}
+			},
+			"speeds": [
+				1.0,
+				2.0,
+				3.0
+			]
+		},
+		"hud_and_strings": {
+			"alive": true,
+			"capsule_charges": 1,
+			"capsule_invite_count": 3,
+			"capsule_radius_km": 100,
+			"dead": false,
+			"dead_snapshot_dead": true,
+			"dead_snapshot_death_slice": {
+				"bag_items": 0,
+				"cause": "смертельні рани (тулуб)",
+				"day": 1,
+				"inventory": false,
+				"lived": 1
+			},
+			"death_screen": {
+				"fate_inventory_bag": "Торба (3 предм.) лежить на місці загибелі — вона позначена на мапі, її можна забрати.\nПоселення й склад лишаються. Новий виживальник прибуде туди й почне з нуля.",
+				"fate_inventory_empty": "Рюкзак був порожній — втрачати нічого.\nПоселення й склад лишаються. Новий виживальник прибуде туди й почне з нуля.",
+				"fate_stock": "Усе, що було при собі, втрачено.\nПоселення й склад лишаються. Новий виживальник прибуде туди й почне з нуля.",
+				"lessons": {
+					"": "Порада: тримай тепло, їжу й сон — і будуй оборону до 5-го дня.",
+					"втрата крові": "Порада: бийся біля турелей і шипів, а рани лікуй сном у ліжку.",
+					"голод": "Порада: збирай ягоди з кущів і носи їжу з собою — голодний виживальник їсть сам.",
+					"переохолодження": "Порада: багаття, а навколо — стіни з дверима: у приміщенні тепло тримається.",
+					"смертельні рани (тулуб)": "Порада: бийся біля турелей і шипів, а рани лікуй сном у ліжку.",
+					"тепловий удар": "Порада: у спеку ховайся в приміщенні, не стій біля вогню.",
+					"щось інше": "Порада: тримай тепло, їжу й сон — і будуй оборону до 5-го дня."
+				}
+			},
+			"death_slice": {
+				"bag_items": 0,
+				"cause": "",
+				"day": 1,
+				"inventory": false,
+				"lived": 0
+			},
+			"goals_slice": {
+				"all_done": false,
+				"available": true,
+				"current": {
+					"build": "campfire",
+					"hint": "Натисни 9 (Багаття) і клікни біля пішака. Вогонь гріє +4°C на 6 клітин і світить уночі.",
+					"id": "fire",
+					"pct": 0.0,
+					"title": "🔥 Розпали багаття"
+				},
+				"done": 0,
+				"next": "🪵 Добудь ресурси",
+				"total": 10
+			},
+			"lifecycle_literals_present": {
+				"ЗАГИБЕЛЬ": true,
+				"Новий виживальник": true,
+				"Поселення й склад лишаються": true,
+				"до 5-го дня": true
+			},
+			"raid_slice": {
+				"count": 0,
+				"state": "none",
+				"wave": 0
+			},
+			"region_slice_keys": [
+				"chain",
+				"lat",
+				"lon",
+				"name",
+				"seed",
+				"stored"
+			],
+			"snapshot_paths": [
+				".alive",
+				".build",
+				".build.selected",
+				".build.slots",
+				".build.slots[].afford",
+				".build.slots[].cost",
+				".build.slots[].hotkey",
+				".build.slots[].key",
+				".build.slots[].locked",
+				".build.slots[].name",
+				".build.slots[].selected",
+				".build.slots[].tip",
+				".capsule",
+				".capsule.charges",
+				".capsule.invites",
+				".capsule.invites[].clan",
+				".capsule.invites[].id",
+				".capsule.invites[].inviter",
+				".capsule.invites[].lat",
+				".capsule.invites[].lon",
+				".capsule.invites[].name",
+				".capsule.radius_km",
+				".catalog",
+				".catalog.available",
+				".catalog.build_actions",
+				".catalog.build_actions[].enabled",
+				".catalog.build_actions[].id",
+				".catalog.build_actions[].label",
+				".catalog.build_actions[].sub",
+				".catalog.build_actions[].tip",
+				".catalog.craft_actions",
+				".catalog.live",
+				".catalog.next",
+				".catalog.next[].id",
+				".catalog.next[].label",
+				".catalog.research",
+				".catalog.research[].cost",
+				".catalog.research[].id",
+				".catalog.research[].label",
+				".catalog.research[].prereqs",
+				".catalog.research[].status",
+				".catalog.research[].tier",
+				".catalog.research_actions",
+				".catalog.research_actions[].enabled",
+				".catalog.research_actions[].id",
+				".catalog.research_actions[].label",
+				".catalog.research_actions[].sub",
+				".catalog.research_actions[].tip",
+				".catalog.summary",
+				".catalog.summary.buildable",
+				".catalog.summary.buildings",
+				".catalog.summary.craftable",
+				".catalog.summary.items",
+				".catalog.summary.progress",
+				".catalog.summary.recipes",
+				".catalog.summary.research",
+				".catalog.summary.researched",
+				".catalog.summary.resources",
+				".catalog.tiers",
+				".catalog.tiers[].tier",
+				".catalog.tiers[].total",
+				".catalog.tiers[].unlocked",
+				".clock",
+				".clock.day",
+				".clock.daylight",
+				".clock.hhmm",
+				".clock.phase",
+				".clock.season",
+				".dead",
+				".death",
+				".death.bag_items",
+				".death.cause",
+				".death.day",
+				".death.inventory",
+				".death.lived",
+				".env",
+				".env.anomaly_c",
+				".env.indoor",
+				".env.light",
+				".env.temp_c",
+				".env.weather",
+				".equipment",
+				".equipment.owned",
+				".equipment.tool",
+				".equipment.weapon",
+				".gear",
+				".gear.rows",
+				".gear.rows[].affordable",
+				".gear.rows[].cost",
+				".gear.rows[].equipped",
+				".gear.rows[].id",
+				".gear.rows[].locked",
+				".gear.rows[].name",
+				".gear.rows[].owned",
+				".gear.rows[].slot",
+				".goals",
+				".goals.all_done",
+				".goals.available",
+				".goals.current",
+				".goals.current.build",
+				".goals.current.hint",
+				".goals.current.id",
+				".goals.current.pct",
+				".goals.current.title",
+				".goals.done",
+				".goals.next",
+				".goals.total",
+				".heat",
+				".heat.ambient",
+				".heat.available",
+				".heat.comfort_max",
+				".heat.comfort_min",
+				".heat.emitters",
+				".heat.indoor",
+				".heat.insulation",
+				".heat.n",
+				".heat.radius",
+				".heat.setpoint",
+				".inspect",
+				".inspect.shown",
+				".inventory",
+				".inventory.enabled",
+				".light",
+				".light.ambient",
+				".light.night_max",
+				".light.sources",
+				".light.threshold",
+				".logistics",
+				".logistics.convoys",
+				".logistics.hubs",
+				".logistics.hubs[].buys",
+				".logistics.hubs[].buys_icon",
+				".logistics.hubs[].dist_km",
+				".logistics.hubs[].have",
+				".logistics.hubs[].index",
+				".logistics.hubs[].name",
+				".logistics.hubs[].rate",
+				".logistics.hubs[].sells",
+				".logistics.hubs[].sells_icon",
+				".power",
+				".power.participants",
+				".raid",
+				".raid.count",
+				".raid.state",
+				".raid.wave",
+				".region",
+				".region.chain",
+				".region.lat",
+				".region.lon",
+				".region.name",
+				".region.seed",
+				".region.stored",
+				".research",
+				".research.active",
+				".research.active_eta_days",
+				".research.active_label",
+				".research.active_pct",
+				".research.counts",
+				".research.counts.buildings",
+				".research.counts.buildings.total",
+				".research.counts.buildings.unlocked",
+				".research.counts.items",
+				".research.counts.items.total",
+				".research.counts.items.unlocked",
+				".research.counts.recipes",
+				".research.counts.recipes.total",
+				".research.counts.recipes.unlocked",
+				".research.level",
+				".research.next_unlocks",
+				".research.next_unlocks.buildings",
+				".research.next_unlocks.items",
+				".research.next_unlocks.recipes",
+				".research.next_unlocks.total",
+				".research.options",
+				".research.options[].cost",
+				".research.options[].id",
+				".research.options[].label",
+				".research.options[].tier",
+				".research.queue",
+				".research.rate",
+				".research.total",
+				".research.unlocked",
+				".research.wired",
+				".social_info",
+				".social_info.alliance",
+				".social_info.available",
+				".social_info.clan",
+				".social_info.empire",
+				".social_info.friends",
+				".social_info.friends[].clan_name",
+				".social_info.friends[].dist_km",
+				".social_info.friends[].lat",
+				".social_info.friends[].lon",
+				".social_info.friends[].name",
+				".social_info.friends[].place",
+				".social_info.hostiles",
+				".social_info.members",
+				".social_info.pressure",
+				".speed",
+				".stats",
+				".stats.melee",
+				".stats.melee.explain",
+				".stats.melee.value",
+				".stock",
+				".stock.*",
+				".stock.*.components",
+				".stock.*.food",
+				".stock.*.planks",
+				".stock.*.scrap",
+				".stock.*.stone",
+				".stock.*.wood",
+				".threat",
+				".threat.available",
+				".threat.difficulty",
+				".threat.generosity",
+				".threat.phase",
+				".threat.raid_hint",
+				".threat.threat",
+				".threat.wealth",
+				".ui",
+				".ui.armed",
+				".ui.menu",
+				".ui.remove",
+				".ui.touch",
+				".vitals",
+				".vitals.bars",
+				".vitals.bars[].icon",
+				".vitals.bars[].id",
+				".vitals.bars[].label",
+				".vitals.bars[].pct",
+				".vitals.bars[].state",
+				".vitals.carry",
+				".vitals.carry.*",
+				".vitals.comfort",
+				".vitals.conditions",
+				".vitals.downed",
+				".vitals.felt_c",
+				".vitals.sleeping"
+			]
+		},
+		"inventory_on_300": {
+			"bags": 0,
+			"campfire_placed": true,
+			"region_keys": [
+				"bags",
+				"buildings",
+				"day",
+				"frac",
+				"health",
+				"key",
+				"lat",
+				"lon",
+				"n",
+				"nodes",
+				"place_name",
+				"player",
+				"seed",
+				"source",
+				"stock",
+				"use_catalog",
+				"use_inventory"
+			],
+			"use_inventory_in_record": true
+		},
+		"needs_pace": {
+			"after_100_ticks": [
+				77.79999999999984,
+				88.99999999999989,
+				0.5666666666666704,
+				195
+			],
+			"day_len": 150.0,
+			"eat_after_3s": [
+				76.69799999999995,
+				17
+			],
+			"eat_one_tick": [
+				77.958,
+				17,
+				2.5
+			],
+			"frac_after_turn": 2.8199664825478976e-14,
+			"sleep_50_ticks": [
+				99.82,
+				false
+			],
+			"start": [
+				82.0,
+				92.0,
+				0.5
+			],
+			"ticks_to_day_turn_from_noon": 750
+		},
+		"osm_overlay": {
+			"base_center": [
+				10,
+				9
+			],
+			"player": [
+				9.5,
+				9.5
+			],
+			"record_keys": [
+				"buildings",
+				"day",
+				"frac",
+				"health",
+				"key",
+				"lat",
+				"lon",
+				"n",
+				"nodes",
+				"place_name",
+				"player",
+				"seed",
+				"source",
+				"stock",
+				"tiles_b64",
+				"use_catalog"
+			],
+			"reload_spawn": [
+				9,
+				9
+			],
+			"reload_storage": [
+				10,
+				9
+			],
+			"reload_tiles_equal": true,
+			"source": "osm",
+			"spawn_after": [
+				9,
+				9
+			],
+			"spawn_before": [
+				9,
+				9
+			],
+			"storage_after": [
+				10,
+				9
+			],
+			"storage_before": [
+				10,
+				9
+			],
+			"storage_in_bgrid": true,
+			"tiles_sha256": "fdbc56a3d01e4bfe8936bd4f00d33e4fd2a316fe9ec0d3f60f0013d73d5ff447"
+		},
+		"patrol_fight": {
+			"turret_built": true
+		},
+		"raid_director_apply": {
+			"armed": {
+				"banner": "⚠ НАБЛИЖАЄТЬСЯ РЕЙД",
+				"has_payload": true,
+				"next": 12.0,
+				"warned": true
+			}
+		},
+		"raid_forced_building": {
+			"base": [
+				29,
+				34
+			],
+			"ring_walls": 13,
+			"spawn": [
+				28,
+				34
+			]
+		},
+		"record_keys": {
+			"base_region_paths": [
+				".buildings",
+				".buildings[].hp",
+				".buildings[].kind",
+				".buildings[].x",
+				".buildings[].y",
+				".day",
+				".frac",
+				".health",
+				".health.blood",
+				".health.hediffs",
+				".health.scar_watch",
+				".key",
+				".lat",
+				".lon",
+				".n",
+				".nodes",
+				".place_name",
+				".player",
+				".player.born",
+				".player.carry",
+				".player.carry_cap",
+				".player.equipped",
+				".player.equipped.tool",
+				".player.equipped.weapon",
+				".player.face",
+				".player.hp",
+				".player.hunger",
+				".player.items",
+				".player.px",
+				".player.py",
+				".player.rest",
+				".player.skills",
+				".player.skills.combat",
+				".player.skills.gather",
+				".player.sleeping",
+				".seed",
+				".source",
+				".stock",
+				".stock.*",
+				".use_catalog"
+			],
+			"base_runtime_paths": [
+				".convoy_seq",
+				".convoys",
+				".craft_timer",
+				".dead",
+				".director_rng_state",
+				".enemies",
+				".env_rng_state",
+				".patrol",
+				".patrol.next",
+				".patrol.timer",
+				".patrol.wave",
+				".player_live",
+				".player_live.action",
+				".player_live.atk_cd",
+				".player_live.dep_cd",
+				".player_live.eat_cd",
+				".raid",
+				".raid.active",
+				".raid.next",
+				".raid.timer",
+				".raid.warned",
+				".raid.wave",
+				".research_unlocked",
+				".shots",
+				".temp_offset",
+				".temp_offset_days",
+				".threat_rng_state",
+				".weather",
+				".weather_t"
+			],
+			"building_record_keys": {
+				"auto_turret": [
+					"hp",
+					"kind",
+					"x",
+					"y"
+				],
+				"campfire": [
+					"hp",
+					"kind",
+					"x",
+					"y"
+				],
+				"grow_zone": [
+					"growth",
+					"hp",
+					"kind",
+					"x",
+					"y"
+				],
+				"storage": [
+					"hp",
+					"kind",
+					"x",
+					"y"
+				],
+				"wood_generator": [
+					"fuel",
+					"hp",
+					"kind",
+					"x",
+					"y"
+				]
+			},
+			"catalog_region_keys": [
+				"buildings",
+				"day",
+				"frac",
+				"health",
+				"key",
+				"lat",
+				"lon",
+				"n",
+				"nodes",
+				"place_name",
+				"player",
+				"seed",
+				"source",
+				"stock",
+				"use_catalog"
+			],
+			"enemy_hash_fields": [
+				"px",
+				"py",
+				"face",
+				"hp",
+				"maxhp",
+				"dmg",
+				"speed",
+				"atk_cd",
+				"path_cd",
+				"tx",
+				"ty",
+				"dead",
+				"kind"
+			],
+			"health_dict_keys": [
+				"blood",
+				"hediffs",
+				"scar_watch"
+			],
+			"inventory_region_keys": [
+				"bags",
+				"buildings",
+				"day",
+				"frac",
+				"health",
+				"key",
+				"lat",
+				"lon",
+				"n",
+				"nodes",
+				"place_name",
+				"player",
+				"seed",
+				"source",
+				"stock",
+				"use_catalog",
+				"use_inventory"
+			],
+			"osm_region_keys": [
+				"buildings",
+				"day",
+				"frac",
+				"health",
+				"key",
+				"lat",
+				"lon",
+				"n",
+				"nodes",
+				"place_name",
+				"player",
+				"seed",
+				"source",
+				"stock",
+				"tiles_b64",
+				"use_catalog"
+			],
+			"player_fields": [
+				"px",
+				"py",
+				"face",
+				"hp",
+				"hunger",
+				"rest",
+				"carry",
+				"carry_cap",
+				"sleeping",
+				"skills",
+				"equipped",
+				"items",
+				"born",
+				"inv",
+				"hand"
+			],
+			"shot_hash_fields": [
+				"x1",
+				"y1",
+				"x2",
+				"y2",
+				"t"
+			],
+			"store_version": 2
+		},
+		"save_continue": {
+			"catalog": {
+				"active_use_catalog": true,
+				"active_use_inventory": false,
+				"capsule": {
+					"charges": 1.0,
+					"last_day": 1.0,
+					"radius_km": 100.0
+				},
+				"goals": [
+					"fire"
+				],
+				"key_paths": [
+					".active",
+					".active.region",
+					".active.region.buildings",
+					".active.region.buildings[].hp",
+					".active.region.buildings[].kind",
+					".active.region.buildings[].x",
+					".active.region.buildings[].y",
+					".active.region.day",
+					".active.region.frac",
+					".active.region.health",
+					".active.region.health.blood",
+					".active.region.health.hediffs",
+					".active.region.health.hediffs[].sev",
+					".active.region.health.hediffs[].t",
+					".active.region.health.scar_watch",
+					".active.region.key",
+					".active.region.lat",
+					".active.region.lon",
+					".active.region.n",
+					".active.region.nodes",
+					".active.region.nodes.*",
+					".active.region.nodes.*.amount",
+					".active.region.nodes.*.kind",
+					".active.region.place_name",
+					".active.region.player",
+					".active.region.player.born",
+					".active.region.player.carry",
+					".active.region.player.carry_cap",
+					".active.region.player.equipped",
+					".active.region.player.equipped.tool",
+					".active.region.player.equipped.weapon",
+					".active.region.player.face",
+					".active.region.player.hp",
+					".active.region.player.hunger",
+					".active.region.player.items",
+					".active.region.player.px",
+					".active.region.player.py",
+					".active.region.player.rest",
+					".active.region.player.skills",
+					".active.region.player.skills.combat",
+					".active.region.player.skills.gather",
+					".active.region.player.sleeping",
+					".active.region.seed",
+					".active.region.source",
+					".active.region.stock",
+					".active.region.stock.*",
+					".active.region.use_catalog",
+					".active.runtime",
+					".active.runtime.convoy_seq",
+					".active.runtime.convoys",
+					".active.runtime.craft_timer",
+					".active.runtime.dead",
+					".active.runtime.director_rng_state",
+					".active.runtime.enemies",
+					".active.runtime.env_rng_state",
+					".active.runtime.patrol",
+					".active.runtime.patrol.next",
+					".active.runtime.patrol.timer",
+					".active.runtime.patrol.wave",
+					".active.runtime.player_live",
+					".active.runtime.player_live.action",
+					".active.runtime.player_live.atk_cd",
+					".active.runtime.player_live.dep_cd",
+					".active.runtime.player_live.eat_cd",
+					".active.runtime.raid",
+					".active.runtime.raid.active",
+					".active.runtime.raid.next",
+					".active.runtime.raid.timer",
+					".active.runtime.raid.warned",
+					".active.runtime.raid.wave",
+					".active.runtime.research_unlocked",
+					".active.runtime.shots",
+					".active.runtime.temp_offset",
+					".active.runtime.temp_offset_days",
+					".active.runtime.threat_rng_state",
+					".active.runtime.weather",
+					".active.runtime.weather_t",
+					".auto_research",
+					".bench_announced",
+					".capsule",
+					".capsule.charges",
+					".capsule.last_day",
+					".capsule.radius_km",
+					".goals",
+					".has_home",
+					".home",
+					".home.lat",
+					".home.lon",
+					".home.name",
+					".invites",
+					".meta",
+					".meta.day",
+					".meta.dead",
+					".meta.place",
+					".progression",
+					".progression.active",
+					".progression.progress",
+					".progression.queue",
+					".progression.unlocked",
+					".store",
+					".store.head",
+					".store.regions",
+					".store.regions.*",
+					".store.regions.*.buildings",
+					".store.regions.*.buildings[].hp",
+					".store.regions.*.buildings[].kind",
+					".store.regions.*.buildings[].x",
+					".store.regions.*.buildings[].y",
+					".store.regions.*.day",
+					".store.regions.*.frac",
+					".store.regions.*.hash",
+					".store.regions.*.health",
+					".store.regions.*.health.blood",
+					".store.regions.*.health.hediffs",
+					".store.regions.*.health.hediffs[].sev",
+					".store.regions.*.health.hediffs[].t",
+					".store.regions.*.health.scar_watch",
+					".store.regions.*.key",
+					".store.regions.*.lat",
+					".store.regions.*.lon",
+					".store.regions.*.n",
+					".store.regions.*.nodes",
+					".store.regions.*.nodes.*",
+					".store.regions.*.nodes.*.amount",
+					".store.regions.*.nodes.*.kind",
+					".store.regions.*.place_name",
+					".store.regions.*.player",
+					".store.regions.*.player.born",
+					".store.regions.*.player.carry",
+					".store.regions.*.player.carry_cap",
+					".store.regions.*.player.equipped",
+					".store.regions.*.player.equipped.tool",
+					".store.regions.*.player.equipped.weapon",
+					".store.regions.*.player.face",
+					".store.regions.*.player.hp",
+					".store.regions.*.player.hunger",
+					".store.regions.*.player.items",
+					".store.regions.*.player.px",
+					".store.regions.*.player.py",
+					".store.regions.*.player.rest",
+					".store.regions.*.player.skills",
+					".store.regions.*.player.skills.combat",
+					".store.regions.*.player.skills.gather",
+					".store.regions.*.player.sleeping",
+					".store.regions.*.prev",
+					".store.regions.*.seed",
+					".store.regions.*.source",
+					".store.regions.*.stock",
+					".store.regions.*.stock.*",
+					".store.regions.*.use_catalog",
+					".store.version",
+					".version"
+				],
+				"meta_keys": [
+					"day",
+					"dead",
+					"place"
+				],
+				"resave_paths_equal": true,
+				"resave_written": true,
+				"restored": true,
+				"save_version_const": 1,
+				"store_regions": 2,
+				"store_version": 2,
+				"top_keys": [
+					"active",
+					"auto_research",
+					"bench_announced",
+					"capsule",
+					"goals",
+					"has_home",
+					"home",
+					"invites",
+					"meta",
+					"progression",
+					"store",
+					"version"
+				],
+				"version": 1,
+				"written": true
+			},
+			"inventory": {
+				"active_use_catalog": false,
+				"active_use_inventory": true,
+				"capsule": {
+					"charges": 1.0,
+					"last_day": 1.0,
+					"radius_km": 100.0
+				},
+				"goals": [
+					"fire"
+				],
+				"key_paths": [
+					".active",
+					".active.region",
+					".active.region.bags",
+					".active.region.buildings",
+					".active.region.buildings[].hp",
+					".active.region.buildings[].kind",
+					".active.region.buildings[].x",
+					".active.region.buildings[].y",
+					".active.region.day",
+					".active.region.frac",
+					".active.region.health",
+					".active.region.health.blood",
+					".active.region.health.hediffs",
+					".active.region.health.hediffs[].sev",
+					".active.region.health.hediffs[].t",
+					".active.region.health.scar_watch",
+					".active.region.key",
+					".active.region.lat",
+					".active.region.lon",
+					".active.region.n",
+					".active.region.nodes",
+					".active.region.nodes.*",
+					".active.region.nodes.*.amount",
+					".active.region.nodes.*.kind",
+					".active.region.place_name",
+					".active.region.player",
+					".active.region.player.born",
+					".active.region.player.carry",
+					".active.region.player.carry_cap",
+					".active.region.player.equipped",
+					".active.region.player.equipped.tool",
+					".active.region.player.equipped.weapon",
+					".active.region.player.face",
+					".active.region.player.hand",
+					".active.region.player.hp",
+					".active.region.player.hunger",
+					".active.region.player.inv",
+					".active.region.player.inv[].id",
+					".active.region.player.inv[].n",
+					".active.region.player.items",
+					".active.region.player.px",
+					".active.region.player.py",
+					".active.region.player.rest",
+					".active.region.player.skills",
+					".active.region.player.skills.combat",
+					".active.region.player.skills.gather",
+					".active.region.player.sleeping",
+					".active.region.seed",
+					".active.region.source",
+					".active.region.stock",
+					".active.region.stock.*",
+					".active.region.use_catalog",
+					".active.region.use_inventory",
+					".active.runtime",
+					".active.runtime.convoy_seq",
+					".active.runtime.convoys",
+					".active.runtime.craft_timer",
+					".active.runtime.dead",
+					".active.runtime.director_rng_state",
+					".active.runtime.enemies",
+					".active.runtime.env_rng_state",
+					".active.runtime.patrol",
+					".active.runtime.patrol.next",
+					".active.runtime.patrol.timer",
+					".active.runtime.patrol.wave",
+					".active.runtime.player_live",
+					".active.runtime.player_live.action",
+					".active.runtime.player_live.atk_cd",
+					".active.runtime.player_live.dep_cd",
+					".active.runtime.player_live.eat_cd",
+					".active.runtime.raid",
+					".active.runtime.raid.active",
+					".active.runtime.raid.next",
+					".active.runtime.raid.timer",
+					".active.runtime.raid.warned",
+					".active.runtime.raid.wave",
+					".active.runtime.research_unlocked",
+					".active.runtime.shots",
+					".active.runtime.temp_offset",
+					".active.runtime.temp_offset_days",
+					".active.runtime.threat_rng_state",
+					".active.runtime.weather",
+					".active.runtime.weather_t",
+					".auto_research",
+					".bench_announced",
+					".capsule",
+					".capsule.charges",
+					".capsule.last_day",
+					".capsule.radius_km",
+					".goals",
+					".has_home",
+					".home",
+					".home.lat",
+					".home.lon",
+					".home.name",
+					".invites",
+					".invites[].allow_receive",
+					".invites[].clan",
+					".invites[].id",
+					".invites[].inviter",
+					".invites[].lat",
+					".invites[].lon",
+					".invites[].name",
+					".invites[].radius_km",
+					".meta",
+					".meta.day",
+					".meta.dead",
+					".meta.place",
+					".progression",
+					".progression.active",
+					".progression.progress",
+					".progression.queue",
+					".progression.unlocked",
+					".store",
+					".store.head",
+					".store.regions",
+					".store.regions.*",
+					".store.regions.*.bags",
+					".store.regions.*.buildings",
+					".store.regions.*.buildings[].hp",
+					".store.regions.*.buildings[].kind",
+					".store.regions.*.buildings[].x",
+					".store.regions.*.buildings[].y",
+					".store.regions.*.day",
+					".store.regions.*.frac",
+					".store.regions.*.hash",
+					".store.regions.*.health",
+					".store.regions.*.health.blood",
+					".store.regions.*.health.hediffs",
+					".store.regions.*.health.hediffs[].sev",
+					".store.regions.*.health.hediffs[].t",
+					".store.regions.*.health.scar_watch",
+					".store.regions.*.key",
+					".store.regions.*.lat",
+					".store.regions.*.lon",
+					".store.regions.*.n",
+					".store.regions.*.nodes",
+					".store.regions.*.nodes.*",
+					".store.regions.*.nodes.*.amount",
+					".store.regions.*.nodes.*.kind",
+					".store.regions.*.place_name",
+					".store.regions.*.player",
+					".store.regions.*.player.born",
+					".store.regions.*.player.carry",
+					".store.regions.*.player.carry_cap",
+					".store.regions.*.player.equipped",
+					".store.regions.*.player.equipped.tool",
+					".store.regions.*.player.equipped.weapon",
+					".store.regions.*.player.face",
+					".store.regions.*.player.hand",
+					".store.regions.*.player.hp",
+					".store.regions.*.player.hunger",
+					".store.regions.*.player.inv",
+					".store.regions.*.player.inv[].id",
+					".store.regions.*.player.inv[].n",
+					".store.regions.*.player.items",
+					".store.regions.*.player.px",
+					".store.regions.*.player.py",
+					".store.regions.*.player.rest",
+					".store.regions.*.player.skills",
+					".store.regions.*.player.skills.combat",
+					".store.regions.*.player.skills.gather",
+					".store.regions.*.player.sleeping",
+					".store.regions.*.prev",
+					".store.regions.*.seed",
+					".store.regions.*.source",
+					".store.regions.*.stock",
+					".store.regions.*.stock.*",
+					".store.regions.*.use_catalog",
+					".store.regions.*.use_inventory",
+					".store.version",
+					".version"
+				],
+				"meta_keys": [
+					"day",
+					"dead",
+					"place"
+				],
+				"resave_paths_equal": true,
+				"resave_written": true,
+				"restored": true,
+				"save_version_const": 1,
+				"store_regions": 2,
+				"store_version": 2,
+				"top_keys": [
+					"active",
+					"auto_research",
+					"bench_announced",
+					"capsule",
+					"goals",
+					"has_home",
+					"home",
+					"invites",
+					"meta",
+					"progression",
+					"store",
+					"version"
+				],
+				"version": 1,
+				"written": true
+			},
+			"stock": {
+				"active_use_catalog": false,
+				"active_use_inventory": false,
+				"capsule": {
+					"charges": 1.0,
+					"last_day": 1.0,
+					"radius_km": 100.0
+				},
+				"goals": [
+					"fire"
+				],
+				"key_paths": [
+					".active",
+					".active.region",
+					".active.region.buildings",
+					".active.region.buildings[].hp",
+					".active.region.buildings[].kind",
+					".active.region.buildings[].x",
+					".active.region.buildings[].y",
+					".active.region.day",
+					".active.region.frac",
+					".active.region.health",
+					".active.region.health.blood",
+					".active.region.health.hediffs",
+					".active.region.health.hediffs[].sev",
+					".active.region.health.hediffs[].t",
+					".active.region.health.scar_watch",
+					".active.region.key",
+					".active.region.lat",
+					".active.region.lon",
+					".active.region.n",
+					".active.region.nodes",
+					".active.region.nodes.*",
+					".active.region.nodes.*.amount",
+					".active.region.nodes.*.kind",
+					".active.region.place_name",
+					".active.region.player",
+					".active.region.player.born",
+					".active.region.player.carry",
+					".active.region.player.carry_cap",
+					".active.region.player.equipped",
+					".active.region.player.equipped.tool",
+					".active.region.player.equipped.weapon",
+					".active.region.player.face",
+					".active.region.player.hp",
+					".active.region.player.hunger",
+					".active.region.player.items",
+					".active.region.player.px",
+					".active.region.player.py",
+					".active.region.player.rest",
+					".active.region.player.skills",
+					".active.region.player.skills.combat",
+					".active.region.player.skills.gather",
+					".active.region.player.sleeping",
+					".active.region.seed",
+					".active.region.source",
+					".active.region.stock",
+					".active.region.stock.*",
+					".active.region.use_catalog",
+					".active.runtime",
+					".active.runtime.convoy_seq",
+					".active.runtime.convoys",
+					".active.runtime.craft_timer",
+					".active.runtime.dead",
+					".active.runtime.director_rng_state",
+					".active.runtime.enemies",
+					".active.runtime.env_rng_state",
+					".active.runtime.patrol",
+					".active.runtime.patrol.next",
+					".active.runtime.patrol.timer",
+					".active.runtime.patrol.wave",
+					".active.runtime.player_live",
+					".active.runtime.player_live.action",
+					".active.runtime.player_live.atk_cd",
+					".active.runtime.player_live.dep_cd",
+					".active.runtime.player_live.eat_cd",
+					".active.runtime.raid",
+					".active.runtime.raid.active",
+					".active.runtime.raid.next",
+					".active.runtime.raid.timer",
+					".active.runtime.raid.warned",
+					".active.runtime.raid.wave",
+					".active.runtime.research_unlocked",
+					".active.runtime.shots",
+					".active.runtime.temp_offset",
+					".active.runtime.temp_offset_days",
+					".active.runtime.threat_rng_state",
+					".active.runtime.weather",
+					".active.runtime.weather_t",
+					".auto_research",
+					".bench_announced",
+					".capsule",
+					".capsule.charges",
+					".capsule.last_day",
+					".capsule.radius_km",
+					".goals",
+					".has_home",
+					".home",
+					".home.lat",
+					".home.lon",
+					".home.name",
+					".invites",
+					".invites[].allow_receive",
+					".invites[].clan",
+					".invites[].id",
+					".invites[].inviter",
+					".invites[].lat",
+					".invites[].lon",
+					".invites[].name",
+					".invites[].radius_km",
+					".meta",
+					".meta.day",
+					".meta.dead",
+					".meta.place",
+					".progression",
+					".progression.active",
+					".progression.progress",
+					".progression.queue",
+					".progression.unlocked",
+					".store",
+					".store.head",
+					".store.regions",
+					".store.regions.*",
+					".store.regions.*.buildings",
+					".store.regions.*.buildings[].hp",
+					".store.regions.*.buildings[].kind",
+					".store.regions.*.buildings[].x",
+					".store.regions.*.buildings[].y",
+					".store.regions.*.day",
+					".store.regions.*.frac",
+					".store.regions.*.hash",
+					".store.regions.*.health",
+					".store.regions.*.health.blood",
+					".store.regions.*.health.hediffs",
+					".store.regions.*.health.hediffs[].sev",
+					".store.regions.*.health.hediffs[].t",
+					".store.regions.*.health.scar_watch",
+					".store.regions.*.key",
+					".store.regions.*.lat",
+					".store.regions.*.lon",
+					".store.regions.*.n",
+					".store.regions.*.nodes",
+					".store.regions.*.nodes.*",
+					".store.regions.*.nodes.*.amount",
+					".store.regions.*.nodes.*.kind",
+					".store.regions.*.place_name",
+					".store.regions.*.player",
+					".store.regions.*.player.born",
+					".store.regions.*.player.carry",
+					".store.regions.*.player.carry_cap",
+					".store.regions.*.player.equipped",
+					".store.regions.*.player.equipped.tool",
+					".store.regions.*.player.equipped.weapon",
+					".store.regions.*.player.face",
+					".store.regions.*.player.hp",
+					".store.regions.*.player.hunger",
+					".store.regions.*.player.items",
+					".store.regions.*.player.px",
+					".store.regions.*.player.py",
+					".store.regions.*.player.rest",
+					".store.regions.*.player.skills",
+					".store.regions.*.player.skills.combat",
+					".store.regions.*.player.skills.gather",
+					".store.regions.*.player.sleeping",
+					".store.regions.*.prev",
+					".store.regions.*.seed",
+					".store.regions.*.source",
+					".store.regions.*.stock",
+					".store.regions.*.stock.*",
+					".store.regions.*.use_catalog",
+					".store.version",
+					".version"
+				],
+				"meta_keys": [
+					"day",
+					"dead",
+					"place"
+				],
+				"resave_paths_equal": true,
+				"resave_written": true,
+				"restored": true,
+				"save_version_const": 1,
+				"store_regions": 2,
+				"store_version": 2,
+				"top_keys": [
+					"active",
+					"auto_research",
+					"bench_announced",
+					"capsule",
+					"goals",
+					"has_home",
+					"home",
+					"invites",
+					"meta",
+					"progression",
+					"store",
+					"version"
+				],
+				"version": 1,
+				"written": true
+			}
+		},
+		"session_feed": {
+			"inventory": {
+				"away_hints": [
+					"warn|❄ Тут холодно (#°C): постав багаття з хотбару (слот 1), потім стіни з дверима навколо — у приміщенні тепло тримається."
+				],
+				"away_plain": [
+					"good|🛬 Нова місцевість: Львів · біом помірний."
+				],
+				"back_hints": [],
+				"back_plain": [
+					"good|↩ Повернення в Київ."
+				],
+				"continue_hints": [],
+				"continue_plain": [
+					"good|▶ Продовжено: Київ · день 1."
+				],
+				"has_home": true,
+				"invites_seeded": 3,
+				"restored": true,
+				"saved": true,
+				"start_count": 4,
+				"start_hints": [
+					"warn|❄ Тут холодно (#°C): постав багаття з хотбару (слот 1), потім стіни з дверима навколо — у приміщенні тепло тримається."
+				],
+				"start_plain": [
+					"good|Висадка: Київ · біом помірний",
+					"|Клан: Твій клан «Вовки» · рейди від ворожих фракцій.",
+					"|✉ Друзі надіслали інвайтів: 3 — капсула (V) долетить до них."
+				]
+			},
+			"stock": {
+				"away_hints": [
+					"warn|❄ Тут холодно (#°C): розпали багаття (9), а тоді обнеси клітинку стінами (1) з дверима (2) — у приміщенні тепло тримається."
+				],
+				"away_plain": [
+					"good|🛬 Нова місцевість: Львів · біом помірний."
+				],
+				"back_hints": [],
+				"back_plain": [
+					"good|↩ Повернення в Київ."
+				],
+				"continue_hints": [],
+				"continue_plain": [
+					"good|▶ Продовжено: Київ · день 1."
+				],
+				"has_home": true,
+				"invites_seeded": 3,
+				"restored": true,
+				"saved": true,
+				"start_count": 4,
+				"start_hints": [
+					"warn|❄ Тут холодно (#°C): розпали багаття (9), а тоді обнеси клітинку стінами (1) з дверима (2) — у приміщенні тепло тримається."
+				],
+				"start_plain": [
+					"good|Висадка: Київ · біом помірний",
+					"|Клан: Твій клан «Вовки» · рейди від ворожих фракцій.",
+					"|✉ Друзі надіслали інвайтів: 3 — капсула (V) долетить до них."
+				]
+			}
+		},
+		"spawn_presets": {
+			"rows": {
+				"Київ": {
+					"base_center": [
+						29,
+						34
+					],
+					"buildings": 1,
+					"key": "50.4501,30.5234",
+					"nodes_hash": "584ba19bcb958db4",
+					"player": [
+						28.5,
+						34.5
+					],
+					"regions": 6,
+					"seed": 1545000153,
+					"spawn": [
+						28,
+						34
+					],
+					"stock": {
+						"components": 2,
+						"food": 18,
+						"planks": 0,
+						"scrap": 16,
+						"stone": 30,
+						"wood": 50
+					},
+					"storage": [
+						29,
+						34
+					],
+					"tiles_sha256": "640cf97571bc4cb78085ba33160115b2cb816e60136d0ed19ef33e3b716a952b"
+				},
+				"Кіото": {
+					"base_center": [
+						29,
+						28
+					],
+					"buildings": 1,
+					"key": "35.0116,135.7681",
+					"nodes_hash": "cbe4d9360635b7f4",
+					"player": [
+						28.5,
+						28.5
+					],
+					"regions": 6,
+					"seed": 3033491858,
+					"spawn": [
+						28,
+						28
+					],
+					"stock": {
+						"components": 2,
+						"food": 18,
+						"planks": 0,
+						"scrap": 16,
+						"stone": 30,
+						"wood": 50
+					},
+					"storage": [
+						29,
+						28
+					],
+					"tiles_sha256": "5dc771b1777b49598c3c2c5285e9fd944c9cd2fc5e7607c7a2e81c77603c0ab0"
+				},
+				"Львів": {
+					"base_center": [
+						29,
+						27
+					],
+					"buildings": 1,
+					"key": "49.8397,24.0297",
+					"nodes_hash": "3f65437973914c07",
+					"player": [
+						28.5,
+						27.5
+					],
+					"regions": 6,
+					"seed": 2608950987,
+					"spawn": [
+						28,
+						27
+					],
+					"stock": {
+						"components": 2,
+						"food": 18,
+						"planks": 0,
+						"scrap": 16,
+						"stone": 30,
+						"wood": 50
+					},
+					"storage": [
+						29,
+						27
+					],
+					"tiles_sha256": "765411a1c19db4ed2dc260f72155fbf1c6e746ccde39fd50e461a6846049b214"
+				},
+				"Манхеттен": {
+					"base_center": [
+						24,
+						28
+					],
+					"buildings": 1,
+					"key": "40.7549,-73.9840",
+					"nodes_hash": "25261b739c59dfcb",
+					"player": [
+						23.5,
+						28.5
+					],
+					"regions": 6,
+					"seed": 823839102,
+					"spawn": [
+						23,
+						28
+					],
+					"stock": {
+						"components": 2,
+						"food": 18,
+						"planks": 0,
+						"scrap": 16,
+						"stone": 30,
+						"wood": 50
+					},
+					"storage": [
+						24,
+						28
+					],
+					"tiles_sha256": "caf890f09e2b2e168ef9777acabc6d33f2293c0b7f1b76cf1c2c45a2aee92cff"
+				},
+				"Рейк'явік": {
+					"base_center": [
+						29,
+						28
+					],
+					"buildings": 1,
+					"key": "64.1466,-21.9426",
+					"nodes_hash": "2e2ff0d904486b65",
+					"player": [
+						28.5,
+						28.5
+					],
+					"regions": 6,
+					"seed": 3117460527,
+					"spawn": [
+						28,
+						28
+					],
+					"stock": {
+						"components": 2,
+						"food": 18,
+						"planks": 0,
+						"scrap": 16,
+						"stone": 30,
+						"wood": 50
+					},
+					"storage": [
+						29,
+						28
+					],
+					"tiles_sha256": "b99a8a2a2c1711468f13fcb4fb00b0d2e62c1ec8554b99c4cc8b614dce50c7c5"
+				}
+			}
+		},
+		"storage_reach": {
+			"bench_rows": {
+				"0.0": {
+					"ok": true
+				},
+				"3.45": {
+					"ok": true
+				},
+				"3.5": {
+					"ok": true
+				},
+				"3.51": {
+					"msg": "Потрібен верстак поруч.",
+					"ok": false
+				},
+				"3.6": {
+					"msg": "Потрібен верстак поруч.",
+					"ok": false
+				}
+			},
+			"cap": 450,
+			"hand_craft_bed_without_bench_msg": {
+				"ok": true
+			},
+			"link_can_pay": {
+				"0.0@0.0": false,
+				"0.0@10.0": false,
+				"0.0@10.01": false,
+				"0.0@10.1": false,
+				"0.0@9.99": false,
+				"1.9@0.0": false,
+				"1.9@10.0": false,
+				"1.9@10.01": false,
+				"1.9@10.1": false,
+				"1.9@9.99": false,
+				"2.0@0.0": true,
+				"2.0@10.0": true,
+				"2.0@10.01": false,
+				"2.0@10.1": false,
+				"2.0@9.99": true
+			},
+			"nearest_storage": {
+				"10.4": [
+					9,
+					8
+				],
+				"10.49": [
+					9,
+					8
+				],
+				"10.51": [
+					9,
+					8
+				],
+				"10.6": [
+					9,
+					8
+				],
+				"14.5": [
+					9,
+					13
+				],
+				"6.5": [
+					9,
+					8
+				]
+			},
+			"off_rows": {
+				"1.7": {
+					"carry": 0,
+					"food": 17,
+					"hunger": 77.958,
+					"wood": 55
+				},
+				"1.79": {
+					"carry": 0,
+					"food": 17,
+					"hunger": 77.958,
+					"wood": 55
+				},
+				"1.81": {
+					"carry": 5,
+					"food": 17,
+					"hunger": 77.958,
+					"wood": 50
+				},
+				"1.9": {
+					"carry": 5,
+					"food": 17,
+					"hunger": 77.958,
+					"wood": 50
+				},
+				"2.1": {
+					"carry": 5,
+					"food": 17,
+					"hunger": 77.958,
+					"wood": 50
+				},
+				"2.19": {
+					"carry": 5,
+					"food": 17,
+					"hunger": 77.958,
+					"wood": 50
+				},
+				"2.21": {
+					"carry": 5,
+					"food": 18,
+					"hunger": 39.958,
+					"wood": 50
+				},
+				"2.3": {
+					"carry": 5,
+					"food": 18,
+					"hunger": 39.958,
+					"wood": 50
+				}
+			},
+			"pack_after_almost_full": 4,
+			"reach_rows": {
+				"0.0": {
+					"near": true,
+					"pack_wood": 3,
+					"stash": {
+						"moved": 7,
+						"msg": "⇣ Розкладено на склад: 7",
+						"ok": true
+					},
+					"stock_wood": 54,
+					"take": {
+						"ok": true,
+						"taken": 3
+					}
+				},
+				"2.45": {
+					"near": true,
+					"pack_wood": 3,
+					"stash": {
+						"moved": 7,
+						"msg": "⇣ Розкладено на склад: 7",
+						"ok": true
+					},
+					"stock_wood": 54,
+					"take": {
+						"ok": true,
+						"taken": 3
+					}
+				},
+				"2.49": {
+					"near": true,
+					"pack_wood": 3,
+					"stash": {
+						"moved": 7,
+						"msg": "⇣ Розкладено на склад: 7",
+						"ok": true
+					},
+					"stock_wood": 54,
+					"take": {
+						"ok": true,
+						"taken": 3
+					}
+				},
+				"2.5": {
+					"near": true,
+					"pack_wood": 3,
+					"stash": {
+						"moved": 7,
+						"msg": "⇣ Розкладено на склад: 7",
+						"ok": true
+					},
+					"stock_wood": 54,
+					"take": {
+						"ok": true,
+						"taken": 3
+					}
+				},
+				"2.51": {
+					"near": false,
+					"pack_wood": 7,
+					"stash": {
+						"msg": "Підійди до складу.",
+						"ok": false
+					},
+					"stock_wood": 50,
+					"take": {
+						"msg": "Підійди до складу.",
+						"ok": false
+					}
+				},
+				"2.55": {
+					"near": false,
+					"pack_wood": 7,
+					"stash": {
+						"msg": "Підійди до складу.",
+						"ok": false
+					},
+					"stock_wood": 50,
+					"take": {
+						"msg": "Підійди до складу.",
+						"ok": false
+					}
+				},
+				"3.0": {
+					"near": false,
+					"pack_wood": 7,
+					"stash": {
+						"msg": "Підійди до складу.",
+						"ok": false
+					},
+					"stock_wood": 50,
+					"take": {
+						"msg": "Підійди до складу.",
+						"ok": false
+					}
+				}
+			},
+			"stash_almost_full": {
+				"moved": 3,
+				"msg": "⇣ Розкладено на склад: 3",
+				"ok": true
+			},
+			"stash_full": {
+				"moved": 0,
+				"msg": "Нема що розкласти.",
+				"ok": false
+			},
+			"take_nothing_there": {
+				"msg": "Нема на складі або рюкзак повний.",
+				"ok": false
+			}
+		},
+		"travel_regions": {
+			"away": {
+				"base_center_is_hero": true,
+				"buildings": 0,
+				"day_kept": true,
+				"key": "49.8397,24.0297",
+				"place": "Львів",
+				"regions": 6,
+				"stock": 0
+			},
+			"back": {
+				"base_center": [
+					29,
+					34
+				],
+				"buildings": [
+					"storage@29,34:90.0",
+					"campfire@29,33:30.0",
+					"wall@28,35:120.0"
+				],
+				"day_kept": true,
+				"home_center": [
+					29,
+					34
+				],
+				"key": "50.4501,30.5234",
+				"pos": [
+					29.5,
+					35.5
+				],
+				"same_as_before": true,
+				"stored_regions": 2
+			}
+		},
+		"twin_ambient_300": {
+			"region_keys": [
+				"buildings",
+				"day",
+				"frac",
+				"health",
+				"key",
+				"lat",
+				"lon",
+				"n",
+				"nodes",
+				"place_name",
+				"player",
+				"seed",
+				"source",
+				"stock",
+				"use_catalog"
+			],
+			"runtime_keys": [
+				"convoy_seq",
+				"convoys",
+				"craft_timer",
+				"dead",
+				"director_rng_state",
+				"enemies",
+				"env_rng_state",
+				"patrol",
+				"player_live",
+				"raid",
+				"research_unlocked",
+				"shots",
+				"temp_offset",
+				"temp_offset_days",
+				"threat_rng_state",
+				"weather",
+				"weather_t"
+			],
+			"world_hash_is_region_plus_dyn": true
+		},
+		"workbench_craft": {
+			"after_700": {
+				"planks_made": 14
+			},
+			"axe": {
+				"ok": true
+			},
+			"axe_again_free": {
+				"ok": true
+			},
+			"axe_equipped": "axe",
+			"axe_without_bench": {
+				"msg": "Потрібен верстак.",
+				"ok": false
+			},
+			"bench_built": true,
+			"club_short": {
+				"msg": "Бракує: 🪵20",
+				"ok": false
+			},
+			"gather_time_tree_skill0": 0.8125,
+			"inv_axe": {
+				"ok": true
+			},
+			"inv_pack_after": {
+				"axe": 1,
+				"stone": 30,
+				"wood": 45
+			},
+			"sledge_gated": {
+				"msg": "🔒 Потребує дослідження: Каменярство.",
+				"ok": false
+			},
+			"stock_after_axe": {
+				"components": 2,
+				"food": 18,
+				"planks": 0,
+				"scrap": 16,
+				"stone": 16,
+				"wood": 17
+			},
+			"stock_after_axe_again": {
+				"components": 2,
+				"food": 18,
+				"planks": 0,
+				"scrap": 16,
+				"stone": 16,
+				"wood": 17
+			},
+			"stock_after_bench": {
+				"components": 2,
+				"food": 18,
+				"planks": 0,
+				"scrap": 16,
+				"stone": 26,
+				"wood": 32
+			},
+			"stock_start": {
+				"components": 2,
+				"food": 18,
+				"planks": 0,
+				"scrap": 16,
+				"stone": 30,
+				"wood": 50
+			},
+			"unknown_item": {
+				"msg": "Невідомий предмет.",
+				"ok": false
+			}
+		}
+	},
+	"save_version": 1,
+	"schema": 1,
+	"world_hash_final": "c4dbef44fe0f95d6"
+}
