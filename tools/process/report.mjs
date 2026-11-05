@@ -77,8 +77,9 @@ function renderBrief(s) {
   const lines = [
     "RealWorld · стан процесу (node tools/process/report.mjs --brief)",
     "• Вхід у будь-яку ігрову задачу — /gamedev; процес — docs/process/README.md; ролі — .claude/agents/.",
-    "• Правила: без доказу нема «готово» · стовп/scope/баланс/модель вводу вирішує лише власник · коміт перед сесією.",
-    `• Відкриті рішення власника (${s.open.length}): ${s.open.slice(0, 5).map((d) => `${d.ID} ${d["Рішення"]}`).join(" · ") || "—"}`,
+    "• Власник лише каже, чого хоче, тисне кнопки й мерджить PR — решту робиш ти (не проси його правити файли процесу).",
+    "• Правила: без доказу нема «готово» · стовп/scope/баланс/модель вводу вирішує лише власник (кнопками, /decide) · коміт перед сесією.",
+    `• Чекають рішення власника (${s.open.length}) → /decide: ${s.open.slice(0, 4).map((d) => `${d.ID} ${d["Рішення"]}`).join(" · ") || "—"}`,
     `• Scope: ${s.unruled.length}/${s.scope.length} систем без вердикту власника (docs/design/scope.md).`,
     `• Правки після агента: ${s.rv.n}, з них дизайн ${pct(s.rv.design, s.rv.n)}% → ${s.rv.verdict.split(" → ").pop()}.`,
     `• Плейтест: ${s.lastPlaytest || "ще не було"} · LLM Week: ${s.llmNext ? `до ${s.llmNext}` : "не запланована"}.`,
