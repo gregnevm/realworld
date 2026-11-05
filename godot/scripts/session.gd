@@ -23,7 +23,8 @@ const SAVE_VERSION := 1
 var sim: Variant = null   # Sim (scripts/sim.gd); Variant, бо тести підставляють легкі фейки
 var store: Dictionary = {}
 var social: Dictionary = {}
-var home := {"lat": 0.0, "lon": 0.0, "name": ""}
+const NO_HOME := {"lat": 0.0, "lon": 0.0, "name": ""}   # «дому нема»: початкове значення й те, до чого скидає відмовлений start()
+var home := NO_HOME.duplicate()
 var has_home := false   # explicit — a legitimate spawn at (0,0) must not read as "no home"
 var autosave := true   # tests disable disk writes
 
@@ -37,30 +38,67 @@ var bench_announced := false   # one-time «стіл працює» toast (the R
 # respawn and save/continue. Pure observation of sim state: never steers the sim, never hashed.
 var goals_done: Dictionary = {}   # goal id -> true
 var use_inventory := false        # spec 0009: set by the entry scene BEFORE start(); tests keep the stock path
+var use_catalog := false          # spec 0008: відкритий склад; ON-капсула його вимагає (REQ-0010-59). ДО start()
+var use_main_capsule := false     # spec 0010: Основна капсула; ставиться ДО start(), далі замкнений (dev-перемикач `-- capsule`)
+var last_error: StringName = &""  # чому start()/restore_game()/travel_to() відмовили (&"" — усе гаразд); для UI/тестів
 var _goal_t := 0.0
 
-func start(lat: float, lon: float, place_name: String) -> void:
+# false (+ last_error, sim == null) — конфігурація не дозволила створити світ (ON без інвентаря/каталогу, мапа без місця);
+# OFF завжди true. `now_ms` — годинник пристрою на межі сесії (власник — spec 0012): push_clock ДО new_game, щоб landed_at
+# капсули взявся з нього, а не з 0 (0 == годинник не подано). Сим сам час не читає (REQ-0010-92).
+func start(lat: float, lon: float, place_name: String, now_ms: int = 0) -> bool:
+	last_error = &""
 	var m := WorldGen.generate_map(lat, lon, MAP_N)
 	m["place_name"] = place_name
 	sim = Sim.new()
 	sim.use_inventory = use_inventory   # spec 0009: the playable scene opts new games into the personal inventory
+	sim.use_catalog = use_catalog
+	sim.use_main_capsule = use_main_capsule   # ДО new_game: setter замикається після нього (REQ-0010-02/60)
+	push_clock(now_ms)
 	sim.new_game(m, false)   # the session issues the climate hint itself, after the landing lines
+	if sim.config_error != &"":
+		last_error = sim.config_error
+		_clear_world()
+		return false
+	var on: bool = bool(sim.use_main_capsule)
 	progression = Progression.new(Catalog.load_json())
 	store = Persistence.store_new()
 	social = Social.new_graph("Ти", WorldGen.hash_seed(lat, lon), lat, lon)
 	sim.social = social
 	home = {"lat": lat, "lon": lon, "name": place_name}
+	if on:   # дім = посилання на капсулу {region_key, tile}; has_home <=> капсула є (REQ-0010-09)
+		var cap_tile: Vector2i = MainCapsule.tile(sim)
+		home["region_key"] = WorldGen.canon_coord(lat, lon)
+		home["tile"] = [cap_tile.x, cap_tile.y]
 	has_home = true
 	sim._log("Висадка: %s · біом %s" % [place_name, m.biome], "good")
 	sim._log("Клан: %s · рейди від ворожих фракцій." % Social.my_clan(social).name)
-	# seed a couple of friend invites so the capsule flow has content immediately — ONE feed line
+	# seed a couple of friend invites so the capsule flow has content immediately — ONE feed line.
+	# ON: щоденної капсули нема (запуск відхиляється, REQ-0010-41), тож інвайтів «капсула (V) долетить» не сіємо.
 	var seeded := 0
-	for i in range(min(3, social.friends.size())):
+	for i in range(0 if on else min(3, social.friends.size())):
 		sim.add_invite(Social.friend_invite(social, i, sim.capsule.radius_km), true)
 		seeded += 1
 	if seeded > 0:
 		sim._log("✉ Друзі надіслали інвайтів: %d — капсула (V) долетить до них." % seeded)
 	sim.spawn_hint()
+	return true
+
+# Відмовлений start(): сесія не лишається з рештками ПОПЕРЕДНЬОГО світу. Світ, дім, склад регіонів, соцграф і дослідження
+# належать одному світові; без sim «дім» без капсули порушив би has_home <=> капсула є (REQ-0010-09). Акаунтні дані
+# (goals_done, auto_research) — не світ, їх start() і так не чіпає.
+func _clear_world() -> void:
+	sim = null
+	home = NO_HOME.duplicate()
+	has_home = false
+	store = {}
+	social = {}
+	progression = null
+
+# Годинник пристрою -> sim (Sim.set_clock, монотонно). Викликає край пристрою (newhud_main), ніколи сам sim.
+func push_clock(now_ms: int) -> void:
+	if sim != null:
+		sim.set_clock(now_ms)
 
 # Serialize the active region into the store (seed + diff + save), advancing the hash chain.
 func commit_region() -> void:
@@ -74,6 +112,7 @@ func travel_to(lat: float, lon: float, place_name: String) -> void:
 		return
 	if sim.use_main_capsule:   # spec 0010: капсула одна й лишається у своєму регіоні (REQ-0010-04/75) — відмова ДО commit_region/стирання
 		sim._log(MainCapsule.MSG_NO_TRAVEL, "warn")
+		last_error = &"capsule_no_travel"
 		return
 	commit_region()
 	var pawn: Dictionary = sim.extract_pawn()
@@ -96,6 +135,9 @@ func travel_to(lat: float, lon: float, place_name: String) -> void:
 # Permadeath: a fresh pawn at the clan home. If you died away, fly home first (region identity,
 # NOT presence of any storage — you may have built one at a remote outpost).
 func respawn() -> void:
+	if sim.get("use_main_capsule") == true:   # ON: місце задає шов respawn_anchor, посадку робить landing (REQ-0010-07/09/98)
+		sim.respawn_new_pawn(MainCapsule.respawn_anchor(self))
+		return
 	var cur_key := Persistence.region_key(float(sim.map.lat), float(sim.map.lon))
 	var home_key := Persistence.region_key(float(home.lat), float(home.lon))
 	if has_home and cur_key != home_key:
@@ -257,16 +299,28 @@ static func _read_save(path: String) -> Dictionary:
 		return parsed
 	return {}
 
-# Rebuild THIS session from a save; false (and untouched) when there is none / it is unreadable.
+# Rebuild THIS session from a save; false (and untouched) when there is none / it is unreadable / the world record is
+# refused (an ON save without its capsule, a newer record version… — sim.load_error -> last_error, REQ-0010-60/83).
+# The sim is restored into a LOCAL instance first: a refusal leaves this session exactly as it was (no half-alive world).
 func restore_game(path: String = SAVE_PATH) -> bool:
+	last_error = &""
 	var d := _read_save(path)
 	if d.is_empty():
 		return false
+	var restored: Variant = Sim.new()
+	if not Persistence.restore(restored, d.active):
+		last_error = restored.load_error
+		return false
+	sim = restored
 	var h: Dictionary = d.get("home", {})
 	home = {"lat": float(h.get("lat", 0.0)), "lon": float(h.get("lon", 0.0)), "name": str(h.get("name", ""))}
 	has_home = bool(d.get("has_home", true))
-	sim = Sim.new()
-	Persistence.restore(sim, d.active)
+	if sim.use_main_capsule:   # ON: дім = посилання на капсулу з відновленого сима (ключі додаються лише при ON; OFF-дім незмінний)
+		use_main_capsule = true   # Session відображає живий світ
+		var cap_tile: Vector2i = MainCapsule.tile(sim)
+		home["region_key"] = WorldGen.canon_coord(float(home.lat), float(home.lon))
+		home["tile"] = [cap_tile.x, cap_tile.y]
+		has_home = true
 	var st: Variant = d.get("store", {})
 	store = st if (st is Dictionary and (st as Dictionary).has("regions")) else Persistence.store_new()
 	progression = Progression.new(Catalog.load_json())

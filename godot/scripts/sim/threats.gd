@@ -273,14 +273,18 @@ static func on_death(s) -> void:
 		s._inv_drop_bag()   # spec 0009: the backpack stays where the pawn fell, as a bag
 	s.dead = true
 	s.banner = ""
-	if s.get("use_inventory") == true:
+	if s.get("use_main_capsule") == true:
+		s._log(MainCapsule.MSG_DEATH, "bad")   # ON (REQ-0010-10): «з'явишся біля капсули», а не «новий виживальник у поселенні»
+	elif s.get("use_inventory") == true:
 		s._log("☠ Загибель. Торба лишилась на місці — новий виживальник може її забрати.", "bad")
 	else:
 		s._log("☠ Загибель. Усе, що було при собі, втрачено.", "bad")
 
 # Permadeath (spec 0002): the pawn is gone entirely — skills, carried loot and items reset.
 # You get a fresh un-leveled rookie at the clan base; the settlement (buildings + stock) persists.
-static func respawn_new_pawn(s) -> void:
+static func respawn_new_pawn(s, anchor: Dictionary = {}) -> void:
+	if MainCapsule.respawn(s, anchor):
+		return   # ON (spec 0010): тіло з шва respawn_source, місце — landing біля капсули; ворогів/рейд не чіпаємо (REQ-0010-63)
 	var sp: Vector2i = s.base_center()
 	var open: Vector2i = s._nearest_free(s.astar, sp)
 	if open == Vector2i(-1, -1):

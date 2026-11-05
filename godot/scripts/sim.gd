@@ -17,6 +17,8 @@ const DataBridge = preload("res://scripts/data_bridge.gd")
 const CatalogDefs = preload("res://scripts/catalog_defs.gd")
 const Catalog = preload("res://scripts/kernel/catalog.gd")
 const MainCapsule = preload("res://scripts/sim/capsule.gd")
+const Persistence = preload("res://scripts/persistence.gd")
+const OrbitStub = preload("res://scripts/sim/orbit_stub.gd")
 
 var map: Dictionary
 var n: int = 0
@@ -45,6 +47,8 @@ var use_main_capsule: bool = false:   # spec 0010: ON = Основна капс�
 		use_main_capsule = MainCapsule.set_flag(self, v)
 var main_capsule: Dictionary = {}   # {} при OFF/до посадки; запис — MainCapsule.new_record (tile живе тут)
 var config_error: StringName = &""  # непорожнє => new_game нічого не створив (див. MainCapsule.preflight)
+var load_error: StringName = &""    # непорожнє => load_region відхилив запис ДО мутацій (MainCapsule.validate_region)
+var now_ms: int = 0                 # ВХІД часу (UTC-мс), лише через set_clock; НЕ в сейві й НЕ в world_hash (REQ-0010-92)
 var convoys: Array = []
 var regions: Array = []
 var convoy_seq := 0
@@ -223,27 +227,15 @@ func apply_pawn(pawn: Dictionary) -> void:
 
 # Rebuild a previously-visited region from a persistence record (seed + diff + save).
 func load_region(data: Dictionary) -> void:
+	load_error = MainCapsule.validate_region(data, not map.is_empty(), use_main_capsule)
+	if load_error != &"":
+		return   # відхилено ДО будь-якої мутації: ні мапи, ні будівель, ні потоків (REQ-0010-60/83)
+	use_main_capsule = bool(data.get("use_main_capsule", false))   # ДО мапи й будівель; сейв без ключа -> OFF (REQ-0010-02)
 	var nn := int(data.n)
-	var lat := float(data.lat)
-	var lon := float(data.lon)
-	var m := WorldGen.generate_map(lat, lon, nn)
-	m["place_name"] = str(data.get("place_name", "Регіон"))
-	# OSM terrain is the ONE thing not reproducible from the coordinate, so it is persisted as a tile
-	# blob. Restore it only if intact (right length); never silently fall back to a DIFFERENT world.
-	if str(data.get("source", "")) == "osm":
-		var decoded := Marshalls.base64_to_raw(str(data.get("tiles_b64", "")))
-		if decoded.size() == nn * nn:
-			m.tiles = decoded
-			m["source"] = "osm"
-			# spawn was picked against procedural tiles; re-pick against the real OSM terrain
-			m.spawn = WorldGen._pick_spawn(m.tiles, m.nodes, nn)
-		else:
-			_log("⚠ OSM-регіон пошкоджено (немає збережених тайлів) — тимчасово процедурна карта.", "bad")
-	var nodes := {}
-	for k in data.nodes:
-		var nd: Dictionary = data.nodes[k]
-		nodes[int(str(k))] = {"kind": str(nd.kind), "amount": int(nd.amount)}
-	m.nodes = nodes
+	var decoded: Dictionary = Persistence.map_from_record(data)
+	var m: Dictionary = decoded.map
+	if decoded.osm_lost:
+		_log("⚠ OSM-регіон пошкоджено (немає збережених тайлів) — тимчасово процедурна карта.", "bad")
 	map = m
 	n = nn
 	_build_astar()
@@ -266,6 +258,7 @@ func load_region(data: Dictionary) -> void:
 	buildings = []
 	bgrid = {}
 	_reset_local_threats()
+	MainCapsule.from_record(self, data.get("main_capsule", {}))   # ON: капсула = buildings[0], як у new_game; OFF: no-op
 	for b in data.buildings:
 		var placed: Dictionary = _place_building(str(b.kind), int(b.x), int(b.y), float(b.hp))
 		for f in ["fuel", "charge", "growth"]:   # power/farming/defense state rides the record
@@ -333,17 +326,7 @@ func after_map_change() -> void:
 	_recompute_indoor()
 
 func _init_regions() -> void:
-	var home := {"name": map.get("place_name", "Поселення"), "lat": map.lat, "lon": map.lon, "home": true}
-	var ranked := []
-	for hb in GameData.HUBS:
-		var d := WorldGen.haversine_km(home.lat, home.lon, hb.lat, hb.lon)
-		if d > 8:
-			ranked.append({"name": hb.name, "lat": hb.lat, "lon": hb.lon, "d": d})
-	ranked.sort_custom(func(a, b): return a.d < b.d)
-	regions = [home]
-	for i in range(min(5, ranked.size())):
-		var hb: Dictionary = ranked[i]
-		regions.append({"name": hb.name, "lat": hb.lat, "lon": hb.lon, "d": hb.d, "offer": GameData.OFFERS[i % GameData.OFFERS.size()]})
+	WorldMeta.init_regions(self)   # home + 5 nearest hubs (sim/world_meta.gd)
 
 # ---------------- helpers ----------------
 func _in(x: int, y: int) -> bool:
@@ -1228,8 +1211,16 @@ func _damage_enemy(e, amt: float) -> void:
 func _on_death() -> void:
 	Threats.on_death(self)
 
-func respawn_new_pawn() -> void:
-	Threats.respawn_new_pawn(self)
+func respawn_new_pawn(anchor: Dictionary = {}) -> void:
+	Threats.respawn_new_pawn(self, anchor)   # anchor — MainCapsule.respawn_anchor (лише ON; OFF ігнорує)
+
+# ЧИЄ тіло повертається після смерті — шов spec 0011 (до неї стаб OrbitStub: стартовий пішак); його підміняють 0011 і тести.
+func respawn_source() -> Dictionary:
+	return OrbitStub.respawn_source(self)
+
+# Годинник пристрою -> sim: єдиний вхід абсолютного часу (власник Clock — spec 0012). Монотонний: відкат не скорочує таймери.
+func set_clock(ms: int) -> void:
+	now_ms = maxi(now_ms, ms)
 
 # ---------------- capsules & invites (spec 0002) ----------------
 # Bodies live in sim/world_meta.gd (capsule travel + invite envelopes); delegates keep the sim API.

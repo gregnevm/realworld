@@ -26,6 +26,16 @@
 # refusal reason). Expectations come from the spec rows and the owner's decisions, NOT from the code: where a
 # row leaves a point open (capacity number TBD П10, the metric behind «відстань» in REQ-73) the test pins only
 # what every reading agrees on. A red test here is a finding, not a test bug.
+#
+# WAVE 0010-W1b (appended after the W1a block): respawn + seams + save/hash + the now-input + Session.
+# REQ-0010-02 (flag persists / old save -> OFF), 07/08/74 (respawn next to the capsule at every level, ring expansion,
+# buildings untouched), 09 (respawn_anchor / respawn_source stub / Session.home reference / Continue), 10 + 96 (sim
+# part: death changes nothing in the capsule, the bag mechanism is the spec-0009 one, no «новий виживальник у домі»),
+# 34 (the flag does not shift director/env/threat cursors), 35 + 82 (CURRENT record fields move the hash; int64
+# times survive JSON as strings), 41 (Session part), 60 (flag frozen, refused loads mutate nothing), 61 (an old OFF
+# save stays OFF), 83 (save between death and respawn; an ON save without its capsule is refused explicitly),
+# 92 (time enters only through Sim.set_clock; monotone; not hashed), 98 (ONE landing seam). Fields of the record
+# that later waves add (invested W2a; immune_until / token / raid cursor W3a) are NOT attacked here — they do not exist yet.
 extends "res://tests/harness.gd"
 
 const Sim = preload("res://scripts/sim.gd")
@@ -90,6 +100,23 @@ func _init() -> void:
 	_t_region_changes_keep_capsule_consistent()
 	_t_no_eternal_siege()
 	_t_capsule_fuzz()
+	# --- wave 0010-W1b ---
+	_t_flag_persist()
+	_t_flag_locked()
+	_t_old_save_stays_off()
+	_t_respawn_position()
+	_t_respawn_blocked_rings()
+	_t_respawn_seams()
+	_t_death_bag_and_texts()
+	_t_session_on()
+	_t_save_continue_on()
+	_t_restore_parity_live()
+	_t_save_refusals()
+	_t_single_landing()
+	_t_stream_cursors()
+	_t_hash_fields()
+	_t_clock_input()
+	_t_no_wallclock_alias_proof()
 	chk.skip_banner()
 	finish()
 
@@ -1315,3 +1342,985 @@ func _t_capsule_fuzz() -> void:
 	var ca: Dictionary = a.counts
 	ok(int(ca.build_on_capsule) > 0 and int(ca.demolish_capsule) > 0 and int(ca.damage_capsule) > 0 and int(ca.repair_capsule) > 0 and int(ca.raid) == 2 and int(ca.respawn) >= 1,
 		"REQ-0010-75 fuzz: the run really aimed at the capsule (build/demolish/damage/repair attempts, 2 raids, a death): %s" % str(ca))
+
+
+# =============================================================================================
+# WAVE 0010-W1b — helpers
+# =============================================================================================
+const CLOCK_T := 1800000000000             # an injected device instant (UTC ms)
+const BIG_MS := 9007199254740993           # 2^53 + 1: the first integer a float cannot hold
+const I64_MAX := 9223372036854775807       # the largest int64 — a JSON number would round it, a string cannot
+const SAVE_TMP := "user://qa_capsule_w1b_save.json"
+const NO_CELL := Vector2i(-1, -1)
+
+
+# The spec-0011 seam substitute (REQ-0010-09 «підміна respawn_source стабом»): a body with markers that stands FAR from the
+# capsule — where the hero ends up must come from landing, WHOSE body it is must come from the source.
+class StubSim extends "res://scripts/sim.gd":
+	var source_calls: int = 0
+
+	func respawn_source() -> Dictionary:
+		source_calls += 1
+		var body: Dictionary = _default_player(Vector2i(0, 0))
+		body["born"] = 4242
+		body["skills"] = {"gather": 7.0, "combat": 3.0}
+		return body
+
+
+func _on_real(ms: int = CLOCK_T, lat: float = Scenarios.LAT, lon: float = Scenarios.LON) -> Variant:
+	var s: Variant = Sim.new()
+	s.use_inventory = true
+	s.use_catalog = true
+	s.use_main_capsule = true
+	s.set_clock(ms)
+	s.new_game(_gen(lat, lon), false)
+	return s
+
+
+func _stub_on(m: Dictionary) -> Variant:
+	var s: Variant = StubSim.new()
+	s.use_inventory = true
+	s.use_catalog = true
+	s.use_main_capsule = true
+	s.set_clock(CLOCK_T)
+	s.new_game(m, false)
+	return s
+
+
+func _session_on(now_ms: int = CLOCK_T, lat: float = Scenarios.LAT, lon: float = Scenarios.LON) -> Variant:
+	var sess: Variant = SessionScript.new()
+	sess.autosave = false
+	sess.use_inventory = true
+	sess.use_catalog = true
+	sess.use_main_capsule = true
+	sess.start(lat, lon, "Тест", now_ms)
+	return sess
+
+
+func _dispose_session(sess: Variant) -> void:
+	if sess != null and sess.sim != null:
+		_dispose(sess.sim)
+
+
+func _json_rt(d: Variant) -> Variant:
+	return JSON.parse_string(JSON.stringify(d, "", true, true))
+
+
+func _cheb(a: Vector2i, b: Vector2i) -> int:
+	return maxi(absi(a.x - b.x), absi(a.y - b.y))
+
+
+# the smallest Chebyshev ring around `t` that holds a passable, resource-free cell — computed by brute force over the
+# whole map, independently of any search order the code uses (REQ-0010-07 «суміжна», REQ-0010-74 «до першої вільної»)
+func _min_free_ring(s: Variant, t: Vector2i) -> int:
+	var best: int = 1 << 30
+	for y in range(int(s.n)):
+		for x in range(int(s.n)):
+			if Vector2i(x, y) == t:
+				continue
+			if s.is_blocked(x, y) or (s.map.nodes as Dictionary).has(y * int(s.n) + x):
+				continue
+			best = mini(best, _cheb(Vector2i(x, y), t))
+	return best
+
+
+func _bsig(s: Variant) -> String:
+	var rows: Array = []
+	for b in s.buildings:
+		rows.append("%s@%d,%d:%s" % [String(b.kind), int(b.x), int(b.y), str(b.hp)])
+	rows.sort()
+	return "|".join(PackedStringArray(rows))
+
+
+func _ring_cells(c: Vector2i, r: int, n: int) -> Array:
+	var out: Array = []
+	for dy in range(-r, r + 1):
+		for dx in range(-r, r + 1):
+			if maxi(absi(dx), absi(dy)) == r:
+				var v: Vector2i = Vector2i(c.x + dx, c.y + dy)
+				if v.x >= 0 and v.y >= 0 and v.x < n and v.y < n:
+					out.append(v)
+	return out
+
+
+func _inv_is_empty(s: Variant) -> bool:
+	for sl in s.player.inv:
+		if String(sl.id) != "":
+			return false
+	return true
+
+
+func _text_has(s: Variant, needles: Array) -> String:
+	for line in _texts(s):
+		for nd in needles:
+			if String(line).contains(String(nd)):
+				return "«%s» in «%s»" % [String(nd), String(line)]
+	return ""
+
+
+func _rm_file(path: String) -> void:
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+# =============================================================================================
+# REQ-0010-02: the flag is persisted in serialize_region; ON round-trips (through real JSON) to the SAME world;
+# a record without the key loads as OFF
+# =============================================================================================
+func _t_flag_persist() -> void:
+	var s: Variant = _on_real(CLOCK_T)
+	for t in 80:
+		s.update(Scenarios.DT)
+		_topup(s)
+	var rec: Dictionary = Persistence.serialize_region(s)
+	ok(rec.get("use_main_capsule", false) == true and rec.get("main_capsule") is Dictionary and not (rec.get("main_capsule") as Dictionary).is_empty(),
+		"REQ-0010-02: at ON serialize_region persists the flag (use_main_capsule=true) AND the capsule record")
+	var wire: Dictionary = _json_rt(Persistence.resume_payload(s))
+	var r: Variant = Sim.new()
+	ok(not bool(r.use_main_capsule), "REQ-0010-02 setup: a fresh Sim has the flag OFF before it loads anything")
+	Persistence.restore(r, wire)
+	ok(r.load_error == &"" and bool(r.use_main_capsule), "REQ-0010-02: loading an ON record turns the flag ON in the fresh Sim (load_error=%s)" % str(r.load_error))
+	ok(_cap_count(r) == 1 and _cap_problem(r, _cap_tile(s)) == "", "REQ-0010-02: ... with exactly one capsule building on the saved tile (%s)" % _cap_problem(r, _cap_tile(s)))
+	ok(Persistence.content_hash(r.main_capsule) == Persistence.content_hash(s.main_capsule), "REQ-0010-02: the capsule record survives the JSON round-trip field for field")
+	ok(Persistence.world_hash(r) == Persistence.world_hash(s), "REQ-0010-02/35: restoring a resume payload through JSON gives the SAME world_hash at ON")
+	ok(not (r.building_def(MainCapsule.KIND) as Dictionary).is_empty(), "REQ-0010-02: the restored Sim speaks the ON vocabulary (the capsule kind is a def)")
+	for t in 100:
+		s.update(Scenarios.DT)
+		r.update(Scenarios.DT)
+		_topup(s)
+		_topup(r)
+	ok(Persistence.world_hash(r) == Persistence.world_hash(s), "REQ-0010-02 Continue-parity: 100 more ticks on the live world and on the restored one -> still the same world_hash")
+	# a record WITHOUT the key is an OFF world — even into a Sim whose dev switch was preset ON before any world existed
+	var off: Variant = _sim_with(_gen(Scenarios.LAT, Scenarios.LON), true, true, false)
+	var off_payload: Dictionary = Persistence.resume_payload(off)
+	ok(not (off_payload.region as Dictionary).has("use_main_capsule") and not (off_payload.region as Dictionary).has("main_capsule"), "REQ-0010-02 setup: an OFF record carries neither key")
+	var pre_on: Variant = Sim.new()
+	pre_on.use_inventory = true
+	pre_on.use_catalog = true
+	pre_on.use_main_capsule = true
+	Persistence.restore(pre_on, _json_rt(off_payload))
+	ok(pre_on.load_error == &"" and not bool(pre_on.use_main_capsule), "REQ-0010-02/61: a record without the key loads with the flag OFF, even into a Sim preset ON (load_error=%s)" % str(pre_on.load_error))
+	ok((pre_on.main_capsule as Dictionary).is_empty() and _cap_count(pre_on) == 0 and pre_on.has_building("storage"), "REQ-0010-02/61: ... no capsule appears, the classic storage is there")
+	ok(Persistence.world_hash(pre_on) == Persistence.world_hash(off), "REQ-0010-02/61: ... and the world hashes exactly like the OFF world it was saved from")
+	var explicit_off: Dictionary = (off_payload.region as Dictionary).duplicate(true)
+	explicit_off["use_main_capsule"] = false
+	var eo: Variant = Sim.new()
+	eo.load_region(_json_rt(explicit_off))
+	ok(eo.load_error == &"" and not bool(eo.use_main_capsule) and (eo.main_capsule as Dictionary).is_empty(), "REQ-0010-02: an explicit use_main_capsule=false without a capsule record is a plain OFF world, not an error")
+	for x in [s, r, off, pre_on, eo]:
+		_dispose(x)
+
+
+# =============================================================================================
+# REQ-0010-60: the flag is frozen after new_game — also against LOADS; a refused load mutates NOTHING
+# =============================================================================================
+func _t_flag_locked() -> void:
+	var on: Variant = _on_real(CLOCK_T)
+	var off: Variant = _sim_with(_gen(Scenarios.LAT, Scenarios.LON), true, true, false)
+	var on_rec: Dictionary = _json_rt(Persistence.serialize_region(on))
+	var off_rec: Dictionary = _json_rt(Persistence.serialize_region(off))
+	var on_sig: String = _world_sig(on)
+	on.load_region(off_rec)   # an OFF record into a RUNNING ON world would flip the frozen flag
+	ok(on.load_error != &"" and bool(on.use_main_capsule) and _world_sig(on) == on_sig,
+		"REQ-0010-60: an OFF record loaded into a RUNNING ON world is refused (load_error=%s), the flag stays ON and the world is untouched" % str(on.load_error))
+	var off_sig: String = _world_sig(off)
+	off.load_region(on_rec)
+	ok(off.load_error != &"" and not bool(off.use_main_capsule) and _world_sig(off) == off_sig,
+		"REQ-0010-60: an ON record loaded into a RUNNING OFF world is refused (load_error=%s), the flag stays OFF and the world is untouched" % str(off.load_error))
+	on.load_region(on_rec)
+	ok(on.load_error == &"" and bool(on.use_main_capsule) and _cap_problem(on, _cap_tile(on)) == "", "REQ-0010-60: reloading an ON record into the ON world is fine (a region revisit) and clears the error")
+	# a record the build cannot trust: explicit error, NOT a silent OFF world — and the Sim stays exactly as a never-started one
+	var base: Dictionary = _json_rt(Persistence.serialize_region(_on_real(CLOCK_T)))
+	var dirty_runtime: Dictionary = {"dead": true, "weather": "storm", "weather_t": 3.5, "enemies": [{"px": 1.0, "py": 1.0, "hp": 9.0, "kind": "raider", "path": []}], "env_rng_state": "12345"}
+	for case_name in ["version_plus_1", "version_99", "version_missing", "flag_missing_capsule_present", "flag_false_capsule_present"]:
+		var rec: Dictionary = base.duplicate(true)
+		var cap: Dictionary = rec.main_capsule
+		match String(case_name):
+			"version_plus_1":
+				cap["version"] = MainCapsule.RECORD_VERSION + 1
+			"version_99":
+				cap["version"] = 99
+			"version_missing":
+				cap.erase("version")
+			"flag_missing_capsule_present":
+				rec.erase("use_main_capsule")
+			"flag_false_capsule_present":
+				rec["use_main_capsule"] = false
+		var fresh: Variant = Sim.new()
+		var fresh_sig: String = _world_sig(fresh)
+		fresh.load_region(rec)
+		ok(fresh.load_error != &"", "REQ-0010-60 [%s]: the record is refused with an explicit error, not loaded silently as OFF (load_error=%s)" % [String(case_name), str(fresh.load_error)])
+		ok(_world_sig(fresh) == fresh_sig and (fresh.map as Dictionary).is_empty() and fresh.buildings.is_empty() and not bool(fresh.use_main_capsule),
+			"REQ-0010-60/83 [%s]: ... and the refusal happens BEFORE any mutation (no map, no buildings, flag untouched)" % String(case_name))
+		var f2: Variant = Sim.new()
+		var env0: int = int(f2.env_rng.state)   # a fresh RandomNumberGenerator seeds itself: compare against THIS instance's own state
+		Persistence.restore(f2, {"region": rec, "runtime": dirty_runtime})
+		ok(f2.load_error != &"" and not bool(f2.dead) and (f2.enemies as Array).is_empty() and f2.weather == &"clear" and int(f2.env_rng.state) == env0,
+			"REQ-0010-60/83 [%s]: Persistence.restore does NOT apply the runtime half over a refused world (dead=%s, enemies=%d, weather=%s)" % [String(case_name), str(f2.dead), (f2.enemies as Array).size(), str(f2.weather)])
+		_dispose(fresh)
+		_dispose(f2)
+	for x in [on, off]:
+		_dispose(x)
+
+
+# =============================================================================================
+# REQ-0010-61: an old (OFF) save stays OFF — it is not converted, even when the dev switch is ON at Continue
+# =============================================================================================
+func _t_old_save_stays_off() -> void:
+	var old: Variant = SessionScript.new()
+	old.autosave = false
+	ok(bool(old.start(Scenarios.LAT, Scenarios.LON, "Старий світ")) and old.last_error == &"", "REQ-0010-61 setup: a default (OFF) Session.start succeeds")
+	ok(old.home.keys().size() == 3 and not old.home.has("tile") and not old.home.has("region_key"), "REQ-0010-61: the OFF home is the old {lat, lon, name} — no capsule reference keys")
+	ok((old.sim.main_capsule as Dictionary).is_empty() and old.sim.has_building("storage") and _cap_count(old.sim) == 0, "REQ-0010-61: the OFF world has its storage and no capsule")
+	ok(old.save_game(SAVE_TMP), "REQ-0010-61 setup: the OFF session saves")
+	var text0: String = FileAccess.get_file_as_string(SAVE_TMP)
+	var home0: Dictionary = (old.home as Dictionary).duplicate(true)
+	var hash0: String = Persistence.world_hash(old.sim)
+	var cont: Variant = SessionScript.new()
+	cont.autosave = false
+	cont.use_inventory = true
+	cont.use_catalog = true
+	cont.use_main_capsule = true   # the dev switch is ON when the player presses Continue on the OLD save
+	ok(bool(cont.restore_game(SAVE_TMP)) and cont.last_error == &"", "REQ-0010-61: Continue on the old save succeeds even with the dev switch ON")
+	ok(not bool(cont.sim.use_main_capsule), "REQ-0010-61: the restored world is OFF — it is not converted automatically")
+	ok((cont.sim.main_capsule as Dictionary).is_empty() and _cap_count(cont.sim) == 0 and cont.sim.has_building("storage"), "REQ-0010-61: no capsule is minted, the classic storage is still there")
+	ok(var_to_str(cont.home) == var_to_str(home0) and bool(cont.has_home), "REQ-0010-61: home is the old {lat, lon, name} byte-for-byte (no tile/region_key migration): %s" % str(cont.home))
+	ok(Persistence.world_hash(cont.sim) == hash0, "REQ-0010-61: the restored OFF world hashes exactly like the one that was saved")
+	for k in Persistence.serialize_region(cont.sim):
+		ok(not String(k).contains("capsule") or String(k) == "capsule", "REQ-0010-61: no new capsule key appears in the OFF record after Continue (%s)" % String(k))
+	# the REAL baseline saves of the S0 fixture (stock / inventory / catalog worlds) with the dev switch ON at Continue
+	var legacy: Dictionary = chk.fixture.get("legacy_saves", {})
+	ok(legacy.size() == 3, "REQ-0010-61 setup: the fixture holds the three baseline saves (%s)" % str(legacy.keys()))
+	for kind in legacy:
+		var lp: String = SAVE_TMP + ".legacy"
+		var lf: FileAccess = FileAccess.open(lp, FileAccess.WRITE)
+		lf.store_string(OffFixture.decode_legacy_text(legacy[kind]))
+		lf.close()
+		var lc: Variant = SessionScript.new()
+		lc.autosave = false
+		lc.use_inventory = true
+		lc.use_catalog = true
+		lc.use_main_capsule = true
+		var lrestored: bool = lc.restore_game(lp)
+		ok(lrestored and lc.last_error == &"", "REQ-0010-61 [%s save]: the baseline save restores with the dev switch ON (last_error=%s)" % [String(kind), str(lc.last_error)])
+		if lrestored:
+			ok(not bool(lc.sim.use_main_capsule) and (lc.sim.main_capsule as Dictionary).is_empty() and _cap_count(lc.sim) == 0 and lc.sim.has_building("storage"),
+				"REQ-0010-61 [%s save]: it stays an OFF world — no capsule is minted, the storage is there" % String(kind))
+			ok(lc.home.keys().size() == 3 and lc.home.has("lat") and lc.home.has("lon") and lc.home.has("name") and not lc.home.has("tile"), "REQ-0010-61 [%s save]: home is the old {lat, lon, name} (no capsule reference grafted on): %s" % [String(kind), str(lc.home)])
+		_rm_file(lp)
+		_dispose_session(lc)
+	ok(cont.save_game(SAVE_TMP + ".2"), "REQ-0010-61 setup: the continued session re-saves")
+	ok(Persistence.content_hash(JSON.parse_string(FileAccess.get_file_as_string(SAVE_TMP + ".2"))) == Persistence.content_hash(JSON.parse_string(text0)),
+		"REQ-0010-61: save -> Continue (dev switch ON) -> save gives the same save content (canonical; JSON number formatting aside)")
+	_rm_file(SAVE_TMP)
+	_rm_file(SAVE_TMP + ".2")
+	_dispose_session(old)
+	_dispose_session(cont)
+
+
+# =============================================================================================
+# REQ-0010-07 / 08 / 96: after death the new hero stands NEXT TO the capsule (not at the death site, not «at home»),
+# at every level, whatever else the capsule record holds; the capsule is not touched
+# =============================================================================================
+func _t_respawn_position() -> void:
+	for pr in GameData.SPAWN_PRESETS:
+		var name: String = String(pr.name)
+		var label: String = "REQ-0010-07 [%s]" % name
+		var s: Variant = _sim_with(_gen(float(pr.lat), float(pr.lon)), true, true, true)
+		_quiet(s)
+		var tile: Vector2i = _cap_tile(s)
+		var away: Vector2i = _far_cell(s, tile, 12)
+		if away == NO_CELL:
+			away = _far_cell(s, tile, 6)
+		ok(away != NO_CELL, "%s setup: a passable cell far from the capsule exists" % label)
+		s.player.px = float(away.x) + 0.5
+		s.player.py = float(away.y) + 0.5
+		var cap0: String = Persistence.content_hash(s.main_capsule)
+		var stock0: String = var_to_str(s.stock)
+		var bsig0: String = _bsig(s)
+		_kill(s)
+		ok(bool(s.dead), "%s setup: the hero died" % label)
+		var died: Vector2i = _hero_cell(s)
+		ok(_cheb(died, tile) >= 6, "%s setup: it died far from the capsule (%d cells)" % [label, _cheb(died, tile)])
+		s.respawn_new_pawn()
+		var h: Vector2i = _hero_cell(s)
+		var want: int = _min_free_ring(s, tile)
+		ok(not bool(s.dead) and float(s.player.hp) > 0.0, "%s: the new hero lives (dead=%s hp=%s)" % [label, str(s.dead), str(s.player.hp)])
+		ok(want >= 1 and _cheb(h, tile) == want and not s.is_blocked(h.x, h.y) and not (s.map.nodes as Dictionary).has(h.y * int(s.n) + h.x),
+			"%s: respawn on a FREE cell of the NEAREST ring around the capsule (ring %d, hero %s, capsule %s)" % [label, want, str(h), str(tile)])
+		ok(h != died and _cheb(h, died) >= 4, "%s: ... not where the hero died (%s) and not by the old «home» logic" % [label, str(died)])
+		ok(s.player.get("action") == null and _inv_is_empty(s), "%s: the new hero arrives idle and empty-handed" % label)
+		ok(Persistence.content_hash(s.main_capsule) == cap0 and _cap_problem(s, tile) == "", "REQ-0010-96 [%s]: the capsule record (level, owner, instants) is exactly as before the death" % name)
+		ok(var_to_str(s.stock) == stock0 and _bsig(s) == bsig0, "REQ-0010-96 [%s]: the storage stock and every building are exactly as before the death" % name)
+		for t in 30:
+			s.update(Scenarios.DT)
+			_topup(s)
+		ok(not bool(s.dead), "%s: the new hero survives 30 more ticks" % label)
+		_dispose(s)
+	# REQ-0010-08: the capsule's state never blocks the respawn — levels 0..5, immunity running, «just after a raid»
+	for lvl in range(0, 6):
+		var s2: Variant = _on_pad()
+		s2.main_capsule.level = lvl
+		if lvl % 2 == 1:
+			s2.main_capsule["immune_until"] = CLOCK_T + 86400000
+			s2.main_capsule["free_transport_token"] = 1
+		s2.player.px = 2.5
+		s2.player.py = 2.5
+		var c0: String = var_to_str(s2.main_capsule)
+		_kill(s2)
+		s2.respawn_new_pawn()
+		var h2: Vector2i = _hero_cell(s2)
+		ok(not bool(s2.dead) and _cheb(h2, Vector2i(8, 8)) == 1 and not s2.is_blocked(h2.x, h2.y),
+			"REQ-0010-08 [level %d%s]: respawn succeeds next to the capsule (hero %s)" % [lvl, " + immunity + token" if lvl % 2 == 1 else "", str(h2)])
+		ok(var_to_str(s2.main_capsule) == c0, "REQ-0010-96 [level %d]: respawn leaves the capsule record untouched" % lvl)
+		_dispose(s2)
+	# REQ-0010-08/09: another storage ANYWHERE does not move the respawn («не залежить від наявності будь-якого іншого сховища»)
+	var s3: Variant = _on_pad()
+	s3._place_building("storage", 2, 2, -1)
+	s3.player.px = 3.5
+	s3.player.py = 3.5
+	_kill(s3)
+	s3.respawn_new_pawn()
+	var h3: Vector2i = _hero_cell(s3)
+	ok(_cheb(h3, Vector2i(8, 8)) == 1 and _cheb(h3, Vector2i(2, 2)) >= 4, "REQ-0010-08/09: with an extra storage at (2,2) the hero still respawns next to the CAPSULE (hero %s)" % str(h3))
+	_dispose(s3)
+	# a death right next to the capsule: respawn is still next to it (the death cell itself may be re-used or not — either is adjacent)
+	var s4: Variant = _on_pad()
+	s4.player.px = 9.5
+	s4.player.py = 8.5
+	_kill(s4)
+	s4.respawn_new_pawn()
+	ok(_cheb(_hero_cell(s4), Vector2i(8, 8)) == 1 and not bool(s4.dead), "REQ-0010-07: a death beside the capsule respawns beside the capsule")
+	_dispose(s4)
+	# determinism: two worlds, one script -> the same respawn cell and the same hash
+	var cells: Array = []
+	var hashes: Array = []
+	for pass_i in 2:
+		var tw: Variant = _on_real(CLOCK_T)
+		_quiet(tw)
+		var far: Vector2i = _far_cell(tw, _cap_tile(tw), 12)
+		tw.player.px = float(far.x) + 0.5
+		tw.player.py = float(far.y) + 0.5
+		_kill(tw)
+		tw.respawn_new_pawn()
+		for t in 50:
+			tw.update(Scenarios.DT)
+			_topup(tw)
+		cells.append(_hero_cell(tw))
+		hashes.append(Persistence.world_hash(tw))
+		_dispose(tw)
+	ok(cells[0] == cells[1] and hashes[0] == hashes[1], "REQ-0010-07/04: twin worlds, same death, same respawn -> the same cell %s and the same world_hash" % str(cells[0]))
+
+
+# =============================================================================================
+# REQ-0010-74: every cell next to the capsule is blocked -> the search ring grows to the first passable free cell;
+# nothing is demolished; never off the map
+# =============================================================================================
+func _walled_respawn(m: Dictionary, wall_rings: Array) -> Dictionary:
+	var s: Variant = _sim_with(m, true, true, true)
+	_quiet(s)
+	var tile: Vector2i = _cap_tile(s)
+	var n: int = int(s.n)
+	for r in wall_rings:
+		for c in _ring_cells(tile, int(r), n):
+			var v: Vector2i = c
+			if not s.bgrid.has(v.y * n + v.x) and not WorldGen.is_terrain_blocked(int(s.map.tiles[v.y * n + v.x])):
+				s._place_building("wall", v.x, v.y, -1)
+	var bsig0: String = _bsig(s)
+	var away: Vector2i = _far_cell(s, tile, 5)
+	if away != NO_CELL:
+		s.player.px = float(away.x) + 0.5
+		s.player.py = float(away.y) + 0.5
+	_kill(s)
+	s.respawn_new_pawn()
+	var h: Vector2i = _hero_cell(s)
+	var out: Dictionary = {"hero": h, "tile": tile, "blocked": s.is_blocked(h.x, h.y), "on_map": h.x >= 0 and h.y >= 0 and h.x < n and h.y < n,
+		"walls_intact": _bsig(s) == bsig0, "want": _min_free_ring(s, tile), "dead": bool(s.dead), "capsule_ok": _cap_problem(s, tile) == ""}
+	_dispose(s)
+	return out
+
+
+func _t_respawn_blocked_rings() -> void:
+	for rings in [[1], [1, 2], [1, 2, 3], [1, 2, 3, 4, 5, 6]]:
+		var r: Dictionary = _walled_respawn(_pad_map(PAD_N, Vector2i(8, 8)), rings)
+		var label: String = "REQ-0010-74 [walls on rings %s]" % str(rings)
+		var hero: Vector2i = r.hero
+		var cheb: int = _cheb(hero, r.tile)
+		ok(not bool(r.dead) and not bool(r.blocked) and bool(r.on_map), "%s: respawn is not blocked — the hero lives on a passable on-map cell %s" % [label, str(hero)])
+		ok(cheb == int(r.want) and int(r.want) == int(rings.max()) + 1, "%s: the search ring expanded exactly to the first passable one (ring %d, wanted %d)" % [label, cheb, int(r.want)])
+		ok(bool(r.walls_intact) and bool(r.capsule_ok), "%s: no building was demolished to make room (walls/capsule intact)" % label)
+	# map corners: the ring leaves the map on two sides — nothing may step outside
+	for corner in [Vector2i(0, 0), Vector2i(7, 7), Vector2i(7, 0), Vector2i(0, 7)]:
+		var rc: Dictionary = _walled_respawn(_pad_map(8, corner), [1])
+		var hc: Vector2i = rc.hero
+		ok(not bool(rc.dead) and not bool(rc.blocked) and bool(rc.on_map) and _cheb(hc, rc.tile) == 2 and bool(rc.walls_intact),
+			"REQ-0010-74 [corner %s, ring 1 walled]: hero on the map at ring 2 (hero %s)" % [str(corner), str(hc)])
+	# water instead of walls: the island whose only dry cells are far away
+	for dry in [[Vector2i(8, 8), Vector2i(10, 8)], [Vector2i(8, 8), Vector2i(13, 8)], [Vector2i(8, 8), Vector2i(15, 15)]]:
+		var ri: Dictionary = _walled_respawn(_island_map(PAD_N, Vector2i(8, 8), dry), [])
+		ok(ri.hero == dry[1] and not bool(ri.dead) and bool(ri.capsule_ok), "REQ-0010-74 [island, dry cell %s]: the hero respawns on the only passable cell (got %s)" % [str(dry[1]), str(ri.hero)])
+	# two equally distant dry cells: whichever is chosen, the choice is stable (twin runs agree)
+	var tie_a: Dictionary = _walled_respawn(_island_map(PAD_N, Vector2i(8, 8), [Vector2i(8, 8), Vector2i(14, 8), Vector2i(2, 8)]), [])
+	var tie_b: Dictionary = _walled_respawn(_island_map(PAD_N, Vector2i(8, 8), [Vector2i(8, 8), Vector2i(14, 8), Vector2i(2, 8)]), [])
+	ok(tie_a.hero == tie_b.hero and (tie_a.hero == Vector2i(14, 8) or tie_a.hero == Vector2i(2, 8)), "REQ-0010-74: an exact tie between two dry cells resolves the same way every time (%s)" % str(tie_a.hero))
+
+
+# =============================================================================================
+# REQ-0010-09: the seams. respawn_source (0011 stub = _default_player; substitutable), respawn_anchor(session) ->
+# {region_key, pos}, Session.home as a reference to the capsule
+# =============================================================================================
+func _t_respawn_seams() -> void:
+	var d: Variant = _on_pad()
+	ok(var_to_str(d.respawn_source()) == var_to_str(d._default_player(d.map.spawn)), "REQ-0010-09: until 0011 the respawn_source seam answers with the existing starter pawn (_default_player)")
+	# a substituted source decides WHOSE body comes back; landing decides WHERE
+	var st: Variant = _stub_on(_pad_map(PAD_N, Vector2i(8, 8)))
+	_quiet(st)
+	st.player.px = 2.5
+	st.player.py = 2.5
+	var cap0: String = var_to_str(st.main_capsule)
+	var stock0: String = var_to_str(st.stock)
+	_kill(st)
+	st.respawn_new_pawn()
+	ok(int(st.source_calls) == 1, "REQ-0010-09: one respawn asks the respawn_source seam exactly once (%d)" % int(st.source_calls))
+	ok(int(st.player.born) == 4242 and is_equal_approx(float(st.player.skills.gather), 7.0), "REQ-0010-09: the body that arrives IS the one the seam returned (markers born=%s skills=%s)" % [str(st.player.born), str(st.player.skills)])
+	ok(_cheb(_hero_cell(st), Vector2i(8, 8)) == 1, "REQ-0010-09: ... yet it stands next to the capsule, not where the source put it (%s)" % str(_hero_cell(st)))
+	ok(_inv_is_empty(st) and not bool(st.dead), "REQ-0010-09: ... empty-handed and alive")
+	ok(var_to_str(st.main_capsule) == cap0 and var_to_str(st.stock) == stock0, "REQ-0010-96: a substituted source changes nothing in the capsule record or the storage")
+	# respawn_anchor(session) -> {region_key, pos}, in the plain case and with the capsule walled in
+	for walled in [false, true]:
+		var sim: Variant = _stub_on(_pad_map(PAD_N, Vector2i(8, 8)))
+		_quiet(sim)
+		var tile: Vector2i = _cap_tile(sim)
+		if walled:
+			for c in _ring_cells(tile, 1, int(sim.n)):
+				var v: Vector2i = c
+				sim._place_building("wall", v.x, v.y, -1)
+		var sess: Variant = SessionScript.new()
+		sess.autosave = false
+		sess.sim = sim
+		sess.has_home = true
+		sess.home = {"lat": Scenarios.LAT, "lon": Scenarios.LON, "name": "тест", "region_key": WorldGen.canon_coord(Scenarios.LAT, Scenarios.LON), "tile": [tile.x, tile.y]}
+		var label: String = "REQ-0010-09/74 [%s]" % ("capsule walled in" if walled else "open ground")
+		var anchor: Dictionary = MainCapsule.respawn_anchor(sess)
+		var pos: Vector2i = anchor.get("pos", NO_CELL)
+		ok(anchor.has("region_key") and anchor.has("pos") and anchor.get("region_key") is String and anchor.get("pos") is Vector2i, "%s: respawn_anchor returns {region_key: String, pos: Vector2i}" % label)
+		ok(String(anchor.get("region_key", "")) == Persistence.region_key(Scenarios.LAT, Scenarios.LON), "%s: region_key is the region of the home capsule (%s)" % [label, str(anchor.get("region_key"))])
+		var want: int = _min_free_ring(sim, tile)
+		ok(pos != tile and _cheb(pos, tile) == want and not sim.is_blocked(pos.x, pos.y),
+			"%s: «при ON повертає клітинку біля капсули» — pos is a passable free cell of the nearest ring (ring %d), got %s for a capsule on %s" % [label, want, str(pos), str(tile)])
+		_kill(sim)
+		sess.respawn()
+		ok(not bool(sim.dead) and _hero_cell(sim) == pos, "%s: Session.respawn puts the hero exactly on the cell the anchor announced (D9: one truth) — hero %s, anchor %s" % [label, str(_hero_cell(sim)), str(pos)])
+		ok(_cap_problem(sim, tile) == "" and int(sim.source_calls) == 1, "%s: the capsule is intact and the body came through the seam" % label)
+		_dispose(sim)
+	# OFF: the anchor is the home coordinate and announces no cell
+	var off: Variant = SessionScript.new()
+	off.autosave = false
+	off.start(Scenarios.LAT, Scenarios.LON, "Дім")
+	var oa: Dictionary = MainCapsule.respawn_anchor(off)
+	ok(String(oa.get("region_key", "")) == Persistence.region_key(Scenarios.LAT, Scenarios.LON) and oa.get("pos") is Vector2i, "REQ-0010-09: at OFF the anchor is the home region (default home) with a typed pos")
+	for x in [d, st]:
+		_dispose(x)
+	_dispose_session(off)
+
+
+# =============================================================================================
+# REQ-0010-10 / 96 (sim part): the death/bag mechanism is the spec-0009 one at ON; the log promises no «новий
+# виживальник у домі»; the bag stays where the pawn fell
+# =============================================================================================
+func _t_death_bag_and_texts() -> void:
+	var on: Variant = _on_pad()
+	var off: Variant = _sim_with(_pad_map(PAD_N, Vector2i(8, 8)), true, true, false)
+	_quiet(off)
+	for s in [on, off]:
+		s.player.px = 3.5
+		s.player.py = 3.5
+		_kill(s)
+	ok(on.bags.size() == 1 and var_to_str(on.bags) == var_to_str(off.bags),
+		"REQ-0010-10: at ON the death drops the SAME bag, at the same cell, as the spec-0009 world (ON %s vs OFF %s)" % [var_to_str(on.bags), var_to_str(off.bags)])
+	var bag0: String = var_to_str(on.bags)
+	on.respawn_new_pawn()
+	ok(var_to_str(on.bags) == bag0, "REQ-0010-10/96: respawn neither moves nor deletes the bag — it stays where the pawn fell")
+	ok(_inv_is_empty(on), "REQ-0010-10: the new hero does not inherit the bag's contents")
+	var promise: String = _text_has(on, ["Новий виживальник", "новий виживальник", "поселення", "у домі", "в домі", "Поселення"])
+	ok(promise == "", "REQ-0010-10/40: after death + respawn at ON the feed makes no «новий виживальник / поселення / у домі» promise %s" % promise)
+	for s in [on, off]:
+		_dispose(s)
+
+
+# =============================================================================================
+# REQ-0010-09 / 41 / 92 (Session part): flags reach the Sim before new_game; Session.home is a reference to the capsule;
+# a refused configuration yields no half-world; the landing instant is the pushed clock
+# =============================================================================================
+func _t_session_on() -> void:
+	var sess: Variant = _session_on(CLOCK_T)
+	var sim: Variant = sess.sim
+	ok(sess.last_error == &"" and sim != null, "REQ-0010-09 setup: an ON Session.start succeeds (last_error=%s)" % str(sess.last_error))
+	ok(bool(sim.use_main_capsule) and bool(sim.use_catalog) and bool(sim.use_inventory), "REQ-0010-02: Session.start hands the flags to the Sim BEFORE new_game (ON world, catalogue vocabulary, inventory)")
+	var tile: Vector2i = _cap_tile(sim)
+	ok(bool(sess.has_home) == (not (sim.main_capsule as Dictionary).is_empty()) and bool(sess.has_home), "REQ-0010-09: has_home <=> the capsule exists")
+	ok(sess.home.has("region_key") and String(sess.home.region_key) == Persistence.region_key(Scenarios.LAT, Scenarios.LON), "REQ-0010-09: Session.home.region_key is the region of the capsule (%s)" % str(sess.home.get("region_key")))
+	ok(sess.home.has("tile") and Vector2i(int(sess.home.tile[0]), int(sess.home.tile[1])) == tile, "REQ-0010-09: Session.home.tile IS the capsule tile %s (a reference, not a copy of a coordinate)" % str(tile))
+	ok(int(sim.main_capsule.landed_at) == CLOCK_T and int(sim.main_capsule.grace_start) == CLOCK_T, "REQ-0010-92/35: the landing instant is the clock pushed at Session.start (landed_at=%s, wanted %d)" % [str(sim.main_capsule.landed_at), CLOCK_T])
+	var stale: String = _text_has(sim, ["долетить", "Щоденна капсула", "Друзі надіслали"])
+	ok(stale == "" and (sim.invites as Array).is_empty(), "REQ-0010-41/40: at ON the feed carries no «капсула (V) долетить / Щоденна капсула» claim and no seeded invites %s" % stale)
+	# a refused configuration: no world, no home, a reason — and the same Session can start again once fixed
+	for missing in ["catalog", "inventory"]:
+		var bad: Variant = SessionScript.new()
+		bad.autosave = false
+		bad.use_inventory = missing != "inventory"
+		bad.use_catalog = missing != "catalog"
+		bad.use_main_capsule = true
+		var started: bool = bad.start(Scenarios.LAT, Scenarios.LON, "Тест", CLOCK_T)
+		ok(not started and bad.last_error != &"" and bad.sim == null and not bool(bad.has_home), "REQ-0010-03/59 [no %s]: Session.start returns false with a reason, creates no world and no home (error=%s)" % [missing, str(bad.last_error)])
+		bad.use_inventory = true
+		bad.use_catalog = true
+		var again: bool = bad.start(Scenarios.LAT, Scenarios.LON, "Тест", CLOCK_T)
+		ok(again and bad.last_error == &"" and bad.sim != null and bool(bad.has_home) and _cap_count(bad.sim) == 1, "REQ-0010-03/59 [no %s]: after fixing the config the same Session starts a normal ON world" % missing)
+		_dispose_session(bad)
+	# a Session that already ran a world and then FAILS an ON start must not keep claiming a home with no capsule behind it
+	var reuse: Variant = SessionScript.new()
+	reuse.autosave = false
+	reuse.start(Scenarios.LAT, Scenarios.LON, "Попередній світ")
+	ok(bool(reuse.has_home), "REQ-0010-09 setup: the reused Session ran a world first (has_home)")
+	reuse.use_inventory = true
+	reuse.use_main_capsule = true   # use_catalog is still false: the ON start is refused (REQ-0010-59)
+	var reuse_started: bool = reuse.start(Scenarios.LAT, Scenarios.LON, "Новий світ", CLOCK_T)
+	ok(not reuse_started and reuse.sim == null, "REQ-0010-59 setup: the ON start without a catalogue is refused and leaves no sim")
+	ok(not bool(reuse.has_home), "REQ-0010-09: has_home <=> the capsule exists — after a refused ON start there is no capsule, so there must be no home either (has_home=%s, home=%s)" % [str(reuse.has_home), str(reuse.home)])
+	# twin sessions: same coordinate + same clock -> same world; another landing instant -> another world
+	var twin: Variant = _session_on(CLOCK_T)
+	var later: Variant = _session_on(CLOCK_T + 1)
+	ok(Persistence.world_hash(twin.sim) == Persistence.world_hash(sim), "REQ-0010-04/92: twin Sessions (same lat/lon, same clock) -> the same world_hash")
+	ok(Persistence.world_hash(later.sim) != Persistence.world_hash(sim), "REQ-0010-82: another landing instant is another world (landed_at is hashed)")
+	# the clock is monotone at the Session edge too
+	sess.push_clock(CLOCK_T - 1000)
+	ok(int(sim.now_ms) == CLOCK_T, "REQ-0010-68/92: Session.push_clock with an earlier instant does not rewind the sim clock (now_ms=%s)" % str(sim.now_ms))
+	sess.push_clock(CLOCK_T + 10)
+	ok(int(sim.now_ms) == CLOCK_T + 10 and int(sim.main_capsule.landed_at) == CLOCK_T, "REQ-0010-92: a later push advances now_ms but the landing instant stays a fact (landed_at=%s)" % str(sim.main_capsule.landed_at))
+	var nobody: Variant = SessionScript.new()
+	nobody.push_clock(CLOCK_T)
+	ok(nobody.sim == null, "REQ-0010-92: push_clock on a Session with no world is a harmless no-op")
+	# a capsule/travel launch is refused at the Session edge without touching the world (REQ-0010-41/75)
+	var sig0: String = _world_sig(sim)
+	sess.travel_to(Scenarios.LAT2, Scenarios.LON2, "Львів")
+	ok(_world_sig(sim) == sig0 and _cap_problem(sim, tile) == "", "REQ-0010-41/75: travel_to another region at ON leaves capsule, stock and buildings exactly as they were")
+	# Session.respawn: died far away -> next to the capsule in the SAME region, home untouched, capsule untouched
+	_quiet(sim)
+	var far: Vector2i = _far_cell(sim, tile, 12)
+	sim.player.px = float(far.x) + 0.5
+	sim.player.py = float(far.y) + 0.5
+	var home0: String = var_to_str(sess.home)
+	var cap0: String = Persistence.content_hash(sim.main_capsule)
+	_kill(sim)
+	sess.respawn()
+	var h: Vector2i = _hero_cell(sim)
+	ok(not bool(sim.dead) and _cheb(h, tile) == _min_free_ring(sim, tile) and not sim.is_blocked(h.x, h.y) and Persistence.region_key(float(sim.map.lat), float(sim.map.lon)) == Persistence.region_key(Scenarios.LAT, Scenarios.LON),
+		"REQ-0010-07/09: Session.respawn after a far death puts the hero beside the capsule in the same region (hero %s, capsule %s)" % [str(h), str(tile)])
+	ok(var_to_str(sess.home) == home0 and Persistence.content_hash(sim.main_capsule) == cap0 and bool(sess.has_home), "REQ-0010-09/96: Session.respawn leaves home and the capsule record untouched")
+	for x in [sess, twin, later]:
+		_dispose_session(x)
+
+
+# =============================================================================================
+# REQ-0010-02 / 09 / 83: save_game -> restore_game (Continue): same world, home restored from the capsule,
+# a save made BETWEEN death and respawn keeps the death and can respawn
+# =============================================================================================
+func _t_save_continue_on() -> void:
+	var a: Variant = _session_on(CLOCK_T)
+	var tile: Vector2i = _cap_tile(a.sim)
+	a.sim._place_building("wall", tile.x + 3, tile.y, -1)
+	for t in 120:
+		a.sim.update(Scenarios.DT)
+		_topup(a.sim)
+	ok(bool(a.save_game(SAVE_TMP)), "REQ-0010-02 setup: the ON session saves")
+	var b: Variant = SessionScript.new()
+	b.autosave = false
+	ok(bool(b.restore_game(SAVE_TMP)) and b.last_error == &"", "REQ-0010-02: Continue restores the ON session (last_error=%s)" % str(b.last_error))
+	ok(bool(b.sim.use_main_capsule) and bool(b.use_main_capsule), "REQ-0010-02: the restored world, and the Session that mirrors it, are ON")
+	ok(bool(b.has_home) and b.home.has("tile") and Vector2i(int(b.home.tile[0]), int(b.home.tile[1])) == tile and String(b.home.get("region_key", "")) == String(a.home.region_key),
+		"REQ-0010-09: Continue restores the home reference (region_key + capsule tile): %s" % str(b.home))
+	ok(absf(float(b.home.lat) - Scenarios.LAT) < 1e-9 and absf(float(b.home.lon) - Scenarios.LON) < 1e-9, "REQ-0010-09: ... and the home coordinate")
+	ok(Persistence.world_hash(b.sim) == Persistence.world_hash(a.sim), "REQ-0010-02/35: the continued world hashes exactly like the saved one")
+	for t in 100:
+		for x in [a, b]:
+			x.sim.update(Scenarios.DT)
+			_topup(x.sim)
+	ok(Persistence.world_hash(b.sim) == Persistence.world_hash(a.sim), "REQ-0010-02: 100 ticks after Continue the two worlds are still identical (the restored one is not a different trajectory)")
+	_dispose_session(b)
+	# one truth: a save whose home points elsewhere does not move the home away from the capsule
+	var forged: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(SAVE_TMP))
+	forged["home"]["tile"] = [0, 0]
+	forged["home"]["region_key"] = "0.0000,0.0000"
+	var f: FileAccess = FileAccess.open(SAVE_TMP + ".forged", FileAccess.WRITE)
+	f.store_string(JSON.stringify(forged, "", true, true))
+	f.close()
+	var fo: Variant = SessionScript.new()
+	fo.autosave = false
+	ok(bool(fo.restore_game(SAVE_TMP + ".forged")), "REQ-0010-09 setup: the save with a forged home still loads")
+	ok(Vector2i(int(fo.home.tile[0]), int(fo.home.tile[1])) == tile and String(fo.home.region_key) == String(a.home.region_key),
+		"REQ-0010-09/D9: Session.home at ON is a REFERENCE to the capsule — a forged home.tile/region_key in the file cannot point away from it (home %s)" % str(fo.home))
+	_dispose_session(fo)
+	# a save between death and respawn
+	var d: Variant = _session_on(CLOCK_T)
+	_quiet(d.sim)
+	var far: Vector2i = _far_cell(d.sim, tile, 10)
+	d.sim.player.px = float(far.x) + 0.5
+	d.sim.player.py = float(far.y) + 0.5
+	_kill(d.sim)
+	var died: Vector2i = _hero_cell(d.sim)
+	var cap0: String = Persistence.content_hash(d.sim.main_capsule)
+	var bags0: String = Persistence.content_hash(d.sim.bags)
+	ok(bool(d.sim.dead) and bool(d.save_game(SAVE_TMP)), "REQ-0010-83 setup: saved in the state «dead» (the death screen is up)")
+	ok(bool(SessionScript.save_meta(SAVE_TMP).get("dead", false)), "REQ-0010-83: the continue meta knows the hero is dead")
+	var e: Variant = SessionScript.new()
+	e.autosave = false
+	ok(bool(e.restore_game(SAVE_TMP)), "REQ-0010-83: a save made between death and respawn restores")
+	ok(bool(e.sim.dead), "REQ-0010-83: ... still dead — the player lands on the death screen, not on a phantom hero")
+	ok(Persistence.world_hash(e.sim) == Persistence.world_hash(d.sim), "REQ-0010-83/35: the dead world hashes exactly like the saved one")
+	e.respawn()
+	var h: Vector2i = _hero_cell(e.sim)
+	ok(not bool(e.sim.dead) and _cheb(h, tile) == _min_free_ring(e.sim, tile) and not e.sim.is_blocked(h.x, h.y), "REQ-0010-83: respawn works after the restore and puts the hero beside the capsule (%s)" % str(h))
+	ok(Persistence.content_hash(e.sim.main_capsule) == cap0 and Persistence.content_hash(e.sim.bags) == bags0 and e.sim.bags.size() == 1 and Vector2i(int(e.sim.bags[0].x), int(e.sim.bags[0].y)) == died,
+		"REQ-0010-96/10: the capsule is as before, the bag still lies where the hero fell (%s)" % var_to_str(e.sim.bags))
+	_rm_file(SAVE_TMP)
+	_rm_file(SAVE_TMP + ".forged")
+	for x in [a, d, e]:
+		_dispose_session(x)
+
+
+# =============================================================================================
+# REQ-0010-02 / 83 (hash-exact resume): a payload cut while the pawn is MID-ACTION in a small base resumes bit-exact;
+# after the restore a death + respawn lands the restored world exactly where the live one lands
+# =============================================================================================
+func _t_restore_parity_live() -> void:
+	var s: Variant = _on_real(CLOCK_T)
+	var tile: Vector2i = _cap_tile(s)
+	s._place_building("wall", tile.x + 2, tile.y, -1)
+	s._place_building("storage", tile.x - 2, tile.y + 1, -1)
+	for t in 40:
+		s.update(Scenarios.DT)
+		_topup(s)
+	# the nearest resource node at least 6 cells from the hero: a walk long enough to still be under way 5 ticks later
+	var best: int = -1
+	var best_d: int = 1 << 30
+	var hero: Vector2i = _hero_cell(s)
+	var cells: Array = (s.map.nodes as Dictionary).keys()
+	cells.sort()
+	for c in cells:
+		var cell: int = int(c)
+		var d: int = _cheb(Vector2i(cell % int(s.n), cell / int(s.n)), hero)
+		if d >= 6 and d < best_d:
+			best_d = d
+			best = cell
+	ok(best >= 0, "REQ-0010-02 setup: a resource node 6+ cells away exists")
+	if best >= 0:
+		s.order_gather(best % int(s.n), best / int(s.n))
+	for t in 5:
+		s.update(Scenarios.DT)
+		_topup(s)
+	ok(s.player.get("action") != null, "REQ-0010-02 setup: the pawn is mid-action when the payload is cut")
+	var r: Variant = Sim.new()
+	Persistence.restore(r, _json_rt(Persistence.resume_payload(s)))
+	ok(r.load_error == &"" and Persistence.world_hash(r) == Persistence.world_hash(s), "REQ-0010-02/35: a resume payload cut mid-action restores to the SAME world_hash (load_error=%s)" % str(r.load_error))
+	ok(_bsig(r) == _bsig(s) and _cap_count(r) == 1 and _cap_problem(r, tile) == "", "REQ-0010-02: ... with the same buildings and the capsule on its tile")
+	for t in 150:
+		s.update(Scenarios.DT)
+		r.update(Scenarios.DT)
+		_topup(s)
+		_topup(r)
+	ok(Persistence.world_hash(r) == Persistence.world_hash(s), "REQ-0010-02: 150 ticks later (the walk, the gather, the stash) the restored world still equals the live one")
+	_kill(s)
+	_kill(r)
+	s.respawn_new_pawn()
+	r.respawn_new_pawn()
+	ok(_hero_cell(r) == _hero_cell(s) and Persistence.world_hash(r) == Persistence.world_hash(s), "REQ-0010-07/83: a death + respawn after the restore lands the restored world exactly where the live one lands (%s)" % str(_hero_cell(r)))
+	for x in [s, r]:
+		_dispose(x)
+
+
+# =============================================================================================
+# REQ-0010-60 / 83: a corrupt / newer / orphan ON save is refused with an explicit reason, through Session.restore_game
+# AND Persistence.restore, and a refusal leaves a RUNNING session exactly as it was
+# =============================================================================================
+func _tampered_save(src: String, case_name: String) -> String:
+	var d: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(src))
+	var region: Dictionary = d["active"]["region"]
+	match case_name:
+		"capsule_key_missing":
+			region.erase("main_capsule")
+		"capsule_empty":
+			region["main_capsule"] = {}
+		"capsule_null":
+			region["main_capsule"] = null
+		"version_99":
+			region["main_capsule"]["version"] = 99
+		"orphan_capsule_without_flag":
+			region.erase("use_main_capsule")
+		"flag_false_but_capsule":
+			region["use_main_capsule"] = false
+		"tile_off_map":
+			region["main_capsule"]["tile"] = [999, 3]
+		"tile_arity":
+			region["main_capsule"]["tile"] = [3]
+		"tile_text":
+			region["main_capsule"]["tile"] = "8,8"
+	var out: String = src + "." + case_name
+	var f: FileAccess = FileAccess.open(out, FileAccess.WRITE)
+	f.store_string(JSON.stringify(d, "", true, true))
+	f.close()
+	return out
+
+
+func _t_save_refusals() -> void:
+	var live: Variant = _session_on(CLOCK_T)
+	_quiet(live.sim)
+	for t in 30:
+		live.sim.update(Scenarios.DT)
+		_topup(live.sim)
+	ok(bool(live.save_game(SAVE_TMP)), "REQ-0010-83 setup: a valid ON save exists")
+	var live_sim: Variant = live.sim
+	var live_sig: String = _world_sig(live_sim)
+	var live_home: String = var_to_str(live.home)
+	for case_name in ["capsule_key_missing", "capsule_empty", "capsule_null", "version_99", "orphan_capsule_without_flag", "flag_false_but_capsule", "tile_off_map", "tile_arity", "tile_text"]:
+		var bad: String = _tampered_save(SAVE_TMP, String(case_name))
+		var label: String = "REQ-0010-60/83 [%s]" % String(case_name)
+		var none: Variant = SessionScript.new()
+		none.autosave = false
+		var loaded: bool = none.restore_game(bad)
+		ok(not loaded and none.last_error != &"" and none.sim == null and not bool(none.has_home), "%s: Session.restore_game refuses with an explicit reason and builds no world (last_error=%s)" % [label, str(none.last_error)])
+		var loaded2: bool = live.restore_game(bad)
+		ok(not loaded2 and live.last_error != &"" and live.sim == live_sim and _world_sig(live.sim) == live_sig and var_to_str(live.home) == live_home,
+			"%s: a refused Continue leaves the RUNNING session exactly as it was (same Sim instance, same world, same home)" % label)
+		# the same payload through Persistence.restore (the net-rejoin path): nothing applied over a refused world
+		var d: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(bad))
+		var payload: Dictionary = d["active"]
+		payload["runtime"]["dead"] = true
+		var raw: Variant = Sim.new()
+		var raw_sig: String = _world_sig(raw)
+		Persistence.restore(raw, payload)
+		ok(raw.load_error != &"" and _world_sig(raw) == raw_sig and not bool(raw.dead), "%s: Persistence.restore refuses too and does not apply dead=true over an empty Sim" % label)
+		_dispose(raw)
+		_rm_file(bad)
+	ok(bool(live.restore_game(SAVE_TMP)) and live.last_error == &"", "REQ-0010-83: after the refusals a valid save still restores and the error is cleared (nothing latched)")
+	_rm_file(SAVE_TMP)
+	_dispose_session(live)
+
+
+# =============================================================================================
+# REQ-0010-98: ONE landing seam. Exactly one definition in the code; the capsule is only ever installed from it
+# (and from the save-restore path)
+# =============================================================================================
+func _t_single_landing() -> void:
+	var files: Array = []
+	_gd_files("res://scripts", files)
+	var re_landing: RegEx = RegEx.new()
+	re_landing.compile("(?m)^\\s*(?:static\\s+)?func\\s+landing\\s*\\(")
+	var re_anchor: RegEx = RegEx.new()
+	re_anchor.compile("(?m)^\\s*(?:static\\s+)?func\\s+respawn_anchor\\s*\\(")
+	var re_fn: RegEx = RegEx.new()
+	re_fn.compile("^\\s*(?:static\\s+)?func\\s+(\\w+)")
+	var re_install: RegEx = RegEx.new()
+	re_install.compile("_place_building\\(\\s*(MainCapsule\\.)?KIND\\b|_place_building\\(\\s*\"main_capsule\"")
+	var landing_defs: Array = []
+	var anchor_defs: int = 0
+	var install_sites: Dictionary = {}
+	for path in files:
+		var text: String = FileAccess.get_file_as_string(String(path))
+		for mm in re_landing.search_all(text):
+			landing_defs.append(path)
+		anchor_defs += re_anchor.search_all(text).size()
+		var cur_fn: String = ""
+		for line in text.split("\n"):
+			var code: String = String(line).get_slice("#", 0)
+			var mf: RegExMatch = re_fn.search(code)
+			if mf != null:
+				cur_fn = mf.get_string(1)
+			if re_install.search(code) != null:
+				install_sites["%s::%s" % [String(path).trim_prefix("res://scripts/"), cur_fn]] = true
+	ok(landing_defs.size() == 1, "REQ-0010-98: exactly ONE `func landing` in the code (found %d: %s)" % [landing_defs.size(), str(landing_defs)])
+	ok(anchor_defs == 1, "REQ-0010-09: exactly ONE `func respawn_anchor` (found %d)" % anchor_defs)
+	var sites: Array = install_sites.keys()
+	sites.sort()
+	ok(sites == ["sim/capsule.gd::from_record", "sim/capsule.gd::landing"], "REQ-0010-98: the capsule building is installed only by landing (first landing) and from_record (restoring a save) — sites: %s" % str(sites))
+
+
+# =============================================================================================
+# REQ-0010-34 (W1b part): switching the capsule ON does not shift the director / environment / threat streams
+# =============================================================================================
+func _cursors(s: Variant) -> Array:
+	return [str(s.director_rng.state), str(s.env_rng.state), str(s.threat_rng.state)]
+
+
+func _cursor_run(lat: float, lon: float, capsule: bool, ticks: int, with_death: bool) -> Dictionary:
+	var s: Variant = _sim_with(_gen(lat, lon), true, true, capsule)
+	var out: Dictionary = {"init": _cursors(s)}
+	var enemies_seen: int = 0
+	for t in ticks:
+		s.update(Scenarios.DT)
+		_topup(s)
+		enemies_seen += (s.enemies as Array).size()
+		if with_death and t == ticks / 2:
+			_kill(s)
+			s.respawn_new_pawn()
+	out["end"] = _cursors(s)
+	out["enemies"] = enemies_seen
+	_dispose(s)
+	return out
+
+
+func _t_stream_cursors() -> void:
+	for pr in GameData.SPAWN_PRESETS:
+		for with_death in [false, true]:
+			var lat: float = float(pr.lat)
+			var lon: float = float(pr.lon)
+			var on: Dictionary = _cursor_run(lat, lon, true, 600, bool(with_death))
+			var off: Dictionary = _cursor_run(lat, lon, false, 600, bool(with_death))
+			var label: String = "REQ-0010-34 [%s%s]" % [String(pr.name), " + a death" if with_death else ""]
+			ok(int(off.enemies) == 0 and int(on.enemies) == 0, "%s setup: no raid/patrol in 60 s (enemies seen OFF=%d ON=%d)" % [label, int(off.enemies), int(on.enemies)])
+			ok(on.end[0] != on.init[0] and on.end[1] != on.init[1], "%s setup: the director and environment streams really ran (the cursors moved in 600 ticks)" % label)
+			ok(on.init == off.init, "%s: the three stream cursors right after new_game are those of the OFF world (ON %s vs OFF %s)" % [label, str(on.init), str(off.init)])
+			ok(on.end == off.end, "%s: ... and after 600 ticks (director/env/threat) the flag has not shifted any of them (ON %s vs OFF %s)" % [label, str(on.end), str(off.end)])
+
+
+# =============================================================================================
+# REQ-0010-35 / 82 (current record fields): every field moves world_hash; round-trip returns the same hash; int64
+# instants are exact through JSON (strings, not floats); dt does not matter; now_ms is not hashed
+# =============================================================================================
+func _t_hash_fields() -> void:
+	var base: Variant = _on_real(CLOCK_T)
+	var h0: String = Persistence.world_hash(base)
+	ok(Persistence.world_hash(_on_real(CLOCK_T)) == h0, "REQ-0010-82 setup: twin ON worlds hash the same (%s)" % h0)
+	var tile: Vector2i = _cap_tile(base)
+	for field in ["level", "owner", "landed_at", "grace_start", "tile"]:
+		var m: Variant = _on_real(CLOCK_T)
+		match String(field):
+			"level":
+				m.main_capsule["level"] = 1
+			"owner":
+				m.main_capsule["owner"] = "someone_else"
+			"landed_at":
+				m.main_capsule["landed_at"] = CLOCK_T + 1
+			"grace_start":
+				m.main_capsule["grace_start"] = CLOCK_T + 1
+			"tile":
+				m.main_capsule["tile"] = [tile.x + 1, tile.y]
+		ok(Persistence.world_hash(m) != h0, "REQ-0010-35/82 [%s]: mutating the capsule field changes world_hash" % String(field))
+		_dispose(m)
+	# the record on the wire: instants as decimal STRINGS, level an int, tile two ints
+	var x: Variant = _on_real(CLOCK_T)
+	x.main_capsule["level"] = 3
+	x.main_capsule["landed_at"] = BIG_MS
+	x.main_capsule["grace_start"] = I64_MAX
+	var rec: Dictionary = Persistence.serialize_region(x).main_capsule
+	ok(rec.get("landed_at") is String and rec.get("grace_start") is String and rec.get("level") is int and rec.get("tile") is Array, "REQ-0010-82: instants are strings (int64 can't ride a JSON number), level is an int, tile an array")
+	var text: String = JSON.stringify(rec, "", true, true)
+	ok(text.contains(str(BIG_MS)) and text.contains(str(I64_MAX)), "REQ-0010-82: 2^53+1 and int64-max appear digit-exact in the JSON text")
+	var hx: String = Persistence.world_hash(x)
+	var y: Variant = Sim.new()
+	Persistence.restore(y, _json_rt(Persistence.resume_payload(x)))
+	ok(y.load_error == &"" and int(y.main_capsule.landed_at) == BIG_MS and int(y.main_capsule.grace_start) == I64_MAX and int(y.main_capsule.level) == 3,
+		"REQ-0010-82: 2^53+1 / int64-max / level 3 come back EXACT from a JSON round-trip (landed_at=%s grace_start=%s)" % [str(y.main_capsule.get("landed_at")), str(y.main_capsule.get("grace_start"))])
+	ok(Persistence.world_hash(y) == hx, "REQ-0010-35: the round-tripped world has the same world_hash")
+	# dt independence of the record: same seed, 100 x 0.1 s vs 200 x 0.05 s
+	var a: Variant = _on_real(CLOCK_T)
+	var b: Variant = _on_real(CLOCK_T)
+	_quiet(a)
+	_quiet(b)
+	for t in 100:
+		a.update(0.1)
+		_topup(a)
+	for t in 200:
+		b.update(0.05)
+		_topup(b)
+	ok(Persistence.content_hash(Persistence.serialize_region(a).main_capsule) == Persistence.content_hash(Persistence.serialize_region(b).main_capsule),
+		"REQ-0010-82: the capsule record's hash is the same at dt=0.1 and dt=0.05 (the same 10 s of sim)")
+	# now_ms is an input, not state
+	var before: String = Persistence.world_hash(a)
+	a.set_clock(CLOCK_T + 5000)
+	ok(Persistence.world_hash(a) == before, "REQ-0010-92: set_clock after landing does not change world_hash (now_ms is an input)")
+	ok(not JSON.stringify(Persistence.resume_payload(a)).contains("now_ms"), "REQ-0010-92: now_ms appears nowhere in the save/resume payload")
+	for s in [base, x, y, a, b]:
+		_dispose(s)
+
+
+# =============================================================================================
+# REQ-0010-92 / 68: time enters the sim only through set_clock — monotone, exact int64, never rewrites the landing fact
+# =============================================================================================
+func _t_clock_input() -> void:
+	var c: Variant = Sim.new()
+	ok(int(c.now_ms) == 0, "REQ-0010-92 setup: a fresh Sim has not been told the time (now_ms=0)")
+	c.set_clock(1000)
+	c.set_clock(500)
+	ok(int(c.now_ms) == 1000, "REQ-0010-68: set_clock with an earlier instant does not rewind now_ms (%s)" % str(c.now_ms))
+	c.set_clock(BIG_MS)
+	ok(int(c.now_ms) == BIG_MS, "REQ-0010-92: set_clock keeps 2^53+1 exact (no float rounding): %s" % str(c.now_ms))
+	c.set_clock(5)
+	ok(int(c.now_ms) == BIG_MS, "REQ-0010-68: ... and still never goes back")
+	# landing instant: taken from the clock fed BEFORE new_game, monotone even if the device clock jumped back first
+	var l: Variant = Sim.new()
+	l.use_inventory = true
+	l.use_catalog = true
+	l.use_main_capsule = true
+	l.set_clock(CLOCK_T)
+	l.set_clock(CLOCK_T - 7000)   # the device clock jumped back before the landing
+	l.new_game(_gen(Scenarios.LAT, Scenarios.LON), false)
+	ok(int(l.main_capsule.landed_at) == CLOCK_T and int(l.main_capsule.grace_start) == CLOCK_T, "REQ-0010-35/68: landed_at is the (monotone) clock at landing, %s wanted %d" % [str(l.main_capsule.landed_at), CLOCK_T])
+	l.set_clock(CLOCK_T + 12345)
+	l.set_clock(CLOCK_T - 99999)
+	ok(int(l.main_capsule.landed_at) == CLOCK_T and int(l.main_capsule.grace_start) == CLOCK_T, "REQ-0010-92: later clock pushes (forward or back) never rewrite the landing fact")
+	# no clock fed at all: the explicit «not given» state, and still a deterministic world
+	var n1: Variant = _sim_with(_gen(Scenarios.LAT, Scenarios.LON), true, true, true)
+	var n2: Variant = _sim_with(_gen(Scenarios.LAT, Scenarios.LON), true, true, true)
+	ok(Persistence.world_hash(n1) == Persistence.world_hash(n2), "REQ-0010-92: without any clock input the ON world is still deterministic (twin hashes agree)")
+	# the same set of time inputs (rollbacks and repeats included) -> the same world
+	var a: Variant = _on_real(CLOCK_T)
+	var b: Variant = _on_real(CLOCK_T)
+	b.set_clock(CLOCK_T - 500)
+	for t in 50:
+		a.update(Scenarios.DT)
+		b.update(Scenarios.DT)
+		_topup(a)
+		_topup(b)
+	a.set_clock(CLOCK_T + 1000)
+	b.set_clock(CLOCK_T + 1000)
+	b.set_clock(CLOCK_T + 200)
+	for t in 50:
+		a.update(Scenarios.DT)
+		b.update(Scenarios.DT)
+		_topup(a)
+		_topup(b)
+	ok(int(a.now_ms) == int(b.now_ms) and int(a.now_ms) == CLOCK_T + 1000, "REQ-0010-68: twin clocks with rollbacks/repeats end on the same now_ms (%s / %s)" % [str(a.now_ms), str(b.now_ms)])
+	ok(Persistence.world_hash(a) == Persistence.world_hash(b), "REQ-0010-92: the same effective time inputs (rollbacks and repeats ignored) -> the same world_hash")
+	for s in [c, l, n1, n2, a, b]:
+		_dispose(s)
+
+
+# =============================================================================================
+# REQ-0010-92: alias-proof wall-clock tripwire. The W1a scan looks for `Time.get_…(` / `OS.get_…time(` CALLS; an alias
+# (`const T = Time`), a system-clock provider or `Engine` ticks would slip past it. Nothing in the sim path may even NAME
+# the time/OS singletons or the device-clock provider.
+# =============================================================================================
+func _t_no_wallclock_alias_proof() -> void:
+	var re: RegEx = RegEx.new()
+	re.compile("(^|[^.\\w\"])(Time|OS|DateTime)\\b|SystemClock|Engine\\.get_(ticks|physics|process)|get_unix_time|get_ticks_(msec|usec)")
+	var files: Array = ["res://scripts/sim.gd", "res://scripts/persistence.gd", "res://scripts/world_gen.gd"]
+	for dir_path in ["res://scripts/sim", "res://scripts/kernel"]:
+		var dir: DirAccess = DirAccess.open(dir_path)
+		if dir == null:
+			continue
+		for f in dir.get_files():
+			if f.ends_with(".gd"):
+				files.append(dir_path + "/" + f)
+	var offenders: Array = []
+	for path in files:
+		var code: PackedStringArray = PackedStringArray()
+		for line in FileAccess.get_file_as_string(String(path)).split("\n"):
+			var stripped: String = String(line).strip_edges()
+			if not stripped.begins_with("#"):
+				code.append(String(line).get_slice("#", 0))
+		var m: RegExMatch = re.search("\n".join(code))
+		if m != null:
+			offenders.append("%s «%s»" % [String(path).trim_prefix("res://scripts/"), m.get_string()])
+	ok(files.size() > 20, "REQ-0010-92: the alias-proof scan covers the sim path (%d files)" % files.size())
+	ok(offenders.is_empty(), "REQ-0010-92: nothing in the sim path names Time/OS/DateTime/SystemClock/Engine ticks/get_unix_time — %s" % ("clean" if offenders.is_empty() else ", ".join(PackedStringArray(offenders))))

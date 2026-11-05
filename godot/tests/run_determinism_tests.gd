@@ -19,6 +19,7 @@ const LAT := 50.4501
 const LON := 30.5234
 const N := 56
 const DT := 0.1
+const CAPSULE_CLOCK_MS := 1800000000000   # spec 0010: the injected device clock of the ON scenario (a fixed UTC ms instant)
 
 
 func _init() -> void:
@@ -27,7 +28,9 @@ func _init() -> void:
 	_t_twin_commands()
 	_t_seed_contrast()
 	_t_region_roundtrip_hash()
+	_t_twin_capsule_on()
 	_print_final_hash()
+	_print_capsule_hash()
 	finish()
 
 
@@ -144,6 +147,40 @@ func _t_region_roundtrip_hash() -> void:
 	ok(ha == hb, "region payload survives a serialize -> load_region -> serialize round-trip bit-stable")
 
 
+# spec 0010 (REQ-0010-04/35/82/92): the Основна капсула world, ON — two independent instances, the SAME injected clock,
+# 600 ticks: world_hash (the capsule record rides in serialize_region) must agree. The clock enters ONLY through
+# Sim.set_clock (never read inside the sim); landed_at/grace_start take it at landing, now_ms itself is not hashed.
+func _capsule_on(now_ms: int) -> Variant:
+	var sim: Variant = Sim.new()
+	sim.use_inventory = true
+	sim.use_catalog = true
+	sim.use_main_capsule = true
+	sim.set_clock(now_ms)
+	sim.new_game(WorldGen.generate_map(LAT, LON, N))
+	return sim
+
+
+func _t_twin_capsule_on() -> void:
+	var a: Variant = _capsule_on(CAPSULE_CLOCK_MS)
+	var b: Variant = _capsule_on(CAPSULE_CLOCK_MS)
+	var diverged := -1
+	for t in 600:
+		a.update(DT)
+		b.update(DT)
+		_topup(a)
+		_topup(b)
+		if (t + 1) % 150 == 0 and Persistence.world_hash(a) != Persistence.world_hash(b):
+			diverged = t + 1
+			break
+	var label := "identical" if diverged < 0 else "DIVERGED at tick %d" % diverged
+	ok(diverged < 0 and not (a.main_capsule as Dictionary).is_empty(), "twin ON capsule run (fixed set_clock): world_hash %s across 600 ticks" % label)
+	var late: Variant = _capsule_on(CAPSULE_CLOCK_MS + 1)
+	ok(Persistence.world_hash(late) != Persistence.world_hash(_capsule_on(CAPSULE_CLOCK_MS)), "a different landing instant is a different world (landed_at is hashed)")
+	var same: Variant = _capsule_on(CAPSULE_CLOCK_MS)
+	same.set_clock(CAPSULE_CLOCK_MS + 5000)   # later pushes move now_ms, not the world record
+	ok(Persistence.world_hash(same) == Persistence.world_hash(_capsule_on(CAPSULE_CLOCK_MS)), "now_ms itself is NOT in world_hash (only the instants stored in the capsule record are)")
+
+
 # canonical scenario for the cross-process check: CI runs the suite twice and diffs this line
 func _print_final_hash() -> void:
 	var sim: Variant = _fresh(LAT, LON)
@@ -151,3 +188,13 @@ func _print_final_hash() -> void:
 		sim.update(DT)
 		_topup(sim)
 	print("WORLD_HASH_FINAL=" + Persistence.world_hash(sim))
+
+
+# the same cross-process check for the ON world (spec 0010): CI diffs this line too, so per-process nondeterminism in the
+# capsule path (record, landing, clock input) has nowhere to hide. WORLD_HASH_FINAL (OFF) above must stay c4dbef44fe0f95d6.
+func _print_capsule_hash() -> void:
+	var sim: Variant = _capsule_on(CAPSULE_CLOCK_MS)
+	for t in 300:
+		sim.update(DT)
+		_topup(sim)
+	print("WORLD_HASH_CAPSULE=" + Persistence.world_hash(sim))

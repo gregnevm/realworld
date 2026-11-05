@@ -11,6 +11,7 @@
 extends RefCounted
 
 const WorldGen = preload("res://scripts/world_gen.gd")
+const MainCapsule = preload("res://scripts/sim/capsule.gd")
 const STORE_VERSION := 2
 
 # ---------------- region keys ----------------
@@ -89,7 +90,10 @@ static func serialize_region(sim) -> Dictionary:
 		"buildings": [],
 		"nodes": {},
 	}
+	var capsule_on: bool = sim.get("use_main_capsule") == true
 	for b in sim.buildings:
+		if capsule_on and String(b.kind) == MainCapsule.KIND:
+			continue   # spec 0010: капсула живе у main_capsule.tile (єдина правда про позицію), не в buildings
 		var brec := {"kind": b.kind, "x": int(b.x), "y": int(b.y), "hp": float(b.hp)}
 		# building-module state: a generator's tank, a battery's charge (Batch 8c) and a grow zone's
 		# cycle (farming) are save-state and world_hash-state. Only defs with those mechanics ever
@@ -113,6 +117,10 @@ static func serialize_region(sim) -> Dictionary:
 	if sim.get("use_inventory") == true:
 		rec["use_inventory"] = true
 		rec["bags"] = (sim.bags as Array).duplicate(true)
+	# spec 0010: Основна капсула — прапор + запис (версія запису всередині) лише при ON; OFF-записи без жодного нового ключа
+	if capsule_on:
+		rec["use_main_capsule"] = true
+		rec["main_capsule"] = MainCapsule.to_record(sim)
 	return rec
 
 static func _pick(src: Dictionary, fields: Array) -> Dictionary:
@@ -303,9 +311,40 @@ static func resume_payload(sim) -> Dictionary:
 	return {"region": serialize_region(sim), "runtime": serialize_runtime(sim)}
 
 
-static func restore(sim, payload: Dictionary) -> void:
+# false == відхилено: load_region не змінив світ (sim.load_error каже чому), тож runtime-половина НЕ накладається на
+# порожній sim (спільний шлях Session.restore_game і net-rejoin; REQ-0010-60/83 — жодного напівживого світу).
+static func restore(sim, payload: Dictionary) -> bool:
 	sim.load_region(payload.region)
+	var refused: Variant = sim.get("load_error")
+	if refused != null and refused != &"":
+		return false
 	apply_runtime(sim, payload.runtime)
+	return true
+
+# Мапа з запису регіону (зворотне до map-половини serialize_region): рельєф — з seed координат (OSM — з blob тайлів, якщо
+# цілий), ноди — з diff. {map, osm_lost}: osm_lost — запис казав «osm», але тайлів нема/пошкоджені (викликач каже гравцю).
+static func map_from_record(data: Dictionary) -> Dictionary:
+	var nn := int(data.n)
+	var m := WorldGen.generate_map(float(data.lat), float(data.lon), nn)
+	m["place_name"] = str(data.get("place_name", "Регіон"))
+	# OSM terrain is the ONE thing not reproducible from the coordinate, so it is persisted as a tile blob.
+	# Restore it only if intact (right length); never silently fall back to a DIFFERENT world.
+	var osm_lost := false
+	if str(data.get("source", "")) == "osm":
+		var decoded := Marshalls.base64_to_raw(str(data.get("tiles_b64", "")))
+		if decoded.size() == nn * nn:
+			m.tiles = decoded
+			m["source"] = "osm"
+			# spawn was picked against procedural tiles; re-pick against the real OSM terrain
+			m.spawn = WorldGen._pick_spawn(m.tiles, m.nodes, nn)
+		else:
+			osm_lost = true
+	var nodes := {}
+	for k in data.nodes:
+		var nd: Dictionary = data.nodes[k]
+		nodes[int(str(k))] = {"kind": str(nd.kind), "amount": int(nd.amount)}
+	m.nodes = nodes
+	return {"map": m, "osm_lost": osm_lost}
 
 static func decode_tiles(b64: String) -> PackedByteArray:
 	return Marshalls.base64_to_raw(b64)

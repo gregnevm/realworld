@@ -28,9 +28,12 @@ const Widgets = preload("res://scripts/ui/widgets.gd")
 const TouchCtl = preload("res://scripts/ui/touch_controls.gd")
 const AM = preload("res://scripts/ui/action_model.gd")
 const InventoryMod = preload("res://scripts/sim/inventory.gd")
+const Clock = preload("res://scripts/clock.gd")
 const TILE := ViewGeom.TILE
 
 var session: SessionScript
+# Край пристрою (spec 0010 REQ-92 / 0012 D1): годинник пристрою -> Session.push_clock -> Sim.set_clock. Sim час сам не читає.
+var _clock: Clock.SystemClock = Clock.SystemClock.new()
 var view: Node2D
 var overlay_host: Node2D
 var cam: Camera2D
@@ -180,8 +183,14 @@ func _start_game(lat: float, lon: float, place_name: String) -> void:
 		return   # уже в грі (пізній GPS-callback чи повторний сигнал): другий бут ремонтував би панелі
 	session = SessionScript.new()
 	session.use_inventory = true          # spec 0009: new games play with the Minecraft-style inventory
+	if "capsule" in OS.get_cmdline_user_args():   # dev-перемикач `-- capsule` (spec 0010): Основна капсула; за замовчуванням OFF (OD-7 open)
+		session.use_catalog = true        # капсула вимагає відкритого складу (REQ-0010-59)
+		session.use_main_capsule = true
 	session.autosave = not shot_mode
-	session.start(lat, lon, place_name)
+	if not session.start(lat, lon, place_name, _clock.now_ms()):
+		push_error("Старт світу відхилено: %s" % String(session.last_error))
+		session = null                    # не лишаємо порожню сесію: guard `session != null` заблокував би новий старт
+		return
 	_enter_session()
 	_autosave()   # a new landing claims the save slot at once (the spawn screen warned about it)
 
@@ -191,6 +200,8 @@ func _continue_game() -> void:
 		return
 	var s := SessionScript.new()
 	if not s.restore_game():
+		if s.last_error != &"":
+			push_error("Збереження відхилено: %s" % String(s.last_error))   # ON-сейв без капсули / новіша версія запису (REQ-0010-60/83)
 		return   # unreadable save: the screen stays (presets still work)
 	session = s
 	_enter_session()
@@ -300,6 +311,7 @@ func _process(dt: float) -> void:
 			_shot_step(dt)   # `shot spawn`: the spawn screen itself is the subject
 		return
 	view.sim = session.sim            # travel/respawn swap the sim under the session — track it
+	session.push_clock(_clock.now_ms())   # годинник пристрою -> sim (монотонно); сам sim час не читає
 	var sdt := dt * winput.speed
 	if sdt > 0.0 and not session.sim.dead:
 		session.sim.update(sdt)
@@ -498,6 +510,9 @@ func _build_demo_base() -> void:
 	sim.player.py = c.y + 1.5
 	router.dispatch(&"craft", {"id": "axe"}, session)
 	router.dispatch(&"craft", {"id": "spear"}, session)
+	if bool(sim.use_main_capsule):   # `shot capsule`: герой збоку від капсули — високий спрайт перед нею ховав би «◎»
+		sim.player.px = c.x + 1.5
+		sim.player.py = c.y + 0.5
 	# лор у кадрі: патрульний робот Старого світу на підході до бази
 	sim.enemies.append(GameData.make_patrol_bot(c.x + 5.5, c.y + 0.5, 3))
 	# populate the research pipeline so the ResearchPanel reads live in the screenshot
