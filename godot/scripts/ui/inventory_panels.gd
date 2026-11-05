@@ -148,8 +148,18 @@ class InventoryPanel extends PanelBase.Base:
 		_hint.add_theme_color_override("font_color", Tokens.MUT)
 		_hint.text = HINT_IDLE
 		_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		_hint.custom_minimum_size = Vector2(440, 0)
-		vb.add_child(_hint)
+		_hint.custom_minimum_size = Vector2(340, 0)
+		_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var top := HBoxContainer.new()   # hint + an explicit way out («no ✕ — how do I close it?», 2nd independent read)
+		top.add_child(_hint)
+		var close := Button.new()
+		close.text = "✕ Закрити"
+		close.tooltip_text = "Закрити інвентар (Tab)"
+		close.focus_mode = Control.FOCUS_NONE
+		close.custom_minimum_size = Vector2(96, 36)
+		close.pressed.connect(func() -> void: emit_intent(&"toggle_inventory", {}))
+		top.add_child(close)
+		vb.add_child(top)
 		_grid = GridContainer.new()
 		_grid.columns = COLS
 		_grid.add_theme_constant_override("h_separation", 4)

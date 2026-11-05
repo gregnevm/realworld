@@ -188,14 +188,18 @@ func _t_comprehension() -> void:
 	md.free()
 	var sp = Panels.StockPanel.new()
 	sp.build_once()
-	sp.bind({"clock": {"day": 5}, "stock": {"rows": {"wood": 0, "food": 4}, "total": 3, "cap": 32, "backpack": true}})
+	sp.bind({"clock": {"day": 5}, "stock": {"rows": {"wood": 0, "food": 2}, "total": 3, "cap": 32, "backpack": true}})
 	ok(not sp._rows["wood"].visible and sp._rows["food"].visible and sp._rows["food"].caption == "Мало їжі",
 		"stock: zeros hidden (food stays), low food says so in words")
 	ok(sp._total.label.begins_with("Рюкзак"), "stock: the slot counter is named the backpack in an inventory world")
+	sp.bind({"clock": {"day": 5}, "stock": {"rows": {"food": 8}, "total": 3, "cap": 32, "backpack": true}})
+	ok(sp._rows["food"].state == &"good" and sp._rows["food"].caption == "", "stock: 8 portions is calm, not the loudest red on screen")
 	sp.free()
 	var slots: Array = [{"id": "bld:campfire", "n": 1}, {"id": "", "n": 0}]
 	ok(InvPanels.SlotKit.guide_slot({"goals": {"current": {"build": "campfire"}}}, slots) == 0, "hotbar guide: the goal's building slot")
 	ok(InvPanels.SlotKit.guide_slot({"goals": {"current": {"build": "bed"}}}, slots) == -2, "hotbar guide: not carried → the backpack button")
+	var InvMod = preload("res://scripts/sim/inventory.gd")
+	ok(InvMod.words({"scrap": 8}).contains("брухт ×8"), "shortfall in words: the resource is named, not just ⚙")
 
 # Touch build drawer: closed = only the 🔨 button; a category tab shows just its slots; desktop shows the
 # flat hotkey row with no button/tabs. Same Button pool throughout (R2).

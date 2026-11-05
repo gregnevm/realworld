@@ -51,6 +51,8 @@ var _right_scroll: ScrollContainer
 # strip (a 950x430 logical screen has no room to share it), panels honour their compact_open default
 # and the feed shrinks. Desktop keeps the authored layout.
 var compact := false
+# phone feed sits ABOVE the action button's target pill (it covered «Добути · брухт» — 2nd independent read)
+const FEED_LIFT_TOUCH := 190.0
 var dock_top := 10.0
 var dock_bottom_gap := DOCK_BOTTOM_GAP
 
@@ -63,7 +65,7 @@ func set_compact(on: bool) -> void:
 	if feed_w != null:
 		feed_w.set_compact(on)
 		# the phone build bar is taller (finger slots + scrollbar): the feed must clear it, never cover a slot
-		WidgetBase.Widget.pin_bottom_right(feed_w, 14.0, 150.0 if on else 74.0)
+		WidgetBase.Widget.pin_bottom_right(feed_w, 14.0, FEED_LIFT_TOUCH if on else 74.0)
 
 func _build_zones() -> void:
 	_left_scroll = _dock_scroll()
@@ -160,7 +162,7 @@ func mount() -> void:
 	_mount_feedback()
 	if compact:
 		feed_w.set_compact(true)
-		WidgetBase.Widget.pin_bottom_right(feed_w, 14.0, 150.0)
+		WidgetBase.Widget.pin_bottom_right(feed_w, 14.0, FEED_LIFT_TOUCH)
 
 func _starts_open(p) -> bool:
 	if compact and int(p.compact_open) >= 0:

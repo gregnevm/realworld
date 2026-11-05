@@ -18,6 +18,7 @@ const V_MONO    := &"MonoValue"    # right-aligned numeric Label
 const V_CARD    := &"RwCard"       # translucent feed/flash/banner card over the world
 const V_TIP     := &"RwTip"        # hover-inspect tooltip (amber edge: «this is about the cursor»)
 const V_BARE    := &"RwBare"       # chromeless dock unit: the content (medallions) IS the HUD, no box behind it
+const V_PRIMARY := &"RwPrimary"    # the ONE primary action of a screen (spawn «Грати»): amber fill, dark ink
 
 static func build() -> Theme:
 	install_emoji_fallback()
@@ -64,6 +65,12 @@ static func build() -> Theme:
 	t.set_stylebox("hover", "Button", _sb(Tokens.PANEL2, Tokens.AMBER, 6, 6))
 	t.set_stylebox("pressed", "Button", _sb(Tokens.PANEL, Tokens.AMBER, 6, 6))
 	t.set_stylebox("focus", "Button", _sb_outline(Tokens.AMBER, 6))
+	t.set_type_variation(V_PRIMARY, &"Button")
+	t.set_stylebox("normal", V_PRIMARY, _sb(Tokens.AMBER, Tokens.AMBER, 8, 10))
+	t.set_stylebox("hover", V_PRIMARY, _sb(Tokens.AMBER.lightened(0.12), Tokens.INK, 8, 10))
+	t.set_stylebox("pressed", V_PRIMARY, _sb(Tokens.AMBER.darkened(0.15), Tokens.AMBER, 8, 10))
+	for st in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		t.set_color(st, V_PRIMARY, Tokens.BG)
 	return t
 
 # Web builds have no system emoji font (desktop silently falls back to Segoe/Apple emoji; the web

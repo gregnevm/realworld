@@ -17,6 +17,7 @@ class StockPanel extends PanelBase.Base:
 	# Mobile-HUD redesign (2026-11): a bare row of resource medallions (icon + count badge, name in the
 	# tooltip) — Clash/Boom-Beach-style counters, no box, no header, no labels. Storage fill is the last token.
 	const EXTRA_POOL := 8          # fixed pool of catalogue-stock tokens (R2; slice caps to match)
+	const FOOD_WARN := 4           # portions: below this the food token warns (≈ one hungry day)
 	var _rows: Dictionary = {}     # res id -> Medallion
 	var _extra: Array = []         # Medallion pool for catalogue-only resources (spec 0008 phase 4)
 	var _total: Widgets.Medallion
@@ -55,9 +56,11 @@ class StockPanel extends PanelBase.Base:
 		var learning: bool = int((vm.get("clock", {}) as Dictionary).get("day", 1)) <= VitalsPanel.LEARN_DAYS
 		for res in _rows:
 			var n: int = int(rows.get(res, 0))
-			var low: bool = res == "food" and n < 10
-			var cap: String = "Мало їжі" if low else (String(GameData.RES[res].label) if learning else "")
-			_rows[res].bind({"value": str(n), "state": &"crit" if low else &"good", "caption": cap})
+			# alarm hierarchy: «8 food — мало?» was the loudest red on screen while a robot broke the wall.
+			# Out of food is critical, a few portions left is a warning, the rest is calm.
+			var fstate: StringName = (&"crit" if n == 0 else (&"warn" if n < FOOD_WARN else &"good")) if res == "food" else &"good"
+			var cap: String = ("Нема їжі" if fstate == &"crit" else "Мало їжі") if fstate != &"good" else (String(GameData.RES[res].label) if learning else "")
+			_rows[res].bind({"value": str(n), "state": fstate, "caption": cap})
 			# what you hold, plus food always (running out of it is the news); a «0» medallion was noise
 			# that the independent read could not decode (gamedev §5)
 			_rows[res].visible = n > 0 or res == "food"
@@ -148,7 +151,10 @@ class VitalsPanel extends PanelBase.Base:
 		var comfort := StringName(v.get("comfort", &"ok"))
 		var wstate: StringName = &"good" if comfort == &"ok" else (&"crit" if absf(felt - 18.0) > 22.0 else &"warn")
 		var wcap: String = ("Холодно" if comfort == &"cold" else "Спекотно") if comfort != &"ok" else ("Тепло" if learning else "")
-		_warm.bind({"value": "%d°" % int(round(felt)), "state": wstate, "caption": wcap})
+		# no «11°» beside the top bar's «−19°C»: two temperatures read as a riddle (2nd independent read) —
+		# the ring + the word say it; the felt °C itself lives in the tooltip
+		_warm.bind({"value": "", "state": wstate, "caption": wcap})
+		_warm.tooltip_text = "Відчуття тепла з одягом: %d°C (надворі — у верхній смузі)" % int(round(felt))
 		var carry: Dictionary = v.carry
 		_carry.bind({"value": "%d/%d" % [int(carry.cur), int(carry.cap)], "state": &"info" if int(carry.cur) > 0 else &"good"})
 		var conds: Array = v.get("conditions", [])
@@ -620,7 +626,7 @@ class TopBarPanel extends PanelBase.Base:
 	# the strip (pinch + the action button's vertical swipe do it), ✖ shows only while a tool is armed,
 	# and the remove tool says what it does in words.
 	const TOOLS := [["☰", &"toggle_menu", "Панелі та оверлеї"], ["✖", &"cancel_tool", "Скасувати інструмент"],
-		["🗑 Розібрати", &"remove_tool", "Розібрати: торкнись своєї будівлі"]]
+		["♻ Розібрати", &"remove_tool", "Розібрати: торкнись своєї будівлі — повернеш частину ресурсів"]]
 	var _clock: Label
 	var _season: Label
 	var _weather: Label

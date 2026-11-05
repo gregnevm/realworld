@@ -187,7 +187,7 @@ class SpawnScreen extends Control:
 		primary.custom_minimum_size = Vector2(0, 64)
 		primary.add_theme_font_override("font", UITheme.display_font())
 		primary.add_theme_font_size_override("font_size", 24)
-		primary.add_theme_color_override("font_color", Tokens.AMBER)
+		primary.theme_type_variation = UITheme.V_PRIMARY   # the one filled button on the screen: it out-shouts the art
 		Chrome.pop_button(primary)
 		box.add_child(primary)
 		arrivals.append(primary)
@@ -332,9 +332,9 @@ class DeathScreen extends Control:
 	static func _fate(vm: Dictionary) -> String:
 		if bool(vm.get("inventory", false)):
 			var n: int = int(vm.get("bag_items", 0))
-			var bag: String = ("Торба (%d предм.) лежить на місці загибелі — її можна забрати." % n) if n > 0 else "Рюкзак був порожній — втрачати нічого."
-			return bag + "\nПоселення й склад лишаються. Новий виживальник прибуде без навичок."
-		return "Усе, що було при собі, втрачено.\nПоселення й склад лишаються. Новий виживальник прибуде без навичок."
+			var bag: String = ("Торба (%d предм.) лежить на місці загибелі — вона позначена на мапі, її можна забрати." % n) if n > 0 else "Рюкзак був порожній — втрачати нічого."
+			return bag + "\nПоселення й склад лишаються. Новий виживальник прибуде туди й почне з нуля."
+		return "Усе, що було при собі, втрачено.\nПоселення й склад лишаються. Новий виживальник прибуде туди й почне з нуля."
 
 	static func _lesson(c: String) -> String:
 		if "переохолод" in c:

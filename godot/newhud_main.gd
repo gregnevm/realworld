@@ -489,6 +489,10 @@ func _build_demo_base() -> void:
 	_put("heater", c.x, c.y - 1)
 	_put("spike_trap", c.x, c.y + 4)
 	_put("spike_trap", c.x - 1, c.y + 4)
+	if bool(sim.use_inventory):   # staging: the crafts below are paid from the backpack — stock it, so the frame
+		InventoryMod.add(sim, "scrap", 40)   # shows the kit and not a stale «бракує» flash (an artifact, not the game)
+		InventoryMod.add(sim, "wood", 20)
+		InventoryMod.add(sim, "components", 6)
 	router.dispatch(&"craft", {"id": "plate"}, session)
 	sim.player.px = c.x + 0.5
 	sim.player.py = c.y + 1.5
