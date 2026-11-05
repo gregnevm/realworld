@@ -188,7 +188,7 @@ static func death_cause(tracker) -> String:
 		if h is Needs.Hediff_Malnutrition:
 			return "голодна смерть"
 		if h is Gear.Hediff_Hypothermia:
-			return "замерз"
+			return "переохолодження"   # a cause, not a gendered verb («замерз»)
 		if h is Gear.Hediff_Heatstroke:
 			return "тепловий удар"
 		if h is Health.Hediff_Disease:
@@ -362,7 +362,10 @@ static func _cap_list(names: Array) -> Array:
 static func spawn_hint(s) -> void:
 	var felt: float = s.hero_felt_c()
 	if felt < Gear.COMFORT_MIN_C:
-		s._log("❄ Тут холодно (%.0f°C): розпали багаття (9), а тоді обнеси клітинку стінами (1) з дверима (2) — у приміщенні тепло тримається." % felt, "warn")   # gdlint: ignore=max-line-length
+		if s.get("use_inventory") == true:   # spec 0009: the campfire is an item in the hotbar, not a build-bar key
+			s._log("❄ Тут холодно (%.0f°C): постав багаття з хотбару (слот 1), потім стіни з дверима навколо — у приміщенні тепло тримається." % felt, "warn")   # gdlint: ignore=max-line-length
+		else:
+			s._log("❄ Тут холодно (%.0f°C): розпали багаття (9), а тоді обнеси клітинку стінами (1) з дверима (2) — у приміщенні тепло тримається." % felt, "warn")   # gdlint: ignore=max-line-length
 	elif felt > Gear.COMFORT_MAX_C:
 		s._log("🥵 Тут спекотно (%.0f°C). Приміщення дає прохолоду." % felt, "warn")
 

@@ -215,6 +215,15 @@ static func building_recipe(s, kind: String) -> Dictionary:
 	return {"kind": kind, "cost": def.get("cost", {}), "station": "" if HAND_CRAFT.has(kind) else "workbench",
 		"name": String(def.get("name", kind))}
 
+# A shortfall in WORDS («10 дерева, 8 брухту»): «бракує 🪵10 ⚙8» named a resource the HUD wasn't even
+# showing — the 2nd independent read could not decode ⚙ (gamedev §5). Icon + amount + name.
+static func words(cost: Dictionary) -> String:
+	var parts: Array = []
+	for k in cost:
+		var r: Dictionary = GameData.RES.get(str(k), {})
+		parts.append("%s %s ×%d" % [String(r.get("icon", "")), String(r.get("label", str(k))).to_lower(), int(cost[k])])
+	return ", ".join(parts)
+
 static func craft_building(s, kind: String) -> Dictionary:
 	var rc := building_recipe(s, kind)
 	if rc.is_empty():
@@ -226,7 +235,7 @@ static func craft_building(s, kind: String) -> Dictionary:
 		return {"ok": false, "msg": "Потрібен верстак поруч."}
 	var at := Vector2(s.player.px, s.player.py)
 	if not can_pay(s, rc.cost, at):
-		return {"ok": false, "msg": "Бракує: " + s._cost_str(missing(s, rc.cost, at))}
+		return {"ok": false, "msg": "%s — бракує: %s" % [String(rc.name), words(missing(s, rc.cost, at))]}
 	if room(s, BLD + kind) < 1:
 		return {"ok": false, "msg": "Рюкзак повний."}
 	pay(s, rc.cost, at)
@@ -321,7 +330,7 @@ static func craft_tool(s, item_id: String) -> Dictionary:
 	var recipe: Dictionary = GameData.ITEMS[item_id].recipe
 	var at := Vector2(s.player.px, s.player.py)
 	if not can_pay(s, recipe, at):
-		return {"ok": false, "msg": "Бракує: " + s._cost_str(missing(s, recipe, at))}
+		return {"ok": false, "msg": "%s — бракує: %s" % [String(GameData.ITEMS[item_id].get("name", item_id)), words(missing(s, recipe, at))]}
 	if room(s, item_id) < 1:
 		return {"ok": false, "msg": "Рюкзак повний."}
 	pay(s, recipe, at)

@@ -53,6 +53,7 @@ var _last_epos: Array = []          # enemy world positions last frame (death po
 var _poofs: Array = []              # {pos, age}
 var action_target: Dictionary = {}  # touch scheme: what the action button will act on (scene sets it each frame)
 var action_mode: StringName = &"gather"
+var action_build := ""              # build mode: the building the button will place (its ghost fills the brackets)
 const ACTION_COL := {&"gather": Color(0.44, 0.68, 0.33, 1.0), &"build": Color(0.88, 0.69, 0.44, 1.0), &"repair": Color(0.53, 0.82, 0.84, 1.0), &"fight": Color(0.88, 0.42, 0.36, 1.0)}
 var shake := 0.0                    # TRAUMA 0..1 (Eiserloh): events add, decays 1/s; the scene offsets the camera by trauma²
 var hitstop := 0.0                  # seconds the RENDER holds its frame (Vlambeer/Dead Cells hit-stop) — the sim never pauses
@@ -501,6 +502,13 @@ func enemy_intent(e) -> Dictionary:
 		return {"glyph": "⚔", "num": int(round(float(e.dmg) * float(sim.armor_mult()))), "col": INTENT_WARN, "hunt": true}
 	return {"glyph": "👁" if String(e.get("kind", "raider")) == "bot" else "⚑", "num": -1, "col": Color(0.53, 0.82, 0.84, 1.0), "hunt": false}
 
+static func _intent_word(it: Dictionary) -> String:
+	match String(it.glyph):
+		"⚔": return "удар −%d" % int(it.num)
+		"🔨": return "ламає стіну"
+		"👁": return "патруль"
+	return "блукає"
+
 func _draw_intents() -> void:
 	for e in sim.enemies:
 		var it := enemy_intent(e)
@@ -514,7 +522,8 @@ func _draw_intents() -> void:
 					draw_circle(prev.lerp(q, (j + 0.5) / 3.0), TILE * 0.06, Color(it.col.r, it.col.g, it.col.b, 0.75))
 				prev = q
 		var fs := int(TILE * 0.42)
-		var label: String = String(it.glyph) + ("%d" % int(it.num) if int(it.num) >= 0 else "")
+		# glyph + a WORD: «🔨11» read as «level? HP?» in the independent read (gamedev §5) — say the intent
+		var label: String = String(it.glyph) + " " + _intent_word(it)
 		var tw: float = _font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 		var rr := Rect2(head.x - tw * 0.5 - 5.0, head.y - fs * 0.95, tw + 10.0, fs * 1.25)
 		draw_rect(rr, Color(0.05, 0.07, 0.09, 0.85))
@@ -533,6 +542,10 @@ func _draw_action_target() -> void:
 	var k: float = 0.5 + 0.5 * sin(_now() * 5.0)
 	var pad: float = TILE * (0.02 + 0.06 * k)
 	var r := Rect2(p - Vector2(pad, pad), Vector2(TILE + 2 * pad, TILE + 2 * pad))
+	if action_mode == &"build" and action_build != "":   # empty brackets did not say WHAT lands there (3rd read)
+		var gtex := building_texture(action_build)
+		if gtex != null:
+			draw_texture_rect(gtex, Rect2(p, Vector2(TILE, TILE)), false, Color(1, 1, 1, 0.8 + 0.2 * k))
 	var arm: float = TILE * 0.3
 	var w := 3.0
 	for corner in [[r.position, Vector2(1, 0), Vector2(0, 1)], [Vector2(r.end.x, r.position.y), Vector2(-1, 0), Vector2(0, 1)],
@@ -552,7 +565,9 @@ func _draw_bags() -> void:
 		var bob: float = sin(_now() * 3.0 + float(bag.x)) * TILE * 0.06
 		var death: bool = (bag.slots as Array).size() > 1
 		if death:
-			draw_circle(c, TILE * (0.48 + 0.05 * sin(_now() * 4.0)), Color(BAG_COL.r, BAG_COL.g, BAG_COL.b, 0.22))
+			var rr: float = TILE * (0.48 + 0.05 * sin(_now() * 4.0))
+			draw_circle(c, rr, Color(BAG_COL.r, BAG_COL.g, BAG_COL.b, 0.22))
+			draw_arc(c, rr, 0.0, TAU, 32, Color(BAG_COL.r, BAG_COL.g, BAG_COL.b, 0.85), 2.0, true)   # reads on dark rock too
 		draw_contact_shadow(c + Vector2(0, TILE * 0.3), TILE * 0.28)
 		if tex != null:
 			draw_sprite_fit(tex, Rect2(c.x - TILE * 0.38, c.y - TILE * 0.5 - bob, TILE * 0.76, TILE * 0.76))

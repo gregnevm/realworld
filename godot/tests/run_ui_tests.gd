@@ -36,6 +36,8 @@ const Sim = preload("res://scripts/sim.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
 const CatalogDefs = preload("res://scripts/catalog_defs.gd")
 const HudRootScript = preload("res://scripts/ui/hud_root.gd")
+const LifecycleScript = preload("res://scripts/ui/lifecycle.gd")
+const InvPanels = preload("res://scripts/ui/inventory_panels.gd")
 const SessionScript = preload("res://scripts/session.gd")
 
 
@@ -46,6 +48,7 @@ func _init() -> void:
 	_t_world_fx()
 	_t_panel_fold()
 	_t_goal_guide()
+	_t_comprehension()
 	_t_build_drawer()
 	_t_enemy_intent()
 	_t_action_model()
@@ -162,6 +165,41 @@ func _t_goal_guide() -> void:
 	bb.bind({"build": {"slots": slots}, "goals": {"current": {"build": ""}}})
 	ok(bb._btns[1].modulate == Tokens.WHITE and bb._btns[1].scale == Vector2.ONE, "goal guide: no target → no pulse")
 	bb.free()
+
+# Comprehension pass (gamedev §5 — the first independent read failed on these): the death screen tells the
+# truth about the bag and uses no gendered verb; the goal chip shows THIS goal's progress (no «5/10» step
+# count); medallions carry a word while learning / while off; the inventory hotbar points at the goal's item.
+func _t_comprehension() -> void:
+	var DS = LifecycleScript.DeathScreen
+	ok("Торба (18" in DS._fate({"inventory": true, "bag_items": 18}), "death: the bag waits where the pawn fell (spec 0009)")
+	ok("втрачено" in DS._fate({"inventory": false}), "death: the classic world still says carried loot is lost")
+	ok("багаття" in DS._lesson("переохолодження"), "death: the cold cause maps to the warmth lesson")
+	var src := FileAccess.get_file_as_string("res://scripts/ui/lifecycle.gd")
+	ok(not ("ЗАГИНУВ" in src) and not ("нова пішка" in src), "death: no gendered «ти загинув», no «пішка»")
+	var gp = Panels.GoalsPanel.new()
+	gp.build_once()
+	gp.bind({"goals": {"available": true, "done": 4, "total": 10, "current": {"title": "Розпали багаття", "hint": "h", "pct": 0.0}, "next": "Укриття"}})
+	ok(gp._title.text == "Розпали багаття" and "Крок 5 з 10" in gp._title.tooltip_text, "goal chip: no step count on the chip, the step lives in the tooltip")
+	gp.free()
+	var md = Widgets.Medallion.new()
+	md.build_once()
+	md.bind({"value": "8", "state": &"crit", "caption": "Мало їжі"})
+	ok(md.caption == "Мало їжі", "medallion: carries the alert word")
+	md.free()
+	var sp = Panels.StockPanel.new()
+	sp.build_once()
+	sp.bind({"clock": {"day": 5}, "stock": {"rows": {"wood": 0, "food": 2}, "total": 3, "cap": 32, "backpack": true}})
+	ok(not sp._rows["wood"].visible and sp._rows["food"].visible and sp._rows["food"].caption == "Мало їжі",
+		"stock: zeros hidden (food stays), low food says so in words")
+	ok(sp._total.label.begins_with("Рюкзак"), "stock: the slot counter is named the backpack in an inventory world")
+	sp.bind({"clock": {"day": 5}, "stock": {"rows": {"food": 8}, "total": 3, "cap": 32, "backpack": true}})
+	ok(sp._rows["food"].state == &"good" and sp._rows["food"].caption == "", "stock: 8 portions is calm, not the loudest red on screen")
+	sp.free()
+	var slots: Array = [{"id": "bld:campfire", "n": 1}, {"id": "", "n": 0}]
+	ok(InvPanels.SlotKit.guide_slot({"goals": {"current": {"build": "campfire"}}}, slots) == 0, "hotbar guide: the goal's building slot")
+	ok(InvPanels.SlotKit.guide_slot({"goals": {"current": {"build": "bed"}}}, slots) == -2, "hotbar guide: not carried → the backpack button")
+	var InvMod = preload("res://scripts/sim/inventory.gd")
+	ok(InvMod.words({"scrap": 8}).contains("брухт ×8"), "shortfall in words: the resource is named, not just ⚙")
 
 # Touch build drawer: closed = only the 🔨 button; a category tab shows just its slots; desktop shows the
 # flat hotkey row with no button/tabs. Same Button pool throughout (R2).

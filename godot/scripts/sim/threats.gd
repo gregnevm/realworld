@@ -266,7 +266,10 @@ static func on_death(s) -> void:
 		s._inv_drop_bag()   # spec 0009: the backpack stays where the pawn fell, as a bag
 	s.dead = true
 	s.banner = ""
-	s._log("☠ Твій персонаж загинув. Все нажите втрачено.", "bad")
+	if s.get("use_inventory") == true:
+		s._log("☠ Загибель. Торба лишилась на місці — новий виживальник може її забрати.", "bad")
+	else:
+		s._log("☠ Загибель. Усе, що було при собі, втрачено.", "bad")
 
 # Permadeath (spec 0002): the pawn is gone entirely — skills, carried loot and items reset.
 # You get a fresh un-leveled rookie at the clan base; the settlement (buildings + stock) persists.
@@ -286,4 +289,4 @@ static func respawn_new_pawn(s) -> void:
 	s.raid.timer = 0.0
 	s.banner = ""
 	s.dead = false
-	s._log("🧬 Нова пішка прибула в поселення — прокачка з нуля.", "warn")
+	s._log("Новий виживальник прибув у поселення — навички з нуля.", "warn")
