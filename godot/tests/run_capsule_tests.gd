@@ -37,6 +37,17 @@
 # 92 (time enters only through Sim.set_clock; monotone; not hashed), 98 (ONE landing seam). Fields of the record
 # that later waves add (invested W2a; immune_until / token / raid cursor W3a) are NOT attacked here — they do not exist yet.
 #
+# WAVE 0010-W2a (appended after the W1b block): the levels table + upgrade_capsule + the invested ledger.
+# REQ-0010-11/91 (ONE table in the catalog data, rows 0..5, the code holds none of its numbers — a grep AND an injected table that
+# changes behaviour; a 7th row needs no code), 12 (buffs(0) empty even when the data says otherwise), 13 (atomic debit: backpack
+# FIRST, then the stock only while the hero stands in the zone, edge inclusive; refusal = the first reason, nothing debited; level 5
+# is the top), 14 + 35 (ledger == the units that actually left, measured around the call; every level/ledger change moves
+# world_hash; JSON round trip keeps ints; records handed out are copies), 17 (one axis: a row is {level,cost,radius,core_hp,buffs},
+# one upgrade entry point), 76 (backpack-then-stock, the same cmd id in the same tick pays once, no id = no dedup), 79 (no
+# hunger/cold/sleep key anywhere in the table), 82 (invested key order), 88 (a level-5 save against a lower/higher/one-row table:
+# clamp, ledger as is, defence recomputed; corrupt ledgers refused), 96/97 (death leaves the ledger and stock; upgrading summons
+# no body), plus a seeded property run against an INDEPENDENT oracle (measured funds + the catalog FILE + the data's metric).
+# Not testable in this wave: «захист(L) впливає на resolve_raid» (REQ-0010-17, resolve_raid is W3a), drop of invested by a raid (W3a).
 # CLOSEOUT of the integrity blockers on W1a/W1b (guards that survived deletion — F3): `_t_on_patrol_not_spawned`,
 # `_t_on_director_raid_dropped`, `_t_on_session_travel_refused` (after `_t_no_eternal_siege`) and the respawn_anchor WIRING
 # checks inside `_t_respawn_seams` (REQ-0010-09: what Session.respawn hands to sim.respawn_new_pawn). Each fails when its guard is removed.
@@ -124,6 +135,23 @@ func _init() -> void:
 	_t_hash_fields()
 	_t_clock_input()
 	_t_no_wallclock_alias_proof()
+	# --- wave 0010-W2a ---
+	_t_levels_table_data()
+	_t_table_drives_code()
+	_t_upgrade_walk()
+	_t_upgrade_refusals()
+	_t_upgrade_reach()
+	_t_upgrade_sources()
+	_t_upgrade_dedupe()
+	_t_upgrade_hash_roundtrip()
+	_t_invested_key_order()
+	_t_save_clamp()
+	_t_ledger_save_compat()
+	_t_range_extension()
+	_t_upgrade_side_effects()
+	_t_upgrade_death_and_roster()
+	_t_one_axis_api()
+	_t_upgrade_property()
 	chk.skip_banner()
 	finish()
 
@@ -2471,3 +2499,1244 @@ func _t_no_wallclock_alias_proof() -> void:
 			offenders.append("%s «%s»" % [String(path).trim_prefix("res://scripts/"), m.get_string()])
 	ok(files.size() > 20, "REQ-0010-92: the alias-proof scan covers the sim path (%d files)" % files.size())
 	ok(offenders.is_empty(), "REQ-0010-92: nothing in the sim path names Time/OS/DateTime/SystemClock/Engine ticks/get_unix_time — %s" % ("clean" if offenders.is_empty() else ", ".join(PackedStringArray(offenders))))
+
+
+# =============================================================================================
+# WAVE 0010-W2a — helpers (the capsule_levels table, upgrade_capsule, the invested ledger)
+# Expectations come from REQ-0010-11/12/13/14/17/35/76/79/82/88/91/97 and OD-58/59, NOT from capsule.gd: the data oracle is the
+# catalog FILE read here independently (never through MainCapsule.table), the resource accounting is measured around the call
+# (backpack + stock before/after), and the zone test uses the metric the data names. A red test here is a finding.
+# =============================================================================================
+const CATALOG_FILE := "res://content/catalog.json"
+const PAY_IDS: Array = ["wood", "stone", "scrap", "planks", "components"]   # ids the backpack AND the stock both speak
+const NEED_WORDS: Array = ["hunger", "cold", "sleep", "rest", "thirst", "need", "warm", "heat", "fatigue", "stamina"]   # S2 (REQ-0010-79)
+const ROSTER_WORDS: Array = ["clone", "roster", "genome", "implant", "orbit", "pawn", "body", "dna"]   # the Orbit's business (REQ-0010-97)
+
+var _raw_cache: Dictionary = {}
+
+
+func _raw_table() -> Dictionary:
+	if _raw_cache.is_empty():
+		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(CATALOG_FILE))
+		if parsed is Dictionary:
+			_raw_cache = (parsed as Dictionary).get("capsule_levels", {})
+	return _raw_cache
+
+
+func _raw_rows() -> Array:
+	return _raw_table().get("levels", [])
+
+
+# a deep copy of the catalog table: tests may edit it, the catalog (and MainCapsule's cache) must never see it
+func _table_copy() -> Dictionary:
+	return _raw_table().duplicate(true)
+
+
+# {res: int} price of level L in a `levels` array (JSON floats -> ints); {} outside the table
+func _cost_of(rows: Array, L: int) -> Dictionary:
+	var out: Dictionary = {}
+	if L < 0 or L >= rows.size():
+		return out
+	var src: Dictionary = (rows[L] as Dictionary).get("cost", {})
+	for k in src:
+		out[String(k)] = int(src[k])
+	return out
+
+
+func _same_numbers(a: Dictionary, b: Dictionary) -> bool:
+	if a.size() != b.size():
+		return false
+	for k in a:
+		if not b.has(k) or absf(float(a[k]) - float(b[k])) > 1.0e-9:
+			return false
+	return true
+
+
+# a table whose numbers appear NOWHERE in the catalog or the code: a hard-coded constant shows up as a mismatch. Cost keys are
+# inserted in a NON-alphabetical order (wood, stone, planks) on purpose.
+func _synth_table(n_levels: int) -> Dictionary:
+	var rows: Array = []
+	for L in n_levels:
+		var cost: Dictionary = {}
+		if L >= 1:
+			cost["wood"] = 7 + 3 * L
+			cost["stone"] = 2 * L
+		if L >= 2:
+			cost["planks"] = L + 1
+		var buffs: Dictionary = {}
+		if L >= 1:
+			buffs["gather_mult"] = 1.0 + 0.07 * float(L)
+			buffs["craft_mult"] = 1.0 + 0.03 * float(L)
+		rows.append({"level": L, "cost": cost, "radius": 4 + L, "core_hp": 100.0 * float(L + 1) + 7.0, "buffs": buffs})
+	return {"version": 1, "status": "proposed", "metric": "chebyshev", "levels": rows}
+
+
+func _pack_set(s: Variant, res: String, n: int) -> void:
+	for sl in (s.player.inv as Array):
+		if String(sl.id) == res:
+			sl.id = ""
+			sl.n = 0
+	if n > 0:
+		var left: int = Inventory.add(s, res, n)
+		if left != 0:
+			ok(false, "setup: the backpack could not hold %d x %s (%d left over)" % [n, res, left])
+
+
+func _fund(s: Variant, res: String, in_pack: int, in_stock: int) -> void:
+	_pack_set(s, res, in_pack)
+	s.stock[s.res_key(res)] = in_stock
+
+
+func _wipe(s: Variant) -> void:
+	for id in PAY_IDS:
+		_fund(s, String(id), 0, 0)
+
+
+func _have(s: Variant, res: String) -> int:
+	return Inventory.count(s, res) + int(s.res_amount(res))
+
+
+func _funds_sig(s: Variant) -> String:
+	return var_to_str([s.player.inv, s.stock])
+
+
+func _put_hero(s: Variant, c: Vector2i) -> void:
+	s.player.px = float(c.x) + 0.5
+	s.player.py = float(c.y) + 0.5
+	s.player.action = null
+
+
+func _half(n: int) -> int:
+	return int(floor(float(n) * 0.5))
+
+
+# fund `cost` exactly, split between the backpack and the stock (the backpack gets `pack_part` of each)
+func _fund_cost(s: Variant, cost: Dictionary, pack_part: float) -> void:
+	for res in cost:
+		var c: int = int(cost[res])
+		var p: int = mini(c, int(floor(float(c) * pack_part)))
+		_fund(s, String(res), p, c - p)
+
+
+# an ON pad at level `n` of the REAL catalog table, reached through real upgrades; funds end at zero
+func _leveled(n: int) -> Variant:
+	var s: Variant = _on_pad()
+	_wipe(s)
+	var rows: Array = _raw_rows()
+	for L in range(1, n + 1):
+		_fund_cost(s, _cost_of(rows, L), 0.4)
+		var r: Dictionary = s.upgrade_capsule()
+		if not bool(r.get("ok", false)):
+			ok(false, "setup: upgrade to level %d failed: %s" % [L, str(r)])
+	return s
+
+
+func _ledger_sig(s: Variant) -> String:
+	return var_to_str((s.main_capsule as Dictionary).get("invested", {}))
+
+
+func _all_keys(v: Variant, out: Array, skip_key: String = "") -> void:
+	if v is Dictionary:
+		for k in (v as Dictionary):
+			if String(k) == skip_key:
+				continue
+			out.append(String(k))
+			_all_keys((v as Dictionary)[k], out, skip_key)
+	elif v is Array:
+		for e in (v as Array):
+			_all_keys(e, out, skip_key)
+
+
+func _first_word_in(keys: Array, words: Array) -> String:
+	for k in keys:
+		for w in words:
+			if String(k).to_lower().contains(String(w)):
+				return "%s ~ %s" % [String(k), String(w)]
+	return ""
+
+
+# =============================================================================================
+# REQ-0010-11 / 12 / 16 / 17 / 79 / 97 — the ONE table in the catalog DATA; no needs buff; no clone entry; no second axis;
+# the code holds none of its numbers (grep)
+# =============================================================================================
+func _t_levels_table_data() -> void:
+	var t: Dictionary = _raw_table()
+	var rows: Array = t.get("levels", [])
+	ok(not t.is_empty() and rows.size() == 6, "REQ-0010-11: catalog.json carries ONE capsule_levels table with exactly 6 rows (levels 0..5, OD-56) — %d rows" % rows.size())
+	var contiguous: bool = true
+	for i in rows.size():
+		contiguous = contiguous and int((rows[i] as Dictionary).get("level", -1)) == i
+	ok(contiguous, "REQ-0010-11: the rows are levels 0,1,..,5 in order (no gap, no duplicate)")
+	ok(["proposed", "approved"].has(String(t.get("status", ""))), "OD-59/60: the numbers carry an explicit status ('proposed' until the owner approves) — '%s'" % String(t.get("status", "")))
+	ok(String(t.get("metric", "")) == "chebyshev", "REQ-0010-80: the zone metric is named in the data (this suite's zone oracle needs it) — '%s'" % String(t.get("metric", "")))
+	# data -> code: every number the code reports is the file's number
+	var s: Variant = _on_pad()
+	ok(MainCapsule.max_level(s) == rows.size() - 1, "REQ-0010-11: max_level is the table size - 1 (code max %d, data rows %d)" % [MainCapsule.max_level(s), rows.size()])
+	var bad: Array = []
+	for L in rows.size():
+		var raw: Dictionary = rows[L]
+		var row: Dictionary = MainCapsule.row(s, L)
+		if not _same_numbers(row.get("cost", {}), _cost_of(rows, L)):
+			bad.append("cost[%d]" % L)
+		if int(MainCapsule.radius(s, L)) != int(raw.radius) or int(row.get("radius", -1)) != int(raw.radius):
+			bad.append("radius[%d]" % L)
+		if absf(float(MainCapsule.core_hp(s, L)) - float(raw.core_hp)) > 1.0e-6 or absf(float(row.get("core_hp", -1.0)) - float(raw.core_hp)) > 1.0e-6:
+			bad.append("core_hp[%d]" % L)
+		if L >= 1 and not _same_numbers(MainCapsule.buffs(s, L), raw.get("buffs", {})):
+			bad.append("buffs[%d]" % L)
+	ok(bad.is_empty(), "REQ-0010-11: cost/radius/core_hp/buffs of every level are read from the data unchanged — %s" % ("ok" if bad.is_empty() else ", ".join(PackedStringArray(bad))))
+	# REQ-0010-12: level 0 is bare
+	ok(_cost_of(rows, 0).is_empty() and (rows[0] as Dictionary).get("buffs", {"x": 1}).is_empty() and MainCapsule.buffs(s, 0).is_empty(),
+		"REQ-0010-12: level 0 costs nothing and buffs(0) is empty (data AND code)")
+	# REQ-0010-12 is a RULE, not a property of today's numbers: a table that (wrongly) hangs a buff on level 0 still gives level 0 none
+	var tricky: Dictionary = _synth_table(3)
+	tricky.levels[0].buffs = {"gather_mult": 1.5, "craft_mult": 1.2}
+	s.capsule_table = tricky
+	ok(MainCapsule.buffs(s, 0).is_empty() and not MainCapsule.buffs(s, 1).is_empty(), "REQ-0010-12: level 0 gives NO buff even when the data lists one (level 1 still does) — buffs(0)=%s" % str(MainCapsule.buffs(s, 0)))
+	s.capsule_table = {}
+	# REQ-0010-16/17: the zone never shrinks, the ONE defence parameter changes with every level
+	var mono: bool = true
+	var strict: bool = true
+	var grows: bool = true
+	var prev_total: int = 0
+	for L in range(1, rows.size()):
+		mono = mono and int(MainCapsule.radius(s, L)) >= int(MainCapsule.radius(s, L - 1))
+		strict = strict and float(MainCapsule.core_hp(s, L)) > float(MainCapsule.core_hp(s, L - 1))
+		var total: int = 0
+		for res in _cost_of(rows, L):
+			total += int(_cost_of(rows, L)[res])
+		grows = grows and total > prev_total
+		prev_total = total
+	ok(mono, "REQ-0010-16: radius(L+1) >= radius(L) for every level")
+	ok(strict, "REQ-0010-17: an upgrade CHANGES the defence parameter — core_hp(L+1) > core_hp(L) for every level")
+	ok(grows, "P1: the price of a level grows with the level (every level costs more units than the one before)")
+	# prices: only resources the game knows, positive whole numbers
+	var priced: bool = true
+	for L in range(1, rows.size()):
+		var c: Dictionary = _cost_of(rows, L)
+		priced = priced and not c.is_empty()
+		for res in c:
+			priced = priced and GameData.RES.has(res) and int(c[res]) > 0 and Inventory.stack_max(String(res)) > 0 and s.res_key(res) != ""
+	ok(priced, "REQ-0010-11/13: every level 1..5 has a price in known resources, positive whole units")
+	# REQ-0010-79 / 97 / 17: no body-need multiplier, no clone/roster entry, no second axis — anywhere in the table
+	var keys: Array = []
+	_all_keys(t, keys, "cost")
+	ok(_first_word_in(keys, NEED_WORDS) == "", "REQ-0010-79: no key of the table touches hunger/cold/sleep/thirst/needs — %s" % _first_word_in(keys, NEED_WORDS))
+	ok(_first_word_in(keys, ROSTER_WORDS) == "", "REQ-0010-97: no key of the table grants/levels clones, genome, implants or Orbit things — %s" % _first_word_in(keys, ROSTER_WORDS))
+	var axis: String = _first_word_in(t.keys(), ["axis", "axes", "branch", "track", "tree"])
+	var row_ok: bool = true
+	for r in rows:
+		for k in (r as Dictionary):
+			row_ok = row_ok and ["level", "cost", "radius", "core_hp", "buffs"].has(String(k))
+	ok(axis == "" and row_ok, "REQ-0010-17: ONE axis — a row is exactly {level,cost,radius,core_hp,buffs} and the table has no axes/branches (%s)" % axis)
+	# REQ-0010-11 «код не містить цих чисел»: no number of the table is a literal in the capsule module (comments stripped)
+	var nums: Dictionary = {}
+	for L in rows.size():
+		var rw: Dictionary = rows[L]
+		for k in (rw.get("cost", {}) as Dictionary):
+			nums[str(int(rw.cost[k]))] = "cost[%d].%s" % [L, String(k)]
+		nums[str(int(rw.radius))] = "radius[%d]" % L
+		nums[str(int(rw.core_hp))] = "core_hp[%d]" % L
+		for k in (rw.get("buffs", {}) as Dictionary):
+			nums["%s" % str(float(rw.buffs[k]))] = "buffs[%d].%s" % [L, String(k)]
+	var code: PackedStringArray = PackedStringArray()
+	for line in FileAccess.get_file_as_string("res://scripts/sim/capsule.gd").split("\n"):
+		var stripped: String = String(line).strip_edges()
+		if not stripped.begins_with("#"):
+			code.append(String(line).get_slice("#", 0))
+	var body: String = "\n".join(code)
+	var hit: String = ""
+	for num in nums:
+		var n_str: String = String(num)
+		if n_str.length() < 2 and not n_str.contains("."):
+			continue   # 0..9 are everyday literals (levels, indexes); only the table's distinctive numbers are searched
+		var re: RegEx = RegEx.new()
+		re.compile("(?<![\\w.])" + n_str.replace(".", "\\.") + "(?![\\w.])")
+		if re.search(body) != null:
+			hit = "%s (%s)" % [n_str, String(nums[num])]
+			break
+	ok(hit == "", "REQ-0010-11: capsule.gd holds no number of the table as a literal — %s" % ("clean" if hit == "" else hit))
+	_dispose(s)
+
+
+# =============================================================================================
+# REQ-0010-11 / 91: the CODE follows the table — a table with other numbers and another length changes behaviour, nothing leaks
+# between sims, and the table is never mutated by the code that reads it
+# =============================================================================================
+func _t_table_drives_code() -> void:
+	var catalog_max: int = _raw_rows().size() - 1
+	var s: Variant = _on_pad()
+	var syn: Dictionary = _synth_table(4)
+	var syn_snap: String = var_to_str(syn.duplicate(true))
+	s.capsule_table = syn
+	ok(MainCapsule.max_level(s) == 3, "REQ-0010-11/91: a 4-row table in s.capsule_table makes max_level 3 (%d)" % MainCapsule.max_level(s))
+	var follows: bool = true
+	var rows: Array = syn.levels
+	for L in 4:
+		var rw: Dictionary = rows[L]
+		follows = follows and _same_numbers(MainCapsule.row(s, L).cost, _cost_of(rows, L)) and MainCapsule.radius(s, L) == int(rw.radius) \
+			and absf(MainCapsule.core_hp(s, L) - float(rw.core_hp)) < 1.0e-6 and _same_numbers(MainCapsule.buffs(s, L), rw.buffs if L >= 1 else {})
+	ok(follows, "REQ-0010-11: row/radius/core_hp/buffs of every level follow the injected table (no number is baked into the code)")
+	var other: Variant = _on_pad()
+	ok(MainCapsule.max_level(other) == catalog_max, "REQ-0010-11: the override of one sim does not leak into another (other max %d, catalog %d)" % [MainCapsule.max_level(other), catalog_max])
+	s.capsule_table = _synth_table(9)
+	ok(MainCapsule.max_level(s) == 8, "REQ-0010-91: a 9-row table -> max_level 8 (the range is the table's length, not a constant) — %d" % MainCapsule.max_level(s))
+	s.capsule_table = {}
+	ok(MainCapsule.max_level(s) == catalog_max, "REQ-0010-11: clearing the override returns to the catalog table (%d)" % MainCapsule.max_level(s))
+	# an upgrade charges the INJECTED numbers and leaves the injected table untouched; the ledger does not alias a table dict
+	s.capsule_table = syn
+	_wipe(s)
+	_fund_cost(s, _cost_of(rows, 1), 0.5)
+	var r: Dictionary = s.upgrade_capsule()
+	ok(bool(r.get("ok", false)) and s.capsule_level() == 1 and _have(s, "wood") == 0 and _have(s, "stone") == 0, "REQ-0010-13: the price charged is the injected row 1 (wood %d, stone %d) — result %s" % [int(rows[1].cost.wood), int(rows[1].cost.stone), str(r)])
+	var inv: Dictionary = s.main_capsule.invested
+	ok(inv.has("1") and _same_numbers(inv["1"], _cost_of(rows, 1)), "REQ-0010-14: invested[1] is the injected price — %s" % var_to_str(inv))
+	ok(var_to_str(syn) == syn_snap, "REQ-0010-11: upgrade did not mutate the table it reads")
+	s.main_capsule.invested["1"]["wood"] = int(s.main_capsule.invested["1"]["wood"]) + 1000
+	ok(var_to_str(syn) == syn_snap and _same_numbers(MainCapsule.row(s, 1).cost, _cost_of(rows, 1)), "REQ-0010-11/14: editing the ledger afterwards does not edit the table (no aliasing of the price dict)")
+	r["paid"]["wood"] = 5
+	ok(int(s.main_capsule.invested["1"]["wood"]) == int(rows[1].cost.wood) + 1000 and var_to_str(syn) == syn_snap, "REQ-0010-14: the returned `paid` is a copy (editing it moves neither ledger nor table)")
+	# the same on the CATALOG table: a real upgrade must not change what MainCapsule.table hands out (the cache is shared by every sim)
+	var c: Variant = _on_pad()
+	var cat_snap: String = var_to_str(MainCapsule.table(c))
+	_wipe(c)
+	_fund_cost(c, _cost_of(_raw_rows(), 1), 0.5)
+	c.upgrade_capsule()
+	c.main_capsule.invested["1"]["wood"] = 1
+	ok(var_to_str(MainCapsule.table(c)) == cat_snap and var_to_str(MainCapsule.table(other)) == cat_snap, "REQ-0010-11: a real upgrade + a ledger edit leave the shared catalog table byte-identical")
+	for x in [s, other, c]:
+		_dispose(x)
+
+
+# =============================================================================================
+# REQ-0010-13 / 14 / 35: the whole ladder 0 -> 5 on the REAL table: exact debit, ledger == paid, hash moves every step
+# =============================================================================================
+func _t_upgrade_walk() -> void:
+	var s: Variant = _on_pad()
+	_wipe(s)
+	var rows: Array = _raw_rows()
+	var hashes: Dictionary = {Persistence.world_hash(s): 0}
+	ok(s.capsule_level() == 0, "REQ-0010-12 setup: the capsule lands at level 0")
+	for L in range(1, rows.size()):
+		var cost: Dictionary = _cost_of(rows, L)
+		_fund_cost(s, cost, 0.4)
+		_fund(s, "components", 1, 2)   # a bystander the price does not ask for (not even at level 5): it must not move
+		var before: Dictionary = {}
+		for res in PAY_IDS:
+			before[res] = _have(s, String(res))
+		var led_before: String = _ledger_sig(s)
+		var r: Dictionary = s.upgrade_capsule()
+		ok(bool(r.get("ok", false)) and int(r.get("level", -1)) == L and s.capsule_level() == L, "REQ-0010-13: upgrade to level %d succeeds with exact funds — %s" % [L, str(r)])
+		var exact: bool = true
+		for res in PAY_IDS:
+			var want: int = int(before[res]) - int(cost.get(res, 0))
+			if _have(s, String(res)) != want:
+				exact = false
+		ok(exact, "REQ-0010-13: level %d took EXACTLY its price (backpack+stock measured around the call), nothing else" % L)
+		var inv: Dictionary = s.main_capsule.invested
+		ok(inv.has(str(L)) and _same_numbers(inv[str(L)], cost) and bool(_same_numbers(r.get("paid", {}), cost)), "REQ-0010-14: invested[%d] == the units that left the backpack/stock == `paid` (%s)" % [L, var_to_str(inv.get(str(L), {}))])
+		ok(_ledger_sig(s) != led_before and inv.size() == L, "REQ-0010-14: the ledger gained exactly one level entry (keys: %s)" % str(inv.keys()))
+		var h: String = Persistence.world_hash(s)
+		ok(not hashes.has(h), "REQ-0010-35: world_hash after level %d is new (level + invested move the hash)" % L)
+		hashes[h] = L
+	var top: Dictionary = s.upgrade_capsule()
+	ok(not bool(top.get("ok", true)) and s.capsule_level() == 5, "REQ-0010-91: level 5 is the top — one more is refused, level stays 5 (%s)" % str(top))
+	_dispose(s)
+
+
+# =============================================================================================
+# REQ-0010-13: refusals — shortage / nothing / max / OFF: the FIRST reason and NO debit at all
+# =============================================================================================
+func _t_upgrade_refusals() -> void:
+	var rows: Array = _raw_rows()
+	var cost1: Dictionary = _cost_of(rows, 1)
+	# (a) short by exactly one unit of ONE resource (the rest fully paid, split between the sources): refused, nothing moves
+	for short_res in cost1:
+		var s: Variant = _on_pad()
+		_wipe(s)
+		for res in cost1:
+			var total: int = int(cost1[res]) - (1 if res == short_res else 0)
+			_fund(s, String(res), _half(total), total - _half(total))
+		var sig: String = _funds_sig(s)
+		var led: String = _ledger_sig(s)
+		var h: String = Persistence.world_hash(s)
+		var r: Dictionary = s.upgrade_capsule()
+		ok(not bool(r.get("ok", true)) and r.get("reason", &"") == &"cost", "REQ-0010-13: one unit of %s short -> refused with the cost reason — %s" % [String(short_res), str(r)])
+		var miss: Dictionary = r.get("missing", {})
+		ok(miss.size() == 1 and miss.has(short_res) and int(miss[short_res]) == 1, "REQ-0010-13: the reason names the missing resource and amount ({%s: 1}) — %s" % [String(short_res), str(miss)])
+		ok(_funds_sig(s) == sig and _ledger_sig(s) == led and s.capsule_level() == 0 and Persistence.world_hash(s) == h, "REQ-0010-13: the refusal debited NOTHING (a fully paid resource keeps its units; world_hash unchanged)")
+		_dispose(s)
+	# (b) nothing funded: every price line is missing with its FULL amount; the first reason does not depend on dict insertion order
+	var e: Variant = _on_pad()
+	_wipe(e)
+	var re: Dictionary = e.upgrade_capsule()
+	var miss_all: Dictionary = re.get("missing", {})
+	ok(_same_numbers(miss_all, cost1), "REQ-0010-13: with nothing funded the whole price is reported missing — %s vs %s" % [str(miss_all), str(cost1)])
+	var asc: Array = miss_all.keys()
+	var sorted_keys: Array = asc.duplicate()
+	sorted_keys.sort()
+	ok(asc == sorted_keys, "REQ-0010-13: the reasons come in ascending id order, so the FIRST one is a function of state (%s)" % str(asc))
+	var syn: Dictionary = _synth_table(3)
+	e.capsule_table = syn
+	e.main_capsule.level = 1   # next row = synthetic level 2: {wood, stone, planks} inserted in that order
+	var rs: Dictionary = e.upgrade_capsule()
+	var keys2: Array = (rs.get("missing", {}) as Dictionary).keys()
+	ok(keys2 == ["planks", "stone", "wood"], "REQ-0010-13: ... even when the table lists the price as wood, stone, planks (got %s)" % str(keys2))
+	# (c) atomic over several resources: the covered line is NOT debited when another line fails
+	var a: Variant = _on_pad()
+	_wipe(a)
+	_fund(a, "wood", int(cost1.wood), 0)             # wood fully in the backpack
+	_fund(a, "stone", 0, int(cost1.stone) - 1)       # stone one short in the stock
+	_fund(a, "scrap", 0, int(cost1.scrap))           # scrap fully in the stock
+	var sig_a: String = _funds_sig(a)
+	var ra: Dictionary = a.upgrade_capsule()
+	ok(not bool(ra.get("ok", true)) and _funds_sig(a) == sig_a and a.capsule_level() == 0, "REQ-0010-13: atomic — wood and scrap were covered, stone was not: nothing was taken (%s)" % str(ra))
+	# (d) the top: level 5 refuses with plenty of funds, nothing moves
+	var m: Variant = _on_pad()
+	m.main_capsule.level = 5
+	for res in PAY_IDS:
+		_fund(m, String(res), 40, 300)
+	var sig_m: String = _funds_sig(m)
+	var h_m: String = Persistence.world_hash(m)
+	var rm: Dictionary = m.upgrade_capsule()
+	ok(not bool(rm.get("ok", true)) and m.capsule_level() == 5 and _funds_sig(m) == sig_m and Persistence.world_hash(m) == h_m, "REQ-0010-13/91: at the max level upgrade is refused, level 5 stays, no debit, hash unchanged (%s)" % str(rm))
+	# (e) OFF: no capsule -> a refusal with no side effect and no new key anywhere
+	var off: Variant = _sim_with(_pad_map(PAD_N, Vector2i(8, 8)), true, true, false)
+	var h_off: String = Persistence.world_hash(off)
+	var sig_off: String = _funds_sig(off)
+	var roff: Dictionary = off.upgrade_capsule()
+	ok(not bool(roff.get("ok", true)) and Persistence.world_hash(off) == h_off and _funds_sig(off) == sig_off and (off.main_capsule as Dictionary).is_empty(), "REQ-0010-01: OFF — upgrade_capsule is a refusal without side effects (%s)" % str(roff))
+	ok(not Persistence.serialize_region(off).has("main_capsule") and not Persistence.serialize_region(off).has("use_main_capsule"), "REQ-0010-01: OFF — the record has no capsule key after a refused upgrade")
+	for x in [e, a, m, off]:
+		_dispose(x)
+
+
+# =============================================================================================
+# REQ-0010-13 / 76: «зі складу капсули в її радіусі» — the stock counts only while the hero stands in the zone (edge inclusive);
+# the backpack needs no proximity; a refusal says «far» and debits nothing
+# =============================================================================================
+func _t_upgrade_reach() -> void:
+	var syn: Dictionary = _synth_table(3)
+	var rows: Array = syn.levels
+	var cost1: Dictionary = _cost_of(rows, 1)
+	var radius: int = int(rows[0].radius)   # 4 — not the 2.5 stash reach, so the zone edge is a distinct line
+	var dirs: Array = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	for d in dirs:
+		var dv: Vector2i = d
+		# on the edge: inclusive
+		var s: Variant = _on_pad()
+		s.capsule_table = syn
+		var cap: Vector2i = _cap_tile(s)
+		_wipe(s)
+		_fund_cost(s, cost1, 0.0)   # the whole price in the STOCK
+		_put_hero(s, cap + dv * radius)
+		var r: Dictionary = s.upgrade_capsule()
+		ok(bool(r.get("ok", false)) and _have(s, "wood") == 0, "REQ-0010-13/15: hero ON the zone edge (%d cells %s) pays from the stock — %s" % [radius, str(dv), str(r)])
+		_dispose(s)
+		# one cell past the edge: refused, «far», nothing taken
+		var f: Variant = _on_pad()
+		f.capsule_table = syn
+		_wipe(f)
+		_fund_cost(f, cost1, 0.0)
+		_put_hero(f, cap + dv * (radius + 1))
+		var sig: String = _funds_sig(f)
+		var h: String = Persistence.world_hash(f)
+		var rf: Dictionary = f.upgrade_capsule()
+		ok(not bool(rf.get("ok", true)) and rf.get("reason", &"") == &"cost" and bool(rf.get("far", false)), "REQ-0010-13: hero one cell OUTSIDE the zone (%s): refused, flagged far (the stock would have covered it) — %s" % [str(dv), str(rf)])
+		ok(_funds_sig(f) == sig and Persistence.world_hash(f) == h and f.capsule_level() == 0, "REQ-0010-13: the far refusal debited nothing")
+		# the backpack alone needs no proximity
+		_fund_cost(f, cost1, 1.0)   # the whole price in the BACKPACK
+		var rp: Dictionary = f.upgrade_capsule()
+		ok(bool(rp.get("ok", false)) and f.capsule_level() == 1, "REQ-0010-13: far from the capsule the BACKPACK still pays (no proximity needed) — %s" % str(rp))
+		_dispose(f)
+	# far away with the price split pack + stock: the stock half cannot be reached -> refused, the backpack half stays too (atomic)
+	var g: Variant = _on_pad()
+	g.capsule_table = syn
+	_wipe(g)
+	_fund_cost(g, cost1, 0.5)
+	_put_hero(g, _cap_tile(g) + Vector2i(radius + 2, 0))
+	var sig_g: String = _funds_sig(g)
+	var rg: Dictionary = g.upgrade_capsule()
+	ok(not bool(rg.get("ok", true)) and _funds_sig(g) == sig_g and g.capsule_level() == 0, "REQ-0010-76: far away with a split price the whole command fails and neither source moves (%s)" % str(rg))
+	_dispose(g)
+
+
+# =============================================================================================
+# REQ-0010-76: backpack FIRST, then the stock; atomic across both sources; a price larger than one stack; the ledger counts both
+# =============================================================================================
+func _t_upgrade_sources() -> void:
+	var syn: Dictionary = _synth_table(3)   # level 1: wood 10, stone 2
+	var cost1: Dictionary = _cost_of(syn.levels, 1)
+	# 1. partial coverage: 4 wood in the backpack, the rest from the stock; stone only in the stock
+	var s: Variant = _on_pad()
+	s.capsule_table = syn
+	_wipe(s)
+	_fund(s, "wood", 4, 20)
+	_fund(s, "stone", 0, 5)
+	var r: Dictionary = s.upgrade_capsule()
+	ok(bool(r.get("ok", false)) and Inventory.count(s, "wood") == 0 and s.res_amount("wood") == 14 and s.res_amount("stone") == 3 and Inventory.count(s, "stone") == 0,
+		"REQ-0010-76: 4 wood from the backpack FIRST, the other 6 from the stock (20 -> 14); stone 2 from the stock (5 -> 3) — %s | pack wood %d stock wood %d stone %d" % [str(r), Inventory.count(s, "wood"), s.res_amount("wood"), s.res_amount("stone")])
+	ok(_same_numbers(s.main_capsule.invested["1"], cost1), "REQ-0010-14: the ledger counts the units from BOTH sources (%s vs price %s)" % [var_to_str(s.main_capsule.invested), str(cost1)])
+	_dispose(s)
+	# 2. the backpack alone is enough -> the stock is not touched at all
+	var b: Variant = _on_pad()
+	b.capsule_table = syn
+	_wipe(b)
+	_fund(b, "wood", 15, 20)
+	_fund(b, "stone", 3, 9)
+	var rb: Dictionary = b.upgrade_capsule()
+	ok(bool(rb.get("ok", false)) and Inventory.count(b, "wood") == 5 and b.res_amount("wood") == 20 and Inventory.count(b, "stone") == 1 and b.res_amount("stone") == 9,
+		"REQ-0010-76: with enough in the backpack the stock stays untouched (wood pack 15->5, stock 20; stone pack 3->1, stock 9) — %s" % str(rb))
+	_dispose(b)
+	# 3. mixed per line: wood fully from the backpack, stone half-half
+	var m: Variant = _on_pad()
+	m.capsule_table = syn
+	_wipe(m)
+	_fund(m, "wood", 10, 7)
+	_fund(m, "stone", 1, 1)
+	var rm: Dictionary = m.upgrade_capsule()
+	ok(bool(rm.get("ok", false)) and Inventory.count(m, "wood") == 0 and m.res_amount("wood") == 7 and Inventory.count(m, "stone") == 0 and m.res_amount("stone") == 0,
+		"REQ-0010-76: each price line is split on its own (wood 10 pack / 0 stock; stone 1 pack / 1 stock) — %s" % str(rm))
+	_dispose(m)
+	# 4. a price bigger than one stack (wood stack = 50): spans several slots, leaves no ghost slot
+	var big: Dictionary = _synth_table(2)
+	big.levels[1].cost = {"wood": 130}
+	var g: Variant = _on_pad()
+	g.capsule_table = big
+	_wipe(g)
+	_fund(g, "wood", 120, 20)
+	var rg: Dictionary = g.upgrade_capsule()
+	var ghost: bool = false
+	for sl in (g.player.inv as Array):
+		if int(sl.n) < 0 or (String(sl.id) == "" and int(sl.n) != 0) or (String(sl.id) == "wood" and int(sl.n) == 0):
+			ghost = true
+	ok(bool(rg.get("ok", false)) and Inventory.count(g, "wood") == 0 and g.res_amount("wood") == 10 and not ghost,
+		"REQ-0010-76: a 130-wood price over three 50-stacks: backpack 120 -> 0, stock 20 -> 10, no ghost slot — %s" % str(rg))
+	_dispose(g)
+	# 5. atomic across BOTH sources: 4 + 5 < 10 -> nothing moves, in either source
+	var a: Variant = _on_pad()
+	a.capsule_table = syn
+	_wipe(a)
+	_fund(a, "wood", 4, 5)
+	_fund(a, "stone", 2, 0)
+	var sig: String = _funds_sig(a)
+	var ra: Dictionary = a.upgrade_capsule()
+	ok(not bool(ra.get("ok", true)) and _funds_sig(a) == sig and a.capsule_level() == 0 and (a.main_capsule.invested as Dictionary).is_empty(), "REQ-0010-76: the two sources together are short (4+5 < 10): no unit left either, ledger empty (%s)" % str(ra))
+	ok(int((ra.get("missing", {}) as Dictionary).get("wood", -1)) == 1, "REQ-0010-13: the missing amount counts BOTH sources (10 - 4 - 5 = 1) — %s" % str(ra.get("missing", {})))
+	_dispose(a)
+
+
+# =============================================================================================
+# REQ-0010-76: a repeated command with the same id in the SAME tick pays once; without an id nothing is deduplicated;
+# the dedup memory is not world state
+# =============================================================================================
+func _t_upgrade_dedupe() -> void:
+	var syn: Dictionary = _synth_table(4)
+	var rows: Array = syn.levels
+	var total: Dictionary = {}
+	for L in [1, 2]:
+		for res in _cost_of(rows, L):
+			total[res] = int(total.get(res, 0)) + int(_cost_of(rows, L)[res])
+	var s: Variant = _on_pad()
+	s.capsule_table = syn
+	_wipe(s)
+	_fund_cost(s, total, 0.5)   # funds for TWO levels
+	var r1: Dictionary = s.upgrade_capsule(77)
+	var after1: String = _funds_sig(s)
+	var led1: String = _ledger_sig(s)
+	var r2: Dictionary = s.upgrade_capsule(77)
+	ok(bool(r1.get("ok", false)) and s.capsule_level() == 1, "REQ-0010-76 setup: the first command id=77 upgrades to 1 — %s" % str(r1))
+	ok(s.capsule_level() == 1 and _funds_sig(s) == after1 and _ledger_sig(s) == led1, "REQ-0010-76: the same id in the same tick is idempotent — level still 1, funds and ledger as after the first (second said %s)" % str(r2))
+	var r3: Dictionary = s.upgrade_capsule(78)
+	ok(bool(r3.get("ok", false)) and s.capsule_level() == 2, "REQ-0010-76: a DIFFERENT id in the same tick is a new command — level 2 (%s)" % str(r3))
+	# the dedup scope is ONE tick: after the next update() the same id is a new command (a stale memory would swallow it)
+	s.capsule_table = syn
+	_fund_cost(s, _cost_of(rows, 3), 0.5)
+	s.update(Scenarios.DT)
+	var again: Dictionary = s.upgrade_capsule(77)
+	ok(bool(again.get("ok", false)) and s.capsule_level() == 3, "REQ-0010-76: the same id in a LATER tick is a new command (the idempotency window is one tick) — %s" % str(again))
+	# no id (-1 is the local path): never deduplicated — two calls, two levels
+	var n: Variant = _on_pad()
+	n.capsule_table = syn
+	_wipe(n)
+	_fund_cost(n, total, 0.5)
+	var a: Dictionary = n.upgrade_capsule()
+	var b: Dictionary = n.upgrade_capsule()
+	ok(bool(a.get("ok", false)) and bool(b.get("ok", false)) and n.capsule_level() == 2, "REQ-0010-76: two id-less commands in one tick are two commands (level 2) — %s / %s" % [str(a), str(b)])
+	# the dedup memory is not state: not in the hash, not in the record, not on the wire
+	var x: Variant = _on_pad()
+	var y: Variant = _on_pad()
+	x.capsule_table = syn
+	y.capsule_table = syn
+	for who in [x, y]:
+		_wipe(who)
+		_fund_cost(who, _cost_of(rows, 1), 0.5)
+	x.upgrade_capsule(5)
+	y.upgrade_capsule()
+	ok(Persistence.world_hash(x) == Persistence.world_hash(y), "REQ-0010-82: the dedup memory (cmd id) is not in the hash — id 5 vs no id give the same world")
+	ok(Persistence.serialize_region(x).keys() == Persistence.serialize_region(y).keys() and not JSON.stringify(Persistence.resume_payload(x)).contains("cmds"), "REQ-0010-35: ... nor in the record or the resume payload")
+	for w in [s, n, x, y]:
+		_dispose(w)
+
+
+# =============================================================================================
+# REQ-0010-14 / 35: every change of level / ledger moves the hash; a JSON round trip returns the SAME world, ints stay ints,
+# the restored sim keeps upgrading identically; records handed out are copies
+# =============================================================================================
+func _t_upgrade_hash_roundtrip() -> void:
+	var rows: Array = _raw_rows()
+	var a: Variant = _leveled(2)
+	var b: Variant = _leveled(2)
+	var h0: String = Persistence.world_hash(a)
+	ok(Persistence.world_hash(b) == h0, "REQ-0010-82 setup: two worlds built by the same upgrades hash the same (%s)" % h0)
+	var seen: Dictionary = {h0: "base"}
+	var collisions: Array = []
+	for case_name in ["level 3 (ledger as is)", "level 1 (ledger as is)", "level 0 (ledger as is)", "ledger[1].wood +1", "ledger[1].wood -1", "ledger[2].stone +1", "ledger[3] appears", "ledger[1].components appears", "ledger[1] <-> ledger[2] swapped", "ledger[2] emptied"]:
+		var m: Variant = _leveled(2)
+		var inv: Dictionary = m.main_capsule.invested
+		match String(case_name):
+			"level 3 (ledger as is)":
+				m.main_capsule.level = 3
+			"level 1 (ledger as is)":
+				m.main_capsule.level = 1
+			"level 0 (ledger as is)":
+				m.main_capsule.level = 0
+			"ledger[1].wood +1":
+				inv["1"]["wood"] = int(inv["1"]["wood"]) + 1
+			"ledger[1].wood -1":
+				inv["1"]["wood"] = int(inv["1"]["wood"]) - 1
+			"ledger[2].stone +1":
+				inv["2"]["stone"] = int(inv["2"]["stone"]) + 1
+			"ledger[3] appears":
+				inv["3"] = {"wood": 1}
+			"ledger[1].components appears":
+				inv["1"]["components"] = 1
+			"ledger[1] <-> ledger[2] swapped":
+				var tmp: Dictionary = inv["1"]
+				inv["1"] = inv["2"]
+				inv["2"] = tmp
+			"ledger[2] emptied":
+				inv["2"] = {}
+		var h: String = Persistence.world_hash(m)
+		if seen.has(h):
+			collisions.append("%s == %s" % [String(case_name), String(seen[h])])
+		seen[h] = String(case_name)
+		_dispose(m)
+	ok(collisions.is_empty(), "REQ-0010-35: each mutation of level or invested gives a world_hash different from the base and from every other mutation — %s" % ("ok (%d distinct)" % seen.size() if collisions.is_empty() else ", ".join(PackedStringArray(collisions))))
+	# the record on the wire: a whole-number ledger under string keys, in numeric order
+	var rec: Dictionary = Persistence.serialize_region(a).main_capsule
+	var wire: Dictionary = rec.get("invested", {})
+	var whole: bool = true
+	for lk in wire:
+		whole = whole and lk is String
+		for res in (wire[lk] as Dictionary):
+			whole = whole and typeof((wire[lk] as Dictionary)[res]) == TYPE_INT
+	ok(int(rec.get("level", -1)) == 2 and wire.keys() == ["1", "2"] and whole and _same_numbers(wire["1"], _cost_of(rows, 1)) and _same_numbers(wire["2"], _cost_of(rows, 2)),
+		"REQ-0010-14/82: serialize_region carries level 2 and invested {\"1\",\"2\"} = the two prices, string keys, int amounts — %s" % var_to_str(wire))
+	# records handed out are COPIES: editing one cannot move the live ledger or the hash (a net snapshot would hold it across ticks)
+	rec["invested"]["1"]["wood"] = 99999
+	rec["level"] = 5
+	ok(Persistence.world_hash(a) == h0 and int(a.main_capsule.invested["1"]["wood"]) == int(_cost_of(rows, 1).wood), "REQ-0010-35: a serialized record is a copy — editing it leaves the live ledger and the hash alone")
+	# a JSON round trip: same hash, the ledger keeps its types
+	var y: Variant = Sim.new()
+	var accepted: bool = Persistence.restore(y, _json_rt(Persistence.resume_payload(a)))
+	ok(accepted and y.load_error == &"" and Persistence.world_hash(y) == h0, "REQ-0010-35: the world restored from a JSON round trip has the same world_hash (%s vs %s)" % [Persistence.world_hash(y), h0])
+	var kinds_ok: bool = true
+	for lk in (y.main_capsule.invested as Dictionary):
+		kinds_ok = kinds_ok and lk is String
+		for res in (y.main_capsule.invested[lk] as Dictionary):
+			kinds_ok = kinds_ok and typeof((y.main_capsule.invested[lk] as Dictionary)[res]) == TYPE_INT
+	ok(kinds_ok and y.capsule_level() == 2 and (y.main_capsule.invested as Dictionary).keys() == ["1", "2"], "REQ-0010-14: after the round trip the ledger is back to String level keys and INT amounts (JSON gives floats) — %s" % var_to_str(y.main_capsule.invested))
+	# the restored sim keeps living exactly like the original: the next upgrade lands the same ledger and the same hash
+	var cost3: Dictionary = _cost_of(rows, 3)
+	for who in [a, y]:
+		_wipe(who)
+		_fund_cost(who, cost3, 0.4)
+	var ra: Dictionary = a.upgrade_capsule()
+	var ry: Dictionary = y.upgrade_capsule()
+	ok(bool(ra.get("ok", false)) and bool(ry.get("ok", false)) and Persistence.world_hash(a) == Persistence.world_hash(y), "REQ-0010-35: original and restored sims, same next upgrade -> the same world_hash (%s / %s)" % [str(ra), str(ry)])
+	var inv_y: Dictionary = y.main_capsule.invested
+	ok(inv_y.keys() == ["1", "2", "3"] and _same_numbers(inv_y["1"], _cost_of(rows, 1)) and _same_numbers(inv_y["2"], _cost_of(rows, 2)) and _same_numbers(inv_y["3"], cost3),
+		"REQ-0010-14: the restored ledger got level 3 appended and kept levels 1-2 intact — %s" % var_to_str(inv_y))
+	for w in [a, b, y]:
+		_dispose(w)
+
+
+# =============================================================================================
+# REQ-0010-82: «invested (ключі в числовому порядку за зростанням)» — insertion order never leaks into the record or the hash
+#
+# The contract pinned here is step 1 (К1): levels 1..5 (OD-56), and the data tests cap the table at 10 rows (tests/catalog.test.js
+# «capsule_levels: levels 0..5 are continuous…», run_catalog_tests `_t_capsule_levels_data`), i.e. ledger keys "1".."9" — ONE digit, where the
+# lexicographic key sort of the hash input is the numeric order. Pinned: (1) EVERY insertion order of 1..5, (2) the widest ledger that
+# bound allows (1..9), (3) holes and the resource order inside a level, (4) 9 levels reached by REAL upgrades and a JSON round trip.
+# NOT pinned — an open question to the designer: a table of >= 11 rows. REQ-0010-91 says the range grows "by data only", REQ-0010-82 says
+# "numeric order", yet a hash input that sorts string keys puts "10" before "2". Closing it moves either the OFF hash (a numeric-aware
+# Persistence._canonical, D4) or the §5.1 record format (an array / padded keys), so no assertion exercises a HASH INPUT for >= 11 levels.
+# =============================================================================================
+func _t_invested_key_order() -> void:
+	var rows: Array = _raw_rows()
+	ok(rows.size() <= 10, "REQ-0010-82 domain: the shipped table has %d rows (<= 10): every ledger key is one digit, so the hash order below is the numeric one (the data tests pin the same bound)" % rows.size())
+	# ---- (1) the К1 range: levels 1..5, EVERY insertion order (5! = 120), not a lucky sample ----
+	var orders5: Array = _perms([1, 2, 3, 4, 5])
+	ok(orders5.size() == 120, "REQ-0010-82 setup: the permutation helper yields all 120 orders of levels 1..5 (%d)" % orders5.size())
+	var ref5: Variant = _on_pad()
+	ref5.main_capsule.level = 5
+	ref5.main_capsule.invested = _ledger_in_order(rows, [1, 2, 3, 4, 5])
+	var h5: String = Persistence.world_hash(ref5)
+	var text5: String = _expected_ledger_text(rows, [1, 2, 3, 4, 5])
+	var probe: Variant = _on_pad()
+	probe.main_capsule.level = 5
+	var want5: Array = ["1", "2", "3", "4", "5"]
+	var bad_hash: Array = []
+	var bad_keys: Array = []
+	var bad_input: Array = []
+	for o in orders5:
+		probe.main_capsule.invested = _ledger_in_order(rows, o)
+		if Persistence.world_hash(probe) != h5:
+			bad_hash.append(str(o))
+		if Persistence.serialize_region(probe).main_capsule.invested.keys() != want5:
+			bad_keys.append(str(o))
+		if not _hash_input_has_ledger(probe, text5):
+			bad_input.append(str(o))
+	ok(bad_hash.is_empty(), "REQ-0010-82: the world_hash of levels 1..5 is the same in all 120 insertion orders — %d differ%s" % [bad_hash.size(), "" if bad_hash.is_empty() else " (first: %s)" % str(bad_hash[0])])
+	ok(bad_keys.is_empty(), "REQ-0010-82: the record lists levels 1..5 ascending (1,2,3,4,5) in all 120 insertion orders — %d differ%s" % [bad_keys.size(), "" if bad_keys.is_empty() else " (first: %s)" % str(bad_keys[0])])
+	ok(bad_input.is_empty(), "REQ-0010-82: the text the world hash digests carries the 1..5 ledger in numeric order in all 120 insertion orders — %d differ%s" % [bad_input.size(), "" if bad_input.is_empty() else " (first: %s)" % str(bad_input[0])])
+	probe.main_capsule.invested = _ledger_in_order(rows, [1, 2, 3, 4])
+	ok(Persistence.world_hash(probe) != h5, "REQ-0010-82 non-vacuous: a ledger without level 5 hashes differently (the order checks above compare a real ledger, not a constant)")
+	# ---- (2) the widest ledger the 10-row bound allows: levels 1..9 ----
+	var t10: Dictionary = _synth_table(10)
+	var rows10: Array = t10.levels
+	var all9: Array = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+	var orders9: Array = [all9.duplicate(), [9, 8, 7, 6, 5, 4, 3, 2, 1], [1, 3, 5, 7, 9, 2, 4, 6, 8], [2, 4, 6, 8, 1, 3, 5, 7, 9], [5, 6, 7, 8, 9, 1, 2, 3, 4], [9, 1, 8, 2, 7, 3, 6, 4, 5]]
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 8209
+	for n in 8:
+		var sh: Array = all9.duplicate()
+		for j in range(sh.size() - 1, 0, -1):
+			var k: int = rng.randi_range(0, j)
+			var tmp: Variant = sh[j]
+			sh[j] = sh[k]
+			sh[k] = tmp
+		orders9.append(sh)
+	var x: Variant = _on_pad()
+	x.capsule_table = t10
+	x.main_capsule.level = 9
+	x.main_capsule.invested = _ledger_in_order(rows10, all9)
+	var h9: String = Persistence.world_hash(x)
+	ok(Persistence.content_hash({"region": Persistence.serialize_region(x), "dyn": Persistence.serialize_runtime(x)}) == h9, "REQ-0010-82 setup: world_hash is the content hash of the {region, dyn} record whose text is checked below")
+	var text9: String = _expected_ledger_text(rows10, all9)
+	var want9: Array = ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
+	var bad9_hash: Array = []
+	var bad9_keys: Array = []
+	var bad9_input: Array = []
+	for o in orders9:
+		x.main_capsule.invested = _ledger_in_order(rows10, o)
+		if Persistence.world_hash(x) != h9:
+			bad9_hash.append(str(o))
+		if Persistence.serialize_region(x).main_capsule.invested.keys() != want9:
+			bad9_keys.append(str(o))
+		if not _hash_input_has_ledger(x, text9):
+			bad9_input.append(str(o))
+	ok(bad9_hash.is_empty(), "REQ-0010-82: the world_hash of levels 1..9 is the same in %d insertion orders (ascending, descending, odd/even, rotated, 8 seeded shuffles) — %d differ%s" % [orders9.size(), bad9_hash.size(), "" if bad9_hash.is_empty() else " (first: %s)" % str(bad9_hash[0])])
+	ok(bad9_keys.is_empty(), "REQ-0010-82: the record lists levels 1..9 ascending in every one of them — %d differ%s" % [bad9_keys.size(), "" if bad9_keys.is_empty() else " (first: %s)" % str(bad9_keys[0])])
+	ok(bad9_input.is_empty(), "REQ-0010-82: the text the world hash digests carries the 1..9 ledger in numeric order in every one of them — %d differ%s" % [bad9_input.size(), "" if bad9_input.is_empty() else " (first: %s)" % str(bad9_input[0])])
+	# ---- (3) holes (a ledger need not hold every level) and the resource order inside a level ----
+	var holes: Array = [[2, 5, 9], [9, 5, 2], [5, 9, 2], [9, 2, 5]]
+	var h_holes: String = ""
+	var holes_ok: bool = true
+	for o in holes:
+		x.main_capsule.invested = _ledger_in_order(rows10, o)
+		if h_holes == "":
+			h_holes = Persistence.world_hash(x)
+		holes_ok = holes_ok and Persistence.world_hash(x) == h_holes and Persistence.serialize_region(x).main_capsule.invested.keys() == ["2", "5", "9"] \
+			and _hash_input_has_ledger(x, _expected_ledger_text(rows10, [2, 5, 9]))
+	ok(holes_ok and h_holes != h9, "REQ-0010-82: a ledger holding only levels 2, 5, 9 hashes and lists the same in every insertion order, numerically (2, 5, 9)")
+	x.main_capsule.invested = {"1": {"wood": 3, "scrap": 5, "stone": 1}}
+	var h_fwd: String = Persistence.world_hash(x)
+	x.main_capsule.invested = {"1": {"stone": 1, "scrap": 5, "wood": 3}}
+	ok(Persistence.world_hash(x) == h_fwd and _hash_input_has_ledger(x, "{\"1\":{\"scrap\":5,\"stone\":1,\"wood\":3}}"), "REQ-0010-82: the order resources were added inside a level does not move the hash (sorted by id in the hash input)")
+	# ---- (4) 9 levels through REAL upgrades on the 10-row table (REQ-0010-91: the range is data) and a JSON round trip ----
+	var real: Variant = _on_pad()
+	real.capsule_table = t10
+	_wipe(real)
+	var climbed: bool = true
+	var why: String = ""
+	for L in range(1, 10):
+		_fund_cost(real, _cost_of(rows10, L), 0.4)
+		var r: Dictionary = real.upgrade_capsule()
+		if not bool(r.get("ok", false)):
+			climbed = false
+			why = "level %d refused: %s" % [L, str(r)]
+			break
+	ok(climbed and real.capsule_level() == 9, "REQ-0010-91/13: nine real upgrades on a 10-row table reach level 9 — %s" % ("ok" if climbed else why))
+	var inv9: Dictionary = real.main_capsule.invested
+	var exact: bool = inv9.keys() == want9
+	for L in range(1, 10):
+		exact = exact and inv9.has(str(L)) and _same_numbers(inv9[str(L)], _cost_of(rows10, L))
+	ok(exact and Persistence.serialize_region(real).main_capsule.invested.keys() == want9 and _hash_input_has_ledger(real, text9), "REQ-0010-14/82: the ledger of the climb is the nine prices, once each, in numeric order — in the live dictionary, the record and the hash input")
+	var h_real: String = Persistence.world_hash(real)
+	var back: Variant = Sim.new()
+	back.capsule_table = t10
+	var accepted: bool = Persistence.restore(back, _json_rt(Persistence.resume_payload(real)))
+	var types_ok: bool = true
+	for lk in (back.main_capsule.invested as Dictionary):
+		types_ok = types_ok and lk is String
+		for res in (back.main_capsule.invested[lk] as Dictionary):
+			types_ok = types_ok and typeof((back.main_capsule.invested[lk] as Dictionary)[res]) == TYPE_INT
+	ok(accepted and back.load_error == &"" and back.capsule_level() == 9 and Persistence.world_hash(back) == h_real, "REQ-0010-35: the level-9 world restored from a JSON round trip (keys sorted as text by the JSON writer) has the same world_hash (%s vs %s)" % [Persistence.world_hash(back), h_real])
+	ok(types_ok and back.main_capsule.invested.keys() == want9 and _hash_input_has_ledger(back, text9), "REQ-0010-14/82: after the round trip the ledger is back to String level keys in numeric order and INT amounts")
+	_fund_cost(real, {"wood": 60, "stone": 60, "planks": 60}, 0.4)
+	var funds_before: String = _funds_sig(real)
+	var past: Dictionary = real.upgrade_capsule()
+	ok(not bool(past.get("ok", true)) and real.capsule_level() == 9 and _funds_sig(real) == funds_before and var_to_str(real.main_capsule.invested) == var_to_str(inv9), "REQ-0010-91: the top of a 10-row table is level 9 — a 10th upgrade is refused with nothing charged and the ledger untouched (%s)" % str(past))
+	# ---- the WIRE record lists a longer ledger numerically too (that is `ledger()`, whatever the table length); what its HASH does for >= 11 rows is the open question above ----
+	var wide: Variant = _on_pad()
+	wide.capsule_table = _synth_table(12)
+	wide.main_capsule.level = 11
+	wide.main_capsule.invested = {"10": {"wood": 1}, "2": {"wood": 1}, "9": {"wood": 1}}
+	var wide_keys: Array = Persistence.serialize_region(wide).main_capsule.invested.keys()
+	ok(wide_keys == ["2", "9", "10"], "REQ-0010-82: the record of a 12-row table lists the ledger numerically (2, 9, 10) — %s" % str(wide_keys))
+	for w in [ref5, probe, x, real, back, wide]:
+		_dispose(w)
+
+
+# every ordering of `items` (n! arrays): order-independence is proved for ALL insertion orders of the K1 range, not a sample
+func _perms(items: Array) -> Array:
+	if items.size() <= 1:
+		return [items.duplicate()]
+	var out: Array = []
+	for i in items.size():
+		var rest: Array = items.duplicate()
+		rest.remove_at(i)
+		for p in _perms(rest):
+			var tail: Array = p
+			var one: Array = [items[i]]
+			one.append_array(tail)
+			out.append(one)
+	return out
+
+
+# a ledger of the price rows of `order`'s levels, inserted in exactly that order (the insertion order is the only thing that varies)
+func _ledger_in_order(price_rows: Array, order: Array) -> Dictionary:
+	var led: Dictionary = {}
+	for L in order:
+		led[str(int(L))] = _cost_of(price_rows, int(L))
+	return led
+
+
+# the ledger text the spec asks the hash input to carry, built here: level keys NUMERICALLY ascending (REQ-0010-82), resources by id
+func _expected_ledger_text(price_rows: Array, levels: Array) -> String:
+	var sorted_levels: Array = levels.duplicate()
+	sorted_levels.sort()
+	var parts: PackedStringArray = PackedStringArray()
+	for L in sorted_levels:
+		parts.append("\"%d\":%s" % [int(L), JSON.stringify(_cost_of(price_rows, int(L)), "", true)])
+	return "{" + ",".join(parts) + "}"
+
+
+# the exact text world_hash digests (world_hash == content_hash of this record — asserted once in the test above)
+func _hash_input_has_ledger(s: Variant, ledger_text: String) -> bool:
+	var text: String = Persistence._canonical({"region": Persistence.serialize_region(s), "dyn": Persistence.serialize_runtime(s)})
+	return text.contains("\"invested\":" + ledger_text)
+
+
+# =============================================================================================
+# REQ-0010-88: a save of level 5 meets a table whose maximum is lower: the level is clamped, `invested` stays AS IS, the
+# defence is recomputed from the new table; the other directions (higher max, other prices, one row, a corrupt level)
+# =============================================================================================
+func _t_save_clamp() -> void:
+	var rows: Array = _raw_rows()
+	var src: Variant = _on_pad()
+	src.main_capsule.level = 5
+	var led: Dictionary = {}
+	for L in range(1, 6):
+		led[str(L)] = _cost_of(rows, L)
+	src.main_capsule.invested = led.duplicate(true)
+	var payload: Dictionary = _json_rt(Persistence.resume_payload(src))
+	var lowered: Dictionary = _table_copy()
+	lowered["levels"] = (lowered.levels as Array).slice(0, 4)   # levels 0..3
+	var y: Variant = Sim.new()
+	y.capsule_table = lowered
+	var accepted: bool = Persistence.restore(y, payload)
+	ok(accepted and y.load_error == &"" and _cap_problem(y, _cap_tile(src)) == "", "REQ-0010-88: a level-5 save loads against a 4-row table (no refusal), the capsule building stands on its tile")
+	ok(y.capsule_level() == 3, "REQ-0010-88: ... the level is clamped to the new maximum 3 (got %d)" % y.capsule_level())
+	var inv: Dictionary = y.main_capsule.invested
+	var as_is: bool = inv.keys() == ["1", "2", "3", "4", "5"]
+	for L in range(1, 6):
+		as_is = as_is and inv.has(str(L)) and _same_numbers(inv[str(L)], led[str(L)])
+	ok(as_is, "REQ-0010-88: ... `invested` is kept as saved (levels 4 and 5 included) — %s" % var_to_str(inv))
+	ok(absf(MainCapsule.core_hp(y, y.capsule_level()) - float(rows[3].core_hp)) < 1.0e-6 and absf(MainCapsule.core_hp(y, y.capsule_level()) - float(rows[5].core_hp)) > 1.0, "REQ-0010-88: ... the defence is the NEW level's (%s, not level 5's %s)" % [str(MainCapsule.core_hp(y, y.capsule_level())), str(rows[5].core_hp)])
+	ok(MainCapsule.radius(y, y.capsule_level()) == int(rows[3].radius), "REQ-0010-88: ... and so is the zone radius")
+	for res in PAY_IDS:
+		_fund(y, String(res), 30, 300)
+	var sig_y: String = _funds_sig(y)
+	var ry: Dictionary = y.upgrade_capsule()
+	ok(not bool(ry.get("ok", true)) and y.capsule_level() == 3 and _funds_sig(y) == sig_y and _ledger_sig(y) == var_to_str(inv), "REQ-0010-88/91: at the clamped maximum an upgrade is refused and the ledger stays (%s)" % str(ry))
+	# the clamped world is itself stable: save it, load it into the same table -> same hash
+	var y2: Variant = Sim.new()
+	y2.capsule_table = lowered
+	var again: bool = Persistence.restore(y2, _json_rt(Persistence.resume_payload(y)))
+	ok(again and y2.capsule_level() == 3 and Persistence.world_hash(y2) == Persistence.world_hash(y), "REQ-0010-88/35: the clamped world round-trips to the same hash")
+	# the clamp is a one-way effect of the SAVE: the clamped file loaded against the full table stays at 3
+	var z: Variant = Sim.new()
+	var back: bool = Persistence.restore(z, _json_rt(Persistence.resume_payload(y)))
+	ok(back and z.capsule_level() == 3, "REQ-0010-88: a clamped save loaded against the full table stays at level 3 (%d)" % z.capsule_level())
+	# a table with a HIGHER max: the level 5 save stays 5 (never raised), and the new top row is reachable
+	var longer: Dictionary = _table_copy()
+	(longer.levels as Array).append({"level": 6, "cost": {"wood": 9}, "radius": 15, "core_hp": 9000, "buffs": {"gather_mult": 1.3}})
+	var hi: Variant = Sim.new()
+	hi.capsule_table = longer
+	var hi_ok: bool = Persistence.restore(hi, payload)
+	ok(hi_ok and hi.capsule_level() == 5 and MainCapsule.max_level(hi) == 6, "REQ-0010-88: a level-5 save against a 7-row table stays at 5 (never raised) — level %d" % hi.capsule_level())
+	# other prices (same length): the saved ledger is NOT recomputed
+	var cheap: Dictionary = _synth_table(6)
+	var ch: Variant = Sim.new()
+	ch.capsule_table = cheap
+	var ch_ok: bool = Persistence.restore(ch, payload)
+	ok(ch_ok and ch.capsule_level() == 5 and _ledger_sig(ch) == var_to_str(ch.main_capsule.invested) and _same_numbers(ch.main_capsule.invested["3"], led["3"]),
+		"REQ-0010-88: a table with other prices does not rewrite what was invested (ledger[3] = %s)" % var_to_str(ch.main_capsule.invested.get("3", {})))
+	# a one-row table: the only level is 0
+	var one: Variant = Sim.new()
+	one.capsule_table = {"version": 1, "levels": [{"level": 0, "cost": {}, "radius": 3, "core_hp": 11.0, "buffs": {}}]}
+	var one_ok: bool = Persistence.restore(one, payload)
+	ok(one_ok and one.capsule_level() == 0 and MainCapsule.max_level(one) == 0, "REQ-0010-88/91: against a table with only level 0 the level is clamped to 0 (%d)" % one.capsule_level())
+	# a corrupt save: a negative level is either refused out loud or clamped into [0, max] — never kept (REQ-0010-91 «ніколи не < 0»)
+	for bad_level in [-2, 3.0, 99]:
+		var bad: Dictionary = payload.duplicate(true)
+		bad.region.main_capsule["level"] = bad_level
+		var bs: Variant = Sim.new()
+		var acc: bool = Persistence.restore(bs, _json_rt(bad))
+		var lv: int = bs.capsule_level()
+		var fine: bool = (not acc and bs.load_error != &"") or (acc and lv >= 0 and lv <= 5)
+		ok(fine, "REQ-0010-91/75: a saved level of %s is refused or clamped into 0..5, never kept (accepted=%s level=%d err=%s)" % [str(bad_level), str(acc), lv, String(bs.load_error)])
+		if acc and bad_level == 3.0:
+			ok(lv == 3 and typeof(bs.main_capsule.level) == TYPE_INT, "REQ-0010-35: a level written as 3.0 (JSON) comes back as the int 3")
+		_dispose(bs)
+	for w in [src, y, y2, z, hi, ch, one]:
+		_dispose(w)
+
+
+# =============================================================================================
+# REQ-0010-14 / 83 / 88: a record from before the ledger existed (the W1b shape) loads with an empty ledger and keeps working;
+# a record with a corrupt ledger is refused out loud with the sim untouched, or loaded sanitised — never half-kept
+# =============================================================================================
+func _t_ledger_save_compat() -> void:
+	var rows: Array = _raw_rows()
+	var src: Variant = _leveled(1)
+	var payload: Dictionary = _json_rt(Persistence.resume_payload(src))
+	var old: Dictionary = payload.duplicate(true)
+	(old.region.main_capsule as Dictionary).erase("invested")
+	var y: Variant = Sim.new()
+	var acc: bool = Persistence.restore(y, old)
+	ok(acc and y.load_error == &"" and y.capsule_level() == 1 and (y.main_capsule.invested as Dictionary).is_empty(), "REQ-0010-88: a capsule record without `invested` (written before the ledger existed) loads — ledger empty, level kept (accepted=%s err=%s)" % [str(acc), String(y.load_error)])
+	ok(_cap_problem(y, _cap_tile(src)) == "", "REQ-0010-75/88: ... and the load finished the job — ONE capsule building on the recorded tile, in bgrid (%s)" % _cap_problem(y, _cap_tile(src)))
+	_wipe(y)
+	_fund_cost(y, _cost_of(rows, 2), 0.5)
+	var r: Dictionary = y.upgrade_capsule()
+	ok(bool(r.get("ok", false)) and y.capsule_level() == 2 and y.main_capsule.invested.keys() == ["2"] and _same_numbers(y.main_capsule.invested["2"], _cost_of(rows, 2)),
+		"REQ-0010-13/14: ... and its next upgrade writes ONLY its own ledger entry — %s" % var_to_str(y.main_capsule.invested))
+	var cases: Dictionary = {
+		"a negative amount": {"1": {"wood": -5}},
+		"a fractional amount": {"1": {"wood": 2.5}},
+		"level key 0": {"0": {"wood": 1}},
+		"a level key that is not a number": {"x": {"wood": 1}},
+		"an entry that is not a dictionary": {"1": 5},
+		"not a dictionary at all": [1, 2],
+		"an empty resource id": {"1": {"": 3}},
+	}
+	for name in cases:
+		var bad: Dictionary = payload.duplicate(true)
+		bad.region.main_capsule["invested"] = cases[name]
+		var b: Variant = Sim.new()
+		var loaded: bool = Persistence.restore(b, bad)
+		var clean: bool = true
+		if loaded:
+			for lk in (b.main_capsule.invested as Dictionary):
+				for res in (b.main_capsule.invested[lk] as Dictionary):
+					clean = clean and typeof(b.main_capsule.invested[lk][res]) == TYPE_INT and int(b.main_capsule.invested[lk][res]) >= 0
+		var refused: bool = (not loaded) and b.load_error != &"" and (b.map as Dictionary).is_empty() and (b.main_capsule as Dictionary).is_empty()
+		ok(refused or (loaded and clean), "REQ-0010-83/14: a save whose ledger is %s is refused out loud with the sim untouched, or loaded sanitised — never kept as is (loaded=%s err=%s)" % [String(name), str(loaded), String(b.load_error)])
+		_dispose(b)
+	_dispose(src)
+	_dispose(y)
+
+
+# =============================================================================================
+# REQ-0010-91: the range is the TABLE — a 7th row added in a test needs no code change; level 6 is refused on the 6-row table
+# =============================================================================================
+func _t_range_extension() -> void:
+	var rows: Array = _raw_rows()
+	var longer: Dictionary = _table_copy()
+	var row6: Dictionary = {"level": 6, "cost": {"wood": 9, "stone": 5}, "radius": 15, "core_hp": 9999.0, "buffs": {"gather_mult": 1.3, "craft_mult": 1.3}}
+	(longer.levels as Array).append(row6)
+	var s: Variant = _on_pad()
+	s.main_capsule.level = 5
+	var led: Dictionary = {}
+	for L in range(1, 6):
+		led[str(L)] = _cost_of(rows, L)
+	s.main_capsule.invested = led
+	_wipe(s)
+	_fund(s, "wood", 9, 0)
+	_fund(s, "stone", 0, 5)
+	var refused: Dictionary = s.upgrade_capsule()
+	ok(not bool(refused.get("ok", true)) and s.capsule_level() == 5, "REQ-0010-91: on the 6-row table level 6 does not exist — refused, level 5 (%s)" % str(refused))
+	s.capsule_table = longer   # the ONLY change: one more row of data
+	ok(MainCapsule.max_level(s) == 6 and MainCapsule.radius(s, 6) == 15 and absf(MainCapsule.core_hp(s, 6) - 9999.0) < 1.0e-6 and absf(MainCapsule.buffs(s, 6).get("gather_mult", 0.0) - 1.3) < 1.0e-9,
+		"REQ-0010-91: the new row is read as data (max 6, radius 15, core_hp 9999, buff 1.3) — no code change")
+	var r: Dictionary = s.upgrade_capsule()
+	ok(bool(r.get("ok", false)) and s.capsule_level() == 6, "REQ-0010-91: with the 7th row level 5 -> 6 works — %s" % str(r))
+	ok(_have(s, "wood") == 0 and _have(s, "stone") == 0 and s.main_capsule.invested.has("6") and _same_numbers(s.main_capsule.invested["6"], {"wood": 9, "stone": 5}) and s.main_capsule.invested.keys() == ["1", "2", "3", "4", "5", "6"],
+		"REQ-0010-14: level 6 took its 9 wood + 5 stone and wrote invested[6] — %s" % var_to_str(s.main_capsule.invested.get("6", {})))
+	var top: Dictionary = s.upgrade_capsule()
+	ok(not bool(top.get("ok", true)) and s.capsule_level() == 6, "REQ-0010-91: the NEW top (6) is a top — refused (%s)" % str(top))
+	var y: Variant = Sim.new()
+	y.capsule_table = longer
+	var acc: bool = Persistence.restore(y, _json_rt(Persistence.resume_payload(s)))
+	ok(acc and y.capsule_level() == 6 and Persistence.world_hash(y) == Persistence.world_hash(s), "REQ-0010-35/91: a level-6 world round-trips through JSON with its hash")
+	var back: Variant = Sim.new()   # the same save against the 6-row table: clamped, the 6th ledger entry stays
+	var acc2: bool = Persistence.restore(back, _json_rt(Persistence.resume_payload(s)))
+	ok(acc2 and back.capsule_level() == 5 and back.main_capsule.invested.has("6"), "REQ-0010-88: the level-6 save on the 6-row table -> level 5 and invested[6] kept (%d)" % back.capsule_level())
+	for w in [s, y, back]:
+		_dispose(w)
+
+
+# =============================================================================================
+# REQ-0010-34 / 92 / 82: an upgrade is a pure state step — it draws no random numbers, touches nothing but the hero's pack, the
+# stock, level and ledger; it does not read the clock; twins agree
+# =============================================================================================
+func _world_without_funds(s: Variant) -> String:
+	return var_to_str([s.map, s.buildings, s.bgrid, s.regions, s.invites, s.bags, s.enemies, s.time, s.weather, s.player.hp, s.player.hunger, s.player.rest, s.player.px, s.player.py, s.player.skills, s.dead, s.flash_msg])
+
+
+func _t_upgrade_side_effects() -> void:
+	var rows: Array = _raw_rows()
+	var s: Variant = _on_pad()
+	_wipe(s)
+	var cur0: Array = _cursors(s)
+	var sig0: String = _world_without_funds(s)
+	var keys0: Array = Persistence.serialize_region(s).keys()
+	var failed: Dictionary = s.upgrade_capsule()   # nothing funded: a refusal must not even stir the world
+	ok(not bool(failed.get("ok", true)) and _cursors(s) == cur0 and _world_without_funds(s) == sig0, "REQ-0010-34: a REFUSED upgrade draws no random numbers and changes nothing around it")
+	_fund_cost(s, _cost_of(rows, 1), 0.5)
+	var done: Dictionary = s.upgrade_capsule()
+	ok(bool(done.get("ok", false)) and _cursors(s) == cur0, "REQ-0010-34: a successful upgrade does not shift the director/env/threat cursors")
+	ok(_world_without_funds(s) == sig0, "REQ-0010-13: ... and moves nothing but the pack, the stock, the level and the ledger (map, buildings, enemies, time, hero body/position, bags unchanged)")
+	ok(Persistence.serialize_region(s).keys() == keys0, "REQ-0010-35: ... and adds no key to the region record")
+	# the clock is an input, not an operand: pushing it before the upgrade changes neither the ledger nor the hash
+	var a: Variant = _on_real(CLOCK_T)
+	var b: Variant = _on_real(CLOCK_T)
+	for w in [a, b]:
+		_wipe(w)
+		_fund_cost(w, _cost_of(rows, 1), 0.5)
+	b.set_clock(CLOCK_T + 86400000 * 3)
+	a.upgrade_capsule()
+	b.upgrade_capsule()
+	ok(Persistence.world_hash(a) == Persistence.world_hash(b) and _ledger_sig(a) == _ledger_sig(b), "REQ-0010-92: the upgrade does not depend on the device clock (same ledger and hash with now_ms +3 days)")
+	# twins: the same commands in the same order -> the same world, across updates in between
+	for w in [a, b]:
+		_fund_cost(w, _cost_of(rows, 2), 0.3)
+		for t in 20:
+			w.update(Scenarios.DT)
+			_topup(w)
+		w.upgrade_capsule()
+	ok(a.capsule_level() == 2 and b.capsule_level() == 2, "REQ-0010-13 setup: both twins reached level 2 across ticks")
+	for w in [s, a, b]:
+		_dispose(w)
+
+
+# =============================================================================================
+# REQ-0010-96 / 97 (W2a part): death changes neither the level nor the ledger nor the capsule's stock (and the stock is still
+# spendable by the new body); upgrading summons no body and trains nobody — the roster is the Orbit's business
+# =============================================================================================
+func _t_upgrade_death_and_roster() -> void:
+	var rows: Array = _raw_rows()
+	var s: Variant = _stub_on(_pad_map(PAD_N, Vector2i(8, 8)))
+	_quiet(s)
+	_wipe(s)
+	var body0: String = var_to_str([s.player.born, s.player.skills])
+	for L in range(1, 4):
+		_fund_cost(s, _cost_of(rows, L), 0.5)
+		s.upgrade_capsule()
+	ok(s.capsule_level() == 3 and int(s.source_calls) == 0, "REQ-0010-97: three upgrades never asked for a body (respawn_source calls: %d) — the capsule levels do not hand out clones" % int(s.source_calls))
+	ok(var_to_str([s.player.born, s.player.skills]) == body0, "REQ-0010-97: ... and the hero's own skills/identity are untouched by levels")
+	_fund(s, "wood", 0, 61)   # something in the capsule's stock that must survive the death
+	var led: String = _ledger_sig(s)
+	var stock_wood: int = s.res_amount("wood")
+	_kill(s)
+	s.respawn_new_pawn()
+	ok(int(s.source_calls) == 1, "REQ-0010-96 setup: the death took ONE body through the respawn_source seam (%d)" % int(s.source_calls))
+	ok(s.capsule_level() == 3 and _ledger_sig(s) == led and s.res_amount("wood") == stock_wood, "REQ-0010-96: death + respawn left the level (3), the ledger and the capsule's stock as they were")
+	# the new body is next to the capsule -> in its zone -> pays from the stock straight away
+	var cost4: Dictionary = _cost_of(rows, 4)
+	for res in cost4:
+		_fund(s, String(res), 0, int(cost4[res]))
+	var r: Dictionary = s.upgrade_capsule()
+	ok(bool(r.get("ok", false)) and s.capsule_level() == 4, "REQ-0010-13/96: after the respawn the new body (empty hands, next to the capsule) upgrades from the stock — %s" % str(r))
+	_dispose(s)
+
+
+# =============================================================================================
+# REQ-0010-17: ONE axis — the code offers exactly one way to raise the capsule, with no axis argument
+# =============================================================================================
+func _t_one_axis_api() -> void:
+	var names: Array = []
+	var cap_script: Script = MainCapsule
+	var sim_script: Script = Sim
+	for m in cap_script.get_script_method_list():
+		var nm: String = String((m as Dictionary).name)
+		if nm.contains("upgrade") or nm.contains("level_up") or nm.contains("boost") or nm.contains("buy_"):
+			names.append("capsule.%s/%d" % [nm, int((m as Dictionary).args.size())])
+	for m in sim_script.get_script_method_list():
+		var nm2: String = String((m as Dictionary).name)
+		if nm2.contains("upgrade") or nm2.contains("level_up") or nm2.contains("boost") or nm2.contains("buy_capsule"):
+			names.append("sim.%s/%d" % [nm2, int((m as Dictionary).args.size())])
+	names.sort()
+	ok(names == ["capsule.upgrade/2", "sim.upgrade_capsule/1"], "REQ-0010-17: exactly one raise entry point (upgrade_capsule(cmd_id)) and no radius/defence/buff variant — %s" % str(names))
+
+
+# =============================================================================================
+# REQ-0010-13 / 14 / 76 / 91 — a seeded property run: random funding across both sources, random hero positions (zone edge
+# included), random commands with and without ids, ticks in between. After EVERY call an independent oracle (measured funds,
+# the data file, the data's metric) says what had to happen: accept or refuse, the exact debit, pack-first, the exact ledger.
+# =============================================================================================
+func _t_upgrade_property() -> void:
+	for variant in ["catalog", "synthetic"]:
+		var synthetic: bool = String(variant) == "synthetic"
+		var table: Dictionary = _synth_table(5) if synthetic else {}
+		var rows: Array = (table.levels as Array) if synthetic else _raw_rows()
+		var ids: Array = []
+		for L in rows.size():
+			for k in _cost_of(rows, L):
+				if not ids.has(k):
+					ids.append(k)
+		var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+		rng.seed = 7100 + (1 if synthetic else 0)
+		var max_lv: int = rows.size() - 1
+		var stats: Dictionary = {"ok": 0, "cost": 0, "far": 0, "max": 0, "dup": 0}
+		var problems: Array = []
+		var stock_cap: int = 40 if synthetic else 300
+		var ends_exact: bool = true
+		var ends_stable: bool = true
+		for session in 6:   # a fresh capsule every 100 steps: the low levels (refusals, «far») are visited again and again
+			var s: Variant = _on_pad()
+			if synthetic:
+				s.capsule_table = table
+			_wipe(s)
+			var cap: Vector2i = _cap_tile(s)
+			var done_ids: Dictionary = {}
+			var bad_ids: Dictionary = {}
+			for step in 100:
+				var op: int = rng.randi_range(0, 9)
+				var lvl: int = int(s.main_capsule.level)
+				if op == 0:
+					var res0: String = String(ids[rng.randi_range(0, ids.size() - 1)])
+					_fund(s, res0, rng.randi_range(0, 60), rng.randi_range(0, stock_cap))
+				elif op == 1 or (op == 2 and rng.randi_range(0, 1) == 0):
+					var nxt: Dictionary = _cost_of(rows, lvl + 1)
+					var short_one: String = String(nxt.keys()[rng.randi_range(0, nxt.size() - 1)]) if nxt.size() > 0 and rng.randi_range(0, 2) == 0 else ""
+					for res in nxt:
+						var need: int = maxi(0, int(nxt[res]) - (1 if String(res) == short_one else 0))
+						var pk: int = rng.randi_range(0, mini(60, need))
+						_fund(s, String(res), pk, need - pk)
+				elif op == 3 or op == 2:
+					var rad: int = int((rows[lvl] as Dictionary).radius)
+					var dx: int = rng.randi_range(-(rad + 2), rad + 2)
+					var dy: int = rng.randi_range(-(rad + 2), rad + 2)
+					if rng.randi_range(0, 2) == 0:
+						dx = clampi(dx, -rad, rad)
+						dy = clampi(dy, -rad, rad)
+					_put_hero(s, Vector2i(clampi(cap.x + dx, 0, PAD_N - 1), clampi(cap.y + dy, 0, PAD_N - 1)))
+				elif op == 4:
+					s.update(Scenarios.DT)
+					_topup(s)
+					done_ids.clear()
+					bad_ids.clear()
+				else:
+					var cid: int = -1
+					if rng.randi_range(0, 1) == 1:
+						cid = rng.randi_range(0, 3)
+						if bad_ids.has(cid):
+							cid = -1
+					var hero: Vector2i = _hero_cell(s)
+					var in_zone: bool = maxi(absi(hero.x - cap.x), absi(hero.y - cap.y)) <= int((rows[lvl] as Dictionary).radius)
+					var dup: bool = cid >= 0 and done_ids.has(cid)
+					var cost: Dictionary = _cost_of(rows, lvl + 1)
+					var packs: Dictionary = {}
+					var stocks: Dictionary = {}
+					var short: Dictionary = {}
+					var far_would_fix: bool = false
+					for res in ids:
+						packs[res] = Inventory.count(s, String(res))
+						stocks[res] = int(s.res_amount(String(res)))
+					for res in cost:
+						var avail: int = int(packs[res]) + (int(stocks[res]) if in_zone else 0)
+						if avail < int(cost[res]):
+							short[res] = int(cost[res]) - avail
+							far_would_fix = far_would_fix or (not in_zone and int(stocks[res]) > 0)
+					var sig0: String = _funds_sig(s)
+					var led0: String = _ledger_sig(s)
+					var ledger0: Dictionary = (s.main_capsule.invested as Dictionary).duplicate(true)
+					var r: Dictionary = s.upgrade_capsule(cid)
+					var tag: String = "[%s session %d step %d lvl %d cid %d zone %s]" % [String(variant), session, step, lvl, cid, str(in_zone)]
+					if dup:
+						stats.dup += 1
+						if _funds_sig(s) != sig0 or _ledger_sig(s) != led0 or int(s.main_capsule.level) != lvl:
+							problems.append("%s duplicate id changed state" % tag)
+					elif lvl >= max_lv:
+						stats["max"] += 1
+						if bool(r.get("ok", true)) or int(s.main_capsule.level) != lvl or _funds_sig(s) != sig0 or _ledger_sig(s) != led0:
+							problems.append("%s max level: not refused cleanly (%s)" % [tag, str(r)])
+						if cid >= 0:
+							bad_ids[cid] = true
+					elif short.is_empty():
+						stats.ok += 1
+						if not bool(r.get("ok", false)) or int(s.main_capsule.level) != lvl + 1 or int(r.get("level", -1)) != lvl + 1:
+							problems.append("%s affordable but refused/level wrong (%s)" % [tag, str(r)])
+						for res in ids:
+							var need2: int = int(cost.get(res, 0))
+							var from_pack: int = mini(int(packs[res]), need2)
+							var from_stock: int = need2 - from_pack
+							if Inventory.count(s, String(res)) != int(packs[res]) - from_pack or int(s.res_amount(String(res))) != int(stocks[res]) - from_stock:
+								problems.append("%s %s debit wrong: pack %d->%d stock %d->%d, expected pack-first -%d/-%d" % [tag, String(res), int(packs[res]), Inventory.count(s, String(res)), int(stocks[res]), int(s.res_amount(String(res))), from_pack, from_stock])
+						var want_led: Dictionary = ledger0.duplicate(true)
+						want_led[str(lvl + 1)] = cost.duplicate()
+						if var_to_str(Persistence.serialize_region(s).main_capsule.invested) != var_to_str(MainCapsule.ledger(want_led)):
+							problems.append("%s ledger is not old + price: %s" % [tag, var_to_str(s.main_capsule.invested)])
+						if cid >= 0:
+							done_ids[cid] = true
+					else:
+						stats.cost += 1
+						if far_would_fix:
+							stats.far += 1
+						if bool(r.get("ok", true)) or r.get("reason", &"") != &"cost" or int(s.main_capsule.level) != lvl or _funds_sig(s) != sig0 or _ledger_sig(s) != led0:
+							problems.append("%s unaffordable: not refused cleanly (%s)" % [tag, str(r)])
+						elif not _same_numbers(r.get("missing", {}), short):
+							problems.append("%s wrong missing %s, expected %s" % [tag, str(r.get("missing", {})), str(short)])
+						elif bool(r.get("far", false)) != far_would_fix:
+							problems.append("%s far flag %s, expected %s" % [tag, str(r.get("far", false)), str(far_would_fix)])
+						if cid >= 0:
+							bad_ids[cid] = true
+			# end of a session: the ledger is exactly the prices of levels 1..level, once each (nothing dropped, nothing invented)
+			var end_lv: int = int(s.main_capsule.level)
+			var inv_end: Dictionary = s.main_capsule.invested
+			ends_exact = ends_exact and inv_end.size() == end_lv
+			for L in range(1, end_lv + 1):
+				ends_exact = ends_exact and inv_end.has(str(L)) and _same_numbers(inv_end[str(L)], _cost_of(rows, L))
+			var y: Variant = Sim.new()
+			if synthetic:
+				y.capsule_table = table
+			var acc: bool = Persistence.restore(y, _json_rt(Persistence.resume_payload(s)))
+			# NOT world_hash: after ticks the runtime floats (patrol.timer, time.frac) ride JSON with the parser's known 1-ulp error
+			# (see the fixture note in AGENTS.md), which has nothing to do with the capsule. The capsule record + the funds are ints/strings.
+			var ra: Dictionary = Persistence.serialize_region(s)
+			var rb: Dictionary = Persistence.serialize_region(y)
+			ends_stable = ends_stable and acc and y.load_error == &"" and Persistence.content_hash([ra.main_capsule, ra.stock, ra.player.inv]) == Persistence.content_hash([rb.main_capsule, rb.stock, rb.player.inv])
+			_dispose(s)
+			_dispose(y)
+		ok(problems.is_empty(), "REQ-0010-13/14/76 [%s]: 600 random steps — every upgrade call matched the independent oracle (%d problems; first: %s)" % [String(variant), problems.size(), str(problems.slice(0, 2))])
+		ok(int(stats.ok) >= 6 and int(stats.cost) >= 20 and int(stats.dup) >= 2, "REQ-0010-13/76 [%s] setup: the run really exercised the paths — %s" % [String(variant), str(stats)])
+		ok(int(stats.far) >= 2, "REQ-0010-13 [%s] setup: «hero outside the zone, the stock would have covered it» refusals were reached — %s" % [String(variant), str(stats)])
+		if synthetic:
+			ok(int(stats["max"]) >= 1, "REQ-0010-91 [synthetic] setup: the top level was reached and attacked — %s" % str(stats))
+		ok(ends_exact, "REQ-0010-14 [%s]: at the end of every session the ledger is exactly the price of each level reached, once" % String(variant))
+		ok(ends_stable, "REQ-0010-35 [%s]: every session's end state survives a JSON round trip — the capsule record, the stock and the backpack come back identical" % String(variant))

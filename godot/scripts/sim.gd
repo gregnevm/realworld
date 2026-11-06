@@ -49,6 +49,8 @@ var main_capsule: Dictionary = {}   # {} при OFF/до посадки; зап�
 var config_error: StringName = &""  # непорожнє => new_game нічого не створив (див. MainCapsule.preflight)
 var load_error: StringName = &""    # непорожнє => load_region відхилив запис ДО мутацій (MainCapsule.validate_region)
 var now_ms: int = 0                 # ВХІД часу (UTC-мс), лише через set_clock; НЕ в сейві й НЕ в world_hash (REQ-0010-92)
+var capsule_table: Dictionary = {}  # override таблиці capsule_levels (тести/пак контенту); {} = каталог (MainCapsule.table)
+var capsule_cmds_tick: Dictionary = {}   # дедуп cmd_id upgrade_capsule в межах тіка: очищається на початку update(); не хеш
 var convoys: Array = []
 var regions: Array = []
 var convoy_seq := 0
@@ -903,6 +905,7 @@ func _follow_path(o: Dictionary, path: Array, step: float) -> bool:
 
 # ---------------- main update ----------------
 func update(dt: float) -> void:
+	capsule_cmds_tick.clear()
 	if flash_t > 0:
 		flash_t = max(0.0, flash_t - dt)
 	if dead:
@@ -1217,6 +1220,13 @@ func respawn_new_pawn(anchor: Dictionary = {}) -> void:
 # ЧИЄ тіло повертається після смерті — шов spec 0011 (до неї стаб OrbitStub: стартовий пішак); його підміняють 0011 і тести.
 func respawn_source() -> Dictionary:
 	return OrbitStub.respawn_source(self)
+
+# Прокачка Основної капсули: value-data результат (MainCapsule.upgrade); verb/роутер — W4a. cmd_id -1 == без дедуплікації.
+func upgrade_capsule(cmd_id: int = -1) -> Dictionary:
+	return MainCapsule.upgrade(self, cmd_id)
+
+func capsule_level() -> int:
+	return int(main_capsule.get("level", 0))
 
 # Годинник пристрою -> sim: єдиний вхід абсолютного часу (власник Clock — spec 0012). Монотонний: відкат не скорочує таймери.
 func set_clock(ms: int) -> void:

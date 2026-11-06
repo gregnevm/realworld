@@ -11,19 +11,29 @@
 #
 # W1a покриває: прапор і явні помилки конфігурації (REQ-03/59), канонічну клітинку й посадку (REQ-04/73/98),
 # склад (REQ-05), заборони видалення (REQ-06/75). W1b: запис капсули в сейві/хеші (REQ-02/35/60/82/83), респавн біля
-# капсули (REQ-07/08/09/74/96), місце респавну — respawn_anchor, посадка — ЄДИНИЙ landing (REQ-98). Рівні/прокачка/
-# бафи/рейд — наступні хвилі (W2…W3); шви 0011 (Орбіта) — окремо, sim/orbit_stub.gd (D2), не тут.
+# капсули (REQ-07/08/09/74/96), місце респавну — respawn_anchor, посадка — ЄДИНИЙ landing (REQ-98). W2a: ТАБЛИЦЯ рівнів
+# 0..5 (дані каталогу, ні одного числа в коді — REQ-11/91), прокачка `upgrade` (атомарно рюкзак → склад у зоні, REQ-13/76),
+# журнал вкладень `invested` у записі/хеші (REQ-14/35/82), кламп рівня при завантаженні (REQ-88). Бафи-гачки й межа зони
+# (W2b), рейд (W3) — наступні хвилі; шви 0011 (Орбіта) — окремо, sim/orbit_stub.gd (D2), не тут.
 extends RefCounted
 
 const GameData = preload("res://scripts/data.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
 const HeroHealth = preload("res://scripts/sim/hero_health.gd")
 const Clock = preload("res://scripts/clock.gd")   # лише to_wire/from_wire (int64 <-> рядок JSON); годинник сим не читає
+const Inventory = preload("res://scripts/sim/inventory.gd")
+const Catalog = preload("res://scripts/kernel/catalog.gd")
 
 const KIND := "main_capsule"
 const RECORD_VERSION := 1   # версія ЗАПИСУ капсули в сейві (SAVE_VERSION не чіпаємо: OD-C14); невідома версія — явна помилка
 const OWNER_LOCAL := "local"   # K1 — соло: власник один, локальний
 const NO_CELL := Vector2i(-1, -1)   # «клітинки нема» (повна мапа) — єдиний sentinel модуля
+# Закритий словник бафів рівнів (REQ-0010-79, OD-59): процеси/герой, ЖОДНИХ hunger/cold/sleep (S2 чистий). Значення — множники
+# (1.0 нейтральний, як gather_mult у GameData.ITEMS); таблиця в каталозі може мати лише ці ключі (валідують обидва дзеркальні тести).
+const BUFF_KEYS := ["gather_mult", "melee_mult", "craft_mult", "research_mult"]
+# Кеш СТОРІНКИ каталогу: capsule_levels читається з диска раз на процес (патерн catalog_defs). s.capsule_table (тести/пак контенту) має
+# пріоритет і не кешується.
+static var _catalog_table: Variant = null
 # Відмова гравцю при спробі покинути регіон/запустити капсулу (одне джерело: world_meta, session, refuses_region_swap).
 const MSG_NO_TRAVEL := "Недоступно: Основна капсула — твій дім."
 # Рядки смерті/респавну при ON (REQ-0010-10): без «новий виживальник у поселенні»; OFF-рядки лишаються в threats.gd дослівно.
@@ -121,7 +131,7 @@ static func canon_cell(m: Dictionary, occupied: Dictionary = {}) -> Vector2i:
 # Рівень 0 = базова капсула без бафів. Поля схеми додаються ПОСТУПОВО, щоб кожна хвиля мала власні хеш-докази
 # (REQ-0010-35/82): W1b — tile/owner/landed_at/grace_start/level; invested — W2a; immune_until/жетон/курсор рейду — W3a.
 static func new_record(cell: Vector2i, now_ms: int = 0) -> Dictionary:
-	return {"kind": "main", "tile": [cell.x, cell.y], "level": 0, "owner": OWNER_LOCAL, "landed_at": now_ms, "grace_start": now_ms}
+	return {"kind": "main", "tile": [cell.x, cell.y], "level": 0, "owner": OWNER_LOCAL, "landed_at": now_ms, "grace_start": now_ms, "invested": {}}
 
 static func tile(s) -> Vector2i:
 	var t: Array = s.main_capsule.tile
@@ -136,12 +146,37 @@ static func to_record(s) -> Dictionary:
 	var t: Vector2i = tile(s)
 	return {"version": RECORD_VERSION, "kind": String(c.get("kind", "main")), "tile": [t.x, t.y], "level": int(c.get("level", 0)),
 		"owner": String(c.get("owner", OWNER_LOCAL)), "landed_at": Clock.to_wire(int(c.get("landed_at", 0))),
-		"grace_start": Clock.to_wire(int(c.get("grace_start", 0)))}
+		"grace_start": Clock.to_wire(int(c.get("grace_start", 0))), "invested": ledger(c.get("invested", {}))}
+
+# Журнал вкладень у канонічному вигляді (REQ-0010-14/82): ключі — десяткові РЯДКИ рівнів у числовому порядку, усередині — id ресурсів
+# за алфавітом, кількості — цілі. Рядки, бо JSON-ключ завжди рядок; world_hash сортує ключі лексикографічно, що збігається з числовим
+# порядком лише до рівня 9 (таблиця на ≤10 рядків — перевіряють тести даних; ширший діапазон = bump RECORD_VERSION і падінг ключів).
+# ДЕТЕРМІНІЗМ від довжини таблиці не залежить (порядок хеш-входу один і той самий в усіх інстансів); лише ЧИСЛОВІСТЬ порядку.
+# `Persistence._canonical` НЕ чіпаємо: region.nodes — теж рядкові числові ключі str(cell), їхній лексикографічний порядок і є еталон
+# OFF (WORLD_HASH_FINAL); числово-обізнаний _canonical міняє хеш OFF-регіону (перевірено на Київ N=56, 506 нод).
+static func ledger(raw: Variant) -> Dictionary:
+	var out: Dictionary = {}
+	if not (raw is Dictionary):
+		return out
+	var levels_sorted: Array = (raw as Dictionary).keys()
+	levels_sorted.sort_custom(func(a: Variant, b: Variant) -> bool: return int(String(a)) < int(String(b)))
+	for lk in levels_sorted:
+		var res_in: Variant = (raw as Dictionary)[lk]
+		if not (res_in is Dictionary):
+			continue
+		var entry: Dictionary = {}
+		var res_sorted: Array = (res_in as Dictionary).keys()
+		res_sorted.sort()
+		for res in res_sorted:
+			entry[String(res)] = int((res_in as Dictionary)[res])
+		out[str(int(String(lk)))] = entry
+	return out
 
 # Обернене до to_record + ставить БУДІВЛЮ капсули. {} (OFF-запис) лише скидає запис. Викликається ПЕРЕД циклом будівель
 # load_region: капсула стає buildings[0], як у new_game (порядок обходу _nearest_storage збігається між живим і
-# відновленим симом). Припускає validate_region(...) == &"". Рівень поки не клампиться: таблиця рівнів (W2a) і
-# REQ-0010-88 («рівень кламиться до нового максимуму») приходять разом.
+# відновленим симом). Припускає validate_region(...) == &"". REQ-0010-88: рівень кламиться до МАКСИМУМУ ПОТОЧНОЇ таблиці
+# (сейв рівня 5 + таблиця на 3 рівні -> 3), `invested` лишається як є (вкладене не зникає від правки каталогу), а захист/радіус
+# «перераховуються» самі — вони не зберігаються, це функції рівня від таблиці (core_hp(s, level)).
 static func from_record(s, rec: Dictionary) -> void:
 	if rec.is_empty():
 		s.main_capsule = {}
@@ -149,9 +184,10 @@ static func from_record(s, rec: Dictionary) -> void:
 	var t: Array = rec.tile
 	var cell := Vector2i(int(t[0]), int(t[1]))
 	s.main_capsule = new_record(cell, Clock.from_wire(rec.get("landed_at"), 0))
-	s.main_capsule.level = maxi(0, int(rec.get("level", 0)))
+	s.main_capsule.level = clampi(int(rec.get("level", 0)), 0, max_level(s))
 	s.main_capsule.owner = String(rec.get("owner", OWNER_LOCAL))
 	s.main_capsule.grace_start = Clock.from_wire(rec.get("grace_start"), 0)
+	s.main_capsule.invested = ledger(rec.get("invested", {}))
 	s._place_building(KIND, cell.x, cell.y, -1)
 
 # Найперший крок load_region — ДО будь-якої мутації світу: &"" == можна завантажувати, інакше явна причина
@@ -191,7 +227,21 @@ static func _fields_ok(c: Dictionary, n: int) -> bool:
 		if not _whole(v) or int(v) < 0 or int(v) >= n:
 			return false
 	return String(c.get("kind", "")) == "main" and c.get("owner") is String and _whole(c.get("level")) and int(c.level) >= 0 \
-		and Clock.from_wire(c.get("landed_at"), -1) >= 0 and Clock.from_wire(c.get("grace_start"), -1) >= 0
+		and Clock.from_wire(c.get("landed_at"), -1) >= 0 and Clock.from_wire(c.get("grace_start"), -1) >= 0 and _ledger_ok(c.get("invested", {}))
+
+# Журнал: {"<рівень>": {"<ресурс>": n}} — ключ-рівень десятковий рядок ≥ 1, n ціле ≥ 0. Відсутній ключ (запис до W2a) == порожній журнал.
+static func _ledger_ok(v: Variant) -> bool:
+	if not (v is Dictionary):
+		return false
+	for lk in (v as Dictionary):
+		var key: String = String(lk)
+		if not key.is_valid_int() or int(key) < 1 or str(int(key)) != key or not ((v as Dictionary)[lk] is Dictionary):
+			return false
+		for res in ((v as Dictionary)[lk] as Dictionary):
+			var n: Variant = ((v as Dictionary)[lk] as Dictionary)[res]
+			if String(res) == "" or not _whole(n) or int(n) < 0:
+				return false
+	return true
 
 # ---------------- landing (REQ-0010-98: ЄДИНИЙ шов посадки) ----------------
 # Перша посадка (капсули ще нема) ставить капсулу на canon_cell(pos) і героя поруч; повторна — лише героя
@@ -256,6 +306,128 @@ static func respawn(s, anchor: Dictionary = {}) -> bool:
 	s.dead = false
 	s._log(MSG_RESPAWN, "warn")
 	return true
+
+# ---------------- levels table (REQ-0010-11 / 12 / 16 / 17 / 88 / 91) ----------------
+# ОДНА таблиця `capsule_levels` у godot/content/catalog.json (status: "proposed" — числа пропонує бот run_capsule_balance.gd, власник
+# схвалює при мерджі): рівні 0..5 (OD-56) — це ОДНА вісь, а радіус, захист (core_hp) і бафи — її похідні (OD-59). Код не знає жодного
+# числа: ні вартості, ні радіуса, ні максимуму (max_level — розмір таблиці), тож розширення діапазону — лише дані (REQ-0010-91).
+# Рядок рівня L = levels[L] (безперервність level == індекс перевіряють обидва дзеркальні тести даних).
+static func table(s) -> Dictionary:
+	var override: Variant = s.get("capsule_table")
+	if override is Dictionary and not (override as Dictionary).is_empty():
+		return override
+	if _catalog_table == null:
+		_catalog_table = Catalog.load_json().get("capsule_levels", {})
+	return _catalog_table
+
+static func levels(s) -> Array:
+	return table(s).get("levels", [])
+
+static func max_level(s) -> int:
+	return maxi(0, levels(s).size() - 1)
+
+# Рядок рівня у прикладному вигляді (JSON-float -> int): cost з ключами за алфавітом — «перша причина відмови» upgrade береться з
+# цього порядку. {} — рівня поза таблицею нема.
+static func row(s, level: int) -> Dictionary:
+	var lv: Array = levels(s)
+	if level < 0 or level >= lv.size():
+		return {}
+	var src: Dictionary = lv[level]
+	var cost: Dictionary = {}
+	var ids: Array = (src.get("cost", {}) as Dictionary).keys()
+	ids.sort()
+	for id in ids:
+		cost[String(id)] = int((src.cost as Dictionary)[id])
+	return {"level": level, "cost": cost, "radius": int(src.get("radius", 0)), "core_hp": float(src.get("core_hp", 0.0)), "buffs": buffs(s, level)}
+
+static func radius(s, level: int) -> int:
+	var lv: Array = levels(s)
+	return int((lv[level] as Dictionary).get("radius", 0)) if level >= 0 and level < lv.size() else 0
+
+# Параметр захисту рівня (ОДНА вісь, OD-59): запас міцності ядра, що його рейд має зняти до нуля (W3). Не зберігається в записі (це
+# похідна рівня від таблиці, тож «перераховується» сама — REQ-0010-88); стан рейду (поточний core_hp) з'явиться у W3 у runtime-половині.
+static func core_hp(s, level: int) -> float:
+	var lv: Array = levels(s)
+	return float((lv[level] as Dictionary).get("core_hp", 0.0)) if level >= 0 and level < lv.size() else 0.0
+
+# Бафи рівня: множники лише з BUFF_KEYS. Рівень 0 — порожньо ЗАВЖДИ, незалежно від даних (REQ-0010-12: базова капсула без бафів).
+static func buffs(s, level: int) -> Dictionary:
+	var lv: Array = levels(s)
+	var out: Dictionary = {}
+	if level <= 0 or level >= lv.size():
+		return out
+	var src: Dictionary = (lv[level] as Dictionary).get("buffs", {})
+	for key in BUFF_KEYS:
+		if src.has(key):
+			out[key] = float(src[key])
+	return out
+
+# Клітинка героя та зона капсули (Чебишов: max(|dx|,|dy|) <= радіус ПОТОЧНОГО рівня, межа включно; метрика — у даних, валідується
+# тестами даних: реалізовано лише "chebyshev"). Рівень 0 теж має зону: R0 покриває склад (REQ-0010-05/12).
+static func hero_cell(s) -> Vector2i:
+	return Vector2i(int(floor(float(s.player.px))), int(floor(float(s.player.py))))
+
+static func in_zone(s, cell: Vector2i) -> bool:
+	if (s.main_capsule as Dictionary).is_empty():
+		return false
+	var t := tile(s)
+	return maxi(absi(cell.x - t.x), absi(cell.y - t.y)) <= radius(s, int(s.main_capsule.get("level", 0)))
+
+# ---------------- upgrade (REQ-0010-13 / 14 / 17 / 76 / 91) ----------------
+# Прокачка на рівень L+1: вартість береться СПЕРШУ з рюкзака, потім зі складу — лише поки герой у зоні (склад «капсули в її радіусі»,
+# REQ-0010-13/76); АТОМАРНО: спершу план по всіх ресурсах, жодного списання при будь-якій нестачі. Повертає value-data (текст — у
+# роутері, R10; verb capsule_upgrade ще не заведено — це W4a):
+#   {ok:true, level, paid:{res:n}}                                               — рівень піднято, журнал дописано
+#   {ok:false, reason:&"no_capsule"|&"dead"|&"duplicate"|&"max"|&"cost", ...}    — світ не змінено
+#   для &"cost": missing:{res:n} (ключі за алфавітом — ПЕРША причина = перший ключ), far:bool (герой поза зоною, а склад покрив би
+#   хоч частину нестачі — підійди до капсули), level, next.
+# cmd_id >= 0 — ідентифікатор команди: повтор з тим самим id у ТОМУ САМОМУ тіку ідемпотентний (списання один раз; мітка
+# sim.capsule_cmds_tick очищається на початку update і не входить у хеш); -1 — без дедуплікації (локальний шлях).
+# Журнал: invested[str(L+1)] НАКОПИЧУЄТЬСЯ (add) при повторній прокачці після падіння — ПРОПОЗИЦІЯ агента (єдине правило, що зберігає
+# REQ-0010-66 «sum(invested) = списане − забране»), схвалює власник при мерджі.
+static func upgrade(s, cmd_id: int = -1) -> Dictionary:
+	if s.get("use_main_capsule") != true or (s.main_capsule as Dictionary).is_empty():
+		return {"ok": false, "reason": &"no_capsule"}
+	if s.dead:
+		return {"ok": false, "reason": &"dead"}
+	if cmd_id >= 0:
+		var seen: Dictionary = s.capsule_cmds_tick
+		if seen.has(cmd_id):
+			return {"ok": false, "reason": &"duplicate"}
+		seen[cmd_id] = true
+	var level: int = int(s.main_capsule.get("level", 0))
+	if level >= max_level(s):
+		return {"ok": false, "reason": &"max", "level": level}
+	var next: int = level + 1
+	var cost: Dictionary = row(s, next).cost
+	var in_reach: bool = in_zone(s, hero_cell(s))
+	var plan: Dictionary = {}
+	var missing: Dictionary = {}
+	var far: bool = false
+	for res in cost:
+		var need: int = int(cost[res])
+		var from_pack: int = mini(Inventory.count(s, String(res)), need)
+		var in_stock: int = int(s.res_amount(String(res)))
+		var from_stock: int = mini(in_stock, need - from_pack) if in_reach else 0
+		if from_pack + from_stock < need:
+			missing[res] = need - from_pack - from_stock
+			far = far or (not in_reach and in_stock > 0)
+		plan[res] = {"pack": from_pack, "stock": from_stock}
+	if not missing.is_empty():
+		return {"ok": false, "reason": &"cost", "missing": missing, "far": far, "level": level, "next": next}
+	for res in plan:
+		Inventory.take(s, String(res), int(plan[res].pack))
+		if int(plan[res].stock) > 0:
+			s._stock_take(String(res), int(plan[res].stock))
+	if not cost.is_empty():
+		var book: Dictionary = s.main_capsule.get("invested", {})
+		var entry: Dictionary = book.get(str(next), {})
+		for res in cost:
+			entry[res] = int(entry.get(res, 0)) + int(cost[res])
+		book[str(next)] = entry
+		s.main_capsule["invested"] = book
+	s.main_capsule.level = next
+	return {"ok": true, "level": next, "paid": cost.duplicate()}
 
 # ---------------- region swaps (REQ-0010-04 / 75) ----------------
 # Капсула ОДНА і лежить у своєму регіоні: arrive_region стирає будівлі регіону (разом із капсулою й bgrid), тож при ON
