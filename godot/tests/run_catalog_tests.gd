@@ -292,6 +292,7 @@ func _t_capsule_levels_data() -> void:
 	ok(keys == want, "REQ-0010-17/97: the table has no key outside the schema (a second axis / clone table has nowhere to hide): %s" % str(keys))
 	ok(int(t.get("version", 0)) == 1 and ["proposed", "approved"].has(String(t.get("status", ""))), "capsule_levels: version 1, status proposed|approved (the agent's numbers until the owner approves)")
 	ok(String(t.get("metric", "")) == "chebyshev", "REQ-0010-80: the zone metric is data, and only chebyshev is implemented")
+	ok(MainCapsule.ZONE_METRICS.has(String(t.get("metric", ""))), "REQ-0010-80: the data's zone metric is one the code implements (MainCapsule.ZONE_METRICS) — else in_zone would be empty for everyone")
 	var levels: Array = t.get("levels", [])
 	ok(levels.size() == 6, "REQ-0010-11/91: levels 0..5 (OD-56) — %d rows" % levels.size())
 	ok(levels.size() <= 10, "REQ-0010-82: invested keys hash lexicographically — numeric order holds up to level 9, so at most 10 rows until a RECORD_VERSION bump")

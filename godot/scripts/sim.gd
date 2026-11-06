@@ -19,6 +19,7 @@ const Catalog = preload("res://scripts/kernel/catalog.gd")
 const MainCapsule = preload("res://scripts/sim/capsule.gd")
 const Persistence = preload("res://scripts/persistence.gd")
 const OrbitStub = preload("res://scripts/sim/orbit_stub.gd")
+const Haul = preload("res://scripts/sim/haul.gd")
 
 var map: Dictionary
 var n: int = 0
@@ -111,6 +112,7 @@ const EMITTER_RADIUS := 6           # Manhattan reach of heat emitters (kernel p
 const LIGHT_RADIUS := {"campfire": 3.5, "torch": 3.0, "lamp": 5.0}
 const DARK_LIGHT_THRESHOLD := 0.35  # below this working slows (spec B3 «−темрява»)
 const DARK_WORK_PENALTY := 0.5      # up to +50% gather time in pitch black
+const GATHER_REACH := 1.4           # tiles to the node's centre: closer — the hero works where he stands (MainCapsule.gather_stand reads it)
 const COLD_SNAP_DIP_C := 6.0        # kernel WeatherSystem parity
 const WEATHER_LABEL := SimEnv.WEATHER_LABEL   # re-export: the frozen main.gd reads Sim.WEATHER_LABEL
 
@@ -654,12 +656,15 @@ func demolish(x: int, y: int) -> Dictionary:
 	return {"ok": true}
 
 # ---------------- items / equipment (spec 0001) ----------------
-func gather_time(node) -> float:
+# `at` — клітинка, з якої герой ПРАЦЮВАТИМЕ (підказка вузла, MainCapsule.gather_preview); за замовчуванням — де він стоїть зараз.
+func gather_time(node, at: Vector2i = MainCapsule.NO_CELL) -> float:
 	var info: Dictionary = GameData.NODEINFO[node.kind]
 	var mult: float = 1.0 + player.skills.gather * 0.04
 	var tool: String = player.equipped.get("tool", "")
 	if tool != "" and GameData.ITEMS.has(tool):
 		mult *= float(GameData.ITEMS[tool].get("gather_mult", 1.0))
+	if use_main_capsule:   # spec 0010: баф зони капсули на героя (клітинка героя, поточний рівень)
+		mult *= MainCapsule.hero_buff(self, "gather_mult", at)
 	# darkness and the body both slow the work: HeroHealth.work_mult reads the Manipulation capacity
 	# (wounded arms, deep cold, starvation), 1.0 at full health.
 	return info.time / mult * dark_work_mult() * HeroHealth.work_mult(self)
@@ -730,6 +735,8 @@ func melee_damage() -> float:
 	var wpn: String = player.equipped.get("weapon", "")
 	if wpn != "" and GameData.ITEMS.has(wpn):
 		dmg += float(GameData.ITEMS[wpn].get("dmg_bonus", 0.0))
+	if use_main_capsule:   # spec 0010: баф зони капсули на героя
+		dmg *= MainCapsule.hero_buff(self, "melee_mult")
 	return dmg * HeroHealth.melee_mult(self)   # a mangled arm swings weaker; 1.0 at full health
 
 func has_workbench() -> bool:
@@ -1001,7 +1008,7 @@ func _update_player(dt: float) -> void:
 		"gather":
 			_do_gather(dt, step)
 		"haul":
-			_do_haul(step)
+			Haul.do_haul(self, step)
 		"attack":
 			_do_attack(dt, step)
 
@@ -1012,7 +1019,7 @@ func _do_gather(dt: float, step: float) -> void:
 		p.action = null
 		return
 	var node: Dictionary = map.nodes[a.cell]
-	if _dist(p.px, p.py, a.nx + 0.5, a.ny + 0.5) >= 1.4:
+	if _dist(p.px, p.py, a.nx + 0.5, a.ny + 0.5) >= GATHER_REACH:
 		var done := _follow_path(p, a.path, step)
 		p.face = atan2(a.ny + 0.5 - p.py, a.nx + 0.5 - p.px)
 		if done and not WorldGen.is_terrain_blocked(map.tiles[a.cell]):
@@ -1024,7 +1031,7 @@ func _do_gather(dt: float, step: float) -> void:
 	if a.t >= a.dur:
 		a.t = 0.0
 		if not use_inventory and carry_total() >= p.carry_cap:
-			_start_haul(int(a.cell), String(node.kind))   # full hands: carry the load home, come back
+			Haul.start_haul(self, int(a.cell), String(node.kind))   # full hands: carry the load home, come back
 			return
 		# phase 4 (spec 0008): under the open catalogue, a node yields its catalogue BUNDLE — rocks
 		# occasionally give ore/coal/clay/sand, trees fiber, bushes herbs. Pure function of
@@ -1047,75 +1054,9 @@ func _do_gather(dt: float, step: float) -> void:
 		if node.amount <= 0:
 			map.nodes.erase(a.cell)
 			p.action = null
-			_continue_gather(int(a.cell), String(node.kind))
+			Haul.continue_gather(self, int(a.cell), String(node.kind))
 
-# ---------------- auto-haul: the gather loop closes itself ----------------
-# One click on a tree used to mean: chop 30, stop, walk the load home by hand, click the tree again.
-# Now full hands walk the load to the nearest storage (the ordinary auto-deposit unloads it there) and
-# come back to the SAME node; a node that runs dry hands over to its nearest same-kind neighbour.
-# Pure functions of state (paths, dict order, explicit tie-breaks) — twins and rejoiners agree.
-const HAUL_RESUME_RADIUS := 7   # Euclidean tiles: «keep chopping this grove», not «wander the map»
-
-func _start_haul(cell: int, kind: String) -> void:
-	var st: Variant = _nearest_storage()
-	if st == null:
-		_flash("Несеш максимум — збудуй склад (4).")
-		player.action = null
-		return
-	var path := compute_path(int(player.px), int(player.py), int(st.x), int(st.y))
-	player.action = {"type": "haul", "path": path, "cell": int(st.y) * n + int(st.x),
-		"resume": {"cell": cell, "kind": kind}}
-
-func _do_haul(step: float) -> void:
-	var p: Dictionary = player
-	var a: Dictionary = p.action
-	if carry_total() == 0:
-		# unloaded (the auto-deposit fired within reach of the storage): back to work
-		var res: Dictionary = a.get("resume", {})
-		var cell := int(res.get("cell", -1))
-		p.action = null
-		if cell >= 0 and map.nodes.has(cell):
-			order_gather(cell % n, cell / n)
-		else:
-			_continue_gather(cell, String(res.get("kind", "")))
-		return
-	if _follow_path(p, a.path, step):
-		if not _near_storage(1.8):
-			_flash("Склад недосяжний — віднеси вантаж сам.")
-			p.action = null
-		elif storage_cap() - stock_total() <= 0:
-			p.action = null   # full storage: the deposit flash already names the fix
-		# else: standing at the storage — the next deposit tick (dep_cd) unloads the hands
-
-# A node ran dry (or a haul came back to an empty cell): keep working the same kind nearby, or carry
-# what is in hand home when the grove is done. Silent no-op when there is nothing left to do.
-func _continue_gather(cell: int, kind: String) -> void:
-	var next := _nearest_node_of_kind(cell, kind, HAUL_RESUME_RADIUS)
-	if next >= 0:
-		if carry_total() >= int(player.carry_cap):
-			_start_haul(next, kind)
-		else:
-			order_gather(next % n, next / n)
-	elif carry_total() > 0 and kind != "":
-		_start_haul(-1, "")   # the grove is done: deliver the last load and stand by the storage
-
-func _nearest_node_of_kind(cell: int, kind: String, radius: int) -> int:
-	if cell < 0 or kind == "":
-		return -1
-	var cx := cell % n
-	var cy := cell / n
-	var best := -1
-	var bd := radius * radius + 1
-	for k in map.nodes:
-		if String(map.nodes[k].kind) != kind:
-			continue
-		var dx: int = int(k) % n - cx
-		var dy: int = int(k) / n - cy
-		var d := dx * dx + dy * dy
-		if d < bd or (d == bd and int(k) < best):
-			bd = d
-			best = int(k)
-	return best
+# ---------------- auto-haul (gather loop closes itself) lives in sim/haul.gd ----------------
 
 func _nearest_storage() -> Variant:
 	var best: Variant = null
@@ -1177,7 +1118,10 @@ func _update_crafting(dt: float) -> void:
 			count += 1
 	if count == 0:
 		return
-	craft_timer += dt * count
+	if use_main_capsule:   # spec 0010: кожен верстак — зі своїм бафом місця; таймер лише накопичується (REQ-0010-80)
+		craft_timer += dt * MainCapsule.craft_rate(self)
+	else:
+		craft_timer += dt * count
 	while craft_timer >= 3.5:
 		craft_timer -= 3.5
 		if res_amount("wood") >= 2 and stock_total() < storage_cap():

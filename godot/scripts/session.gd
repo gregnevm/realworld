@@ -150,6 +150,8 @@ func respawn() -> void:
 func research_rate() -> float:
 	if sim == null:
 		return 0.0
+	if sim.get("use_main_capsule") == true:   # spec 0010: стіл у зоні капсули — з бафом research_mult (OFF-цикл нижче дослівно)
+		return MainCapsule.research_rate(sim)
 	var rate := 0.0
 	for b in sim.buildings:
 		rate += float((GameData.BUILDINGS.get(b.kind, {}) as Dictionary).get("research_rate", 0.0))

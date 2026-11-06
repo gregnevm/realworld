@@ -13,8 +13,10 @@
 # склад (REQ-05), заборони видалення (REQ-06/75). W1b: запис капсули в сейві/хеші (REQ-02/35/60/82/83), респавн біля
 # капсули (REQ-07/08/09/74/96), місце респавну — respawn_anchor, посадка — ЄДИНИЙ landing (REQ-98). W2a: ТАБЛИЦЯ рівнів
 # 0..5 (дані каталогу, ні одного числа в коді — REQ-11/91), прокачка `upgrade` (атомарно рюкзак → склад у зоні, REQ-13/76),
-# журнал вкладень `invested` у записі/хеші (REQ-14/35/82), кламп рівня при завантаженні (REQ-88). Бафи-гачки й межа зони
-# (W2b), рейд (W3) — наступні хвилі; шви 0011 (Орбіта) — окремо, sim/orbit_stub.gd (D2), не тут.
+# журнал вкладень `invested` у записі/хеші (REQ-14/35/82), кламп рівня при завантаженні (REQ-88). W2b: зона контролю за метрикою
+# даних і бафи рівня на героя та процеси (REQ-15/16/80): `in_zone`/`buff_at` + гачки sim.gather_time / sim.melee_damage /
+# sim._update_crafting / Session.research_rate (кожен під прапором, OFF-код дослівно). Рейд (W3) — наступна хвиля; шви 0011
+# (Орбіта) — окремо, sim/orbit_stub.gd (D2), не тут.
 extends RefCounted
 
 const GameData = preload("res://scripts/data.gd")
@@ -362,16 +364,130 @@ static func buffs(s, level: int) -> Dictionary:
 			out[key] = float(src[key])
 	return out
 
-# Клітинка героя та зона капсули (Чебишов: max(|dx|,|dy|) <= радіус ПОТОЧНОГО рівня, межа включно; метрика — у даних, валідується
-# тестами даних: реалізовано лише "chebyshev"). Рівень 0 теж має зону: R0 покриває склад (REQ-0010-05/12).
+# ---------------- control zone + buffs (REQ-0010-12 / 15 / 16 / 79 / 80) ----------------
+# ЗОНА КОНТРОЛЮ: клітинки на відстані <= radius(поточний рівень) від клітинки капсули, МЕЖА ВКЛЮЧНО. Метрика відстані — ДАНІ
+# (`capsule_levels.metric`, REQ-0010-80: одна на всю гру); код реалізує лише словник ZONE_METRICS (кандидат спеки — Чебишов на
+# клітинкових координатах; інші метрики не вигадуємо), а тести даних тримають metric == "chebyshev". Відсутній ключ — той самий
+# Чебишов (єдине значення, що його вимовляє спека); ІНША метрика — «зони нема» (ні бафів, ні дальності складу: безпечна відмова,
+# нічого не ламає). Рівень 0 теж має зону: R0 покриває склад (REQ-0010-05/12), але бафів без рівня ≥ 1 нема.
+const ZONE_METRICS := ["chebyshev"]
+
 static func hero_cell(s) -> Vector2i:
 	return Vector2i(int(floor(float(s.player.px))), int(floor(float(s.player.py))))
+
+static func zone_metric(s) -> String:
+	return String(table(s).get("metric", ZONE_METRICS[0]))
+
+# Відстань за метрикою даних; -1 — метрику не реалізовано (in_zone тоді хибне для всіх клітинок).
+static func zone_distance(s, dx: int, dy: int) -> int:
+	if zone_metric(s) == "chebyshev":
+		return maxi(absi(dx), absi(dy))
+	return -1
 
 static func in_zone(s, cell: Vector2i) -> bool:
 	if (s.main_capsule as Dictionary).is_empty():
 		return false
 	var t := tile(s)
-	return maxi(absi(cell.x - t.x), absi(cell.y - t.y)) <= radius(s, int(s.main_capsule.get("level", 0)))
+	var d: int = zone_distance(s, cell.x - t.x, cell.y - t.y)
+	return d >= 0 and d <= radius(s, int(s.main_capsule.get("level", 0)))
+
+# БАФ у клітинці: множник із рядка ПОТОЧНОГО рівня (1.0 нейтральний) — лише для ключів BUFF_KEYS і лише всередині зони. Поза зоною,
+# на рівні 0, без капсули, для чужого ключа — рівно 1.0, тож споруда/герой за межею просто працюють без бафа й нічого не ламається
+# (REQ-0010-80). Без стану: кожен виклик читає рівень і дані СЬОГОДНІ (бафи «на кожному кроці», без ретроактивності: таймери
+# процесів лише накопичують, нічого не відкочується).
+static func buff_at(s, key: String, cell: Vector2i) -> float:
+	if not BUFF_KEYS.has(key) or not in_zone(s, cell):
+		return 1.0
+	return float(buffs(s, int(s.main_capsule.get("level", 0))).get(key, 1.0))
+
+# Баф ГЕРОЯ (добування, ближній бій): клітинка героя — ціла частина його позиції, як у upgrade. `at` — ІНША клітинка (підказка вузла
+# питає, скільки дало б добування з місця, де герой реально працюватиме, — gather_stand); NO_CELL == де він стоїть зараз.
+static func hero_buff(s, key: String, at: Vector2i = NO_CELL) -> float:
+	return buff_at(s, key, hero_cell(s) if at == NO_CELL else at)
+
+# ---------------- підказка вузла: одна правда про час добування (D9) ----------------
+# «≈N с за одиницю» мусить називати те, що порахує сим, коли герой добуватиме. Баф gather_mult читається з клітинки, де герой СТОЇТЬ ПІД
+# ЧАС роботи, а вона не збігається з клітинкою, де він стоїть, коли наводить курсор. Правило сима (sim._do_gather): герой іде шляхом до
+# вузла й зупиняється, щойно відстань до центру вузла < GATHER_REACH, тож працює в клітинці з 3×3 навколо вузла. Звідси gather_stand:
+#   • герой уже ближче за GATHER_REACH — працює де стоїть (клітинка героя);
+#   • УСІ клітинки 3×3 (у межах мапи) мають однаковий вердикт зони — відповідь однозначна, хоч де він стане (повертаємо клітинку вузла).
+#     Рахуємо й непрохідні: шлях 4-зв'язний і веде лише прохідними клітинками, але до вузла, обгородженого з усіх боків, його немає — order_gather
+#     шляху не перевіряє, тож герой іде від кінця часткового шляху НАВПРОСТЕЦЬ крізь стіну й зупиняється на стіновій клітинці 3×3 (коло
+#     досяжності 1.4 лежить усередині 3×3 завжди), вердикт якої може бути іншим, ніж у прохідних;
+#   • 3×3 розрізає межу зони (вузол за 0..1 клітинку від межі) — клітинку визначає шлях: «сухий прогін» ходьби sim (compute_path + перетин
+#     кола досяжності + крок навпростець від кінця шляху), без кроку dt: крок залежить від частоти кадрів, тож у цій вузькій смузі підказка
+#     (вона з «≈») вгадує клітинку з точністю до одного кроку. Жодного нового числа: лише GATHER_REACH сима й розмір сусідства «вузол + 8 клітинок».
+static func gather_stand(s, node_cell: int) -> Vector2i:
+	var n: int = int(s.n)
+	var node := Vector2i(node_cell % n, node_cell / n)
+	var centre := Vector2(float(node.x) + 0.5, float(node.y) + 0.5)
+	var pos := Vector2(float(s.player.px), float(s.player.py))
+	var reach: float = float(s.GATHER_REACH)
+	if pos.distance_to(centre) < reach:
+		return hero_cell(s)
+	var inside: int = 0
+	var total: int = 0
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			var c := node + Vector2i(dx, dy)
+			if c.x < 0 or c.y < 0 or c.x >= n or c.y >= n:   # поза мапою герой не буває: пряма до центру вузла лишається всередині неї
+				continue
+			total += 1
+			if in_zone(s, c):
+				inside += 1
+	if inside == 0 or inside == total:
+		return node
+	for c in s.compute_path(int(pos.x), int(pos.y), node.x, node.y):
+		var to := Vector2(float(c.x) + 0.5, float(c.y) + 0.5)
+		var t: float = _reach_entry(pos, to, centre, reach)
+		if t >= 0.0:
+			return _cell_at(pos.lerp(to, t))
+		pos = to
+	# шлях скінчився, а до вузла ще далі за досяжність (часткова/порожня траєкторія): сим ступає навпростець до центру вузла
+	return _cell_at(pos.lerp(centre, maxf(_reach_entry(pos, centre, centre, reach), 0.0)))
+
+# Параметр t∈[0,1] першої точки відрізка a→b, що лежить ближче за r до центру c (a — поза колом); -1 — відрізок кола не досягає.
+static func _reach_entry(a: Vector2, b: Vector2, c: Vector2, r: float) -> float:
+	var d: Vector2 = b - a
+	var f: Vector2 = a - c
+	if d.is_zero_approx():
+		return -1.0
+	var qa: float = d.dot(d)
+	var qb: float = 2.0 * f.dot(d)
+	var disc: float = qb * qb - 4.0 * qa * (f.dot(f) - r * r)
+	if disc < 0.0:
+		return -1.0
+	var t: float = (-qb - sqrt(disc)) / (2.0 * qa)
+	return minf(t + 1.0e-4, 1.0) if t >= 0.0 and t <= 1.0 else -1.0   # +ε: сим зупиняється ЗА межею кола, а не на ній
+
+static func _cell_at(p: Vector2) -> Vector2i:
+	return Vector2i(int(floor(p.x)), int(floor(p.y)))
+
+# Підказка вузла (HudModel._inspect_node, лише при ON): ТА САМА sim.gather_time, що в _do_gather, але для клітинки, з якої герой працюватиме.
+static func gather_preview(s, node_cell: int) -> float:
+	return float(s.gather_time(s.map.nodes[node_cell], gather_stand(s, node_cell)))
+
+# Споруда стоїть на клітинці (x, y) (верхній лівий тайл) — її клітинка і є точка перевірки зони.
+static func _bench_cell(b: Dictionary) -> Vector2i:
+	return Vector2i(int(b.x), int(b.y))
+
+# ПРОЦЕСИ. Швидкість крафту верстаків: кожен верстак дає 1.0 × craft_mult СВОГО місця (поза зоною — 1.0), сума по верстаках
+# множиться на dt у sim._update_crafting (OFF-гілка `dt * count` лишається дослівно). Рівень 0 → сума == кількість верстаків.
+static func craft_rate(s) -> float:
+	var rate: float = 0.0
+	for b in s.buildings:
+		if b.kind == "workbench":
+			rate += buff_at(s, "craft_mult", _bench_cell(b))
+	return rate
+
+# Очки досліджень за ігрову добу від усіх дослідницьких столів: research_rate з def × research_mult місця столу (Session.research_rate).
+static func research_rate(s) -> float:
+	var rate: float = 0.0
+	for b in s.buildings:
+		var base: float = float((GameData.BUILDINGS.get(b.kind, {}) as Dictionary).get("research_rate", 0.0))
+		if base > 0.0:
+			rate += base * buff_at(s, "research_mult", _bench_cell(b))
+	return rate
 
 # ---------------- upgrade (REQ-0010-13 / 14 / 17 / 76 / 91) ----------------
 # Прокачка на рівень L+1: вартість береться СПЕРШУ з рюкзака, потім зі складу — лише поки герой у зоні (склад «капсули в її радіусі»,

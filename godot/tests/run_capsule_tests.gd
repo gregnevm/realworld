@@ -48,9 +48,26 @@
 # clamp, ledger as is, defence recomputed; corrupt ledgers refused), 96/97 (death leaves the ledger and stock; upgrading summons
 # no body), plus a seeded property run against an INDEPENDENT oracle (measured funds + the catalog FILE + the data's metric).
 # Not testable in this wave: «захист(L) впливає на resolve_raid» (REQ-0010-17, resolve_raid is W3a), drop of invested by a raid (W3a).
+# WAVE 0010-W2b (appended after the W2a block): the control zone and the buffs on the hero and on the processes.
+# REQ-0010-15 (the SAME act inside / ON the edge / one cell outside gives a different result on every hook — gather time, melee
+# damage, bench crafting, research; the edge is inclusive; the metric is Chebyshev so the CORNER (R,R) is in and (R+1,R) is out; the
+# hero's cell is floor(px),floor(py); each hook reads ITS OWN key and the CURRENT level's row, not a product of the rows below it; a
+# buff multiplies capacity that exists — no bench, no research table → nothing), 16 (radius(L+1) >= radius(L) on the real table and on
+# synthetic ones; every zone is a subset of the next level's zone on the 5 spawn presets; the ring itself is W4a — not testable here),
+# 12 (level 0: no buff, any key, any cell, inside the R0 zone; ON level 0 is BIT-EXACT the OFF world), 79 (a need-key in the data is
+# not a buff and moves no body need), 80 (no retroactivity: a level drop/rise in the middle of a craft or a research project moves
+# neither the accumulated timer nor the progress — the next step simply adds at the NEW rate; the benches outside the shrunk zone keep
+# working at 1.0 and nothing is lost or doubled), 88 (a level-5 save against a lower table: the buffs are the clamped row's), 01 (the
+# hooks are inert under flag OFF even with a stray record + table), D9 (the node tooltip's time is the time the sim then uses), D13
+# (twin worlds + a resume payload cut mid-craft stay in lock-step). Expectations come from the table the TEST builds (distinct, binary-
+# exact buff values per key and per level, radii 2,3,5,6,8,9) or from the catalog FILE, never from capsule.gd.
 # CLOSEOUT of the integrity blockers on W1a/W1b (guards that survived deletion — F3): `_t_on_patrol_not_spawned`,
 # `_t_on_director_raid_dropped`, `_t_on_session_travel_refused` (after `_t_no_eternal_siege`) and the respawn_anchor WIRING
 # checks inside `_t_respawn_seams` (REQ-0010-09: what Session.respawn hands to sim.respawn_new_pawn). Each fails when its guard is removed.
+# WAVE 0010-W2b-b (appended after the W2b block; closes the two integrity gaps found by mutation): the ZONE-EDGE BAND of the node tooltip
+# (REQ-0010-15 x D9: the hint == the real a.dur at every frame step the game feeds; a stated limit for coarse steps; an edge sweep where the walk meets
+# the reach circle exactly on a cell border; nodes walled in on 4 / 8 sides) and the metric's SAFE FAILURE (REQ-0010-80: an unknown metric = «no zone»,
+# a missing key = Chebyshev), plus a characterization pin of the OFF-world haul resume radius moved to sim/haul.gd (REQ-0010-01/D4).
 extends "res://tests/harness.gd"
 
 const Sim = preload("res://scripts/sim.gd")
@@ -69,8 +86,9 @@ const MainCapsule = preload("res://scripts/sim/capsule.gd")
 const KernelBalance = preload("res://scripts/kernel/balance.gd")
 const InputCtl = preload("res://scripts/ui/input_controller.gd")
 const InputVerbs = preload("res://scripts/ui/input_verbs.gd")
+const HudModel = preload("res://scripts/ui/hud_model.gd")
 
-const PAD_N := 16   # the flat grass pad of the W1a tests (spawn (8,8), like the S0 `_flat` pad)
+const PAD_N := 16  # the flat grass pad of the W1a tests (spawn (8,8), like the S0 `_flat` pad)
 
 # run_determinism_tests.gd prints this on the baseline; the literal is asserted here as the REQ-0010-01 anchor
 const WORLD_HASH_FINAL := "c4dbef44fe0f95d6"
@@ -152,6 +170,34 @@ func _init() -> void:
 	_t_upgrade_death_and_roster()
 	_t_one_axis_api()
 	_t_upgrade_property()
+	# --- wave 0010-W2b ---
+	_t_zone_shape()
+	_t_zone_monotone()
+	_t_buff_hero_hooks()
+	_t_buff_one_key_each()
+	_t_buff_stacks_with_gear()
+	_t_buff_keys_closed()
+	_t_buff_level0_and_catalog()
+	_t_buff_after_real_upgrades()
+	_t_buff_craft_process()
+	_t_buff_craft_no_retroactivity()
+	_t_buff_research_process()
+	_t_buff_research_no_retroactivity()
+	_t_buff_gather_melee_e2e()
+	_t_buff_inspector_one_truth()
+	_t_buff_off_inert()
+	_t_buff_pure_and_stateless()
+	_t_buff_twin_and_resume()
+	_t_buff_table_clamp()
+	# --- wave 0010-W2b-b (closing integrity gaps: the zone-edge band of the node tooltip, the metric's safe failure) ---
+	_t_buff_inspector_band()
+	_t_buff_inspector_band_walled_in()
+	_t_buff_inspector_band_ringed()
+	_t_buff_inspector_band_limit()
+	_t_buff_inspector_band_edge()
+	_t_zone_metric_safe_failure()
+	_t_zone_metric_missing_and_live()
+	_t_off_haul_resume_radius()
 	chk.skip_banner()
 	finish()
 
@@ -3740,3 +3786,1574 @@ func _t_upgrade_property() -> void:
 			ok(int(stats["max"]) >= 1, "REQ-0010-91 [synthetic] setup: the top level was reached and attacked — %s" % str(stats))
 		ok(ends_exact, "REQ-0010-14 [%s]: at the end of every session the ledger is exactly the price of each level reached, once" % String(variant))
 		ok(ends_stable, "REQ-0010-35 [%s]: every session's end state survives a JSON round trip — the capsule record, the stock and the backpack come back identical" % String(variant))
+
+
+# =============================================================================================
+# WAVE 0010-W2b — helpers (the control zone + the buffs on the hero and on the processes)
+# Expectations come from REQ-0010-12/15/16/79/80 and the wave brief, NOT from capsule.gd: the zone oracle is max(|dx|,|dy|) <= R with R
+# read from the TABLE this test builds (or from the catalog FILE), the buff values are distinct per key and per level (a swapped key or a
+# row mix-up cannot hide), every expected rate is a sum written out here. A red test here is a finding.
+# =============================================================================================
+const ZB_N := 30                                  # pad side: the capsule stands on ZB_CAP, room for R <= 13 with no clipping by the map edge
+const ZB_CAP := Vector2i(12, 17)                  # x != y on purpose: a swapped (x, y) cannot hide behind a symmetric centre
+const ZB_DT := 0.05
+const ZB_KEYS: Array = ["gather_mult", "melee_mult", "craft_mult", "research_mult"]
+
+
+# rows 0..n-1: radius 2,3,5,6,8,9,11,... ; level L>=1 buffs gather 1+.5L, melee 1+.25L, craft 1+.75L, research 1+L — binary-exact, distinct per key
+# within a level and per level within a key (nothing like the catalog's proposed 3,5,7,9,11,13 / +5% steps)
+func _zone_table(n_levels: int = 4) -> Dictionary:
+	var rows: Array = []
+	for L in n_levels:
+		var buffs: Dictionary = {}
+		if L >= 1:
+			buffs["gather_mult"] = 1.0 + 0.5 * float(L)
+			buffs["melee_mult"] = 1.0 + 0.25 * float(L)
+			buffs["craft_mult"] = 1.0 + 0.75 * float(L)
+			buffs["research_mult"] = 1.0 + float(L)
+		var cost: Dictionary = {}
+		if L >= 1:
+			cost["wood"] = 5 + 4 * L
+		rows.append({"level": L, "cost": cost, "radius": 2 + L + (L >> 1), "core_hp": 100.0 * float(L + 1), "buffs": buffs})
+	return {"version": 1, "status": "proposed", "metric": "chebyshev", "levels": rows}
+
+
+# an ON world on a flat 30x30 pad, the capsule on ZB_CAP at `level` of `table` (default: _zone_table(4)); funds are NOT touched
+func _zone_sim(level: int, table: Dictionary = {}) -> Variant:
+	var s: Variant = _sim_with(_pad_map(ZB_N, ZB_CAP), true, true, true)
+	_quiet(s)
+	s.capsule_table = _zone_table() if table.is_empty() else table
+	s.main_capsule["level"] = level
+	return s
+
+
+func _zb_row(table: Dictionary, L: int) -> Dictionary:
+	return (table.levels as Array)[L]
+
+
+func _zb_radius(table: Dictionary, L: int) -> int:
+	return int(_zb_row(table, L).radius)
+
+
+func _zb_buff(table: Dictionary, L: int, key: String) -> float:
+	return float((_zb_row(table, L).buffs as Dictionary).get(key, 1.0))
+
+
+# the oracle: Chebyshev distance, edge included
+func _zb_in(cap: Vector2i, c: Vector2i, radius: int) -> bool:
+	return maxi(absi(c.x - cap.x), absi(c.y - cap.y)) <= radius
+
+
+func _hero_px(s: Variant, px: float, py: float) -> void:
+	s.player.px = px
+	s.player.py = py
+	s.player.action = null
+
+
+func _near(a: float, b: float, rel: float = 1.0e-9) -> bool:
+	return absf(a - b) <= rel * maxf(1.0, absf(b))
+
+
+# hero positions around the zone edge — FRACTIONAL on purpose: the hero's cell is floor(px), floor(py), so 12+R+0.99 is still in
+# and 12+R+1.0 is out; the corners are in the Chebyshev zone and out of an Euclidean/Manhattan one
+func _edge_probes(cap: Vector2i, R: int) -> Array:
+	var cx: float = float(cap.x)
+	var cy: float = float(cap.y)
+	var r: float = float(R)
+	return [
+		Vector2(cx + 0.5, cy + 0.5),
+		Vector2(cx + r + 0.99, cy + 0.5), Vector2(cx + r + 1.0, cy + 0.5),
+		Vector2(cx - r + 0.0, cy + 0.5), Vector2(cx - r - 0.01, cy + 0.5),
+		Vector2(cx + 0.5, cy + r + 0.99), Vector2(cx + 0.5, cy + r + 1.0),
+		Vector2(cx + 0.5, cy - r + 0.0), Vector2(cx + 0.5, cy - r - 0.01),
+		Vector2(cx + r + 0.5, cy + r + 0.5), Vector2(cx + r + 1.5, cy + r + 0.5), Vector2(cx + r + 0.5, cy + r + 1.5),
+		Vector2(cx - r + 0.5, cy - r + 0.5), Vector2(cx - r - 0.5, cy - r + 0.5), Vector2(cx - r + 0.5, cy - r - 0.5),
+		Vector2(cx + r + 0.5, cy - r + 0.5), Vector2(cx - r + 0.5, cy + r + 0.5),
+		Vector2(cx - r - 0.5, cy + r + 0.5), Vector2(cx + r + 1.5, cy - r + 0.5),
+	]
+
+
+# bench / hero offsets around the edge of radius R: every edge midpoint and corner (in), one step past each (out), a mixed asymmetric set
+func _edge_offsets(R: int) -> Array:
+	return [
+		Vector2i(R, 0), Vector2i(-R, 0), Vector2i(0, R), Vector2i(0, -R),
+		Vector2i(R, R), Vector2i(-R, -R), Vector2i(R, -R), Vector2i(-R, R), Vector2i(1, 2), Vector2i(-2, R - 1),
+		Vector2i(R + 1, 0), Vector2i(-R - 1, 0), Vector2i(0, R + 1), Vector2i(0, -R - 1),
+		Vector2i(R + 1, R), Vector2i(R, R + 1), Vector2i(R + 1, R + 1), Vector2i(-R - 1, -R), Vector2i(-R, -R - 1), Vector2i(R + 1, -R), Vector2i(-R - 1, R + 2),
+	]
+
+
+# the rate the sim applies to the craft timer, measured around ONE step of the real _update_crafting (the timer is put back, so the
+# probe is repeatable and wrap-proof: it runs from a zeroed timer, then puts the timer back)
+func _craft_rate_of(s: Variant) -> float:
+	var before: float = float(s.craft_timer)
+	s.craft_timer = 0.0
+	s._update_crafting(ZB_DT)
+	var d: float = float(s.craft_timer)
+	s.craft_timer = before
+	return d / ZB_DT
+
+
+# research points per game-day as the SESSION reports them (the number the research panel and the ETA use)
+func _research_rate_of(s: Variant) -> float:
+	var sess: Variant = SessionScript.new()
+	sess.autosave = false
+	sess.sim = s
+	return float(sess.research_rate())
+
+
+func _clear_buildings_but_capsule(s: Variant) -> void:
+	for b in (s.buildings as Array).duplicate():
+		if String(b.kind) != MainCapsule.KIND:
+			s._remove_building(b)
+
+
+# =============================================================================================
+# REQ-0010-15 / 16 / 80 — the zone is Chebyshev around the capsule cell, edge included, radius of the CURRENT level; the metric is the
+# data's; no capsule -> no zone
+# =============================================================================================
+func _t_zone_shape() -> void:
+	var syn: Dictionary = _zone_table(6)
+	var s: Variant = _zone_sim(0, syn)
+	var cap: Vector2i = _cap_tile(s)
+	ok(cap == ZB_CAP, "REQ-0010-15 setup: the capsule stands on the pad's spawn %s (got %s)" % [str(ZB_CAP), str(cap)])
+	for variant in ["synthetic", "catalog"]:
+		var table: Dictionary = syn if String(variant) == "synthetic" else _table_copy()
+		s.capsule_table = table
+		var n_rows: int = (table.levels as Array).size()
+		var wrong: Array = []
+		var exact_count: bool = true
+		for L in n_rows:
+			s.main_capsule["level"] = L
+			var R: int = _zb_radius(table, L)
+			var hits: int = 0
+			for dy in range(-(R + 3), R + 4):
+				for dx in range(-(R + 3), R + 4):
+					var c: Vector2i = cap + Vector2i(dx, dy)
+					var got: bool = MainCapsule.in_zone(s, c)
+					if got:
+						hits += 1
+					if got != _zb_in(cap, c, R):
+						wrong.append("L%d %s" % [L, str(Vector2i(dx, dy))])
+			exact_count = exact_count and hits == (2 * R + 1) * (2 * R + 1)
+		ok(wrong.is_empty(), "REQ-0010-15/80 [%s]: in_zone == (max(|dx|,|dy|) <= R of the CURRENT level) for every cell in a window around the capsule, on every level — %d wrong, first %s" % [String(variant), wrong.size(), str(wrong.slice(0, 3))])
+		ok(exact_count, "REQ-0010-80 [%s]: the zone holds exactly (2R+1)^2 cells on every level (a Euclidean or Manhattan zone holds fewer; an exclusive edge too)" % String(variant))
+	# named edge cases at level 2 of the synthetic table (R = 5): all four edge midpoints and corners are IN, one step past each is OUT
+	s.capsule_table = syn
+	s.main_capsule["level"] = 2
+	var ins: Array = [Vector2i(5, 0), Vector2i(-5, 0), Vector2i(0, 5), Vector2i(0, -5), Vector2i(5, 5), Vector2i(-5, -5), Vector2i(5, -5), Vector2i(-5, 5), Vector2i(0, 0)]
+	var outs: Array = [Vector2i(6, 0), Vector2i(-6, 0), Vector2i(0, 6), Vector2i(0, -6), Vector2i(6, 5), Vector2i(5, 6), Vector2i(6, 6), Vector2i(-6, -5), Vector2i(-5, -6), Vector2i(-6, 6), Vector2i(6, -6)]
+	var in_bad: Array = []
+	for d in ins:
+		if not MainCapsule.in_zone(s, cap + (d as Vector2i)):
+			in_bad.append(str(d))
+	var out_bad: Array = []
+	for d in outs:
+		if MainCapsule.in_zone(s, cap + (d as Vector2i)):
+			out_bad.append(str(d))
+	ok(in_bad.is_empty(), "REQ-0010-15 (edge inclusive): the 4 edge midpoints, the 4 corners and the centre are INSIDE at R=5 — outside by mistake: %s" % str(in_bad))
+	ok(out_bad.is_empty(), "REQ-0010-15: one step past the edge / the corner is OUTSIDE at R=5 — inside by mistake: %s" % str(out_bad))
+	ok(not MainCapsule.in_zone(s, Vector2i(-40, -40)) and not MainCapsule.in_zone(s, Vector2i(500, 7)), "REQ-0010-15: cells far outside the map are simply outside (no error, no clamp)")
+	ok(MainCapsule.buff_at(s, "gather_mult", Vector2i(-40, -40)) == 1.0, "REQ-0010-15: ... and neutral (1.0)")
+	# the zone follows the level the capsule has NOW (the drop shrinks it, the rise grows it, on the very next call)
+	var mover: Vector2i = cap + Vector2i(6, 0)
+	s.main_capsule["level"] = 2
+	var out_at_2: bool = not MainCapsule.in_zone(s, mover)
+	s.main_capsule["level"] = 3
+	var in_at_3: bool = MainCapsule.in_zone(s, mover)
+	s.main_capsule["level"] = 1
+	var out_at_1: bool = not MainCapsule.in_zone(s, mover)
+	ok(out_at_2 and in_at_3 and out_at_1, "REQ-0010-80: the zone is recomputed from the current level on every call (cap+(6,0): out at R=5, in at R=6, out again at R=3)")
+	# no capsule at all (flag OFF): there is no zone and no buff anywhere
+	var off: Variant = _sim_with(_pad_map(PAD_N, Vector2i(8, 8)), false, false, false)
+	ok(not MainCapsule.in_zone(off, Vector2i(8, 8)) and not MainCapsule.in_zone(off, Vector2i(9, 8)), "REQ-0010-01/15: with the flag OFF (no capsule record) nothing is inside any zone")
+	ok(MainCapsule.buff_at(off, "gather_mult", Vector2i(8, 8)) == 1.0 and MainCapsule.buff_at(off, "craft_mult", Vector2i(9, 8)) == 1.0, "REQ-0010-01/15: ... and every buff is the neutral 1.0")
+	# the metric is one string in the DATA (REQ-0010-80); the catalog names it and the oracle above used Chebyshev
+	ok(String(_raw_table().get("metric", "")) == "chebyshev" and String(syn.metric) == "chebyshev", "REQ-0010-80: the zone metric is a field of the table — 'chebyshev' in the catalog")
+	_dispose(s)
+	_dispose(off)
+
+
+# =============================================================================================
+# REQ-0010-16 — radius(L+1) >= radius(L); every zone is contained in the next one (same capsule, any cell of the map, 5 presets)
+# =============================================================================================
+func _t_zone_monotone() -> void:
+	var tables: Dictionary = {"catalog": _table_copy(), "synthetic 3": _zone_table(3), "synthetic 7": _zone_table(7), "synthetic 10": _zone_table(10)}
+	for name in tables:
+		var table: Dictionary = tables[name]
+		var s: Variant = _zone_sim(0, table)
+		var n_rows: int = (table.levels as Array).size()
+		var mono: bool = true
+		var same_as_data: bool = true
+		for L in n_rows:
+			same_as_data = same_as_data and MainCapsule.radius(s, L) == _zb_radius(table, L)
+			if L + 1 < n_rows:
+				mono = mono and MainCapsule.radius(s, L + 1) >= MainCapsule.radius(s, L)
+		ok(mono, "REQ-0010-16 [%s]: radius(L+1) >= radius(L) for every consecutive pair of the %d rows" % [String(name), n_rows])
+		ok(same_as_data, "REQ-0010-11/16 [%s]: radius(L) is the table row's radius (no clamp, no offset)" % String(name))
+		_dispose(s)
+	# the same, as geometry on real maps: zone(L) is a subset of zone(L+1), and it never shrinks in size
+	var contained: bool = true
+	var grew: bool = true
+	var detail: String = ""
+	for pr in GameData.SPAWN_PRESETS:
+		var s2: Variant = _sim_with(_gen(float(pr.lat), float(pr.lon)), true, true, true)
+		var cap: Vector2i = _cap_tile(s2)
+		var n: int = int(s2.n)
+		var prev: Dictionary = {}
+		var prev_n: int = -1
+		var rows: int = (_raw_rows() as Array).size()
+		for L in rows:
+			s2.main_capsule["level"] = L
+			var cur: Dictionary = {}
+			for y in n:
+				for x in n:
+					if MainCapsule.in_zone(s2, Vector2i(x, y)):
+						cur[y * n + x] = true
+			if L > 0:
+				for k in prev:
+					if not cur.has(k):
+						contained = false
+						detail = "%s L%d lost cell %d" % [String(pr.name), L, int(k)]
+				grew = grew and cur.size() >= prev_n
+			prev = cur
+			prev_n = cur.size()
+			if L == 0:
+				var holds_cap: bool = prev.has(cap.y * n + cap.x)
+				ok(holds_cap, "REQ-0010-15/16 [%s]: level 0 has a zone and the capsule cell is in it" % String(pr.name))
+		_dispose(s2)
+	ok(contained, "REQ-0010-16: on every spawn preset the zone of level L lies inside the zone of level L+1 — %s" % detail)
+	ok(grew, "REQ-0010-16: ... and the number of cells inside never drops with the level")
+
+
+# =============================================================================================
+# REQ-0010-15 / 80 — the HERO's buffs (gather time, melee damage): same act inside / on the edge / outside -> different result; the
+# hero's cell is floor(px), floor(py); each hook reads the current level's row
+# =============================================================================================
+func _t_buff_hero_hooks() -> void:
+	var syn: Dictionary = _zone_table(4)
+	var node: Dictionary = {"kind": "tree"}
+	var bad_g: Array = []
+	var bad_m: Array = []
+	var seen_in: int = 0
+	var seen_out: int = 0
+	var seen_edge_in: int = 0
+	for L in 4:
+		var s: Variant = _zone_sim(L, syn)
+		var cap: Vector2i = _cap_tile(s)
+		var R: int = _zb_radius(syn, L)
+		_hero_px(s, float(cap.x) + 14.5, float(cap.y) + 0.5)   # 14 cells out: outside every zone of this table — the reference
+		var base_g: float = s.gather_time(node)
+		var base_m: float = s.melee_damage()
+		_hero_px(s, float(cap.x) - 14.5, float(cap.y) + 0.5)   # the other side must give the same reference
+		if not (_near(s.gather_time(node), base_g) and _near(s.melee_damage(), base_m)):
+			bad_g.append("L%d: two far spots disagree" % L)
+		for pr in _edge_probes(cap, R):
+			var p: Vector2 = pr
+			_hero_px(s, p.x, p.y)
+			var c: Vector2i = Vector2i(floori(p.x), floori(p.y))
+			var inside: bool = L >= 1 and _zb_in(cap, c, R)
+			if inside:
+				seen_in += 1
+				if maxi(absi(c.x - cap.x), absi(c.y - cap.y)) == R:
+					seen_edge_in += 1
+			else:
+				seen_out += 1
+			var want_g: float = base_g / _zb_buff(syn, L, "gather_mult") if inside else base_g
+			var want_m: float = base_m * _zb_buff(syn, L, "melee_mult") if inside else base_m
+			if not _near(s.gather_time(node), want_g):
+				bad_g.append("L%d hero (%.2f,%.2f) cell %s inside=%s: gather %.6f want %.6f" % [L, p.x, p.y, str(c - cap), str(inside), s.gather_time(node), want_g])
+			if not _near(s.melee_damage(), want_m):
+				bad_m.append("L%d hero (%.2f,%.2f) cell %s inside=%s: melee %.6f want %.6f" % [L, p.x, p.y, str(c - cap), str(inside), s.melee_damage(), want_m])
+		_dispose(s)
+	ok(bad_g.is_empty(), "REQ-0010-15/80: gather_time = base / gather_mult(current level) in the zone (edge inclusive, Chebyshev corners, fractional cells) and = base outside — %d wrong, first %s" % [bad_g.size(), str(bad_g.slice(0, 2))])
+	ok(bad_m.is_empty(), "REQ-0010-15/80: melee_damage = base * melee_mult(current level) in the zone and = base outside — %d wrong, first %s" % [bad_m.size(), str(bad_m.slice(0, 2))])
+	ok(seen_in >= 24 and seen_edge_in >= 20 and seen_out >= 30, "REQ-0010-15 setup: the probes really covered the inside (%d), the inclusive edge (%d) and the outside (%d)" % [seen_in, seen_edge_in, seen_out])
+	# the SAME hero, the SAME act, only the cell differs: strictly better inside than outside at every level >= 1
+	var s2: Variant = _zone_sim(3, syn)
+	var cap2: Vector2i = _cap_tile(s2)
+	_hero_px(s2, float(cap2.x) + 6.5, float(cap2.y) + 0.5)   # on the edge (R=6)
+	var g_edge: float = s2.gather_time(node)
+	var m_edge: float = s2.melee_damage()
+	_hero_px(s2, float(cap2.x) + 7.5, float(cap2.y) + 0.5)   # one cell past
+	ok(g_edge < s2.gather_time(node) and m_edge > s2.melee_damage(), "REQ-0010-15: on the edge the hero gathers faster and hits harder than one cell further out (%.4f < %.4f; %.2f > %.2f)" % [g_edge, s2.gather_time(node), m_edge, s2.melee_damage()])
+	# a level change moves the result on the VERY NEXT call (nothing cached): the hero stays on cap+(4,0)
+	_hero_px(s2, float(cap2.x) + 4.5, float(cap2.y) + 0.5)
+	var plain: float = 1.3 / (1.0 + float(s2.player.skills.gather) * 0.04)   # data.gd NODEINFO tree.time and the skill formula
+	var seen: Array = []
+	for L in [3, 0, 2, 1, 3]:
+		s2.main_capsule["level"] = L
+		var inside_now: bool = L >= 1 and _zb_in(cap2, cap2 + Vector2i(4, 0), _zb_radius(syn, L))
+		var want: float = plain / _zb_buff(syn, L, "gather_mult") if inside_now else plain
+		seen.append(_near(s2.gather_time(node), want))
+	ok(not seen.has(false), "REQ-0010-80: raising and dropping the level between two calls changes gather_time at once (levels 3,0,2,1,3 at cap+(4,0): inside at levels 3 and 2 (R=6,5), outside at levels 0 and 1 (R=2,3)) — %s" % str(seen))
+	_dispose(s2)
+
+
+# =============================================================================================
+# REQ-0010-15 — each hook reads ITS OWN key, and an ABSENT key is neutral (1.0), not 0 and not an error
+# =============================================================================================
+func _t_buff_one_key_each() -> void:
+	var node: Dictionary = {"kind": "tree"}
+	var base_research: float = float(GameData.BUILDINGS.research_bench.research_rate)
+	var report: Array = []
+	for key in ZB_KEYS:
+		var bf: Dictionary = {}
+		bf[String(key)] = 2.0
+		var rows: Array = [
+			{"level": 0, "cost": {}, "radius": 2, "core_hp": 100.0, "buffs": {}},
+			{"level": 1, "cost": {"wood": 5}, "radius": 4, "core_hp": 200.0, "buffs": bf},
+		]
+		var tab: Dictionary = {"version": 1, "status": "proposed", "metric": "chebyshev", "levels": rows}
+		var s: Variant = _zone_sim(1, tab)
+		var cap: Vector2i = _cap_tile(s)
+		_wipe(s)
+		s._place_building("workbench", cap.x + 2, cap.y, -1)
+		s._place_building("research_bench", cap.x, cap.y - 2, -1)
+		_hero_px(s, float(cap.x) + 14.5, float(cap.y) + 0.5)
+		var g0: float = s.gather_time(node)
+		var m0: float = s.melee_damage()
+		_hero_px(s, float(cap.x) + 1.5, float(cap.y) + 0.5)
+		var want_g: float = g0 / 2.0 if String(key) == "gather_mult" else g0
+		var want_m: float = m0 * 2.0 if String(key) == "melee_mult" else m0
+		var want_c: float = 2.0 if String(key) == "craft_mult" else 1.0
+		var want_r: float = base_research * (2.0 if String(key) == "research_mult" else 1.0)
+		report.append([String(key), _near(s.gather_time(node), want_g), _near(s.melee_damage(), want_m), _near(_craft_rate_of(s), want_c), _near(_research_rate_of(s), want_r)])
+		_dispose(s)
+	var wrong: Array = []
+	for r in report:
+		var row: Array = r
+		if not (bool(row[1]) and bool(row[2]) and bool(row[3]) and bool(row[4])):
+			wrong.append(row)
+	ok(wrong.is_empty(), "REQ-0010-15: with ONLY one key in the row (value 2.0) exactly the matching hook reacts (gather/melee/craft/research) and the other three stay neutral — [key, gather, melee, craft, research] ok-flags of the wrong ones: %s" % str(wrong))
+
+
+# =============================================================================================
+# REQ-0010-15 — the buff is a MULTIPLIER on top of everything else the hero has (skill, tool, weapon): inside the zone the same hero, with
+# the same gear and skills, works/hits exactly b times as well as outside — whatever the gear is
+# =============================================================================================
+func _t_buff_stacks_with_gear() -> void:
+	var syn: Dictionary = _zone_table(4)   # level 3: R = 6, gather 2.5, melee 1.75
+	var node: Dictionary = {"kind": "tree"}
+	var bad: Array = []
+	var loadouts: Array = [
+		["bare hands", "", "", 0.0, 0.0],
+		["axe + club, skills 10/7", "axe", "club", 10.0, 7.0],
+		["axe + bow, skills 20/20", "axe", "bow", 20.0, 20.0],
+		["pick only, skill 3", "pick", "", 3.0, 0.0],
+	]
+	for lo in loadouts:
+		var row: Array = lo
+		var s: Variant = _zone_sim(3, syn)
+		var cap: Vector2i = _cap_tile(s)
+		s.player.equipped = {"tool": String(row[1]), "weapon": String(row[2])}
+		s.player.skills.gather = float(row[3])
+		s.player.skills.combat = float(row[4])
+		_hero_px(s, float(cap.x) + 14.5, float(cap.y) + 0.5)
+		var g_out: float = s.gather_time(node)
+		var m_out: float = s.melee_damage()
+		_hero_px(s, float(cap.x) + 2.5, float(cap.y) + 0.5)
+		var g_in: float = s.gather_time(node)
+		var m_in: float = s.melee_damage()
+		if not _near(g_in * 2.5, g_out):
+			bad.append("%s: gather in %.6f out %.6f (ratio %.6f, want 2.5)" % [String(row[0]), g_in, g_out, g_out / g_in])
+		if not _near(m_in, m_out * 1.75):
+			bad.append("%s: melee in %.6f out %.6f (ratio %.6f, want 1.75)" % [String(row[0]), m_in, m_out, m_in / m_out])
+		_dispose(s)
+	ok(bad.is_empty(), "REQ-0010-15: for every loadout (skills, tool, weapon) the in-zone/out-of-zone ratio is exactly the row's multiplier (gather 2.5 on the time, melee 1.75 on the damage) — %s" % str(bad))
+
+
+# =============================================================================================
+# REQ-0010-79 / wave step 3 — the vocabulary is closed: a need-key in the data is NOT a buff and moves no body need
+# =============================================================================================
+func _t_buff_keys_closed() -> void:
+	ok(_first_word_in(MainCapsule.BUFF_KEYS, NEED_WORDS) == "", "REQ-0010-79: no key of the buff vocabulary names a body need — %s" % _first_word_in(MainCapsule.BUFF_KEYS, NEED_WORDS))
+	var bf: Dictionary = {"gather_mult": 2.0, "hunger_mult": 0.5, "cold_mult": 0.5, "sleep_mult": 0.5, "rest_mult": 0.5, "bogus_mult": 3.0}
+	var rows: Array = [
+		{"level": 0, "cost": {}, "radius": 3, "core_hp": 100.0, "buffs": {}},
+		{"level": 1, "cost": {"wood": 5}, "radius": 4, "core_hp": 200.0, "buffs": bf},
+	]
+	var tab: Dictionary = {"version": 1, "status": "proposed", "metric": "chebyshev", "levels": rows}
+	var s: Variant = _zone_sim(1, tab)
+	var cap: Vector2i = _cap_tile(s)
+	var got: Dictionary = MainCapsule.buffs(s, 1)
+	ok(_first_word_in(got.keys(), NEED_WORDS) == "" and not got.has("bogus_mult"), "REQ-0010-79: buffs(level) hands out only vocabulary keys — a need-key / an unknown key in the data never becomes a buff (%s)" % str(got.keys()))
+	var cell: Vector2i = cap + Vector2i(1, 0)
+	var flat: bool = true
+	for k in ["hunger_mult", "cold_mult", "sleep_mult", "rest_mult", "bogus_mult", "", "gather"]:
+		flat = flat and MainCapsule.buff_at(s, String(k), cell) == 1.0
+	ok(flat, "REQ-0010-79: buff_at of a need-key / unknown key inside the zone is the neutral 1.0")
+	ok(MainCapsule.buff_at(s, "gather_mult", cell) == 2.0, "REQ-0010-15 control: the legitimate key of the same row is 2.0 there")
+	# the bodies: the same hero stands inside the zone for 300 ticks at level 1 (need keys in the data) and at level 0 (none): the same needs
+	var a: Variant = _zone_sim(1, tab)
+	var b: Variant = _zone_sim(0, tab)
+	for w in [a, b]:
+		_hero_px(w, float(cap.x) + 1.5, float(cap.y) + 0.5)
+		w.player.hunger = 60.0
+		w.player.rest = 60.0
+	for t in 300:
+		a.update(Scenarios.DT)
+		b.update(Scenarios.DT)
+	ok(_near(float(a.player.hunger), float(b.player.hunger)) and _near(float(a.player.rest), float(b.player.rest)) and _near(float(a.player.hp), float(b.player.hp)), "REQ-0010-79: 300 ticks inside the zone — hunger/rest/hp at level 1 (need-keys in its row) equal level 0's (%.4f/%.4f vs %.4f/%.4f)" % [float(a.player.hunger), float(a.player.rest), float(b.player.hunger), float(b.player.rest)])
+	for w in [s, a, b]:
+		_dispose(w)
+
+
+# =============================================================================================
+# REQ-0010-12 — level 0 gives no buff anywhere (inside its R0 zone too) and is BIT-EXACT the OFF world; with the REAL catalog every
+# key's value shows up in its hook at every level >= 1 (the table is not vacuous)
+# =============================================================================================
+func _t_buff_level0_and_catalog() -> void:
+	var node: Dictionary = {"kind": "tree"}
+	var table: Dictionary = _table_copy()
+	var rows: Array = table.levels
+	var s: Variant = _zone_sim(0, table)
+	var cap: Vector2i = _cap_tile(s)
+	ok(MainCapsule.buffs(s, 0).is_empty(), "REQ-0010-12: buffs(0) is empty")
+	var flat: bool = true
+	var R0: int = _zb_radius(table, 0)
+	for k in ZB_KEYS:
+		for dy in range(-(R0 + 2), R0 + 3):
+			for dx in range(-(R0 + 2), R0 + 3):
+				flat = flat and MainCapsule.buff_at(s, String(k), cap + Vector2i(dx, dy)) == 1.0
+	ok(flat, "REQ-0010-12: at level 0 every key is exactly 1.0 on every cell, the R0 zone included")
+	# bit-exact vs a flag-OFF twin on the same pad: the same hero cell, the same benches
+	var off: Variant = _sim_with(_pad_map(ZB_N, ZB_CAP), false, false, false)
+	_quiet(off)
+	for w in [s, off]:
+		_hero_px(w, float(cap.x) + 1.5, float(cap.y) + 0.5)
+		w._place_building("workbench", cap.x + 2, cap.y, -1)
+		w._place_building("research_bench", cap.x, cap.y - 2, -1)
+	ok(s.gather_time(node) == off.gather_time(node) and s.melee_damage() == off.melee_damage(), "REQ-0010-12/01: at level 0 inside the zone gather_time and melee_damage equal the OFF world's BIT FOR BIT (%s vs %s)" % [str(s.gather_time(node)), str(off.gather_time(node))])
+	for t in 5:
+		s._update_crafting(ZB_DT)
+		off._update_crafting(ZB_DT)
+	ok(float(s.craft_timer) == float(off.craft_timer) and float(s.craft_timer) > 0.0, "REQ-0010-12/01: ... and 5 crafting steps leave craft_timer identical to the OFF world's (%s vs %s)" % [str(s.craft_timer), str(off.craft_timer)])
+	ok(_research_rate_of(s) == _research_rate_of(off) and _research_rate_of(s) > 0.0, "REQ-0010-12/01: ... and the research rate (%s vs %s)" % [str(_research_rate_of(s)), str(_research_rate_of(off))])
+	# a table that WRONGLY lists buffs on row 0: level 0 still gives none, at the hooks too (REQ-0010-12 is not a data convention)
+	var bf0: Dictionary = {"gather_mult": 1.5, "melee_mult": 1.25, "craft_mult": 1.75, "research_mult": 2.0}
+	var tab0: Dictionary = _zone_table(3)
+	((tab0.levels as Array)[0] as Dictionary)["buffs"] = bf0
+	var w0: Variant = _zone_sim(0, tab0)
+	var cap_w: Vector2i = _cap_tile(w0)
+	w0._place_building("workbench", cap_w.x + 2, cap_w.y, -1)
+	w0._place_building("research_bench", cap_w.x, cap_w.y - 2, -1)
+	_hero_px(w0, float(cap_w.x) + 14.5, float(cap_w.y) + 0.5)
+	var plain_g: float = w0.gather_time(node)
+	var plain_m: float = w0.melee_damage()
+	_hero_px(w0, float(cap_w.x) + 1.5, float(cap_w.y) + 0.5)
+	ok(w0.gather_time(node) == plain_g and w0.melee_damage() == plain_m and _craft_rate_of(w0) == 1.0 and _research_rate_of(w0) == float(GameData.BUILDINGS.research_bench.research_rate), "REQ-0010-12: row 0 listing buffs in the data still gives NO buff at level 0 — gather/melee/craft/research are plain inside the zone")
+	_dispose(w0)
+	# the real table, every level >= 1: the hook shows the data's number for every key the row names (data-driven, no number pinned here)
+	var problems: Array = []
+	var any_effect: bool = false
+	var base_research: float = float(GameData.BUILDINGS.research_bench.research_rate)
+	for L in range(1, rows.size()):
+		s.main_capsule["level"] = L
+		var buffs: Dictionary = (rows[L] as Dictionary).get("buffs", {})
+		_hero_px(s, float(cap.x) + 14.5, float(cap.y) + 0.5)
+		var g0: float = s.gather_time(node)
+		var m0: float = s.melee_damage()
+		_hero_px(s, float(cap.x) + 1.5, float(cap.y) + 0.5)
+		var vg: float = float(buffs.get("gather_mult", 1.0))
+		var vm: float = float(buffs.get("melee_mult", 1.0))
+		var vc: float = float(buffs.get("craft_mult", 1.0))
+		var vr: float = float(buffs.get("research_mult", 1.0))
+		any_effect = any_effect or vg != 1.0 or vm != 1.0 or vc != 1.0 or vr != 1.0
+		if not _near(s.gather_time(node), g0 / vg):
+			problems.append("L%d gather" % L)
+		if not _near(s.melee_damage(), m0 * vm):
+			problems.append("L%d melee" % L)
+		if not _near(_craft_rate_of(s), vc):
+			problems.append("L%d craft (%s vs %s)" % [L, str(_craft_rate_of(s)), str(vc)])
+		if not _near(_research_rate_of(s), base_research * vr):
+			problems.append("L%d research" % L)
+	ok(problems.is_empty(), "REQ-0010-15 [catalog]: for every level 1..5 each hook applies exactly the row's value for its key inside the zone — %s" % str(problems))
+	ok(any_effect, "REQ-0010-15 [catalog]: the REAL table gives at least one non-neutral buff (a table of all 1.0 would satisfy every other test and mean nothing)")
+	_dispose(s)
+	_dispose(off)
+
+
+# =============================================================================================
+# REQ-0010-15 / 80 — through REAL upgrades (funds spent, ledger written): the buff and the radius of the level just reached apply at once
+# =============================================================================================
+func _t_buff_after_real_upgrades() -> void:
+	var rows: Array = _raw_rows()
+	var base: float = 1.3   # data.gd NODEINFO tree.time; the hero's gather skill is 0 at the start and the formula is 1 + skill*0.04
+	var bad: Array = []
+	var s: Variant = _on_pad()
+	var cap: Vector2i = _cap_tile(s)
+	var base_dur: float = base / (1.0 + float(s.player.skills.gather) * 0.04)
+	var node: Dictionary = {"kind": "tree"}
+	_wipe(s)
+	for L in range(1, 3):
+		_fund_cost(s, _cost_of(rows, L), 0.4)
+		var r: Dictionary = s.upgrade_capsule()
+		if not bool(r.get("ok", false)):
+			bad.append("upgrade to %d refused: %s" % [L, str(r)])
+			continue
+		var R: int = int((rows[L] as Dictionary).radius)
+		var v: float = float(((rows[L] as Dictionary).buffs as Dictionary).get("gather_mult", 1.0))
+		_hero_px(s, float(cap.x) + float(R) + 0.5, float(cap.y) + 0.5)   # on the edge of the level just reached (x = 8 + R <= 15 on this pad)
+		if not _near(s.gather_time(node), base_dur / v):
+			bad.append("L%d edge: gather %.6f want %.6f" % [L, s.gather_time(node), base_dur / v])
+		_hero_px(s, float(cap.x) + 0.5, float(cap.y) + 1.5)
+		if not _near(s.gather_time(node), base_dur / v):
+			bad.append("L%d beside the capsule: gather %.6f want %.6f" % [L, s.gather_time(node), base_dur / v])
+	ok(bad.is_empty(), "REQ-0010-15/80: after each REAL upgrade (level 1, then 2) gather_time inside the zone — edge included — is base / the row's gather_mult, at once — %s" % str(bad))
+	# one cell beyond the level-1 edge it is plain again (level 1 reached by a fresh real upgrade)
+	var s1: Variant = _leveled(1)
+	var R1: int = int((rows[1] as Dictionary).radius)
+	_hero_px(s1, float(cap.x) + float(R1) + 1.5, float(cap.y) + 0.5)
+	ok(_near(s1.gather_time(node), base_dur), "REQ-0010-15: one cell past the level-1 edge the same hero gathers at the plain time (%.4f vs %.4f)" % [s1.gather_time(node), base_dur])
+	for w in [s, s1]:
+		_dispose(w)
+
+
+# =============================================================================================
+# REQ-0010-15 / 80 — bench crafting: each workbench counts its OWN cell (edge inclusive, Chebyshev), a bench outside works at 1.0, a
+# buff multiplies capacity that exists (no bench -> nothing), level 0 == the plain count
+# =============================================================================================
+func _t_buff_craft_process() -> void:
+	var syn: Dictionary = _zone_table(4)
+	var wrong: Array = []
+	var covered_in: int = 0
+	var covered_out: int = 0
+	for L in [1, 2, 3]:
+		var s: Variant = _zone_sim(L, syn)
+		var cap: Vector2i = _cap_tile(s)
+		_wipe(s)
+		var R: int = _zb_radius(syn, L)
+		var b: float = _zb_buff(syn, L, "craft_mult")
+		for off in _edge_offsets(R):
+			var o: Vector2i = off
+			var bench: Variant = s._place_building("workbench", cap.x + o.x, cap.y + o.y, -1)
+			var inside: bool = _zb_in(cap, cap + o, R)
+			if inside:
+				covered_in += 1
+			else:
+				covered_out += 1
+			var got: float = _craft_rate_of(s)
+			var want: float = b if inside else 1.0
+			if not _near(got, want):
+				wrong.append("L%d bench at %s: rate %.6f want %.6f" % [L, str(o), got, want])
+			s._remove_building(bench)
+		_dispose(s)
+	ok(wrong.is_empty(), "REQ-0010-15/80: one bench at every edge point/corner/step-past of levels 1..3 — rate = craft_mult(level) inside (edge inclusive), exactly 1.0 outside — %d wrong, first %s" % [wrong.size(), str(wrong.slice(0, 3))])
+	ok(covered_in >= 30 and covered_out >= 30, "REQ-0010-15 setup: the bench probes covered both sides (%d in, %d out)" % [covered_in, covered_out])
+	# several benches: the rate is the SUM of each bench's own multiplier
+	var s2: Variant = _zone_sim(3, syn)   # R = 6, craft 3.25
+	var cap2: Vector2i = _cap_tile(s2)
+	_wipe(s2)
+	ok(_craft_rate_of(s2) == 0.0 and float(s2.craft_timer) == 0.0, "REQ-0010-15 (D8): with NO bench the craft rate is 0 at level 3 — a buff multiplies capacity, it does not create it")
+	var foreign: Array = ["storage", "wall", "bed", "research_bench", "campfire", "turret"]
+	for i in foreign.size():
+		s2._place_building(String(foreign[i]), cap2.x + 1 + i, cap2.y + 3, -1)
+	ok(_craft_rate_of(s2) == 0.0, "REQ-0010-15 (D8): six other buildings inside the zone (storage, wall, bed, research table, campfire, turret) and the capsule itself make NO crafting capacity — the rate stays 0 (%s)" % str(_craft_rate_of(s2)))
+	var timer_probe: float = float(s2.craft_timer)
+	s2._update_crafting(ZB_DT)
+	ok(float(s2.craft_timer) == timer_probe, "REQ-0010-15 (D8): ... and a crafting step with no bench leaves the timer untouched")
+	s2._place_building("workbench", cap2.x + 6, cap2.y, -1)   # edge: in
+	ok(_near(_craft_rate_of(s2), 3.25), "REQ-0010-15: one bench on the edge -> 3.25 (%s)" % str(_craft_rate_of(s2)))
+	s2._place_building("workbench", cap2.x + 7, cap2.y, -1)   # one past: out
+	ok(_near(_craft_rate_of(s2), 3.25 + 1.0), "REQ-0010-15/80: + one bench just outside -> 3.25 + 1.0 (the outside bench still works, without the buff) — %s" % str(_craft_rate_of(s2)))
+	s2._place_building("workbench", cap2.x - 6, cap2.y - 6, -1)   # corner: in
+	s2._place_building("workbench", cap2.x, cap2.y + 6, -1)       # edge: in
+	ok(_near(_craft_rate_of(s2), 3.25 * 3.0 + 1.0), "REQ-0010-15: + a corner bench and an edge bench -> 3 * 3.25 + 1.0 (%s)" % str(_craft_rate_of(s2)))
+	# the real step really uses that rate: one update() of the whole sim adds dt * rate to the timer (no wrap: stock is empty, timer small)
+	var before: float = float(s2.craft_timer)
+	var want_step: float = Scenarios.DT * (3.25 * 3.0 + 1.0)
+	s2.update(Scenarios.DT)
+	ok(_near(float(s2.craft_timer) - before, want_step), "REQ-0010-15: a full sim.update(dt) advances the craft timer by dt * Σ per-bench multipliers (%s vs %s)" % [str(float(s2.craft_timer) - before), str(want_step)])
+	# level 0: the plain count, bit-exact (1.0 per bench) even for benches inside the R0 zone
+	var s0: Variant = _zone_sim(0, syn)
+	var cap0: Vector2i = _cap_tile(s0)
+	_wipe(s0)
+	s0._place_building("workbench", cap0.x + 2, cap0.y, -1)
+	s0._place_building("workbench", cap0.x - 1, cap0.y + 1, -1)
+	s0._place_building("workbench", cap0.x + 9, cap0.y, -1)
+	var t0: float = 0.0
+	for i in 6:
+		s0._update_crafting(ZB_DT)
+		t0 += ZB_DT * 3.0
+	ok(float(s0.craft_timer) == t0, "REQ-0010-12: at level 0 three benches (two inside R0) advance the timer by exactly dt * 3 per step — %s vs %s" % [str(s0.craft_timer), str(t0)])
+	for w in [s2, s0]:
+		_dispose(w)
+
+
+# =============================================================================================
+# REQ-0010-80 — NO RETROACTIVITY: a level drop (or rise) in the middle of a craft moves nothing that was accumulated; the next step adds
+# at the new rate; the bench outside the shrunk zone keeps working and nothing is lost or doubled
+# =============================================================================================
+func _t_buff_craft_no_retroactivity() -> void:
+	var syn: Dictionary = _zone_table(4)
+	var s: Variant = _zone_sim(3, syn)
+	var cap: Vector2i = _cap_tile(s)
+	_wipe(s)
+	var bench_cell: Vector2i = cap + Vector2i(5, 0)   # in at R=6 and R=5 (edge), out at R=3 and R=2
+	var bench: Variant = s._place_building("workbench", bench_cell.x, bench_cell.y, -1)
+	var bench_hp: float = float(bench.hp)
+	var plan: Array = [[3, 4], [1, 4], [2, 4], [0, 4], [3, 4]]   # (level, steps): 4*0.05*(3.25 + 1 + 2.5 + 1 + 3.25) = 2.2 < 3.5, no wrap
+	var expect_timer: float = 0.0
+	var no_jump: bool = true
+	var per_step: bool = true
+	var log_rows: Array = []
+	for seg in plan:
+		var L: int = int(seg[0])
+		var before: float = float(s.craft_timer)
+		s.main_capsule["level"] = L
+		no_jump = no_jump and float(s.craft_timer) == before
+		var rate: float = _zb_buff(syn, L, "craft_mult") if _zb_in(cap, bench_cell, _zb_radius(syn, L)) else 1.0
+		for i in int(seg[1]):
+			var b4: float = float(s.craft_timer)
+			s._update_crafting(ZB_DT)
+			var d: float = float(s.craft_timer) - b4
+			per_step = per_step and _near(d, ZB_DT * rate)
+			expect_timer += ZB_DT * rate
+		log_rows.append("L%d rate %.2f" % [L, rate])
+	ok(no_jump, "REQ-0010-80: changing the level (3->1->2->0->3) leaves craft_timer EXACTLY as it was at that instant — nothing is rolled back or forward")
+	ok(per_step, "REQ-0010-80: every step after a change adds dt * (the NEW level's multiplier at the bench's own cell) — %s" % str(log_rows))
+	ok(_near(float(s.craft_timer), expect_timer), "REQ-0010-80: the final timer is the sum of the per-step increments, each at the rate of ITS step (%s vs %s)" % [str(s.craft_timer), str(expect_timer)])
+	ok(s.buildings.has(bench) and float(bench.hp) == bench_hp and s.has_workbench(), "REQ-0010-80: the bench that fell outside the shrunk zone is intact (still built, same hp) — it merely works without the buff")
+	_dispose(s)
+	# the whole thing through sim.update: planks come out at the rates in force, no wood lost or created
+	var e: Variant = _zone_sim(3, syn)
+	var cap_e: Vector2i = _cap_tile(e)
+	_wipe(e)
+	e.stock[e.res_key("wood")] = 60
+	var cells: Array = [cap_e + Vector2i(3, 0), cap_e + Vector2i(5, 0)]
+	for c in cells:
+		var cv: Vector2i = c
+		e._place_building("workbench", cv.x, cv.y, -1)
+	var wood0: int = int(e.res_amount("wood"))
+	var planks0: int = int(e.res_amount("planks"))
+	var timer: float = 0.0
+	var planks: int = 0
+	for seg in [[3, 60], [0, 60], [3, 30]]:
+		var L2: int = int(seg[0])
+		e.main_capsule["level"] = L2
+		var rate2: float = 0.0
+		for c in cells:
+			rate2 += _zb_buff(syn, L2, "craft_mult") if _zb_in(cap_e, c, _zb_radius(syn, L2)) else 1.0
+		for i in int(seg[1]):
+			e.update(Scenarios.DT)
+			_topup(e)
+			timer += Scenarios.DT * rate2
+			while timer >= 3.5:
+				timer -= 3.5
+				planks += 1
+	ok(planks >= 15, "REQ-0010-80 setup: the run made planks (%d)" % planks)
+	ok(int(e.res_amount("planks")) - planks0 == planks and wood0 - int(e.res_amount("wood")) == 2 * planks, "REQ-0010-80: planks made == the oracle's %d, and each cost exactly 2 wood (planks +%d, wood -%d) — nothing lost, nothing doubled across the level drop" % [planks, int(e.res_amount("planks")) - planks0, wood0 - int(e.res_amount("wood"))])
+	ok(_near(float(e.craft_timer), timer), "REQ-0010-80: the real craft_timer after 150 ticks with the level 3 -> 0 -> 3 equals the per-step oracle (%s vs %s)" % [str(e.craft_timer), str(timer)])
+	_dispose(e)
+
+
+# =============================================================================================
+# REQ-0010-15 — research tables (Session.research_rate): the same per-cell rule; no table -> 0; level 0 == the plain sum
+# =============================================================================================
+func _t_buff_research_process() -> void:
+	var syn: Dictionary = _zone_table(4)
+	var base: float = float(GameData.BUILDINGS.research_bench.research_rate)
+	var wrong: Array = []
+	for L in [1, 2, 3]:
+		var s: Variant = _zone_sim(L, syn)
+		var cap: Vector2i = _cap_tile(s)
+		var R: int = _zb_radius(syn, L)
+		var b: float = _zb_buff(syn, L, "research_mult")
+		for off in _edge_offsets(R):
+			var o: Vector2i = off
+			var tbl: Variant = s._place_building("research_bench", cap.x + o.x, cap.y + o.y, -1)
+			var got: float = _research_rate_of(s)
+			var want: float = base * (b if _zb_in(cap, cap + o, R) else 1.0)
+			if not _near(got, want):
+				wrong.append("L%d table at %s: rate %.6f want %.6f" % [L, str(o), got, want])
+			s._remove_building(tbl)
+		_dispose(s)
+	ok(wrong.is_empty(), "REQ-0010-15/80: one research table at every edge point/corner/step-past of levels 1..3 — rate = base * research_mult inside (edge inclusive), base outside — %d wrong, first %s" % [wrong.size(), str(wrong.slice(0, 3))])
+	var s2: Variant = _zone_sim(3, syn)   # R = 6, research 4.0
+	var cap2: Vector2i = _cap_tile(s2)
+	_wipe(s2)
+	s2._place_building("workbench", cap2.x + 1, cap2.y + 1, -1)
+	s2._place_building("storage", cap2.x - 2, cap2.y, -1)
+	ok(_research_rate_of(s2) == 0.0, "REQ-0010-15 (D8): at level 3 with a workbench and a storage but NO research table the research rate is exactly 0 (%s)" % str(_research_rate_of(s2)))
+	s2._place_building("research_bench", cap2.x + 6, cap2.y, -1)   # edge: in
+	s2._place_building("research_bench", cap2.x + 7, cap2.y, -1)   # out
+	s2._place_building("research_bench", cap2.x, cap2.y - 6, -1)   # edge: in
+	ok(_near(_research_rate_of(s2), base * 4.0 * 2.0 + base), "REQ-0010-15: two tables inside + one just outside -> 2 * base * 4.0 + base (%s)" % str(_research_rate_of(s2)))
+	var s0: Variant = _zone_sim(0, syn)
+	var cap0: Vector2i = _cap_tile(s0)
+	s0._place_building("research_bench", cap0.x + 2, cap0.y, -1)
+	s0._place_building("research_bench", cap0.x + 9, cap0.y, -1)
+	ok(_research_rate_of(s0) == base * 2.0, "REQ-0010-12: at level 0 two tables (one inside R0) give exactly the plain sum 2 * base (%s)" % str(_research_rate_of(s0)))
+	for w in [s2, s0]:
+		_dispose(w)
+
+
+# =============================================================================================
+# REQ-0010-80 — research progress is not retroactive either: a project in progress, the level moves, progress is untouched and grows at the
+# new rate (the real Session.tick_research, the real progression)
+# =============================================================================================
+func _t_buff_research_no_retroactivity() -> void:
+	var syn: Dictionary = _zone_table(4)
+	var sess: Variant = _session_on()
+	var s: Variant = sess.sim
+	s.capsule_table = syn
+	var cap: Vector2i = _cap_tile(s)
+	var bench_cell: Vector2i = cap + Vector2i(5, 0)   # in at R=6 / R=5 (edge), out at R=3 / R=2
+	s._place_building("research_bench", bench_cell.x, bench_cell.y, -1)
+	var best: Variant = null
+	for r in sess.progression.available():
+		if best == null or float(r.cost()) > float(best.cost()):
+			best = r
+	ok(best != null, "REQ-0010-80 setup: a research project is available")
+	if best == null:
+		_dispose_session(sess)
+		return
+	ok(sess.start_research(String(best.id)), "REQ-0010-80 setup: the project starts")
+	var plan: Array = [[3, 3], [1, 3], [2, 3], [0, 3], [3, 3]]   # Σ rate·steps = 3·(4 + 1 + 3 + 1 + 4) = 39
+	var day_len: float = maxf(1.0, float(s.time.day_len))
+	var dday: float = 0.25 * float(best.cost()) / 39.0   # the whole run burns 25% of the project: it can never complete
+	var dt: float = dday * day_len
+	var base: float = float(GameData.BUILDINGS.research_bench.research_rate)
+	var expect: float = float(sess.progression.active_progress())
+	var no_jump: bool = true
+	var per_step: bool = true
+	for seg in plan:
+		var L: int = int(seg[0])
+		var before: float = float(sess.progression.active_progress())
+		s.main_capsule["level"] = L
+		no_jump = no_jump and float(sess.progression.active_progress()) == before
+		var rate: float = base * (_zb_buff(syn, L, "research_mult") if _zb_in(cap, bench_cell, _zb_radius(syn, L)) else 1.0)
+		for i in int(seg[1]):
+			var b4: float = float(sess.progression.active_progress())
+			sess.tick_research(dt)
+			per_step = per_step and _near(float(sess.progression.active_progress()) - b4, rate * dday, 1.0e-7)
+			expect += rate * dday
+	ok(no_jump, "REQ-0010-80: moving the level mid-project leaves the accumulated research progress exactly where it was")
+	ok(per_step, "REQ-0010-80: every tick_research step adds rate(current level, the table's own cell) * dday")
+	ok(_near(float(sess.progression.active_progress()), expect, 1.0e-7) and float(sess.progression.active_progress()) < float(best.cost()), "REQ-0010-80: the final progress is the sum of the per-step increments (%s vs %s), the project did not complete" % [str(sess.progression.active_progress()), str(expect)])
+	# D9: the number the research panel reads is the number the pump uses
+	s.main_capsule["level"] = 3
+	var vm: Dictionary = HudModel._research_slice(sess)
+	ok(_near(float(vm.get("rate", -1.0)), float(sess.research_rate())) and _near(float(sess.research_rate()), base * 4.0), "D9/REQ-0010-15: the research panel's rate is the session's rate the pump uses (%s vs %s)" % [str(vm.get("rate", -1.0)), str(sess.research_rate())])
+	_dispose_session(sess)
+
+
+# =============================================================================================
+# REQ-0010-15 — end to end through the real processes: a gather job and a melee hit inside the zone are quicker/harder than the same act
+# outside; the baseline is the OFF-world number
+# =============================================================================================
+func _gather_ticks(s: Variant, hero: Vector2i, tree: Vector2i) -> int:
+	var cell: int = tree.y * int(s.n) + tree.x
+	s.map.nodes[cell] = {"kind": "tree", "amount": 40}
+	_put_hero(s, hero)
+	s.order_gather(tree.x, tree.y)
+	var ticks: int = 0
+	while int(s.map.nodes[cell].amount) == 40 and ticks < 120:
+		s.update(Scenarios.DT)
+		ticks += 1
+	return ticks
+
+
+func _first_hit(s: Variant, hero: Vector2i) -> float:
+	_put_hero(s, hero)
+	var e: Dictionary = GameData.make_raider(float(hero.x) + 1.0, float(hero.y) + 0.5, 1)
+	e.hp = 1000.0
+	e.maxhp = 1000.0
+	s.enemies.append(e)
+	s.order_attack(e)
+	s.update(Scenarios.DT)
+	return 1000.0 - float(e.hp)
+
+
+func _t_buff_gather_melee_e2e() -> void:
+	var syn: Dictionary = _zone_table(4)   # level 2: R = 5, gather 2.0, melee 1.5
+	var in_cell: Vector2i = ZB_CAP + Vector2i(3, 0)
+	var out_cell: Vector2i = ZB_CAP + Vector2i(9, 0)
+	var s_in: Variant = _zone_sim(2, syn)
+	var s_out: Variant = _zone_sim(2, syn)
+	var s_ref: Variant = _sim_with(_pad_map(ZB_N, ZB_CAP), false, false, false)   # the OFF world: the baseline number
+	_quiet(s_ref)
+	for w in [s_in, s_out]:
+		_wipe(w)
+	var base_dur: float = 1.3 / (1.0 + float(s_ref.player.skills.gather) * 0.04)   # data.gd NODEINFO tree time, skill formula of the OFF world
+	var t_in: int = _gather_ticks(s_in, in_cell, in_cell + Vector2i(1, 0))
+	var t_out: int = _gather_ticks(s_out, out_cell, out_cell + Vector2i(1, 0))
+	var want_out: int = int(ceil(base_dur / Scenarios.DT - 1.0e-6))
+	var want_in: int = int(ceil(base_dur / 2.0 / Scenarios.DT - 1.0e-6))
+	ok(absi(t_out - want_out) <= 1, "REQ-0010-15 (e2e): a gather job OUTSIDE the zone takes the plain time: %d ticks (plain %.2f s -> %d)" % [t_out, base_dur, want_out])
+	ok(absi(t_in - want_in) <= 1, "REQ-0010-15 (e2e): the same job INSIDE the zone takes 1/2.0 of it: %d ticks (want %d)" % [t_in, want_in])
+	ok(t_in < t_out, "REQ-0010-15 (e2e): inside is strictly quicker than outside (%d < %d ticks)" % [t_in, t_out])
+	# melee: the first real hit of the real _do_attack
+	var m_out: float = s_out.melee_damage()
+	var hit_in: float = _first_hit(s_in, in_cell)
+	var hit_out: float = _first_hit(s_out, out_cell)
+	var plain: float = float(s_ref.melee_damage())
+	ok(_near(hit_out, plain), "REQ-0010-15 (e2e): a melee hit OUTSIDE the zone deals the plain damage (%.3f vs %.3f)" % [hit_out, plain])
+	ok(_near(hit_in, plain * 1.5), "REQ-0010-15 (e2e): the same hit INSIDE the zone deals melee_mult(2) = 1.5x (%.3f vs %.3f)" % [hit_in, plain * 1.5])
+	ok(m_out > 0.0, "REQ-0010-15 setup: the reference damage is positive")
+	for w in [s_in, s_out, s_ref]:
+		_dispose(w)
+
+
+# =============================================================================================
+# D9 — the node tooltip's «≈X с за одиницю» is the time the sim then actually works with. The buff depends on where the hero STANDS at
+# work, and the tooltip is read while he stands elsewhere: both mismatches (hero in / tree out, hero out / tree in) must not show a lie
+# =============================================================================================
+func _t_buff_inspector_one_truth() -> void:
+	var syn: Dictionary = _zone_table(4)   # level 2: R = 5, gather 2.0
+	var cases: Array = [
+		["hero inside the zone, the tree outside it", Vector2i(1, 0), Vector2i(11, 0)],
+		["hero outside the zone, the tree inside it", Vector2i(11, 0), Vector2i(3, 0)],
+	]
+	for cs in cases:
+		var label: String = String(cs[0])
+		var s: Variant = _zone_sim(2, syn)
+		var cap: Vector2i = _cap_tile(s)
+		var hero: Vector2i = cap + (cs[1] as Vector2i)
+		var tree: Vector2i = cap + (cs[2] as Vector2i)
+		s.map.nodes[tree.y * int(s.n) + tree.x] = {"kind": "tree", "amount": 40}
+		_put_hero(s, hero)
+		var vm: Dictionary = HudModel._inspect_slice(s, {"hover": tree})
+		var shown: String = ""
+		for l in (vm.get("lines", []) as Array):
+			if String(l).begins_with("≈"):
+				shown = String(l)
+		ok(shown != "", "D9 setup [%s]: the node tooltip carries a time line (%s)" % [label, str(vm.get("lines", []))])
+		s.order_gather(tree.x, tree.y)
+		var dur: float = -1.0
+		var stood_in: bool = false
+		for t in 200:
+			s.update(Scenarios.DT)
+			var a: Variant = s.player.get("action")
+			if a is Dictionary and float((a as Dictionary).get("dur", 0.0)) > 0.0:
+				dur = float((a as Dictionary).dur)
+				stood_in = MainCapsule.in_zone(s, _hero_cell(s))
+				break
+		ok(dur > 0.0, "D9 setup [%s]: the hero reached the tree and started working (dur %.3f, he stands %s the zone)" % [label, dur, "in" if stood_in else "out of"])
+		ok(shown == "≈%.1f с за одиницю" % dur, "D9 [%s]: the tooltip says «%s» but the sim works with %.3f s per unit — the player is shown a number the sim does not use" % [label, shown, dur])
+		_dispose(s)
+
+
+# =============================================================================================
+# REQ-0010-01 — flag OFF: the hooks are inert even if a stray record and a table are lying around (the hook sits under the flag)
+# =============================================================================================
+func _t_buff_off_inert() -> void:
+	var node: Dictionary = {"kind": "tree"}
+	var syn: Dictionary = _zone_table(4)
+	var clean: Variant = _sim_with(_pad_map(ZB_N, ZB_CAP), false, false, false)
+	var stray: Variant = _sim_with(_pad_map(ZB_N, ZB_CAP), false, false, false)
+	for w in [clean, stray]:
+		_quiet(w)
+	stray.capsule_table = syn
+	stray.main_capsule = {"kind": "main", "tile": [ZB_CAP.x, ZB_CAP.y], "level": 3, "invested": {}, "owner": "local"}
+	ok(stray.use_main_capsule == false and clean.use_main_capsule == false, "REQ-0010-01 setup: both worlds are flag OFF")
+	for w in [clean, stray]:
+		_hero_px(w, float(ZB_CAP.x) + 1.5, float(ZB_CAP.y) + 0.5)
+		w._place_building("workbench", ZB_CAP.x + 2, ZB_CAP.y, -1)
+		w._place_building("research_bench", ZB_CAP.x, ZB_CAP.y - 2, -1)
+	ok(stray.gather_time(node) == clean.gather_time(node) and stray.melee_damage() == clean.melee_damage(), "REQ-0010-01: OFF + a stray level-3 record inside its 'zone': gather_time and melee_damage are the clean OFF world's, bit for bit")
+	var plain_timer: float = 0.0
+	for t in 6:
+		clean._update_crafting(ZB_DT)
+		stray._update_crafting(ZB_DT)
+		plain_timer += ZB_DT * 1.0   # one bench
+	ok(float(stray.craft_timer) == float(clean.craft_timer) and float(clean.craft_timer) == plain_timer, "REQ-0010-01: ... craft_timer is the plain dt * count (%s vs %s vs %s)" % [str(stray.craft_timer), str(clean.craft_timer), str(plain_timer)])
+	ok(_research_rate_of(stray) == _research_rate_of(clean) and _research_rate_of(clean) == float(GameData.BUILDINGS.research_bench.research_rate), "REQ-0010-01: ... and Session.research_rate is the plain sum (%s)" % str(_research_rate_of(stray)))
+	for w in [clean, stray]:
+		_dispose(w)
+
+
+# =============================================================================================
+# the buffs are PURE reads (no RNG, no state, no hash movement) and persist nothing of their own: radius/buffs/rates are recomputed
+# =============================================================================================
+func _t_buff_pure_and_stateless() -> void:
+	var node: Dictionary = {"kind": "tree"}
+	var s: Variant = _leveled(3)
+	var cap: Vector2i = _cap_tile(s)
+	s._place_building("workbench", cap.x + 2, cap.y, -1)
+	s._place_building("research_bench", cap.x, cap.y - 2, -1)
+	_hero_px(s, float(cap.x) + 1.5, float(cap.y) + 0.5)
+	var h0: String = Persistence.world_hash(s)
+	var cur0: Array = _cursors(s)
+	var cap0: String = var_to_str(s.main_capsule)
+	var sig0: String = _world_sig(s)
+	var timer0: float = float(s.craft_timer)
+	var acc: float = 0.0
+	for i in 200:
+		for k in ZB_KEYS:
+			acc += MainCapsule.buff_at(s, String(k), cap + Vector2i(i % 9 - 4, i % 7 - 3))
+		acc += float(MainCapsule.in_zone(s, cap + Vector2i(i % 21 - 10, 0)))
+		acc += s.gather_time(node) + s.melee_damage() + _research_rate_of(s)
+	ok(acc > 0.0 and Persistence.world_hash(s) == h0 and _cursors(s) == cur0 and var_to_str(s.main_capsule) == cap0 and _world_sig(s) == sig0 and float(s.craft_timer) == timer0, "REQ-0010-15/34: 200 rounds of buff_at/in_zone/gather_time/melee_damage/research_rate change nothing — hash, record, world and the three RNG cursors are as before")
+	var rec: Dictionary = Persistence.serialize_region(s)
+	var keys: Array = []
+	_all_keys(rec.get("main_capsule", {}), keys)
+	var derived: String = _first_word_in(keys, ["buff", "zone", "radius", "mult", "core_hp"])
+	ok(derived == "", "REQ-0010-80/88: the saved capsule record stores no derived value (buffs/zone/radius/defence are recomputed from level + table) — %s in %s" % [derived, str(keys)])
+	var rkeys: Array = []
+	_all_keys(Persistence.serialize_runtime(s), rkeys)
+	var rderived: String = _first_word_in(rkeys, ["buff", "zone", "radius", "mult"])
+	ok(rderived == "", "REQ-0010-80: ... nor does the runtime half cache a buff, a zone or a multiplier — %s" % rderived)
+	_dispose(s)
+
+
+# =============================================================================================
+# D13 / REQ-0010-80 — twins with buffs in effect stay in lock-step; a resume payload cut MID-CRAFT restores the same buffs from level + table
+# and the restored world then runs exactly like the live one (the real catalog table, JSON round trip)
+# =============================================================================================
+func _craft_world() -> Variant:
+	var s: Variant = _zone_sim(2, _table_copy())
+	var cap: Vector2i = _cap_tile(s)
+	_wipe(s)
+	s.stock[s.res_key("wood")] = 80
+	s._place_building("workbench", cap.x + 2, cap.y, -1)        # inside (R(2) = 7 in the catalog)
+	s._place_building("workbench", cap.x + 9, cap.y, -1)        # outside
+	s._place_building("research_bench", cap.x, cap.y - 3, -1)   # inside
+	return s
+
+
+func _t_buff_twin_and_resume() -> void:
+	var a: Variant = _craft_world()
+	var b: Variant = _craft_world()
+	for t in 300:
+		a.update(Scenarios.DT)
+		b.update(Scenarios.DT)
+		_topup(a)
+		_topup(b)
+	ok(Persistence.world_hash(a) == Persistence.world_hash(b) and float(a.craft_timer) == float(b.craft_timer) and a.res_amount("planks") == b.res_amount("planks"), "D13/REQ-0010-80: two twin ON worlds with a buffed bench and an unbuffed one agree on world_hash, craft_timer and planks after 300 ticks")
+	ok(int(a.res_amount("planks")) >= 5, "REQ-0010-80 setup: the twins crafted (%d planks)" % int(a.res_amount("planks")))
+	# the buff is really in effect in this world (so the comparison below is not between two neutral worlds)
+	var rows: Array = _raw_rows()
+	var want_rate: float = float((rows[2] as Dictionary).buffs.craft_mult) + 1.0
+	ok(_near(_craft_rate_of(a), want_rate), "REQ-0010-15 setup: the inside bench is buffed by level 2's craft_mult and the outside one is not (%s vs %s)" % [str(_craft_rate_of(a)), str(want_rate)])
+	# resume mid-craft
+	var live: Variant = _craft_world()
+	for t in 150:
+		live.update(Scenarios.DT)
+		_topup(live)
+	ok(float(live.craft_timer) > 0.0 and float(live.craft_timer) < 3.5, "REQ-0010-80 setup: the payload is cut with a craft in progress (timer %s)" % str(live.craft_timer))
+	var payload: Dictionary = _json_rt(Persistence.resume_payload(live))
+	var rest: Variant = Sim.new()
+	var accepted: bool = Persistence.restore(rest, payload)
+	_mute(rest)   # the director's weights are not part of any payload: the live world is muted by _quiet, so the restored one must be too
+	ok(accepted and rest.load_error == &"" and rest.capsule_level() == 2 and _cap_tile(rest) == _cap_tile(live), "REQ-0010-80: the resume payload loads (level 2, same tile)")
+	ok(_near(_craft_rate_of(rest), _craft_rate_of(live)) and _research_rate_of(rest) == _research_rate_of(live), "REQ-0010-80: the restored world recomputes the same rates from level + table (craft %s vs %s, research %s vs %s)" % [str(_craft_rate_of(rest)), str(_craft_rate_of(live)), str(_research_rate_of(rest)), str(_research_rate_of(live))])
+	var cap: Vector2i = _cap_tile(live)
+	var probe_ok: bool = true
+	for L in [0, 2]:
+		live.main_capsule["level"] = L
+		rest.main_capsule["level"] = L
+		for dx in range(-9, 10):
+			probe_ok = probe_ok and MainCapsule.in_zone(live, cap + Vector2i(dx, 0)) == MainCapsule.in_zone(rest, cap + Vector2i(dx, 0)) and MainCapsule.buff_at(live, "craft_mult", cap + Vector2i(dx, 0)) == MainCapsule.buff_at(rest, "craft_mult", cap + Vector2i(dx, 0))
+	live.main_capsule["level"] = 2
+	rest.main_capsule["level"] = 2
+	ok(probe_ok, "REQ-0010-80: after the JSON round trip the zone and the buff agree cell for cell with the live world (the tile survived as an integer)")
+	for t in 150:
+		live.update(Scenarios.DT)
+		rest.update(Scenarios.DT)
+		_topup(live)
+		_topup(rest)
+	ok(Persistence.world_hash(live) == Persistence.world_hash(rest) and float(live.craft_timer) == float(rest.craft_timer) and live.res_amount("planks") == rest.res_amount("planks"), "D13/REQ-0010-80: 150 ticks after the restore the live world and the restored one still agree on world_hash, craft_timer and planks")
+	for w in [a, b, live, rest]:
+		_dispose(w)
+
+
+# =============================================================================================
+# REQ-0010-88 x 80 — a level-5 save against a lower table: the zone and the buffs are the CLAMPED row's (and never an out-of-range read)
+# =============================================================================================
+func _t_buff_table_clamp() -> void:
+	var node: Dictionary = {"kind": "tree"}
+	var big: Dictionary = _zone_table(6)
+	var src: Variant = _zone_sim(5, big)
+	var payload: Dictionary = _json_rt(Persistence.resume_payload(src))
+	var low: Dictionary = _zone_table(3)   # rows 0..2: R = 2,3,5; level 2: gather 2.0, melee 1.5, craft 2.5, research 3.0
+	var y: Variant = Sim.new()
+	y.capsule_table = low
+	var accepted: bool = Persistence.restore(y, payload)
+	ok(accepted and y.capsule_level() == 2, "REQ-0010-88 setup: the level-5 save loads against the 3-row table, level clamped to 2 (%d)" % y.capsule_level())
+	var cap: Vector2i = _cap_tile(y)
+	_hero_px(y, float(cap.x) + 14.5, float(cap.y) + 0.5)
+	var g0: float = y.gather_time(node)
+	var m0: float = y.melee_damage()
+	var bad: Array = []
+	for pr in _edge_probes(cap, 5):
+		var p: Vector2 = pr
+		_hero_px(y, p.x, p.y)
+		var inside: bool = _zb_in(cap, Vector2i(floori(p.x), floori(p.y)), 5)
+		if not _near(y.gather_time(node), g0 / 2.0 if inside else g0) or not _near(y.melee_damage(), m0 * 1.5 if inside else m0):
+			bad.append("(%.2f,%.2f) inside=%s" % [p.x, p.y, str(inside)])
+	ok(bad.is_empty(), "REQ-0010-88/15: after the clamp the zone is level 2's (R=5, NOT level 5's R=9) and the buffs are its row's (gather 2.0, melee 1.5) — wrong probes: %s" % str(bad.slice(0, 3)))
+	y._place_building("workbench", cap.x + 5, cap.y, -1)
+	y._place_building("workbench", cap.x + 6, cap.y, -1)
+	ok(_near(_craft_rate_of(y), 2.5 + 1.0), "REQ-0010-88/15: the craft rate after the clamp is level 2's row too (edge bench 2.5, bench past it 1.0) — %s" % str(_craft_rate_of(y)))
+	for w in [src, y]:
+		_dispose(w)
+
+
+# =============================================================================================
+# WAVE 0010-W2b-b — closing the integrity gaps (F3) on the W2b block: (1) the ZONE-EDGE BAND of the node tooltip, (2) the metric's safe failure
+#
+# (1) REQ-0010-15 x D9. The tooltip «≈X с за одиницю» is read while the hero stands elsewhere; the buff the sim then applies belongs to the cell
+# where he STANDS at work, and that cell is decided by his walk. Deep inside / far outside the zone every cell of the node's 3x3 agrees, so a
+# naive hint is right; the lie lives in the BAND — a node 0..1 cell from the edge, d = R-1..R+2 from the capsule. The oracle is the sim itself:
+# the hint (HudModel._inspect_slice, what the player SEES) against `action.dur` of the real order_gather + update walk (what the sim COUNTS),
+# for nodes on the axes, diagonals and off-axis, heroes next to the node (inside the reach: he works where he stands), a few cells away (off
+# the cell's centre), with and without a wall that bends the path, at the frame steps the game really feeds (60 fps = 0.0167 .. 30 fps x3 =
+# 0.1). Plus the REQ-0010-15 oracle on the cell where the hero really worked (Chebyshev, edge inclusive) and an EDGE sweep: starts placed so
+# the straight walk meets the reach circle EXACTLY on a cell border (the entry point must land on the NEAR side of it).
+# (2) REQ-0010-80. The metric is the DATA's; an unknown one means «no zone» (documented: capsule.gd zone_distance, godot-sim.md): no buff,
+# no stock reach — never «the whole map is the zone». A missing key is Chebyshev (the one value the spec names).
+# Expectations come from the table this test builds + the Chebyshev oracle `_zb_in`; none from capsule.gd. A red test here is a finding.
+# =============================================================================================
+const BAND_DIRS: Array = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(-1, -1), Vector2i(1, -1), Vector2i(-1, 1)]
+const BAND_AXES: Array = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+# the largest simulated step at which the tooltip is promised EXACT: the game feeds sim.update(frame_dt * speed); 60 fps x1 = 0.0167, 30 fps x3 = 0.1
+# (speeds x1..x3, REQ-0012-83). Above it («≈») the prediction may be off by one walking step inside the band — see `_t_buff_inspector_band_limit`.
+const BAND_EXACT_DT_MAX := 0.1
+
+
+# wall layouts: 0 none; 1 a vertical wall on the column just past the zone's east edge (gap at its south end); 2 a horizontal wall on the row
+# just past the north edge (gap at its west end): the hero is made to walk AROUND it, so the path (not the straight line) decides the entry cell
+func _band_world(level: int, table: Dictionary, wall: int) -> Variant:
+	var s: Variant = _zone_sim(level, table)
+	var cap: Vector2i = _cap_tile(s)
+	var R: int = _zb_radius(table, level)
+	if wall == 1:
+		for y in range(cap.y - R - 3, cap.y + R + 1):
+			s._place_building("wall", cap.x + R + 1, y, -1)
+	elif wall == 2:
+		for x in range(cap.x - R, cap.x + R + 4):
+			s._place_building("wall", x, cap.y - R - 1, -1)
+	return s
+
+
+# node offsets from the capsule: d = R-1 (all inside), R (the edge), R+1 (just out), R+2 (all out) — on the 4 axes, the 4 diagonals and 4 off-axis lines;
+# `band_only` keeps the two rings whose 3x3 straddles the edge (d = R, R+1)
+func _band_nodes(R: int, band_only: bool = false) -> Array:
+	var out: Array = []
+	for d in ([R, R + 1] if band_only else [R - 1, R, R + 1, R + 2]):
+		for dir in BAND_DIRS:
+			out.append((dir as Vector2i) * d)
+		out.append(Vector2i(d, 1))
+		out.append(Vector2i(-1, -d))
+		out.append(Vector2i(-d, -1))
+		out.append(Vector2i(1, d))
+	return out
+
+
+# start points: the 8 cells around the node (centres; the 4 orthogonal ones are INSIDE the reach, so he works where he stands) + a few cells away
+# on the given directions, deliberately OFF the centre of his cell (the hero is not always at a cell's centre)
+func _band_heroes(node: Vector2i, far_dirs: Array) -> Array:
+	var out: Array = []
+	for d in BAND_DIRS:
+		var dv: Vector2i = d
+		out.append(Vector2(float(node.x + dv.x) + 0.5, float(node.y + dv.y) + 0.5))
+	for d in far_dirs:
+		var fv: Vector2i = d
+		var k: int = 3 if fv.x == 0 or fv.y == 0 else 2
+		out.append(Vector2(float(node.x + fv.x * k) + 0.5 + 0.31, float(node.y + fv.y * k) + 0.5 - 0.17))
+	return out
+
+
+# the body must start every run the same: the sims are reused and a long walk tires the hero (an `exhaustion` hediff slows the work, which would
+# move `dur` between the hint and the first working tick)
+func _band_reset(s: Variant) -> void:
+	_quiet(s)
+	_topup(s)
+	if s.health != null:
+		s.health.hediffs.clear()
+		s.health.blood = 1.0
+	s.player.action = null
+
+
+# one real gather order: the hint the player sees at hover time, then the walk, up to the FIRST working tick -> what the sim counts
+func _band_run(s: Variant, node: Vector2i, p: Vector2, dt: float) -> Dictionary:
+	_band_reset(s)
+	s.map.nodes.clear()
+	s.map.nodes[node.y * int(s.n) + node.x] = {"kind": "tree", "amount": 40}
+	_hero_px(s, p.x, p.y)
+	var vm: Dictionary = HudModel._inspect_slice(s, {"hover": node})
+	var shown: String = ""
+	for l in (vm.get("lines", []) as Array):
+		if String(l).begins_with("≈"):
+			shown = String(l)
+	s.order_gather(node.x, node.y)
+	var dur: float = -1.0
+	var cell: Vector2i = Vector2i(-1, -1)
+	var ticks: int = 0
+	while ticks < 1500:
+		s.update(dt)
+		ticks += 1
+		var a: Variant = s.player.get("action")
+		if a is Dictionary and float((a as Dictionary).get("dur", 0.0)) > 0.0:
+			dur = float((a as Dictionary).dur)
+			cell = _hero_cell(s)
+			break
+	return {"shown": shown, "dur": dur, "cell": cell, "ticks": ticks}
+
+
+# does the node's 3x3 hold passable cells of BOTH verdicts (the band: where the hero's stand decides the buff)
+func _band_mixed(s: Variant, cap: Vector2i, R: int, node: Vector2i) -> bool:
+	var ins: int = 0
+	var outs: int = 0
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			var c: Vector2i = node + Vector2i(dx, dy)
+			if s.is_blocked(c.x, c.y):
+				continue
+			if _zb_in(cap, c, R):
+				ins += 1
+			else:
+				outs += 1
+	return ins > 0 and outs > 0
+
+
+func _band_new_stats() -> Dictionary:
+	return {"runs": 0, "bad": [], "bad_unmixed_list": [], "bad_unmixed": 0, "bad_mixed": 0, "work_wrong": [], "stuck": [], "diverge": 0, "near_diverge": 0, "buffed": 0, "unbuffed": 0, "mixed_runs": 0}
+
+
+# one (node, start) case into `st`: the tooltip == the work time, and the work time is the REQ-0010-15 time of the cell the hero really stood on
+func _band_case(st: Dictionary, s: Variant, cap: Vector2i, R: int, mult: float, plain: float, node: Vector2i, p: Vector2, dt: float, tag: String) -> void:
+	var r: Dictionary = _band_run(s, node, p, dt)
+	st.runs = int(st.runs) + 1
+	if float(r.dur) < 0.0:
+		(st.stuck as Array).append("%s node %s start (%.2f,%.2f)" % [tag, str(node - cap), p.x - float(cap.x), p.y - float(cap.y)])
+		return
+	var stand: Vector2i = r.cell
+	var stand_in: bool = _zb_in(cap, stand, R)
+	var node_in: bool = _zb_in(cap, node, R)
+	var mixed: bool = _band_mixed(s, cap, R, node)
+	var centre: Vector2 = Vector2(float(node.x) + 0.5, float(node.y) + 0.5)
+	if stand_in != node_in:
+		st.diverge = int(st.diverge) + 1
+		if p.distance_to(centre) < float(s.GATHER_REACH):
+			st.near_diverge = int(st.near_diverge) + 1   # he started inside the reach: he works where he stands, NOT where the tree is
+	if stand_in:
+		st.buffed = int(st.buffed) + 1
+	else:
+		st.unbuffed = int(st.unbuffed) + 1
+	if mixed:
+		st.mixed_runs = int(st.mixed_runs) + 1
+	if not _near(float(r.dur), plain / mult if stand_in else plain):
+		(st.work_wrong as Array).append("%s node %s stand %s: dur %.4f" % [tag, str(node - cap), str(stand - cap), float(r.dur)])
+	if String(r.shown) != "≈%.1f с за одиницю" % float(r.dur):
+		(st.bad as Array).append("%s node %s start (%.2f,%.2f) stand %s: tooltip «%s», sim works %.4f s" % [tag, str(node - cap), p.x - float(cap.x), p.y - float(cap.y), str(stand - cap), String(r.shown), float(r.dur)])
+		if mixed:
+			st.bad_mixed = int(st.bad_mixed) + 1
+		else:
+			st.bad_unmixed = int(st.bad_unmixed) + 1
+			(st.bad_unmixed_list as Array).append((st.bad as Array)[(st.bad as Array).size() - 1])
+
+
+func _band_sweep(level: int, table: Dictionary, dt: float, walls: Array, far_dirs: Array) -> Dictionary:
+	var R: int = _zb_radius(table, level)
+	var mult: float = _zb_buff(table, level, "gather_mult")
+	var st: Dictionary = _band_new_stats()
+	for wall in walls:
+		var s: Variant = _band_world(level, table, int(wall))
+		var cap: Vector2i = _cap_tile(s)
+		var plain: float = float(GameData.NODEINFO.tree.time) / (1.0 + float(s.player.skills.gather) * 0.04)   # data time / the OFF world's skill formula
+		for off in _band_nodes(R):
+			var node: Vector2i = cap + (off as Vector2i)
+			if node.x < 1 or node.y < 1 or node.x > ZB_N - 2 or node.y > ZB_N - 2 or s.is_blocked(node.x, node.y):
+				continue
+			for hs in _band_heroes(node, far_dirs):
+				var p: Vector2 = hs
+				var hc: Vector2i = Vector2i(floori(p.x), floori(p.y))
+				if hc.x < 1 or hc.y < 1 or hc.x > ZB_N - 2 or hc.y > ZB_N - 2 or s.is_blocked(hc.x, hc.y):
+					continue
+				_band_case(st, s, cap, R, mult, plain, node, p, dt, "L%d w%d dt%s" % [level, int(wall), str(dt)])
+		_dispose(s)
+	return st
+
+
+# the node walled in on its 4 orthogonal sides — or on all 8 (`ring`) — (the path is 4-connected, so it is UNREACHABLE and the sim's hero walks
+# straight at it, through the walls): the walls are per node, taken down after it
+func _band_sweep_enclosed(level: int, table: Dictionary, dts: Array, far_dirs: Array, ring: bool) -> Dictionary:
+	var R: int = _zb_radius(table, level)
+	var mult: float = _zb_buff(table, level, "gather_mult")
+	var st: Dictionary = _band_new_stats()
+	var s: Variant = _band_world(level, table, 0)
+	var cap: Vector2i = _cap_tile(s)
+	var plain: float = float(GameData.NODEINFO.tree.time) / (1.0 + float(s.player.skills.gather) * 0.04)
+	for off in _band_nodes(R, true):
+		var node: Vector2i = cap + (off as Vector2i)
+		if node.x < 2 or node.y < 2 or node.x > ZB_N - 3 or node.y > ZB_N - 3 or s.is_blocked(node.x, node.y):
+			continue
+		var built: Array = []
+		for d in (BAND_DIRS if ring else BAND_AXES):
+			var w: Vector2i = node + (d as Vector2i)
+			if not s.is_blocked(w.x, w.y):
+				built.append(s._place_building("wall", w.x, w.y, -1))
+		for dt in dts:
+			for hs in _band_heroes(node, far_dirs):
+				var p: Vector2 = hs
+				var hc: Vector2i = Vector2i(floori(p.x), floori(p.y))
+				if hc.x < 1 or hc.y < 1 or hc.x > ZB_N - 2 or hc.y > ZB_N - 2 or s.is_blocked(hc.x, hc.y):
+					continue
+				_band_case(st, s, cap, R, mult, plain, node, p, float(dt), "L%d walled-in dt%s" % [level, str(dt)])
+		for b in built:
+			s._remove_building(b)
+	_dispose(s)
+	return st
+
+
+func _band_brief(st: Dictionary) -> String:
+	return "%d runs, %d tooltip lies, %d stuck, first %s" % [int(st.runs), (st.bad as Array).size(), (st.stuck as Array).size(), str((st.bad as Array).slice(0, 2))]
+
+
+# =============================================================================================
+# REQ-0010-15 x D9 — the band sweep: hint == the sim's time at every frame step the game feeds
+# =============================================================================================
+func _t_buff_inspector_band() -> void:
+	var syn: Dictionary = _zone_table(4)   # level 2: R = 5, gather x2.0 (level 1: R 3 x1.5, level 3: R 6 x2.5)
+	var plans: Array = [
+		[2, 0.1, [0, 1, 2], BAND_DIRS],
+		[2, 0.05, [0, 1, 2], BAND_AXES],
+		[2, 0.0167, [0], BAND_AXES],
+		[1, 0.1, [0, 2], BAND_AXES],
+		[3, 0.1, [0, 1], BAND_AXES],
+	]
+	var sum: Dictionary = _band_new_stats()
+	for pl in plans:
+		var st: Dictionary = _band_sweep(int(pl[0]), syn, float(pl[1]), pl[2] as Array, pl[3] as Array)
+		var tag: String = "level %d, dt %s, walls %s" % [int(pl[0]), str(pl[1]), str(pl[2])]
+		ok((st.bad as Array).is_empty(), "REQ-0010-15 x D9 [%s]: the node tooltip equals the time the sim then works with, over the zone-edge band — %s" % [tag, _band_brief(st)])
+		ok((st.work_wrong as Array).is_empty() and (st.stuck as Array).is_empty(), "REQ-0010-15 [%s]: the work time is gather_mult(level) iff the cell the hero really stood on is inside the Chebyshev zone (edge inclusive), the plain time otherwise; every walk reached the tree — wrong %s, stuck %s" % [tag, str((st.work_wrong as Array).slice(0, 2)), str((st.stuck as Array).slice(0, 2))])
+		for k in ["runs", "diverge", "near_diverge", "buffed", "unbuffed", "mixed_runs"]:
+			sum[k] = int(sum[k]) + int(st[k])
+	# the sweep is not vacuous: it contains the cases a naive «buff of the TREE's cell» hint gets wrong, the hero-already-in-reach ones, both outcomes
+	ok(int(sum.diverge) >= 100, "REQ-0010-15 x D9 setup: %d of %d runs have the hero WORKING in a cell whose verdict differs from the tree's own cell (a hint that reads the tree's cell is wrong on every one)" % [int(sum.diverge), int(sum.runs)])
+	ok(int(sum.near_diverge) >= 20, "REQ-0010-15 x D9 setup: %d runs start with the hero INSIDE the reach (he works where he stands) on a cell of the other verdict than the tree's" % int(sum.near_diverge))
+	ok(int(sum.buffed) >= 100 and int(sum.unbuffed) >= 100, "REQ-0010-15 x D9 setup: both outcomes are reached (%d worked inside the zone, %d outside)" % [int(sum.buffed), int(sum.unbuffed)])
+	ok(int(sum.mixed_runs) >= 100, "REQ-0010-15 x D9 setup: %d runs are on a node whose 3x3 holds both verdicts (the band proper)" % int(sum.mixed_runs))
+
+
+# =============================================================================================
+# REQ-0010-15 x D9 — a node the path cannot reach (the path is 4-connected: walls on its 4 orthogonal sides are enough): the sim's hero walks
+# straight at it from where he stands, and the tooltip must follow
+# =============================================================================================
+func _t_buff_inspector_band_walled_in() -> void:
+	var syn: Dictionary = _zone_table(4)
+	var runs: int = 0
+	var stuck: int = 0
+	var bad: Array = []
+	var work_wrong: Array = []
+	var diverge: int = 0
+	var st: Dictionary = _band_sweep_enclosed(2, syn, [0.1, 0.05], BAND_AXES, false)
+	runs += int(st.runs)
+	stuck += (st.stuck as Array).size()
+	bad.append_array(st.bad as Array)
+	work_wrong.append_array(st.work_wrong as Array)
+	diverge += int(st.diverge)
+	ok(runs >= 200 and diverge >= 10, "REQ-0010-15 x D9 setup: %d walks at nodes walled in on 4 sides (%d of them work on a cell of the other verdict than the tree's), %d stuck" % [runs, diverge, stuck])
+	ok(bad.is_empty(), "REQ-0010-15 x D9: for a node the path cannot reach the tooltip still equals the time the sim works with (%d lies, first %s)" % [bad.size(), str(bad.slice(0, 3))])
+	ok(work_wrong.is_empty(), "REQ-0010-15: ... and that time is gather_mult(level) iff the cell the hero stopped on is inside the zone — wrong %s" % str(work_wrong.slice(0, 3)))
+
+
+# =============================================================================================
+# REQ-0010-15 x D9 — the same with the node walled in on ALL 8 sides. Nothing passable is left in its 3x3 but the tree's own cell, yet the hero (the
+# sim does not refuse an unreachable gather order: `order_gather` has no path check) still walks straight at it THROUGH the wall and stops, inside the
+# reach, on a wall cell — whose verdict can be the other one. The tooltip must still equal the time the sim works with (D9 has no «unless walled in»)
+# =============================================================================================
+func _t_buff_inspector_band_ringed() -> void:
+	var syn: Dictionary = _zone_table(4)
+	var runs: int = 0
+	var stuck: int = 0
+	var bad: Array = []
+	var diverge: int = 0
+	var st: Dictionary = _band_sweep_enclosed(2, syn, [0.1, 0.05, 0.0167], BAND_AXES, true)
+	runs += int(st.runs)
+	stuck += (st.stuck as Array).size()
+	bad.append_array(st.bad as Array)
+	diverge += int(st.diverge)
+	ok(runs >= 200 and diverge >= 10, "REQ-0010-15 x D9 setup: %d walks at nodes walled in on all 8 sides (%d of them work on a cell of the other verdict than the tree's), %d stuck" % [runs, diverge, stuck])
+	ok(bad.is_empty(), "REQ-0010-15 x D9: for a node walled in on all 8 sides the tooltip still equals the time the sim works with — %d lies, first %s" % [bad.size(), str(bad.slice(0, 3))])
+
+
+# =============================================================================================
+# the stated limit of the «≈»: exact at every frame step the game feeds (<= BAND_EXACT_DT_MAX); at coarser steps (a frame hitch) the tooltip may
+# name the wrong verdict ONLY in the band — outside it (all of the node's 3x3 agree) it stays exact at ANY step. The in-band count is printed, not
+# hidden: a bigger step lets the hero overshoot into the next cell before the sim looks at his position (spec question: is that acceptable?)
+# =============================================================================================
+func _t_buff_inspector_band_limit() -> void:
+	var syn: Dictionary = _zone_table(4)
+	ok(1.0 / 60.0 * 3.0 <= BAND_EXACT_DT_MAX and 1.0 / 30.0 * 3.0 <= BAND_EXACT_DT_MAX + 1.0e-9, "REQ-0010-15 x D9: a 60 fps frame at x3 (%.4f) and a 30 fps frame at x3 (%.4f) are inside the promised-exact step range (<= %s)" % [1.0 / 60.0 * 3.0, 1.0 / 30.0 * 3.0, str(BAND_EXACT_DT_MAX)])
+	for dt in [0.15, 0.2, 0.3]:
+		var st: Dictionary = _band_sweep(2, syn, float(dt), [0, 1], BAND_AXES)
+		ok(int(st.bad_unmixed) == 0, "REQ-0010-15 x D9 [dt %s]: outside the band (the node's 3x3 agrees on the zone) the tooltip is exact even on a coarse step — %d lies outside the band, first %s" % [str(dt), int(st.bad_unmixed), str((st.bad_unmixed_list as Array).slice(0, 2))])
+		ok((st.stuck as Array).is_empty(), "REQ-0010-15 [dt %s]: every walk still reaches the tree (%d stuck)" % [str(dt), (st.stuck as Array).size()])
+		print("  note: KNOWN LIMIT [dt %s]: %d of %d runs show a tooltip of the other verdict (all in the band) — REQ-0010-15 / D9 give no tolerance for a coarse step" % [str(dt), int(st.bad_mixed), int(st.runs)])
+
+
+# =============================================================================================
+# REQ-0010-15 x D9 — the EDGE sweep. The hero need not stand at a cell's centre; his walk (4-connected path, a straight segment from where he
+# stands to the centre of the first path cell Q) can meet the reach circle (radius GATHER_REACH around the tree's centre) EXACTLY on the border
+# between his cell C and Q. The cell he then works in is the one just PAST the border (he stops inside the circle, not on it), so a tooltip
+# that lands on the border's far side names the other verdict whenever the zone edge IS that border. Starts are built by pure geometry from the
+# sim's own path: E = (circle ∩ the C|Q border), P = E + 0.03..0.06 * (the unit vector from Q's centre through E), inside C.
+# =============================================================================================
+func _band_edge_starts(s: Variant, cap: Vector2i, R: int) -> Array:
+	var out: Array = []
+	var reach: float = float(s.GATHER_REACH)
+	for off in _band_nodes(R):
+		var node: Vector2i = cap + (off as Vector2i)
+		if node.x < 2 or node.y < 2 or node.x > ZB_N - 3 or node.y > ZB_N - 3 or s.is_blocked(node.x, node.y):
+			continue
+		var c: Vector2 = Vector2(float(node.x) + 0.5, float(node.y) + 0.5)
+		for dv in [Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]:   # the diagonal neighbours: from an orthogonal one he is already in reach
+			var cell: Vector2i = node + (dv as Vector2i)
+			if s.is_blocked(cell.x, cell.y):
+				continue
+			var path: Array = s.compute_path(cell.x, cell.y, node.x, node.y)
+			if path.is_empty():
+				continue
+			var q: Vector2i = path[0]
+			if absi(q.x - cell.x) + absi(q.y - cell.y) != 1 or _zb_in(cap, cell, R) == _zb_in(cap, q, R):
+				continue   # the C|Q border is not on the zone edge: nothing to mispredict
+			var qc: Vector2 = Vector2(float(q.x) + 0.5, float(q.y) + 0.5)
+			var cands: Array = []
+			if q.x == cell.x:   # vertical neighbours: the border is the horizontal line y = max(C.y, Q.y)
+				var by: float = float(maxi(cell.y, q.y))
+				if absf(by - c.y) < reach:
+					var h: float = sqrt(reach * reach - (by - c.y) * (by - c.y))
+					cands = [Vector2(c.x - h, by), Vector2(c.x + h, by)]
+			else:               # horizontal neighbours: the border is the vertical line x = max(C.x, Q.x)
+				var bx: float = float(maxi(cell.x, q.x))
+				if absf(bx - c.x) < reach:
+					var h2: float = sqrt(reach * reach - (bx - c.x) * (bx - c.x))
+					cands = [Vector2(bx, c.y - h2), Vector2(bx, c.y + h2)]
+			for e in cands:
+				var ev: Vector2 = e
+				if (q.x == cell.x and floori(ev.x) != cell.x) or (q.y == cell.y and floori(ev.y) != cell.y):
+					continue   # this intersection is not on the shared border segment
+				var u: Vector2 = (ev - qc).normalized()
+				for back in [0.03, 0.06]:
+					var p: Vector2 = ev + u * float(back)
+					if Vector2i(floori(p.x), floori(p.y)) != cell:
+						continue
+					out.append({"node": node, "p": p, "before": cell, "after": q})
+	return out
+
+
+func _t_buff_inspector_band_edge() -> void:
+	var syn: Dictionary = _zone_table(4)
+	var after_in: int = 0
+	var after_out: int = 0
+	var total: int = 0
+	var bad: Array = []
+	var work_wrong: Array = []
+	var stuck: int = 0
+	for L in [1, 2, 3]:
+		var R: int = _zb_radius(syn, L)
+		var mult: float = _zb_buff(syn, L, "gather_mult")
+		var s: Variant = _band_world(L, syn, 0)
+		var cap: Vector2i = _cap_tile(s)
+		var plain: float = float(GameData.NODEINFO.tree.time) / (1.0 + float(s.player.skills.gather) * 0.04)
+		var starts: Array = _band_edge_starts(s, cap, R)
+		for dt in [0.0167, 0.05, 0.1]:
+			for cf in starts:
+				var cfg: Dictionary = cf
+				var node: Vector2i = cfg.node
+				var p: Vector2 = cfg.p
+				if node.x < 1 or node.y < 1 or node.x > ZB_N - 2 or node.y > ZB_N - 2:
+					continue
+				var r: Dictionary = _band_run(s, node, p, float(dt))
+				total += 1
+				if float(r.dur) < 0.0:
+					stuck += 1
+					continue
+				if _zb_in(cap, cfg.after, R):
+					after_in += 1
+				else:
+					after_out += 1
+				var stand_in: bool = _zb_in(cap, r.cell, R)
+				if not _near(float(r.dur), plain / mult if stand_in else plain):
+					work_wrong.append("L%d dt%s node %s: dur %.4f stand %s" % [L, str(dt), str(node - cap), float(r.dur), str((r.cell as Vector2i) - cap)])
+				if String(r.shown) != "≈%.1f с за одиницю" % float(r.dur):
+					bad.append("L%d dt%s node %s start (%.4f,%.4f) crosses the border into %s: tooltip «%s», sim works %.4f s (stands %s)" % [L, str(dt), str(node - cap), p.x - float(cap.x), p.y - float(cap.y), str((cfg.after as Vector2i) - cap), String(r.shown), float(r.dur), str((r.cell as Vector2i) - cap)])
+		_dispose(s)
+	ok(total >= 60 and after_in >= 20 and after_out >= 20, "REQ-0010-15 x D9 setup: %d edge-border walks built (%d end just inside the zone, %d just outside, tooltip checked at 3 frame steps on 3 levels), %d stuck" % [total, after_in, after_out, stuck])
+	ok(bad.is_empty(), "REQ-0010-15 x D9: a straight walk that meets the reach circle exactly on a zone-edge cell border — the tooltip names the cell the hero then works in (%d lies, first %s)" % [bad.size(), str(bad.slice(0, 2))])
+	ok(work_wrong.is_empty(), "REQ-0010-15: ... and the work time there is the buffed one iff that cell is inside the zone — wrong %s" % str(work_wrong.slice(0, 2)))
+
+
+# =============================================================================================
+# REQ-0010-80 — the metric is one string in the DATA. An unknown one (a typo, another geometry that is not implemented) means «no zone»: no buff
+# anywhere, no stock reach — NOT «the whole map is the zone». A missing key is Chebyshev. The data is read on every call (flip it -> the zone follows)
+# =============================================================================================
+func _t_zone_metric_safe_failure() -> void:
+	var node: Dictionary = {"kind": "tree"}
+	var ref: Variant = _sim_with(_pad_map(ZB_N, ZB_CAP), false, false, false)   # the OFF world: the plain numbers
+	_quiet(ref)
+	var plain_gather: float = float(ref.gather_time(node))
+	var plain_melee: float = float(ref.melee_damage())
+	var base_research: float = float(GameData.BUILDINGS.research_bench.research_rate)
+	var attacked: int = 0
+	var zone_bad: Array = []
+	var buff_bad: Array = []
+	var craft_bad: Array = []
+	var research_bad: Array = []
+	var hero_bad: Array = []
+	var hint_bad: Array = []
+	var reach_bad: Array = []
+	var pack_bad: Array = []
+	for bad_metric in ["manhattan", "euclidean", "", "Chebyshev", "chebychev", " chebyshev", "chebyshev ", "l_inf"]:
+		var table: Dictionary = _zone_table(4)
+		table["metric"] = bad_metric
+		for L in [0, 1, 2, 3]:
+			var s: Variant = _zone_sim(L, table)
+			var cap: Vector2i = _cap_tile(s)
+			var R: int = _zb_radius(table, L)
+			var label: String = "«%s» L%d" % [String(bad_metric), L]
+			attacked += 1
+			# 1. no cell is in the zone — not the capsule's own, not one next to it, not the edge — and no key is buffed anywhere
+			for dy in range(-(R + 3), R + 4):
+				for dx in range(-(R + 3), R + 4):
+					var c: Vector2i = cap + Vector2i(dx, dy)
+					if MainCapsule.in_zone(s, c):
+						zone_bad.append("%s in_zone %s" % [label, str(Vector2i(dx, dy))])
+					for key in ZB_KEYS:
+						if MainCapsule.buff_at(s, String(key), c) != 1.0:
+							buff_bad.append("%s %s@%s" % [label, String(key), str(Vector2i(dx, dy))])
+			# 2. the processes and the hero hooks run at the plain rate, nothing breaks
+			s._place_building("workbench", cap.x + 1, cap.y + 1, -1)
+			s._place_building("workbench", cap.x + R, cap.y, -1)
+			s._place_building("workbench", cap.x + R + 4, cap.y, -1)
+			s._place_building("research_bench", cap.x, cap.y - 2, -1)
+			s._place_building("research_bench", cap.x - R, cap.y, -1)
+			_hero_px(s, float(cap.x) + 1.5, float(cap.y) + 0.5)
+			if not _near(_craft_rate_of(s), 3.0):
+				craft_bad.append("%s craft rate %s (3 benches)" % [label, str(_craft_rate_of(s))])
+			if _research_rate_of(s) != 2.0 * base_research:
+				research_bad.append("%s research rate %s (want %s)" % [label, str(_research_rate_of(s)), str(2.0 * base_research)])
+			if float(s.gather_time(node)) != plain_gather or float(s.melee_damage()) != plain_melee:
+				hero_bad.append("%s gather %s melee %s (plain %s / %s)" % [label, str(s.gather_time(node)), str(s.melee_damage()), str(plain_gather), str(plain_melee)])
+			var tree: Vector2i = cap + Vector2i(R + 1, 0)
+			s.map.nodes[tree.y * int(s.n) + tree.x] = {"kind": "tree", "amount": 9}
+			var hint: float = float(MainCapsule.gather_preview(s, tree.y * int(s.n) + tree.x))
+			if hint != plain_gather:
+				hint_bad.append("%s hint %s (plain %s)" % [label, str(hint), str(plain_gather)])
+			# 3. no zone -> no stock reach: the stock cannot pay even beside the capsule; the backpack still can; nothing is debited on the refusal
+			if L == 0:
+				var price: Dictionary = _cost_of(table.levels as Array, 1)
+				_wipe(s)
+				_fund_cost(s, price, 0.0)
+				_put_hero(s, cap + Vector2i(1, 0))
+				var sig: String = _funds_sig(s)
+				var r: Dictionary = s.upgrade_capsule()
+				if bool(r.get("ok", true)) or r.get("reason", &"") != &"cost" or not bool(r.get("far", false)) or _funds_sig(s) != sig:
+					reach_bad.append("%s stock beside the capsule: %s" % [label, str(r)])
+				_fund_cost(s, price, 1.0)
+				var rp: Dictionary = s.upgrade_capsule()
+				if not bool(rp.get("ok", false)) or s.capsule_level() != 1:
+					pack_bad.append("%s backpack: %s" % [label, str(rp)])
+			_dispose(s)
+	ok(attacked == 32, "REQ-0010-80 setup: 8 unknown metrics (manhattan, euclidean, empty, 2 case/typo variants, 2 whitespace variants, l_inf) x 4 levels were attacked (%d)" % attacked)
+	ok(zone_bad.is_empty(), "REQ-0010-80: an unknown metric means «no zone» — in_zone is false for every cell of the window around the capsule, its own cell and the edge included (%d cells inside by mistake, first %s)" % [zone_bad.size(), str(zone_bad.slice(0, 3))])
+	ok(buff_bad.is_empty(), "REQ-0010-80: ... and buff_at is exactly the neutral 1.0 for every key and cell (%d buffed by mistake, first %s)" % [buff_bad.size(), str(buff_bad.slice(0, 3))])
+	ok(craft_bad.is_empty(), "REQ-0010-80: ... the craft rate is the number of workbenches (3), no multiplier — %s" % str(craft_bad.slice(0, 3)))
+	ok(research_bad.is_empty(), "REQ-0010-80: ... the research rate is the plain sum of the tables — %s" % str(research_bad.slice(0, 3)))
+	ok(hero_bad.is_empty() and hint_bad.is_empty(), "REQ-0010-80/D9: ... the hero beside the capsule gathers and hits at the OFF world's plain numbers and the node hint says the plain time — %s %s" % [str(hero_bad.slice(0, 2)), str(hint_bad.slice(0, 2))])
+	ok(reach_bad.is_empty(), "REQ-0010-80: with no zone the capsule's stock is out of reach even beside it (refused as «far», nothing debited) — %s" % str(reach_bad.slice(0, 2)))
+	ok(pack_bad.is_empty(), "REQ-0010-80: ... while the backpack still pays for the upgrade — %s" % str(pack_bad.slice(0, 2)))
+	_dispose(ref)
+
+
+func _t_zone_metric_missing_and_live() -> void:
+	var table: Dictionary = _zone_table(4)
+	table.erase("metric")
+	ok(not table.has("metric"), "REQ-0010-80 setup: the table under test has no `metric` key")
+	var s: Variant = _zone_sim(0, table)
+	var cap: Vector2i = _cap_tile(s)
+	ok(MainCapsule.zone_metric(s) == "chebyshev", "REQ-0010-80: a table without a `metric` key is Chebyshev — the one geometry the spec names (got «%s»)" % MainCapsule.zone_metric(s))
+	var wrong: Array = []
+	var hits: int = 0
+	for L in [0, 1, 2, 3]:
+		s.main_capsule["level"] = L
+		var R: int = _zb_radius(table, L)
+		for dy in range(-(R + 3), R + 4):
+			for dx in range(-(R + 3), R + 4):
+				var c: Vector2i = cap + Vector2i(dx, dy)
+				var want: bool = _zb_in(cap, c, R)
+				if want:
+					hits += 1
+				if MainCapsule.in_zone(s, c) != want:
+					wrong.append("L%d %s" % [L, str(Vector2i(dx, dy))])
+				if L >= 1:
+					var bw: float = _zb_buff(table, L, "gather_mult") if want else 1.0
+					if MainCapsule.buff_at(s, "gather_mult", c) != bw:
+						wrong.append("L%d buff %s" % [L, str(Vector2i(dx, dy))])
+	ok(wrong.is_empty() and hits > 0, "REQ-0010-80: with no `metric` key the zone is exactly the Chebyshev square of the current level and the buff follows it — %d cells inside, %d wrong, first %s" % [hits, wrong.size(), str(wrong.slice(0, 3))])
+	# the data is read on EVERY call: flip the metric in the live world and the zone follows (no cached zone, no cached verdict)
+	var live: Dictionary = _zone_table(4)
+	s.capsule_table = live
+	s.main_capsule["level"] = 2
+	var edge: Vector2i = cap + Vector2i(5, 5)   # the corner: in for Chebyshev, out for Manhattan/Euclid
+	var states: Array = []
+	for m in ["chebyshev", "manhattan", "chebyshev", "", "chebyshev"]:
+		var t2: Dictionary = _zone_table(4)
+		t2["metric"] = m
+		s.capsule_table = t2
+		states.append(MainCapsule.in_zone(s, edge) and MainCapsule.buff_at(s, "craft_mult", edge) == 2.5)
+	ok(states == [true, false, true, false, true], "REQ-0010-80: the metric is read from the data on every call — chebyshev / manhattan / chebyshev / empty / chebyshev gives %s" % str(states))
+	_dispose(s)
+
+
+# =============================================================================================
+# CHARACTERIZATION PIN (REQ-0010-01 / D4: flag OFF == the code before the spec; NOT a spec-0010 requirement). W2b moved the auto-haul block out of
+# sim.gd into sim/haul.gd «without a change of behaviour»; the S0 `gather_haul` scenario does not straddle the resume radius, so a changed
+# HAUL_RESUME_RADIUS (7 -> 6) passed every suite. The expectations are the BASELINE's (HEAD:godot/scripts/sim.gd `HAUL_RESUME_RADIUS := 7`,
+# «Euclidean tiles»; nearest same-kind node wins, a tie goes to the lower cell index): an exhausted node hands the hero to a same-kind neighbour
+# within 7 tiles (dx^2 + dy^2 <= 49), never to a farther one, never to another kind. OFF world, the real _do_gather -> continue_gather path.
+# =============================================================================================
+func _haul_resume_target(extra: Array) -> Vector2i:
+	var s: Variant = _sim_with(_pad_map(ZB_N, ZB_CAP), false, false, false)
+	_quiet(s)
+	var n: int = int(s.n)
+	var a: Vector2i = Vector2i(10, 10)
+	s.map.nodes.clear()
+	s.map.nodes[a.y * n + a.x] = {"kind": "tree", "amount": 1}
+	for e in extra:
+		var o: Dictionary = e
+		var at: Vector2i = a + (o.at as Vector2i)
+		s.map.nodes[at.y * n + at.x] = {"kind": String(o.get("kind", "tree")), "amount": 40}
+	_put_hero(s, a + Vector2i(-1, 0))   # next to the tree: inside the reach, he works at once
+	s.order_gather(a.x, a.y)
+	for t in 400:
+		s.update(0.05)
+		if not s.map.nodes.has(a.y * n + a.x):
+			break
+	var act: Variant = s.player.get("action")
+	var got: Vector2i = Vector2i(-1, -1)
+	if act is Dictionary and String((act as Dictionary).get("type", "")) == "gather":
+		got = Vector2i(int((act as Dictionary).nx), int((act as Dictionary).ny))
+	var gone: bool = not s.map.nodes.has(a.y * n + a.x)
+	_dispose(s)
+	return got if gone else Vector2i(-2, -2)
+
+
+func _t_off_haul_resume_radius() -> void:
+	var a: Vector2i = Vector2i(10, 10)
+	var cases: Array = [
+		["(7,0): d^2 = 49, the edge of the radius, resumes", [{"at": Vector2i(7, 0)}], a + Vector2i(7, 0)],
+		["(-7,0) resumes", [{"at": Vector2i(-7, 0)}], a + Vector2i(-7, 0)],
+		["(0,-7) resumes", [{"at": Vector2i(0, -7)}], a + Vector2i(0, -7)],
+		["(6,3): d^2 = 45, inside the circle though outside the 6-square, resumes", [{"at": Vector2i(6, 3)}], a + Vector2i(6, 3)],
+		["(8,0): d^2 = 64, out of range, no resume", [{"at": Vector2i(8, 0)}], Vector2i(-1, -1)],
+		["(7,1): d^2 = 50, just out of the circle, no resume", [{"at": Vector2i(7, 1)}], Vector2i(-1, -1)],
+		["(5,5): d^2 = 50 (7.07 tiles), no resume", [{"at": Vector2i(5, 5)}], Vector2i(-1, -1)],
+		["(-5,-5): d^2 = 50, no resume", [{"at": Vector2i(-5, -5)}], Vector2i(-1, -1)],
+		["nearest wins: trees at 7 and 3 tiles -> the 3", [{"at": Vector2i(7, 0)}, {"at": Vector2i(3, 0)}], a + Vector2i(3, 0)],
+		["a tie goes to the lower cell index: (4,0) and (0,4) -> (4,0)", [{"at": Vector2i(4, 0)}, {"at": Vector2i(0, 4)}], a + Vector2i(4, 0)],
+		["a tie goes to the lower cell index: (-4,0) and (4,0) -> (-4,0)", [{"at": Vector2i(4, 0)}, {"at": Vector2i(-4, 0)}], a + Vector2i(-4, 0)],
+		["another kind is ignored: a rock at 2 tiles, a tree at 6 -> the tree", [{"at": Vector2i(2, 0), "kind": "rock"}, {"at": Vector2i(6, 0)}], a + Vector2i(6, 0)],
+		["only another kind in range: no resume", [{"at": Vector2i(2, 0), "kind": "rock"}], Vector2i(-1, -1)],
+	]
+	var wrong: Array = []
+	for cs in cases:
+		var got: Vector2i = _haul_resume_target(cs[1] as Array)
+		if got != (cs[2] as Vector2i):
+			wrong.append("%s: got %s, want %s" % [String(cs[0]), str(got), str(cs[2])])
+	ok(wrong.is_empty(), "REQ-0010-01/D4 (characterization): an exhausted tree hands the OFF-world hero to the nearest same-kind node within 7 tiles (Euclidean, edge included), a tie to the lower cell index, nothing farther, nothing of another kind — %d of %d cases wrong, first %s" % [wrong.size(), cases.size(), str(wrong.slice(0, 2))])

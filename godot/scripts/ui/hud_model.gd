@@ -16,6 +16,7 @@ const Gear = preload("res://scripts/kernel/gear.gd")
 const HeroHealth = preload("res://scripts/sim/hero_health.gd")
 const CatalogDefs = preload("res://scripts/catalog_defs.gd")
 const Director = preload("res://scripts/sim/director.gd")
+const MainCapsule = preload("res://scripts/sim/capsule.gd")   # лише чисті читання зони/підказок (gather_preview)
 const SimScript = preload("res://scripts/sim.gd")   # physics CONSTS only (light radii, emitter reach)
 const WorldInputScript = preload("res://scripts/ui/world_input.gd")   # placement grammar (paintable runs)
 
@@ -685,8 +686,10 @@ static func _inspect_node(sim, node: Dictionary, t: Vector2i) -> Dictionary:
 	var gives: String = "%s %s" % [String(GameData.RES[res].icon), String(GameData.RES[res].label)] if GameData.RES.has(res) else res
 	if bool(sim.get("use_catalog") == true) and kind == "rock":
 		gives += " (+руда, вугілля, глина)"
+	# spec 0010: баф зони капсули читається з клітинки, ДЕ ГЕРОЙ ПРАЦЮВАТИМЕ (не де він стоїть зараз) — одна правда з sim._do_gather
+	var secs: float = MainCapsule.gather_preview(sim, t.y * int(sim.n) + t.x) if sim.get("use_main_capsule") == true else float(sim.gather_time(node))
 	var lines: Array = ["залишилось %d · дає %s" % [int(node.amount), gives],
-		"≈%.1f с за одиницю" % float(sim.gather_time(node))]
+		"≈%.1f с за одиницю" % secs]
 	if float(sim.light_at(t.x, t.y)) < float(SimScript.DARK_LIGHT_THRESHOLD):
 		lines.append("🌙 темно — робота повільніша (смолоскип: клавіша 0)")
 	return {"shown": true, "state": &"good", "title": Fmt.node_title(kind), "lines": lines,
