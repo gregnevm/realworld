@@ -23,6 +23,7 @@ extends RefCounted
 
 const KernelBalance = preload("res://scripts/kernel/balance.gd")
 const Social = preload("res://scripts/social.gd")
+const MainCapsule = preload("res://scripts/sim/capsule.gd")
 
 # Payloads the live slice can actually enact — the substrate-honesty filter.
 const LIVE_INCIDENTS := ["raid", "disease", "cold_snap", "cargo"]
@@ -82,6 +83,8 @@ static func apply(s, payload: Dictionary) -> void:
 	var kind := str(payload.get("incident", ""))
 	if not LIVE_INCIDENTS.has(kind):
 		return   # no live substrate yet (fauna/quests) — dropped, not faked
+	if kind == "raid" and MainCapsule.holds_npc_threats(s):
+		return   # ON (spec 0010 OD-107/D8): рейд на неруйнівну капсулу не може ні вдатись, ні скінчитись — dropped до W3
 	match kind:
 		"raid":
 			_apply_raid(s, payload)

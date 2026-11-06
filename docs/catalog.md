@@ -19,6 +19,13 @@ It composes on the existing mechanics kernel (production/power/environment/gear/
 replacing it, and it does **not** touch `data.gd` — the Phase-0 playable slice keeps its own 6-resource
 table; this catalogue is the forward-engine superset.
 
+Besides the five def sections the file carries one non-def top-level key, **`capsule_levels`** (spec 0010 — the Основна
+капсула level table: `levels[0..5] = {level, cost, radius, core_hp, buffs}` plus a `raid` block). It is data for the
+`sim/capsule.gd` module, not content defs: it does not enter the id-uniqueness / reachability sweeps, its price ids must be
+reachable ones that `data_bridge` maps 1:1. Every number in it is `status:"proposed"` (economy bot
+`godot/tests/run_capsule_balance.gd`) until the owner approves it at merge — **except** `raid.immunity_ms` and
+`raid.take_percent`, which are owner decisions (OD-24/58, listed in `raid.decided`), not agent proposals.
+
 Design canon: **RimWorld** for the survival/needs/quality/medical flavour, **Factorio** for the
 multi-step automation chains (ore → bar → intermediate → advanced) where RimWorld is thin on
 intermediates. The arc runs from a bare neolithic start to a spacer endgame (a launchable ship).

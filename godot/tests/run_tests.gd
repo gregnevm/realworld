@@ -73,6 +73,7 @@ func _init() -> void:
 	_t_save_continue()
 	_t_death_epitaph()
 	_t_no_global_rng()
+	_t_no_wallclock_in_sim()
 	_t_static_typing()
 	_t_stock_seam()
 	finish()
@@ -1273,6 +1274,99 @@ func _t_no_global_rng() -> void:
 	ok(files.size() > 20, "rng tripwire scans the script tree (%d files)" % files.size())
 	ok(offenders.is_empty(), "no global randf()/randi() anywhere in scripts (seeded RNG only)%s"
 		% ("" if offenders.is_empty() else " — " + ", ".join(PackedStringArray(offenders))))
+
+# Tripwire spec 0012 REQ-0012-10: sim ніколи не читає годинник. Час входить лише аргументом
+# (Session -> Sim.set_clock(now_ms)), а джерело — godot/scripts/clock.gd: єдиний файл, де дозволено
+# Time.get_unix_time_from_system. Корпус = _product_scripts() мінус SIM_CORPUS_EXCLUDE (view-шар, де
+# Time.get_ticks_msec крутить пульс/трясіння камери, заморожений main.gd і сам clock.gd) — тож НОВИЙ скрипт
+# покритий за замовчуванням. Той самий список і ті самі патерни веде tools/lint.mjs
+# (tools/process/lib.mjs: SIM_CORPUS_EXCLUDE / SIM_CLOCK_BAN) — tests/process.test.js звіряє обидва боки.
+# Глобальні randf()/randi() тримає _t_no_global_rng (весь продукт), тут їх не дублюємо; тут — `rng.randomize()`.
+# Хибнопозитив — рядок із `# clock-ok`.
+const SIM_CORPUS_EXCLUDE := ["scripts/clock.gd", "scripts/ui/", "scripts/world_view.gd", "scripts/map_widget.gd", "scripts/main.gd", "newhud_main.gd"]
+const SIM_CLOCK_PATTERNS := [
+	"\\bTime\\.",
+	"\\bOS\\.get_\\w*time\\w*",
+	"\\bOS\\.get_unix\\w*",
+	"\\bEngine\\.get_ticks_\\w+",
+	"\\bEngine\\.time_scale",
+	"\\bDateTime\\b",
+	"\\.randomize\\s*\\(",
+]
+const CLOCK_HOME := "res://scripts/clock.gd"
+
+func _t_no_wallclock_in_sim() -> void:
+	var res: Array = []
+	for pat in SIM_CLOCK_PATTERNS:
+		var re := RegEx.new()
+		re.compile(String(pat))
+		res.append(re)
+	var marker := RegEx.new()
+	marker.compile("#\\s*clock-ok\\b")
+	var corpus: Array = _sim_corpus()
+	var offenders: Array = []
+	for path in corpus:
+		var n := 0
+		for line in _read_file(String(path)).split("\n"):
+			n += 1
+			if marker.search(String(line)) != null:
+				continue
+			var code := _code_of(String(line))
+			for re in res:
+				if (re as RegEx).search(code) != null:
+					offenders.append("%s:%d" % [String(path).trim_prefix("res://"), n])
+					break
+	ok(corpus.size() > 20 and offenders.is_empty(), "REQ-0012-10: no Time.*/OS.get_*time*/Engine.get_ticks_*/DateTime/rng.randomize in the sim corpus (%d files)%s"
+		% [corpus.size(), "" if offenders.is_empty() else " — " + ", ".join(PackedStringArray(offenders))])
+	# the one allowed reader of the device clock: exactly clock.gd (comments don't count), across ALL product scripts
+	var homes: Array = []
+	for path in _product_scripts():
+		if _read_code(String(path)).find("Time.get_unix_time_from_system") < 0:
+			continue   # cheap pre-filter; the per-line check below drops trailing comments and string literals
+		for line in _read_file(String(path)).split("\n"):
+			if _code_of(String(line)).find("Time.get_unix_time_from_system") >= 0:
+				homes.append(String(path))
+				break
+	ok(homes == [CLOCK_HOME], "REQ-0012-10: Time.get_unix_time_from_system is called ONLY in clock.gd (found in: %s)" % ", ".join(PackedStringArray(homes)))
+
+# _product_scripts() minus SIM_CORPUS_EXCLUDE ("dir/" = prefix, otherwise exact), paths relative to res://
+func _sim_corpus() -> Array:
+	var out: Array = []
+	for path in _product_scripts():
+		var rel := String(path).trim_prefix("res://")
+		var skip := false
+		for ex in SIM_CORPUS_EXCLUDE:
+			var e := String(ex)
+			if rel == e or (e.ends_with("/") and rel.begins_with(e)):
+				skip = true
+		if not skip:
+			out.append(path)
+	return out
+
+# one source line without its trailing comment and with string contents blanked ("Time." in a message is not a call)
+func _code_of(line: String) -> String:
+	if line.find("#") < 0 and line.find("\"") < 0 and line.find("'") < 0:
+		return line
+	var out := ""
+	var q := ""
+	var i := 0
+	while i < line.length():
+		var ch := line[i]
+		if q != "":
+			if ch == "\\":
+				i += 1
+			elif ch == q:
+				q = ""
+				out += ch
+		elif ch == "\"" or ch == "'":
+			q = ch
+			out += ch
+		elif ch == "#":
+			break
+		else:
+			out += ch
+		i += 1
+	return out
 
 # Tripwire: нові нетипізовані `var` у продуктових скриптах заборонені (AGENTS.md: «статична типізація
 # скрізь»). Редакторський ворнінг (untyped_declaration у project.godot) у headless/CI не емітиться —

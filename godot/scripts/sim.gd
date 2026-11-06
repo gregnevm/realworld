@@ -16,6 +16,10 @@ const Director = preload("res://scripts/sim/director.gd")
 const DataBridge = preload("res://scripts/data_bridge.gd")
 const CatalogDefs = preload("res://scripts/catalog_defs.gd")
 const Catalog = preload("res://scripts/kernel/catalog.gd")
+const MainCapsule = preload("res://scripts/sim/capsule.gd")
+const Persistence = preload("res://scripts/persistence.gd")
+const OrbitStub = preload("res://scripts/sim/orbit_stub.gd")
+const Haul = preload("res://scripts/sim/haul.gd")
 
 var map: Dictionary
 var n: int = 0
@@ -39,6 +43,15 @@ var use_catalog := false   # spec 0008 phase 2: OFF = stock живе на 6 data
                            # байт-у-байт, його сьюти це доводять); ON = ключі stock — catalogue-ids через
                            # data_bridge, тож каталожні рецепти можуть afford-итись проти живого складу.
                            # Прапор ставиться ДО new_game і не фліпається посеред сейва (§5.2 spec 0008).
+var use_main_capsule: bool = false:   # spec 0010: ON = Основна капсула (дім/склад/орієнтир); ДО new_game, далі замкнений
+	set(v):
+		use_main_capsule = MainCapsule.set_flag(self, v)
+var main_capsule: Dictionary = {}   # {} при OFF/до посадки; запис — MainCapsule.new_record (tile живе тут)
+var config_error: StringName = &""  # непорожнє => new_game нічого не створив (див. MainCapsule.preflight)
+var load_error: StringName = &""    # непорожнє => load_region відхилив запис ДО мутацій (MainCapsule.validate_region)
+var now_ms: int = 0                 # ВХІД часу (UTC-мс), лише через set_clock; НЕ в сейві й НЕ в world_hash (REQ-0010-92)
+var capsule_table: Dictionary = {}  # override таблиці capsule_levels (тести/пак контенту); {} = каталог (MainCapsule.table)
+var capsule_cmds_tick: Dictionary = {}   # дедуп cmd_id upgrade_capsule в межах тіка: очищається на початку update(); не хеш
 var convoys: Array = []
 var regions: Array = []
 var convoy_seq := 0
@@ -99,6 +112,7 @@ const EMITTER_RADIUS := 6           # Manhattan reach of heat emitters (kernel p
 const LIGHT_RADIUS := {"campfire": 3.5, "torch": 3.0, "lamp": 5.0}
 const DARK_LIGHT_THRESHOLD := 0.35  # below this working slows (spec B3 «−темрява»)
 const DARK_WORK_PENALTY := 0.5      # up to +50% gather time in pitch black
+const GATHER_REACH := 1.4           # tiles to the node's centre: closer — the hero works where he stands (MainCapsule.gather_stand reads it)
 const COLD_SNAP_DIP_C := 6.0        # kernel WeatherSystem parity
 const WEATHER_LABEL := SimEnv.WEATHER_LABEL   # re-export: the frozen main.gd reads Sim.WEATHER_LABEL
 
@@ -121,6 +135,9 @@ func _default_capsule() -> Dictionary:
 	return {"charges": GameData.CAPSULE_DAILY_CHARGES, "radius_km": GameData.CAPSULE_BASE_RADIUS_KM, "last_day": int(time.day)}
 
 func new_game(m: Dictionary, hint: bool = true) -> void:
+	config_error = MainCapsule.preflight(use_main_capsule, use_inventory, use_catalog, m)   # &"" при OFF
+	if config_error != &"":
+		return   # ДО будь-якої мутації: порожній світ + явна причина (REQ-0010-03/59)
 	map = m
 	n = m.n
 	var sp: Vector2i = m.spawn
@@ -134,12 +151,15 @@ func new_game(m: Dictionary, hint: bool = true) -> void:
 	capsule = _default_capsule()
 	invites = []
 	_build_astar()
-	var lx := sp.x + 1
-	var ly := sp.y
-	if not build_valid(lx, ly):
-		lx = sp.x
-		ly = sp.y + 1
-	_place_building("storage", lx, ly, -1)
+	if use_main_capsule:
+		MainCapsule.landing(self, WorldGen.canon_coord(float(m.lat), float(m.lon)), sp)   # капсула = склад + дім
+	else:
+		var lx := sp.x + 1
+		var ly := sp.y
+		if not build_valid(lx, ly):
+			lx = sp.x
+			ly = sp.y + 1
+		_place_building("storage", lx, ly, -1)
 	_init_regions()
 	_env_init()
 	HeroHealth.reset(self)
@@ -153,6 +173,8 @@ func spawn_hint() -> void:
 
 # Arrive in a NEW region by capsule: your pawn + full personal inventory, but no base/stock here.
 func arrive_region(m: Dictionary, pawn: Dictionary) -> void:
+	if MainCapsule.refuses_region_swap(self):
+		return   # ON: капсула одна й лишається у своєму регіоні (REQ-0010-04/75) — нічого не стираємо
 	map = m
 	n = int(m.n)
 	_build_astar()
@@ -209,27 +231,15 @@ func apply_pawn(pawn: Dictionary) -> void:
 
 # Rebuild a previously-visited region from a persistence record (seed + diff + save).
 func load_region(data: Dictionary) -> void:
+	load_error = MainCapsule.validate_region(data, not map.is_empty(), use_main_capsule)
+	if load_error != &"":
+		return   # відхилено ДО будь-якої мутації: ні мапи, ні будівель, ні потоків (REQ-0010-60/83)
+	use_main_capsule = bool(data.get("use_main_capsule", false))   # ДО мапи й будівель; сейв без ключа -> OFF (REQ-0010-02)
 	var nn := int(data.n)
-	var lat := float(data.lat)
-	var lon := float(data.lon)
-	var m := WorldGen.generate_map(lat, lon, nn)
-	m["place_name"] = str(data.get("place_name", "Регіон"))
-	# OSM terrain is the ONE thing not reproducible from the coordinate, so it is persisted as a tile
-	# blob. Restore it only if intact (right length); never silently fall back to a DIFFERENT world.
-	if str(data.get("source", "")) == "osm":
-		var decoded := Marshalls.base64_to_raw(str(data.get("tiles_b64", "")))
-		if decoded.size() == nn * nn:
-			m.tiles = decoded
-			m["source"] = "osm"
-			# spawn was picked against procedural tiles; re-pick against the real OSM terrain
-			m.spawn = WorldGen._pick_spawn(m.tiles, m.nodes, nn)
-		else:
-			_log("⚠ OSM-регіон пошкоджено (немає збережених тайлів) — тимчасово процедурна карта.", "bad")
-	var nodes := {}
-	for k in data.nodes:
-		var nd: Dictionary = data.nodes[k]
-		nodes[int(str(k))] = {"kind": str(nd.kind), "amount": int(nd.amount)}
-	m.nodes = nodes
+	var decoded: Dictionary = Persistence.map_from_record(data)
+	var m: Dictionary = decoded.map
+	if decoded.osm_lost:
+		_log("⚠ OSM-регіон пошкоджено (немає збережених тайлів) — тимчасово процедурна карта.", "bad")
 	map = m
 	n = nn
 	_build_astar()
@@ -252,6 +262,7 @@ func load_region(data: Dictionary) -> void:
 	buildings = []
 	bgrid = {}
 	_reset_local_threats()
+	MainCapsule.from_record(self, data.get("main_capsule", {}))   # ON: капсула = buildings[0], як у new_game; OFF: no-op
 	for b in data.buildings:
 		var placed: Dictionary = _place_building(str(b.kind), int(b.x), int(b.y), float(b.hp))
 		for f in ["fuel", "charge", "growth"]:   # power/farming/defense state rides the record
@@ -298,6 +309,8 @@ func after_map_change() -> void:
 	for b in buildings:
 		if building_def(String(b.kind)).get("blocks", false):
 			_refresh_solid(b.x, b.y)
+	if MainCapsule.on_map_change(self):
+		return   # ON: герой біля капсули (map.spawn = її непрохідна клітинка), склад не переносимо (REQ-0010-06/75)
 	var sp: Vector2i = map.spawn
 	player.px = sp.x + 0.5
 	player.py = sp.y + 0.5
@@ -317,17 +330,7 @@ func after_map_change() -> void:
 	_recompute_indoor()
 
 func _init_regions() -> void:
-	var home := {"name": map.get("place_name", "Поселення"), "lat": map.lat, "lon": map.lon, "home": true}
-	var ranked := []
-	for hb in GameData.HUBS:
-		var d := WorldGen.haversine_km(home.lat, home.lon, hb.lat, hb.lon)
-		if d > 8:
-			ranked.append({"name": hb.name, "lat": hb.lat, "lon": hb.lon, "d": d})
-	ranked.sort_custom(func(a, b): return a.d < b.d)
-	regions = [home]
-	for i in range(min(5, ranked.size())):
-		var hb: Dictionary = ranked[i]
-		regions.append({"name": hb.name, "lat": hb.lat, "lon": hb.lon, "d": hb.d, "offer": GameData.OFFERS[i % GameData.OFFERS.size()]})
+	WorldMeta.init_regions(self)   # home + 5 nearest hubs (sim/world_meta.gd)
 
 # ---------------- helpers ----------------
 func _in(x: int, y: int) -> bool:
@@ -382,6 +385,8 @@ func deposit(res: String, amt: int, quiet: bool = false) -> int:
 # path (blocks/heat/light/traps/turrets/capacity/hp) serves both vocabularies without caring.
 # {} == unknown/not-live-buildable (try_build refuses it).
 func building_def(kind: String) -> Dictionary:
+	if use_main_capsule and kind == MainCapsule.KIND:
+		return MainCapsule.DEF
 	if GameData.BUILDINGS.has(kind):
 		return GameData.BUILDINGS[kind]
 	return CatalogDefs.building(kind) if use_catalog else {}
@@ -408,7 +413,13 @@ func cost_keys(cost: Dictionary) -> Dictionary:
 func afford(cost: Dictionary) -> bool:
 	return GameData.can_afford(stock, cost_keys(cost))
 
+# «Склад» як можливість, не id: data.gd-склад і (при ON) def з `storage: true` — капсула (REQ-0010-05).
+func has_storage_cap(kind: String) -> bool:
+	return kind == "storage" or (use_main_capsule and bool(building_def(kind).get("storage", false)))
+
 func base_center() -> Vector2i:
+	if not main_capsule.is_empty():
+		return MainCapsule.tile(self)
 	for b in buildings:
 		if b.kind == "storage":
 			return Vector2i(b.x, b.y)
@@ -426,7 +437,7 @@ func _nearest_enemy(x: float, y: float, maxr: float):
 
 func _near_storage(r: float) -> bool:
 	for b in buildings:
-		if b.kind == "storage" and _dist(player.px, player.py, b.x + 0.5, b.y + 0.5) < r:
+		if has_storage_cap(String(b.kind)) and _dist(player.px, player.py, b.x + 0.5, b.y + 0.5) < r:
 			return true
 	return false
 
@@ -596,8 +607,8 @@ func try_build(kind: String, x: int, y: int) -> void:
 	# ONE def seam serves both vocabularies: data.gd ids always; catalogue-only ids when the flag is
 	# on ({} refusal covers unknown ids AND catalogue ids while the flag is off).
 	var def: Dictionary = building_def(kind)
-	if def.is_empty():
-		_flash("Тут не можна будувати.")
+	if def.is_empty() or bool(def.get("landmark", false)):   # landmark (капсула) не будується: вона одна (REQ-0010-06)
+		_flash("Тут не можна будувати." if def.is_empty() else "Основна капсула одна.")
 		return
 	if not research_ok(def):
 		_flash("🔒 Потребує дослідження: %s." % _research_label(def))
@@ -620,6 +631,8 @@ func demolish(x: int, y: int) -> Dictionary:
 	if not _in(x, y) or not bgrid.has(y * n + x):
 		return {"ok": false, "msg": "Тут немає будівлі."}
 	var b: Dictionary = bgrid[y * n + x]
+	if bool(building_def(String(b.kind)).get("indestructible", false)):
+		return {"ok": false, "reason": &"indestructible", "msg": "Капсулу не можна розібрати."}
 	if b.kind == "storage":
 		var storages := 0
 		for o in buildings:
@@ -643,12 +656,15 @@ func demolish(x: int, y: int) -> Dictionary:
 	return {"ok": true}
 
 # ---------------- items / equipment (spec 0001) ----------------
-func gather_time(node) -> float:
+# `at` — клітинка, з якої герой ПРАЦЮВАТИМЕ (підказка вузла, MainCapsule.gather_preview); за замовчуванням — де він стоїть зараз.
+func gather_time(node, at: Vector2i = MainCapsule.NO_CELL) -> float:
 	var info: Dictionary = GameData.NODEINFO[node.kind]
 	var mult: float = 1.0 + player.skills.gather * 0.04
 	var tool: String = player.equipped.get("tool", "")
 	if tool != "" and GameData.ITEMS.has(tool):
 		mult *= float(GameData.ITEMS[tool].get("gather_mult", 1.0))
+	if use_main_capsule:   # spec 0010: баф зони капсули на героя (клітинка героя, поточний рівень)
+		mult *= MainCapsule.hero_buff(self, "gather_mult", at)
 	# darkness and the body both slow the work: HeroHealth.work_mult reads the Manipulation capacity
 	# (wounded arms, deep cold, starvation), 1.0 at full health.
 	return info.time / mult * dark_work_mult() * HeroHealth.work_mult(self)
@@ -719,6 +735,8 @@ func melee_damage() -> float:
 	var wpn: String = player.equipped.get("weapon", "")
 	if wpn != "" and GameData.ITEMS.has(wpn):
 		dmg += float(GameData.ITEMS[wpn].get("dmg_bonus", 0.0))
+	if use_main_capsule:   # spec 0010: баф зони капсули на героя
+		dmg *= MainCapsule.hero_buff(self, "melee_mult")
 	return dmg * HeroHealth.melee_mult(self)   # a mangled arm swings weaker; 1.0 at full health
 
 func has_workbench() -> bool:
@@ -894,6 +912,7 @@ func _follow_path(o: Dictionary, path: Array, step: float) -> bool:
 
 # ---------------- main update ----------------
 func update(dt: float) -> void:
+	capsule_cmds_tick.clear()
 	if flash_t > 0:
 		flash_t = max(0.0, flash_t - dt)
 	if dead:
@@ -903,7 +922,8 @@ func update(dt: float) -> void:
 		time.frac -= 1.0
 		time.day += 1
 		_log("🌅 Новий день: %d" % time.day)
-		_grant_daily_capsule()
+		if not use_main_capsule:
+			_grant_daily_capsule()   # щоденний заряд spec 0002 — лише OFF (REQ-0010-41)
 	_update_environment(dt / time.day_len)
 	SimPower.update(self, dt)   # after environment (solar reads daylight, wind reads weather)
 	SimFarm.update(self, dt)    # after power (hydroponics grows only when the net delivered)
@@ -988,7 +1008,7 @@ func _update_player(dt: float) -> void:
 		"gather":
 			_do_gather(dt, step)
 		"haul":
-			_do_haul(step)
+			Haul.do_haul(self, step)
 		"attack":
 			_do_attack(dt, step)
 
@@ -999,7 +1019,7 @@ func _do_gather(dt: float, step: float) -> void:
 		p.action = null
 		return
 	var node: Dictionary = map.nodes[a.cell]
-	if _dist(p.px, p.py, a.nx + 0.5, a.ny + 0.5) >= 1.4:
+	if _dist(p.px, p.py, a.nx + 0.5, a.ny + 0.5) >= GATHER_REACH:
 		var done := _follow_path(p, a.path, step)
 		p.face = atan2(a.ny + 0.5 - p.py, a.nx + 0.5 - p.px)
 		if done and not WorldGen.is_terrain_blocked(map.tiles[a.cell]):
@@ -1011,7 +1031,7 @@ func _do_gather(dt: float, step: float) -> void:
 	if a.t >= a.dur:
 		a.t = 0.0
 		if not use_inventory and carry_total() >= p.carry_cap:
-			_start_haul(int(a.cell), String(node.kind))   # full hands: carry the load home, come back
+			Haul.start_haul(self, int(a.cell), String(node.kind))   # full hands: carry the load home, come back
 			return
 		# phase 4 (spec 0008): under the open catalogue, a node yields its catalogue BUNDLE — rocks
 		# occasionally give ore/coal/clay/sand, trees fiber, bushes herbs. Pure function of
@@ -1034,81 +1054,15 @@ func _do_gather(dt: float, step: float) -> void:
 		if node.amount <= 0:
 			map.nodes.erase(a.cell)
 			p.action = null
-			_continue_gather(int(a.cell), String(node.kind))
+			Haul.continue_gather(self, int(a.cell), String(node.kind))
 
-# ---------------- auto-haul: the gather loop closes itself ----------------
-# One click on a tree used to mean: chop 30, stop, walk the load home by hand, click the tree again.
-# Now full hands walk the load to the nearest storage (the ordinary auto-deposit unloads it there) and
-# come back to the SAME node; a node that runs dry hands over to its nearest same-kind neighbour.
-# Pure functions of state (paths, dict order, explicit tie-breaks) — twins and rejoiners agree.
-const HAUL_RESUME_RADIUS := 7   # Euclidean tiles: «keep chopping this grove», not «wander the map»
-
-func _start_haul(cell: int, kind: String) -> void:
-	var st: Variant = _nearest_storage()
-	if st == null:
-		_flash("Несеш максимум — збудуй склад (4).")
-		player.action = null
-		return
-	var path := compute_path(int(player.px), int(player.py), int(st.x), int(st.y))
-	player.action = {"type": "haul", "path": path, "cell": int(st.y) * n + int(st.x),
-		"resume": {"cell": cell, "kind": kind}}
-
-func _do_haul(step: float) -> void:
-	var p: Dictionary = player
-	var a: Dictionary = p.action
-	if carry_total() == 0:
-		# unloaded (the auto-deposit fired within reach of the storage): back to work
-		var res: Dictionary = a.get("resume", {})
-		var cell := int(res.get("cell", -1))
-		p.action = null
-		if cell >= 0 and map.nodes.has(cell):
-			order_gather(cell % n, cell / n)
-		else:
-			_continue_gather(cell, String(res.get("kind", "")))
-		return
-	if _follow_path(p, a.path, step):
-		if not _near_storage(1.8):
-			_flash("Склад недосяжний — віднеси вантаж сам.")
-			p.action = null
-		elif storage_cap() - stock_total() <= 0:
-			p.action = null   # full storage: the deposit flash already names the fix
-		# else: standing at the storage — the next deposit tick (dep_cd) unloads the hands
-
-# A node ran dry (or a haul came back to an empty cell): keep working the same kind nearby, or carry
-# what is in hand home when the grove is done. Silent no-op when there is nothing left to do.
-func _continue_gather(cell: int, kind: String) -> void:
-	var next := _nearest_node_of_kind(cell, kind, HAUL_RESUME_RADIUS)
-	if next >= 0:
-		if carry_total() >= int(player.carry_cap):
-			_start_haul(next, kind)
-		else:
-			order_gather(next % n, next / n)
-	elif carry_total() > 0 and kind != "":
-		_start_haul(-1, "")   # the grove is done: deliver the last load and stand by the storage
-
-func _nearest_node_of_kind(cell: int, kind: String, radius: int) -> int:
-	if cell < 0 or kind == "":
-		return -1
-	var cx := cell % n
-	var cy := cell / n
-	var best := -1
-	var bd := radius * radius + 1
-	for k in map.nodes:
-		if String(map.nodes[k].kind) != kind:
-			continue
-		var dx: int = int(k) % n - cx
-		var dy: int = int(k) / n - cy
-		var d := dx * dx + dy * dy
-		if d < bd or (d == bd and int(k) < best):
-			bd = d
-			best = int(k)
-	return best
+# ---------------- auto-haul (gather loop closes itself) lives in sim/haul.gd ----------------
 
 func _nearest_storage() -> Variant:
 	var best: Variant = null
 	var bd := INF
 	for b in buildings:
-		if String(b.kind) != "storage":
+		if not has_storage_cap(String(b.kind)):
 			continue
 		var d := _dist(player.px, player.py, b.x + 0.5, b.y + 0.5)
 		if d < bd:
@@ -1164,7 +1118,10 @@ func _update_crafting(dt: float) -> void:
 			count += 1
 	if count == 0:
 		return
-	craft_timer += dt * count
+	if use_main_capsule:   # spec 0010: кожен верстак — зі своїм бафом місця; таймер лише накопичується (REQ-0010-80)
+		craft_timer += dt * MainCapsule.craft_rate(self)
+	else:
+		craft_timer += dt * count
 	while craft_timer >= 3.5:
 		craft_timer -= 3.5
 		if res_amount("wood") >= 2 and stock_total() < storage_cap():
@@ -1201,8 +1158,23 @@ func _damage_enemy(e, amt: float) -> void:
 func _on_death() -> void:
 	Threats.on_death(self)
 
-func respawn_new_pawn() -> void:
-	Threats.respawn_new_pawn(self)
+func respawn_new_pawn(anchor: Dictionary = {}) -> void:
+	Threats.respawn_new_pawn(self, anchor)   # anchor — MainCapsule.respawn_anchor (лише ON; OFF ігнорує)
+
+# ЧИЄ тіло повертається після смерті — шов spec 0011 (до неї стаб OrbitStub: стартовий пішак); його підміняють 0011 і тести.
+func respawn_source() -> Dictionary:
+	return OrbitStub.respawn_source(self)
+
+# Прокачка Основної капсули: value-data результат (MainCapsule.upgrade); verb/роутер — W4a. cmd_id -1 == без дедуплікації.
+func upgrade_capsule(cmd_id: int = -1) -> Dictionary:
+	return MainCapsule.upgrade(self, cmd_id)
+
+func capsule_level() -> int:
+	return int(main_capsule.get("level", 0))
+
+# Годинник пристрою -> sim: єдиний вхід абсолютного часу (власник Clock — spec 0012). Монотонний: відкат не скорочує таймери.
+func set_clock(ms: int) -> void:
+	now_ms = maxi(now_ms, ms)
 
 # ---------------- capsules & invites (spec 0002) ----------------
 # Bodies live in sim/world_meta.gd (capsule travel + invite envelopes); delegates keep the sim API.

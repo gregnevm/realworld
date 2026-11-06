@@ -24,7 +24,7 @@ jobs:
       - name: Headless suites (leak-gated)
         run: |
           set -o pipefail
-          for suite in run_tests run_kernel_tests run_catalog_tests run_progression_tests run_ui_tests run_determinism_tests run_snapshot_tests run_command_tests run_rejoin_tests run_smoke; do
+          for suite in run_tests run_kernel_tests run_catalog_tests run_progression_tests run_ui_tests run_determinism_tests run_snapshot_tests run_command_tests run_rejoin_tests run_capsule_tests run_realtime_tests run_smoke; do
             echo "=== $suite ==="
             ./godot-bin --headless --path godot -s "res://tests/$suite.gd" 2>&1 | tee suite.log
             ! grep -q "ObjectDB instances were leaked" suite.log
@@ -34,8 +34,10 @@ jobs:
       # nondeterminism (hash seeds, pointer order) has nowhere to hide.
       - name: Cross-process determinism hash
         run: |
-          ./godot-bin --headless --path godot -s res://tests/run_determinism_tests.gd 2>&1 | grep "^WORLD_HASH_FINAL=" > h1.txt
-          ./godot-bin --headless --path godot -s res://tests/run_determinism_tests.gd 2>&1 | grep "^WORLD_HASH_FINAL=" > h2.txt
+          # two lines per process: WORLD_HASH_FINAL (OFF world) and WORLD_HASH_CAPSULE (spec 0010, ON world) — both are diffed
+          ./godot-bin --headless --path godot -s res://tests/run_determinism_tests.gd 2>&1 | grep -E "^WORLD_HASH_(FINAL|CAPSULE)=" > h1.txt
+          ./godot-bin --headless --path godot -s res://tests/run_determinism_tests.gd 2>&1 | grep -E "^WORLD_HASH_(FINAL|CAPSULE)=" > h2.txt
+          test "$(wc -l < h1.txt)" = 2
           diff h1.txt h2.txt && cat h1.txt
       # spec 0006 plan §2 end-to-end: 1 authoritative --headless server + 2 client processes over
       # a real localhost WebSocket, lockstep command echo — world_hash must match on all three.

@@ -166,7 +166,7 @@ static func _linked(s, at: Vector2) -> bool:
 	if not link_unlocked(s):
 		return false
 	for b in s.buildings:
-		if String(b.kind) == "storage" and at.distance_to(Vector2(b.x + 0.5, b.y + 0.5)) <= LINK_REACH:
+		if s.has_storage_cap(String(b.kind)) and at.distance_to(Vector2(b.x + 0.5, b.y + 0.5)) <= LINK_REACH:
 			return true
 	return false
 
@@ -210,7 +210,7 @@ static func near_station(s, station: String) -> bool:
 
 static func building_recipe(s, kind: String) -> Dictionary:
 	var def: Dictionary = s.building_def(kind)
-	if def.is_empty():
+	if def.is_empty() or bool(def.get("landmark", false)):   # landmark (Основна капсула) — не предмет: рецепта нема (REQ-0010-04/06)
 		return {}
 	return {"kind": kind, "cost": def.get("cost", {}), "station": "" if HAND_CRAFT.has(kind) else "workbench",
 		"name": String(def.get("name", kind))}
@@ -227,6 +227,8 @@ static func words(cost: Dictionary) -> String:
 static func craft_building(s, kind: String) -> Dictionary:
 	var rc := building_recipe(s, kind)
 	if rc.is_empty():
+		if bool(s.building_def(kind).get("landmark", false)):   # капсула одна: безкоштовного «мертвого» предмета з нічого не буде
+			return {"ok": false, "reason": &"landmark", "msg": "%s одна." % String(s.building_def(kind).get("name", kind))}
 		return {"ok": false, "msg": "Невідома будівля."}
 	var def: Dictionary = s.building_def(kind)
 	if not s.research_ok(def):
@@ -247,7 +249,7 @@ static func craft_building(s, kind: String) -> Dictionary:
 static func near_storage(s) -> bool:
 	var at := Vector2(s.player.px, s.player.py)
 	for b in s.buildings:
-		if String(b.kind) == "storage" and at.distance_to(Vector2(b.x + 0.5, b.y + 0.5)) <= STASH_REACH:
+		if s.has_storage_cap(String(b.kind)) and at.distance_to(Vector2(b.x + 0.5, b.y + 0.5)) <= STASH_REACH:
 			return true
 	return false
 
@@ -266,6 +268,8 @@ static func stash_all(s) -> Dictionary:
 		if int(sl.n) <= 0:
 			sl.id = ""
 			sl.n = 0
+	if moved == 0 and s.get("use_main_capsule") == true and s.stock_total() >= s.storage_cap():
+		return {"ok": false, "moved": 0, "reason": &"storage_full", "msg": "Склад повний."}   # REQ-0010-77: ON; OFF-рядок нижче не чіпаємо
 	return {"ok": moved > 0, "moved": moved, "msg": ("⇣ Розкладено на склад: %d" % moved) if moved > 0 else "Нема що розкласти."}
 
 static func take_from_storage(s, res: String, n: int) -> Dictionary:

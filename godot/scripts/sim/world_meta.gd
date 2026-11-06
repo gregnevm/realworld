@@ -9,6 +9,7 @@ extends RefCounted
 
 const GameData = preload("res://scripts/data.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
+const MainCapsule = preload("res://scripts/sim/capsule.gd")
 
 # ---------------- capsules & invites (spec 0002) ----------------
 static func grant_daily_capsule(s) -> void:
@@ -31,6 +32,8 @@ static func capsule_can_reach(s, lat: float, lon: float) -> Dictionary:
 
 # Validate + consume a charge. Returns a travel intent for the session (main.travel_to).
 static func try_launch_capsule(s, lat: float, lon: float, place_name: String) -> Dictionary:
+	if s.get("use_main_capsule") == true:   # REQ-0010-41: при ON щоденного запуску нема (запуск = лише OFF)
+		return {"ok": false, "msg": MainCapsule.MSG_NO_TRAVEL}
 	var chk := capsule_can_reach(s, lat, lon)
 	if not chk.ok:
 		return {"ok": false, "msg": chk.msg}
@@ -108,3 +111,19 @@ static func update_convoys(s, dt: float) -> void:
 			s.deposit(c.recv_res, c.recv_amt)
 			s._log("📦 Конвой #%d повернувся: +%d %s." % [c.id, c.recv_amt, GameData.RES[c.recv_res].icon], "good")
 			s.convoys.remove_at(k)
+
+# ---------------- regions list (sim._init_regions) ----------------
+# The home region + the 5 nearest hubs (haversine, > 8 km) with their daily offers: the convoy/logistics world map of one
+# region. Moved here verbatim from sim.gd (its file-size budget): a pure function of the map, no building is touched.
+static func init_regions(s) -> void:
+	var home := {"name": s.map.get("place_name", "Поселення"), "lat": s.map.lat, "lon": s.map.lon, "home": true}
+	var ranked := []
+	for hb in GameData.HUBS:
+		var d := WorldGen.haversine_km(home.lat, home.lon, hb.lat, hb.lon)
+		if d > 8:
+			ranked.append({"name": hb.name, "lat": hb.lat, "lon": hb.lon, "d": d})
+	ranked.sort_custom(func(a, b): return a.d < b.d)
+	s.regions = [home]
+	for i in range(min(5, ranked.size())):
+		var hb: Dictionary = ranked[i]
+		s.regions.append({"name": hb.name, "lat": hb.lat, "lon": hb.lon, "d": hb.d, "offer": GameData.OFFERS[i % GameData.OFFERS.size()]})
