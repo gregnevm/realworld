@@ -1,6 +1,6 @@
 # RealWorld — sim/orbit_stub.gd : STUBS of the spec 0011 (Орбіта) seams that spec 0010 consumes (0010-W1b, D2).
 #
-# Spec 0011 (Orbit: roster of clones, safe stock) is frozen for step 1 (OD-60): only the SEAMS exist, and they live
+# Spec 0011 (Orbit: roster of clones, safe stock) is frozen for step 1 (OD-106): only the SEAMS exist, and they live
 # in this file — NOT in sim/capsule.gd — so that 0011, when it lands, replaces THIS file's bodies and never edits the
 # capsule domain. Static funcs over the sim instance `s`, no state, no preload of sim.gd (no cycle).
 #

@@ -1319,10 +1319,10 @@ func _siege(start_kind: String) -> Dictionary:
 func _t_no_eternal_siege() -> void:
 	for kind in ["timer", "director_apply"]:
 		var r: Dictionary = _siege(String(kind))
-		# OD-58 (owner, decided): «перший NPC-рейд — лише після першої прокачки (є що втрачати)». Until W2a no upgrade exists, so
+		# OD-107 (owner, decided): «перший NPC-рейд — лише після першої прокачки (є що втрачати)». Until W2a no upgrade exists, so
 		# a level-0 capsule must see NO raid wave at all — however the director's raid is triggered.
-		ok(int(r.level) == 0, "OD-58 [%s] setup: the capsule is still level 0 (no upgrade exists in this wave)" % String(kind))
-		ok(int(r.peak) == 0 and not bool(r.ever_active), "OD-58/REQ-0010-65 [%s]: a level-0 capsule is never raided — the first NPC raid waits for the first upgrade (peak raiders alive %d, raid ever active=%s)" % [String(kind), int(r.peak), str(r.ever_active)])
+		ok(int(r.level) == 0, "OD-107 [%s] setup: the capsule is still level 0 (no upgrade exists in this wave)" % String(kind))
+		ok(int(r.peak) == 0 and not bool(r.ever_active), "OD-107/REQ-0010-65 [%s]: a level-0 capsule is never raided — the first NPC raid waits for the first upgrade (peak raiders alive %d, raid ever active=%s)" % [String(kind), int(r.peak), str(r.ever_active)])
 		ok(bool(r.intact), "REQ-0010-75 [%s]: the capsule survives 300 s of a forced raid" % String(kind))
 		ok(bool(r.stock_same), "REQ-0010-77 [%s]: ... and the raid takes nothing from the stock (no level drop / theft until П2 decides otherwise)" % String(kind))
 		ok(not bool(r.active), "D8/critique-0010 #2 [%s]: after 300 s of sim the raid is over — it is not an endless siege (active=%s, %d raiders still alive, %d idling within 2 cells of the capsule, banner «%s»)" % [String(kind), str(r.active), int(r.enemies), int(r.near), String(r.banner)])
@@ -1331,13 +1331,13 @@ func _t_no_eternal_siege() -> void:
 # ---------------------------------------------------------------------------------------------
 # W1a closeout (integrity blocker, F3): three guards of the indestructible capsule had NO test that could fail — deleting
 # any of them left the suite green. Each test below has an OFF control (the probe must be able to SEE the thing the guard
-# suppresses) and was checked against the guard's removal on a scratch copy of the tree. Expectations come from OD-58
+# suppresses) and was checked against the guard's removal on a scratch copy of the tree. Expectations come from OD-107
 # («перший NPC-рейд — лише після першої прокачки»; no upgrade exists in W1, so every capsule is level 0), REQ-0010-65
 # (level 0 is never raided), REQ-0010-34 (the flag does not shift the threat stream), D4/D8 (no signal without a cause),
 # REQ-0010-04/75 (the capsule is one and is never wiped by a region swap) — not from the guards' bodies.
 # ---------------------------------------------------------------------------------------------
 # The patrol channel. A patrol robot is a machine that marches on base_center() = the capsule; at level 0 that is a machine
-# raid on a capsule that cannot be hurt (critique-0010 #2: an endless siege), and OD-58 gives level 0 no NPC raid at all.
+# raid on a capsule that cannot be hurt (critique-0010 #2: an endless siege), and OD-107 gives level 0 no NPC raid at all.
 # `_quiet` parks patrol.next at 1e9, so no other test ever sees a patrol: here its roll falls due on the first tick.
 func _patrol_probe(capsule: bool) -> Dictionary:
 	var s: Variant = _sim_with(_pad_map(PAD_N, Vector2i(8, 8)), true, true, capsule)
@@ -1365,16 +1365,16 @@ func _t_on_patrol_not_spawned() -> void:
 	var off: Dictionary = _patrol_probe(false)
 	var rolled: bool = float(off.next) > 0.0 and float(off.next) < 1.0e9
 	ok(int(off.bots_peak) >= 1 and int(off.wave) >= 1 and rolled,
-		"OD-58 control (OFF): the same 600 ticks DO bring a patrol and re-arm its roll — the probe can see one (bots peak %d, wave %d, next=%s)" % [int(off.bots_peak), int(off.wave), str(off.next)])
+		"OD-107 control (OFF): the same 600 ticks DO bring a patrol and re-arm its roll — the probe can see one (bots peak %d, wave %d, next=%s)" % [int(off.bots_peak), int(off.wave), str(off.next)])
 	var on: Dictionary = _patrol_probe(true)
 	ok(int(on.bots_peak) == 0 and int(on.wave) == 0 and int(on.enemies) == 0,
-		"OD-58/REQ-0010-65/critique-0010 #2: at ON no patrol robot ever enters a level-0 capsule's region (bots peak %d, wave %d, enemies %d)" % [int(on.bots_peak), int(on.wave), int(on.enemies)])
+		"OD-107/REQ-0010-65/critique-0010 #2: at ON no patrol robot ever enters a level-0 capsule's region (bots peak %d, wave %d, enemies %d)" % [int(on.bots_peak), int(on.wave), int(on.enemies)])
 	ok(is_equal_approx(float(on.next), float(off.next)),
 		"REQ-0010-34: ... yet the seeded roll still happened, with the SAME value as at OFF — the threat stream does not fork on the flag (ON next=%s, OFF next=%s)" % [str(on.next), str(off.next)])
 
 
 # The director channel. D8 «немає субстрату — нема ефекту: payload скидається, не імітується»: at ON a raid incident has no
-# raider to bring (OD-58), so it must not arm the alarm either — a «НАБЛИЖАЄТЬСЯ РЕЙД» banner with no raid behind it is a
+# raider to bring (OD-107), so it must not arm the alarm either — a «НАБЛИЖАЄТЬСЯ РЕЙД» banner with no raid behind it is a
 # false signal (D4/D8, REQ-0010-19 «найгучніший сигнал відповідає цьому рейду») that nothing would ever retire.
 func _director_probe(capsule: bool) -> Dictionary:
 	var s: Variant = _sim_with(_pad_map(PAD_N, Vector2i(8, 8)), true, true, capsule)
@@ -2549,7 +2549,7 @@ func _t_no_wallclock_alias_proof() -> void:
 
 # =============================================================================================
 # WAVE 0010-W2a — helpers (the capsule_levels table, upgrade_capsule, the invested ledger)
-# Expectations come from REQ-0010-11/12/13/14/17/35/76/79/82/88/91/97 and OD-58/59, NOT from capsule.gd: the data oracle is the
+# Expectations come from REQ-0010-11/12/13/14/17/35/76/79/82/88/91/97 and OD-107/59, NOT from capsule.gd: the data oracle is the
 # catalog FILE read here independently (never through MainCapsule.table), the resource accounting is measured around the call
 # (backpack + stock before/after), and the zone test uses the metric the data names. A red test here is a finding.
 # =============================================================================================
@@ -2713,7 +2713,7 @@ func _t_levels_table_data() -> void:
 	for i in rows.size():
 		contiguous = contiguous and int((rows[i] as Dictionary).get("level", -1)) == i
 	ok(contiguous, "REQ-0010-11: the rows are levels 0,1,..,5 in order (no gap, no duplicate)")
-	ok(["proposed", "approved"].has(String(t.get("status", ""))), "OD-59/60: the numbers carry an explicit status ('proposed' until the owner approves) — '%s'" % String(t.get("status", "")))
+	ok(["proposed", "approved"].has(String(t.get("status", ""))), "OD-108/60: the numbers carry an explicit status ('proposed' until the owner approves) — '%s'" % String(t.get("status", "")))
 	ok(String(t.get("metric", "")) == "chebyshev", "REQ-0010-80: the zone metric is named in the data (this suite's zone oracle needs it) — '%s'" % String(t.get("metric", "")))
 	# data -> code: every number the code reports is the file's number
 	var s: Variant = _on_pad()

@@ -84,7 +84,7 @@ static func apply(s, payload: Dictionary) -> void:
 	if not LIVE_INCIDENTS.has(kind):
 		return   # no live substrate yet (fauna/quests) — dropped, not faked
 	if kind == "raid" and MainCapsule.holds_npc_threats(s):
-		return   # ON (spec 0010 OD-58/D8): рейд на неруйнівну капсулу не може ні вдатись, ні скінчитись — dropped до W3
+		return   # ON (spec 0010 OD-107/D8): рейд на неруйнівну капсулу не може ні вдатись, ні скінчитись — dropped до W3
 	match kind:
 		"raid":
 			_apply_raid(s, payload)

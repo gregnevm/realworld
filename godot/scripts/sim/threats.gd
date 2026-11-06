@@ -19,7 +19,7 @@ const MainCapsule = preload("res://scripts/sim/capsule.gd")
 # ---------------- raids ----------------
 static func update_raids(s, dt: float) -> void:
 	if MainCapsule.holds_npc_threats(s):
-		return   # ON (spec 0010 OD-58/D8): легасі-цикл рейду не армується — вічна облога неруйнівної капсули (до W3)
+		return   # ON (spec 0010 OD-107/D8): легасі-цикл рейду не армується — вічна облога неруйнівної капсули (до W3)
 	var r: Dictionary = s.raid
 	if r.active:
 		# рейд завершено, коли не лишилось РЕЙДЕРІВ: патрульний робот (kind "bot") живе в тому ж

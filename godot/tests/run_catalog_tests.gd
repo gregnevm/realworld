@@ -266,7 +266,7 @@ func _t_data_bridge() -> void:
 
 
 # --- 11. spec 0010 (Основна капсула): the ONE capsule_levels table — mirrors tests/catalog.test.js one-for-one -----------------------
-# The numbers are DATA, PROPOSED by godot/tests/run_capsule_balance.gd (OD-58/59) and approved by the owner at merge: these tests prove the
+# The numbers are DATA, PROPOSED by godot/tests/run_capsule_balance.gd (OD-107/59) and approved by the owner at merge: these tests prove the
 # SHAPE (continuous levels 0..5, known/reachable price ids that the backpack AND the stock both speak, monotone radius/defence, strictly
 # growing price, buffs from the closed MainCapsule.BUFF_KEYS and none on body needs, one axis, no clone entries) and that the code holds
 # no copy of the table's numbers. The JS side pins the same shape without Godot; this side pins the ids against the REAL data_bridge /
@@ -359,13 +359,13 @@ func _t_capsule_levels_data() -> void:
 	var blob: String = JSON.stringify(t.duplicate(true).merged({"note": ""}, true))
 	var clones: RegEx = RegEx.create_from_string("(?i)clone|roster|genome|orbit|implant|axis|axes")
 	ok(clones.search(blob) == null, "REQ-0010-17/97: no clone-roster, orbit or separate-axis entry anywhere in capsule_levels")
-	# the raid block: decided numbers + a monotone raider ladder; non-delegated numbers are ABSENT (OD-58)
+	# the raid block: decided numbers + a monotone raider ladder; non-delegated numbers are ABSENT (OD-107)
 	var raid: Dictionary = t.get("raid", {})
 	var rk2: Array = raid.keys()
 	rk2.sort()
 	var rw2: Array = CAPSULE_RAID_KEYS.duplicate()
 	rw2.sort()
-	ok(rk2 == rw2, "raid block: grace/min-gap/queue/frequency/rounding are absent until the owner decides (OD-58): %s" % str(rk2))
+	ok(rk2 == rw2, "raid block: grace/min-gap/queue/frequency/rounding are absent until the owner decides (OD-107): %s" % str(rk2))
 	ok(int(raid.get("immunity_ms", 0)) == 86400000 and int(raid.get("take_percent", 0)) == 50, "OD-24/58: immunity 86 400 000 ms and 50% are the owner's numbers")
 	var decided: Array = (raid.get("decided", []) as Array).duplicate()
 	decided.sort()
@@ -373,7 +373,7 @@ func _t_capsule_levels_data() -> void:
 	ok(float(raid.get("warning_s", 0.0)) > 0.0, "raid.warning_s is a positive interval")
 	var by_level: Dictionary = raid.get("by_level", {})
 	var bl_keys: Array = by_level.keys()
-	ok(bl_keys == ["1", "2", "3", "4", "5"], "raid.by_level covers levels 1..5 (level 0 is never raided, OD-58)")
+	ok(bl_keys == ["1", "2", "3", "4", "5"], "raid.by_level covers levels 1..5 (level 0 is never raided, OD-107)")
 	var bl_ok: bool = true
 	var prev_r: Dictionary = {"count": 0, "day_equiv": 0, "t_open_s": 0}
 	for lvl in ["1", "2", "3", "4", "5"]:

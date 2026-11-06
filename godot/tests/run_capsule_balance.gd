@@ -1,6 +1,6 @@
 # RealWorld — tests/run_capsule_balance.gd : the ECONOMY BOT of spec 0010 (informational, NOT a CI gate — like run_perf).
 #
-# OD-58/59 delegate to the agent only a PROPOSAL of the capsule numbers (cost / radius / buffs / raider strength /
+# OD-107/59 delegate to the agent only a PROPOSAL of the capsule numbers (cost / radius / buffs / raider strength /
 # core HP), with the method written down and the owner approving at merge. This bot is that method, executable:
 #   1. INCOME + SUPPLY — a deterministic gather bot (nearest tree / rock / scrap node, use_inventory + use_catalog + use_main_capsule ON,
 #      600 sim-s, stash trips to the capsule when the pack is full) on the 5 SPAWN_PRESETS, for two equipment tiers (bare hands; tier-1

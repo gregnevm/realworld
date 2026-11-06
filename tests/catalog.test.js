@@ -354,7 +354,7 @@ test("catalog: live-tier closure reaches the steel + bread + beer chains (pinned
 
 // ---- spec 0010 (Основна капсула) §5.1/REQ-0010-11/12/16/17/79/91/97: the ONE capsule_levels table ----------------------------
 // All the capsule numbers are DATA (godot/content/catalog.json -> capsule_levels), PROPOSED by the economy bot
-// (godot/tests/run_capsule_balance.gd, OD-58/59) and approved by the owner at merge; the code holds none of them. This validator
+// (godot/tests/run_capsule_balance.gd, OD-107/59) and approved by the owner at merge; the code holds none of them. This validator
 // proves the table's SHAPE, not its values: continuous levels 0..5, known/reachable price ids, monotone radius and defence,
 // strictly growing price, buffs from a CLOSED vocabulary with no body-needs buff, one axis, no clone-roster entries.
 // godot/tests/run_catalog_tests.gd mirrors every check against the same file (and pins the identity of the ids vs data_bridge.gd).
@@ -373,7 +373,7 @@ function capsuleTable() {
 }
 const totalUnits = (cost) => Object.values(cost).reduce((a, b) => a + b, 0);
 
-test("capsule_levels: closed schema, version 1, still PROPOSED until the owner approves (OD-58/59)", () => {
+test("capsule_levels: closed schema, version 1, still PROPOSED until the owner approves (OD-107/59)", () => {
   const t = capsuleTable();
   assert.deepStrictEqual(Object.keys(t).sort(), [...CAPSULE_TOP_KEYS].sort(), "no key outside the schema: a second axis / clone table has nowhere to hide (REQ-0010-17/97)");
   assert.strictEqual(t.version, 1);
@@ -414,7 +414,7 @@ test("capsule_levels: radius and defence never shrink, the price strictly grows,
   const { levels } = capsuleTable();
   for (let i = 0; i < levels.length; i++) {
     assert.ok(Number.isInteger(levels[i].radius) && levels[i].radius > 0, `level ${i}: radius is a positive integer`);
-    assert.ok(typeof levels[i].core_hp === "number" && levels[i].core_hp > 0, `level ${i}: core_hp > 0 (the ONE defence parameter, OD-59)`);
+    assert.ok(typeof levels[i].core_hp === "number" && levels[i].core_hp > 0, `level ${i}: core_hp > 0 (the ONE defence parameter, OD-108)`);
     if (i === 0) continue;
     assert.ok(levels[i].radius >= levels[i - 1].radius, `radius(${i}) >= radius(${i - 1})`);
     assert.ok(levels[i].core_hp >= levels[i - 1].core_hp, `core_hp(${i}) >= core_hp(${i - 1})`);
@@ -426,7 +426,7 @@ test("capsule_levels: radius and defence never shrink, the price strictly grows,
   assert.ok(levels[levels.length - 1].radius <= Math.floor(CAPSULE_MAP_N / 4), "the top zone stays under a quarter of the map side");
 });
 
-test("capsule_levels: buffs are a CLOSED vocabulary of multipliers, none touches a body need (REQ-0010-79, OD-59)", () => {
+test("capsule_levels: buffs are a CLOSED vocabulary of multipliers, none touches a body need (REQ-0010-79, OD-108)", () => {
   const { levels } = capsuleTable();
   const NEEDS = /hunger|cold|sleep|rest|thirst|food|need|temp|warm|health|hp/i;
   for (const row of levels) {
@@ -457,12 +457,12 @@ test("capsule_levels: one axis and no clone-roster entries anywhere in the table
 test("capsule_levels: the raid block carries the decided numbers and a monotone raider ladder (OD-24/58)", () => {
   const { raid } = capsuleTable();
   assert.deepStrictEqual(Object.keys(raid).sort(), [...CAPSULE_RAID_KEYS].sort(),
-    "grace/min-gap/queue/frequency/rounding are NOT delegated to the agent (OD-58): they are absent until the owner decides");
+    "grace/min-gap/queue/frequency/rounding are NOT delegated to the agent (OD-107): they are absent until the owner decides");
   assert.strictEqual(raid.immunity_ms, 86400000, "24 h in UTC ms (OD-24)");
-  assert.strictEqual(raid.take_percent, 50, "50% of invested[L] is destroyed (OD-58)");
+  assert.strictEqual(raid.take_percent, 50, "50% of invested[L] is destroyed (OD-107)");
   assert.deepStrictEqual([...raid.decided].sort(), ["immunity_ms", "take_percent"], "only these two are owner-decided; the rest is proposed");
   assert.ok(typeof raid.warning_s === "number" && raid.warning_s > 0, "a positive warning interval");
-  assert.deepStrictEqual(Object.keys(raid.by_level), ["1", "2", "3", "4", "5"], "a raider for every upgradable level; level 0 is never raided (OD-58)");
+  assert.deepStrictEqual(Object.keys(raid.by_level), ["1", "2", "3", "4", "5"], "a raider for every upgradable level; level 0 is never raided (OD-107)");
   let prev = { count: 0, day_equiv: 0, t_open_s: 0 };
   for (const lvl of ["1", "2", "3", "4", "5"]) {
     const r = raid.by_level[lvl];
