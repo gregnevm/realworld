@@ -4,6 +4,7 @@ extends Node2D
 const WorldGen = preload("res://scripts/world_gen.gd")
 const GameData = preload("res://scripts/data.gd")
 const InventoryMod = preload("res://scripts/sim/inventory.gd")
+const MainCapsule = preload("res://scripts/sim/capsule.gd")   # лише читання рівнів/імунітету для знаків на корпусі
 const ViewGeom = preload("res://scripts/ui/view_geom.gd")
 const TILE := ViewGeom.TILE
 
@@ -299,6 +300,9 @@ func _draw() -> void:
 		_draw_node(sim.map.nodes[key], nx, ny)
 	for b in sim.buildings:
 		_draw_building(b)
+	for b in sim.buildings:   # hull marks go LAST: a neighbour's sprite reaches over the capsule's top edge and would hide the lamps
+		if String(b.kind) == MainCapsule.KIND:
+			_draw_capsule_marks(Vector2(b.x * TILE, b.y * TILE), Vector2(b.x * TILE, b.y * TILE) + Vector2(TILE, TILE) * 0.5)
 	# order feedback: a marching dotted path to the target + a pulsing ring on it (RTS/colony-sim grammar —
 	# the player always sees WHERE the pawn is going and that the click registered)
 	if sim.player.action != null and sim.player.action.has("cell") and int(sim.player.action.cell) >= 0:
@@ -463,6 +467,38 @@ func _draw_building(b) -> void:
 		draw_rect(Rect2(p.x + 2, p.y - 2, TILE - 4, 3), Color(0, 0, 0, 0.5))
 		var bc := Color.html("5fd38a") if fr > 0.5 else (Color.html("ffcf5c") if fr > 0.25 else Color.html("ff6b6b"))
 		draw_rect(Rect2(p.x + 2, p.y - 2, (TILE - 4) * fr, 3), bc)
+
+# Основна капсула, greybox (spec 0010 REQ-0010-87; арт — лише після G0–G1, P4): три РІЗНІ знаки різної ФОРМИ (R11: не лише колір).
+# Рівень капсули 0..5 — ряд кружків-вогнів над корпусом (горить стільки, який рівень; решта — порожні контури); рівень захисту 0..5 —
+# ряд квадратних пластин під корпусом; тимчасовий щит імунітету — суцільна бульба навколо. Шість станів кожної осі читаються за ЧИСЛОМ знаків.
+func _draw_capsule_marks(p: Vector2, c: Vector2) -> void:
+	var cap: Dictionary = sim.main_capsule
+	var lvl: int = int(cap.get("level", 0))
+	var prot: int = int(cap.get("protection", 0))
+	var lamp_n: int = maxi(1, MainCapsule.max_level(sim))
+	var plate_n: int = maxi(1, MainCapsule.max_protection(sim))
+	var step := 5.2
+	var amber := Color(0.88, 0.69, 0.44, 1.0)
+	var steel := Color(0.53, 0.82, 0.84, 1.0)
+	var empty := Color(0.78, 0.83, 0.86, 0.45)
+	var x0: float = c.x - step * float(lamp_n - 1) * 0.5
+	for i in lamp_n:
+		var at := Vector2(x0 + step * float(i), p.y - 4.0)
+		if i < lvl:
+			draw_circle(at, 3.2, Color(amber.r, amber.g, amber.b, 0.28))
+			draw_circle(at, 2.0, amber)
+		else:
+			draw_arc(at, 1.9, 0.0, TAU, 12, empty, 1.0)
+	var px0: float = c.x - step * float(plate_n - 1) * 0.5
+	for i in plate_n:
+		var r := Rect2(px0 + step * float(i) - 1.9, p.y + TILE + 1.5, 3.8, 3.8)
+		if i < prot:
+			draw_rect(r, steel)
+		else:
+			draw_rect(r, empty, false, 1.0)
+	if MainCapsule.is_immune(sim):
+		draw_circle(c, TILE * 0.80, Color(steel.r, steel.g, steel.b, 0.12))
+		draw_arc(c, TILE * 0.80, 0.0, TAU, 32, Color(steel.r, steel.g, steel.b, 0.85), 2.0)
 
 func _draw_raider(e, idx: int = 0) -> void:
 	var c := Vector2(e.px * TILE, e.py * TILE)

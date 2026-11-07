@@ -53,7 +53,7 @@ static func snapshot(session, world: Dictionary, ctx: Dictionary, balance) -> Di
 		"catalog":   _catalog_slice(sim),
 		"gear":      _gear_slice(sim),
 		"logistics": _logistics_slice(sim),
-		"capsule":   _capsule_slice(sim),
+		"capsule":   _capsule_slice(sim, ctx),
 		"social_info": _social_slice(sim),
 	}
 
@@ -117,7 +117,7 @@ static func _logistics_slice(sim) -> Dictionary:
 	return {"hubs": hubs, "convoys": convoys}
 
 # --- capsule / invites (spec 0002 drop pods; the shareable-address travel loop) ---
-static func _capsule_slice(sim) -> Dictionary:
+static func _capsule_slice(sim, ctx: Dictionary = {}) -> Dictionary:
 	var caps: Variant = sim.get("capsule")
 	var live_invites: Variant = sim.get("invites")
 	if caps == null or live_invites == null:
@@ -132,11 +132,50 @@ static func _capsule_slice(sim) -> Dictionary:
 			"lat": float(inv.get("lat", 0.0)),
 			"lon": float(inv.get("lon", 0.0)),
 		})
-	return {
+	var out: Dictionary = {
 		"charges": int((caps as Dictionary).get("charges", 0)),
 		"radius_km": int((caps as Dictionary).get("radius_km", 0)),
 		"invites": invites,
 	}
+	if sim.get("use_main_capsule") == true and not (sim.get("main_capsule") as Dictionary).is_empty():
+		out["main"] = _capsule_main(sim, ctx)   # ключ ЛИШЕ при ON: OFF-слайс і панель — байт-у-байт як до спеки 0010
+	return out
+
+# Основна капсула (spec 0010 W4a): рівні обох осей, дії за станами (REQ-0010-86), ціна/перша причина відмови словами (REQ-0010-38),
+# кільце зони (REQ-0010-16: показується лише при вибраній капсулі — відкрита її панель — або при попередженні/контакті рейду) і склад.
+# Лише value-data (R8): жодного живого посилання на sim; тексти — Fmt (R10), числа — з модуля капсули (R5).
+const CAPSULE_STORAGE_ROWS := 6
+static func _capsule_main(sim, ctx: Dictionary) -> Dictionary:
+	var cap: Dictionary = sim.main_capsule
+	var actions: Array = []
+	for a in MainCapsule.actions(sim):
+		actions.append(a)
+	var raid_state: StringName = StringName(String((sim.get("capsule_raid") as Dictionary).get("state", "none")))
+	var selected: bool = (ctx.get("open_panels", []) as Array).has("capsule_bay")
+	var alert: bool = raid_state == MainCapsule.ST_WARNING or raid_state == MainCapsule.ST_CONTACT
+	var at: Vector2i = MainCapsule.tile(sim)
+	var stock_rows: Array = []
+	var keys: Array = (sim.stock as Dictionary).keys()
+	keys.sort()
+	for k in keys:
+		var n: int = int(sim.stock[k])
+		if n > 0 and stock_rows.size() < CAPSULE_STORAGE_ROWS:
+			stock_rows.append({"res": String(k), "n": n, "label": "%s %s" % [CatalogDefs.res_icon(String(k)).strip_edges(), CatalogDefs.res_label(String(k))]})
+	return {
+		"active": true,
+		"level": int(cap.get("level", 0)), "max": MainCapsule.max_level(sim),
+		"protection": MainCapsule.protection_of(sim), "max_protection": MainCapsule.max_protection(sim),
+		"actions": actions,
+		"upgrade": _capsule_axis(MainCapsule.quote(sim, &"capsule")),
+		"protect": _capsule_axis(MainCapsule.quote(sim, &"protection")),
+		"immune_left_ms": MainCapsule.immune_left_ms(sim),
+		"raid_state": raid_state,
+		"ring": {"show": selected or alert, "alert": alert, "x": at.x, "y": at.y, "radius": MainCapsule.zone_radius(sim)},
+		"storage": stock_rows,
+	}
+
+static func _capsule_axis(q: Dictionary) -> Dictionary:
+	return {"next": int(q.next), "can": bool(q.can), "cost": Fmt.cost_words(q.cost), "why": Fmt.capsule_shortfall(q.missing, bool(q.far))}
 
 # --- social (read view over the clan/alliance/empire graph + friends geography, spec 0002) ---
 static func _social_slice(sim) -> Dictionary:
@@ -648,6 +687,9 @@ static func _inspect_remove(sim, cell: int) -> Dictionary:
 			"hint": "торкнись своєї будівлі · ✖ — сховати інструмент"}
 	var b: Dictionary = sim.bgrid[cell]
 	var def: Dictionary = sim.building_def(String(b.kind))
+	if bool(def.get("indestructible", false)):   # капсула: ніколи не розбирається (REQ-0010-06/75) — підказка каже це, а не «назад: нічого»
+		return {"shown": true, "state": &"crit", "title": "🗑 Розібрати: %s" % String(def.get("name", "")),
+			"lines": ["не розбирається"], "hint": "✖ — сховати інструмент"}
 	var back: Dictionary = {}
 	for k in def.get("cost", {}):
 		var half: int = int(def.cost[k]) / 2
@@ -695,9 +737,19 @@ static func _inspect_node(sim, node: Dictionary, t: Vector2i) -> Dictionary:
 	return {"shown": true, "state": &"good", "title": Fmt.node_title(kind), "lines": lines,
 		"hint": "ЛКМ — %s · повну торбу пішак сам віднесе на склад" % Fmt.node_verb(kind)}
 
+static func _inspect_capsule(sim) -> Dictionary:
+	var lines: Array = ["◎ рівень %d/%d · 🛡 захист %d/%d" % [int(sim.main_capsule.get("level", 0)), MainCapsule.max_level(sim),
+		MainCapsule.protection_of(sim), MainCapsule.max_protection(sim)]]
+	if MainCapsule.is_immune(sim):
+		lines.append("🛡 імунітет ще %s" % Fmt.left_ms(MainCapsule.immune_left_ms(sim)))
+	return {"shown": true, "state": &"info", "title": String(sim.building_def(MainCapsule.KIND).get("name", "")), "lines": lines,
+		"hint": "ЛКМ — панель капсули"}
+
 static func _inspect_building(sim, b: Dictionary) -> Dictionary:
 	var kind := String(b.kind)
 	var def: Dictionary = sim.building_def(kind)
+	if kind == MainCapsule.KIND and sim.get("use_main_capsule") == true and not (sim.get("main_capsule") as Dictionary).is_empty():
+		return _inspect_capsule(sim)
 	var title: String = String(def.get("name", CatalogDefs.building_label(kind)))
 	var lines: Array = ["❤ %d/%d" % [int(ceil(float(b.hp))), int(float(def.get("hp", 50.0)))]]
 	var blurb := Fmt.building_blurb(kind, def, int(SimScript.EMITTER_RADIUS))

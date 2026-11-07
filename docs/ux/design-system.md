@@ -63,6 +63,11 @@ Panel header `h2`: 13px Oswald (display face), `letter-spacing:.11em`, uppercase
 ├ ACTION BAR ───┴── [1..9 build/craft palette] ── [event feed ▸ toasts / scrolling log] ──────┤
 ```
 
+**Бюджет постійних елементів (P9, REQ-0010-90).** Ліміт: 16 постійних елементів телефонного HUD (`.claude/skills/gamedev` §4). Постійний = панель, відкрита
+від старту (`default_open`, на телефоні — `compact_open` 1 або -1 за `default_open`). Зараз їх 5 (top_bar, vitals, stock, build_bar, goals) і однакова кількість
+при OFF/ON Основної капсули: її панель `capsule_bay` відкривається тапом по самій капсулі (`default_open=false`, `compact_open=0`) — не постійний елемент;
+кільце зони — маркер світу без хоткея, що з'являється лише при виборі капсули або попередженні про рейд. Перевіряє `run_ui_tests` (`_t_capsule_budget`).
+
 **Dock rule:** a new mechanic gets a home BY SYSTEM, not by novelty. Hero-body → Left dock. World/economy/threat
 → Right dock. Anything spatial (a grid state) → a **world overlay**, never a panel of coordinates.
 

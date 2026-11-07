@@ -5,6 +5,8 @@
 # at one site (R11), so the snapshot never carries a pre-baked "☀ день" string.
 extends RefCounted
 
+const CatalogDefs = preload("res://scripts/catalog_defs.gd")
+
 # --- clock ---
 static func hhmm(frac: float) -> String:
 	var mins: int = int(frac * 24.0 * 60.0)
@@ -215,3 +217,34 @@ static func touchify(text: String) -> String:
 	for pair in TOUCH_WORDS:
 		out = out.replace(String(pair[0]), String(pair[1]))
 	return out
+
+# --- Основна капсула (spec 0010): нестача/ціна СЛОВАМИ — «🪵 деревина ×8» (іконка + назва + число: колір не єдиний носій, R11) ---
+static func res_words(res: String, n: int) -> String:
+	return "%s %s ×%d" % [CatalogDefs.res_icon(res).strip_edges(), CatalogDefs.res_label(res).to_lower(), n]
+
+static func cost_words(cost: Dictionary) -> String:
+	var parts: Array = []
+	var keys: Array = cost.keys()
+	keys.sort()
+	for k in keys:
+		parts.append(res_words(String(k), int(cost[k])))
+	return " · ".join(parts)
+
+# ПЕРША причина відмови прокачки (REQ-0010-38): перший ключ нестачі за алфавітом; `far` — склад покрив би, та герой поза зоною.
+static func capsule_shortfall(missing: Dictionary, far: bool) -> String:
+	if missing.is_empty():
+		return ""
+	var keys: Array = missing.keys()
+	keys.sort()
+	var first: String = String(keys[0])
+	var text: String = "Бракує: " + res_words(first, int(missing[first]))
+	if far:
+		text += " · підійди до капсули: склад діє в її зоні"
+	return text
+
+# Імунітет у годинах/хвилинах: «5 год 30 хв» / «40 хв» (мс UTC-годинника, округлення вгору до хвилини).
+static func left_ms(ms: int) -> String:
+	var mins: int = int(ceil(float(maxi(0, ms)) / 60000.0))
+	if mins >= 60:
+		return "%d год %d хв" % [mins / 60, mins % 60]
+	return "%d хв" % mins

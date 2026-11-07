@@ -60,6 +60,33 @@ class NightShade extends OverlayBase.Overlay:
 					run_a = a
 					run_w = warm
 
+# ---- Зона Основної капсули (spec 0010 REQ-0010-16): ALWAYS-ON маркер без хоткея (патерн NightShade, не в реєстрі). Показується ЛИШЕ коли капсулу
+# вибрано (її панель відкрита) або надійшло попередження/контакт рейду — slice вирішує (snap.capsule.main.ring.show), оверлей лише малює.
+# Метрика зони — Чебишов (дані), тож «кільце» — квадрат (2r+1) клітинок навколо капсули: правда про те, що саме діє, а не коло з іншою площею.
+# Попередження — інший колір І товща лінія + кутові «засічки» (R11: не лише колір). ----
+class CapsuleRing extends OverlayBase.Overlay:
+	func _init() -> void:
+		overlay_id = &"capsule_ring"
+		radio = false
+	func draw_overlay(host: CanvasItem, snap: Dictionary, _cull: Dictionary) -> void:
+		var main: Dictionary = (snap.get("capsule", {}) as Dictionary).get("main", {})
+		var ring: Dictionary = main.get("ring", {})
+		if not bool(ring.get("show", false)):
+			return
+		var r: int = int(ring.get("radius", 0))
+		var alert: bool = bool(ring.get("alert", false))
+		var col: Color = Tokens.CRIT if alert else Tokens.TEAL
+		var area := Rect2((int(ring.x) - r) * TILE, (int(ring.y) - r) * TILE, (2 * r + 1) * TILE, (2 * r + 1) * TILE)
+		host.draw_rect(area, Tokens.with_alpha(col, 0.07))
+		host.draw_rect(area, Tokens.with_alpha(col, 0.85), false, 3.0 if alert else 2.0)
+		var tick: float = TILE * 0.5
+		for corner in [Vector2(area.position.x, area.position.y), Vector2(area.end.x, area.position.y),
+				Vector2(area.position.x, area.end.y), Vector2(area.end.x, area.end.y)]:
+			var sx: float = 1.0 if corner.x <= area.position.x else -1.0
+			var sy: float = 1.0 if corner.y <= area.position.y else -1.0
+			host.draw_line(corner, corner + Vector2(tick * sx, 0.0), Tokens.with_alpha(col, 1.0), 4.0)
+			host.draw_line(corner, corner + Vector2(0.0, tick * sy), Tokens.with_alpha(col, 1.0), 4.0)
+
 # Shared light math (sim.light_at parity: Manhattan distance, linear falloff to the source radius).
 class Lit extends RefCounted:
 	static func tile_light(ambient: float, sources: Array, x: int, y: int) -> float:

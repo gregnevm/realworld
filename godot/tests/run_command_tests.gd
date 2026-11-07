@@ -44,6 +44,14 @@ func _t_validation() -> void:
 	ok(_reason({"c": 1, "v": "order_move"}) == Command.R_SHAPE, "envelope missing seq refused")
 	ok(_reason(Command.make(1, -3, "cancel_action", {})) == Command.R_SHAPE, "negative seq refused")
 	ok(bool(Command.validate(Command.make(1, 0, "cancel_action", {}), CTX).ok), "a no-arg verb validates with an empty arg set")
+	# spec 0010 REQ-0010-36: both capsule axes are wire verbs without arguments; a client cannot smuggle a price, a level or a cmd id through
+	for v in ["capsule_upgrade", "capsule_protect"]:
+		ok(bool(Command.validate(Command.make(1, 0, v, {}), CTX).ok), "%s validates as an argument-less wire verb" % v)
+		ok(_reason(Command.make(1, 0, v, {"level": 5})) == Command.R_ARGS, "%s refuses any argument (the server reads the level and the price itself)" % v)
+	# the refusal TEXT lives in the router, from value data (R10): the first reason in words, a duplicate stays silent
+	ok(InputVerbs.capsule_result_text({"ok": false, "reason": &"duplicate"}) == "", "a duplicate capsule command is silent")
+	ok(InputVerbs.capsule_result_text({"ok": false, "reason": &"cost", "missing": {"wood": 8, "stone": 2}, "far": false}).begins_with("Бракує: "),
+		"a cost refusal says «Бракує: …» (first reason, in words)")
 	# without a map in ctx the bounds check is simply skipped — a unit test need not build a world
 	ok(bool(Command.validate(Command.make(1, 0, "order_move", {"x": 9999, "y": 1})).ok), "no ctx.n -> coordinates are type-checked but not bounded")
 

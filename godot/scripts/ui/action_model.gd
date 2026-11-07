@@ -140,12 +140,20 @@ static func target_at(sim, c: Vector2i, mode: StringName = &"gather", build_kind
 		return {"kind": &"cell", "x": c.x, "y": c.y, "dist": 0.0, "ref": null}
 	return {"kind": &"ground", "x": c.x, "y": c.y, "dist": 0.0, "ref": null}
 
+# Панель, яку відкриває тап по будівлі (поле def `panel`; порожньо — звичайна будівля). Дані, не ім'я механіки (R4).
+static func panel_of(sim, b: Dictionary) -> String:
+	return String(sim.building_def(String(b.kind)).get("panel", ""))
+
 # The TAP: the mode's verb on the target ({} = nothing to do; the scene flashes a reason).
-static func primary(mode: StringName, t: Dictionary, build_kind: String = "") -> Dictionary:
+static func primary(mode: StringName, t: Dictionary, build_kind: String = "", sim: Variant = null) -> Dictionary:
 	if t.is_empty():
 		return {}
 	var k: StringName = t.kind
 	var xy := {"x": int(t.x), "y": int(t.y)}
+	if k == &"building" and sim != null:
+		var pid: String = panel_of(sim, t.ref)
+		if pid != "":
+			return {"verb": &"open_panel", "args": {"id": pid}}   # орієнтир-панель (капсула): тап відкриває її, а не «розбирає»
 	if k == &"enemy":
 		return {"verb": &"order_attack", "args": {"target": t.ref}}
 	if k == &"node":
@@ -175,11 +183,15 @@ static func options(sim, t: Dictionary, build_kind: String = "") -> Array:
 		&"building":
 			var b: Dictionary = t.ref
 			var def: Dictionary = sim.building_def(String(b.kind))
+			var pid: String = panel_of(sim, b)
+			if pid != "":
+				out.append({"verb": &"open_panel", "args": {"id": pid}, "label": "Капсула", "glyph": "◎"})
 			if float(b.hp) < float(def.get("hp", 50.0)):
 				out.append({"verb": &"repair", "args": xy, "label": "Ремонт", "glyph": "🔧"})
 			if String(b.kind) == "grow_zone":
 				out.append({"verb": &"set_crop", "args": xy, "label": "Культура", "glyph": "🌱"})
-			out.append({"verb": &"deconstruct", "args": xy, "label": "Розібрати", "glyph": "🗑"})
+			if not bool(def.get("indestructible", false)):   # неруйнівне (капсула) не розбирається: пункту нема, а не «відмова»
+				out.append({"verb": &"deconstruct", "args": xy, "label": "Розібрати", "glyph": "🗑"})
 		&"cell", &"ground":
 			if build_kind != "" and sim.build_valid(int(t.x), int(t.y)):
 				out.append({"verb": &"build", "args": {"kind": build_kind, "x": int(t.x), "y": int(t.y)}, "label": "Будувати", "glyph": "🔨"})
