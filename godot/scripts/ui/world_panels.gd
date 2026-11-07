@@ -12,6 +12,7 @@ const Tokens = preload("res://scripts/ui/tokens.gd")
 const LatLon = preload("res://scripts/ui/latlon.gd")
 const UITheme = preload("res://scripts/ui/theme.gd")
 const Fmt = preload("res://scripts/ui/format.gd")
+const CapsuleTexts = preload("res://scripts/ui/capsule_texts.gd")
 
 # ---- LogisticsPanel (RIGHT dock, M) — trade hubs + convoys in flight, reading vm.logistics ----
 class LogisticsPanel extends PanelBase.Base:
@@ -250,7 +251,7 @@ class CapsulePanel extends PanelBase.Base:
 		_m_levels.text = "◎ Рівень %d/%d · 🛡 Захист %d/%d" % [int(main.level), int(main.max), int(main.protection), int(main.max_protection)]
 		var left: int = int(main.get("immune_left_ms", 0))
 		_m_immune.visible = left > 0
-		_m_immune.text = "🛡 Імунітет: ще %s" % Fmt.left_ms(left)
+		_m_immune.text = CapsuleTexts.t("immune_panel") % Fmt.left_ms(left)
 		var rs: StringName = StringName(main.get("raid_state", &"none"))
 		_m_raid.visible = rs == &"warning" or rs == &"contact"
 		_m_raid.text = "⚠ Рейд на підході" if rs == &"warning" else "⚔ Рейд: бій за ядро"

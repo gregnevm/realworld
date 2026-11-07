@@ -16,6 +16,7 @@ const Gear = preload("res://scripts/kernel/gear.gd")
 const HeroHealth = preload("res://scripts/sim/hero_health.gd")
 const CatalogDefs = preload("res://scripts/catalog_defs.gd")
 const Director = preload("res://scripts/sim/director.gd")
+const CapsuleTexts = preload("res://scripts/ui/capsule_texts.gd")
 const MainCapsule = preload("res://scripts/sim/capsule.gd")   # лише чисті читання зони/підказок (gather_preview)
 const SimScript = preload("res://scripts/sim.gd")   # physics CONSTS only (light radii, emitter reach)
 const WorldInputScript = preload("res://scripts/ui/world_input.gd")   # placement grammar (paintable runs)
@@ -741,7 +742,7 @@ static func _inspect_capsule(sim) -> Dictionary:
 	var lines: Array = ["◎ рівень %d/%d · 🛡 захист %d/%d" % [int(sim.main_capsule.get("level", 0)), MainCapsule.max_level(sim),
 		MainCapsule.protection_of(sim), MainCapsule.max_protection(sim)]]
 	if MainCapsule.is_immune(sim):
-		lines.append("🛡 імунітет ще %s" % Fmt.left_ms(MainCapsule.immune_left_ms(sim)))
+		lines.append(CapsuleTexts.t("immune_inspect") % Fmt.left_ms(MainCapsule.immune_left_ms(sim)))
 	return {"shown": true, "state": &"info", "title": String(sim.building_def(MainCapsule.KIND).get("name", "")), "lines": lines,
 		"hint": "ЛКМ — панель капсули"}
 
@@ -854,11 +855,18 @@ static func _death_slice(sim) -> Dictionary:
 	var bag: int = _death_bag_items(sim) if inv_on else 0
 	var ld: Variant = sim.get("last_death")
 	if not (ld is Dictionary) or (ld as Dictionary).is_empty():
-		return {"cause": "", "day": int(sim.time.day), "lived": 0, "inventory": inv_on, "bag_items": bag}
+		return _death_capsule(sim, {"cause": "", "day": int(sim.time.day), "lived": 0, "inventory": inv_on, "bag_items": bag})
 	var d: Dictionary = ld
-	return {"cause": String(d.get("cause", "")), "day": int(d.get("day", 0)),
+	var out: Dictionary = {"cause": String(d.get("cause", "")), "day": int(d.get("day", 0)),
 		"lived": maxi(0, int(d.get("day", 0)) - int(d.get("born", int(d.get("day", 0)))) + 1),
 		"inventory": inv_on, "bag_items": bag}
+	return _death_capsule(sim, out)
+
+# spec 0010 REQ-0010-10: при ON слайс смерті несе capsule:true (екран смерті веде до капсули); ключ ЛИШЕ при ON — OFF-слайс як був.
+static func _death_capsule(sim, out: Dictionary) -> Dictionary:
+	if sim.get("use_main_capsule") == true:
+		out["capsule"] = true
+	return out
 
 # spec 0009: the bag the pawn left where it fell (the newest multi-slot bag) — the death screen tells the truth about it
 static func _death_bag_items(sim) -> int:

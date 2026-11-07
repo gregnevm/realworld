@@ -43,6 +43,8 @@ const CapsuleMod = preload("res://scripts/sim/capsule.gd")
 const InventoryMod = preload("res://scripts/sim/inventory.gd")
 const InputVerbsMod = preload("res://scripts/ui/input_verbs.gd")
 const UITheme = preload("res://scripts/ui/theme.gd")
+const CapsuleTexts = preload("res://scripts/ui/capsule_texts.gd")
+const HeroHealthMod = preload("res://scripts/sim/hero_health.gd")
 const WorldPanels = preload("res://scripts/ui/world_panels.gd")
 const PersistenceMod = preload("res://scripts/persistence.gd")
 
@@ -94,6 +96,9 @@ func _init() -> void:
 	_t_capsule_budget()
 	await _t_capsule_adv()
 	_t_capsule_adv_pure()
+	await _t_capsule_texts()
+	_t_capsule_no_goal_gates()
+	await _t_capsule_w4b_adv()
 	_t_rule_tripwires()
 	# release the process-shared forward-engine model: its placed Things carry comp back-references
 	# (RefCounted cycles) that would otherwise show up as ObjectDB leaks at exit
@@ -1591,6 +1596,330 @@ func _t_capsule_adv_pure() -> void:
 	ok(not ("main_capsule" in man), "REQ-0010-87 (P4): no art-manifest entry for the main capsule before G0-G1")
 
 # ---------------- Rule tripwires: R1/R3/R4/R7/R9/R10 as literal grep tests (the spec's whole point) ----------------
+# --- REQ-0010-10/40/85/27(UI): тексти смерті, спавну й панелі при ON, tripwire застарілих тверджень, OFF-рядки дослівно ---
+func _all_texts(n: Node, out: Array = []) -> Array:
+	if n is Label:
+		out.append(String((n as Label).text))
+	elif n is Button:
+		out.append(String((n as Button).text))
+	if n is Control:
+		out.append(String((n as Control).tooltip_text))
+	for c in n.get_children():
+		_all_texts(c, out)
+	return out
+
+func _stale_hits(lines: Array) -> Array:
+	var hits: Array = []
+	for ln in lines:
+		var low: String = String(ln).to_lower()
+		for bad in CapsuleTexts.FORBIDDEN_ON:
+			if String(bad) in low:
+				hits.append("%s <- %s" % [bad, String(ln).left(60)])
+	return hits
+
+# Усі `const MSG*` з файлу (рядки sim-шару: R1 не пускає їх у ui, тож tripwire читає вихідник).
+func _msg_consts(path: String) -> Array:
+	var rx := RegEx.new()
+	rx.compile("(?m)^const (MSG\\w*)\\s*:=\\s*\"(.*)\"")
+	var out: Array = []
+	for m in rx.search_all(_read_code(path)):
+		out.append(m.get_string(2))
+	return out
+
+func _t_capsule_texts() -> void:
+	# --- ключі: таблиця не порожня, кожен рядок заповнений, forbidden-список сам не вироджений ---
+	ok(CapsuleTexts.TEXTS.size() >= 10 and CapsuleTexts.FORBIDDEN_ON.size() >= 4, "REQ-0010-85: the capsule text table is keyed and the tripwire list is not empty")
+	var keys_ok := true
+	for k in CapsuleTexts.TEXTS:
+		if String(CapsuleTexts.TEXTS[k]) == "" or String(CapsuleTexts.t(String(k))) != String(CapsuleTexts.TEXTS[k]):
+			keys_ok = false
+	ok(keys_ok, "REQ-0010-85: every key resolves to a non-empty string")
+	# --- статичний скан за КЛЮЧАМИ таблиці й за const MSG* sim-модулів капсули ---
+	var table_lines: Array = []
+	for k in CapsuleTexts.TEXTS:
+		table_lines.append(String(CapsuleTexts.TEXTS[k]))
+	ok(_stale_hits(table_lines).is_empty(), "REQ-0010-40/85: no capsule text key carries a stale claim (%s)" % str(_stale_hits(table_lines)))
+	var sim_lines: Array = _msg_consts("res://scripts/sim/capsule.gd") + _msg_consts("res://scripts/sim/hero_health.gd")
+	ok(sim_lines.size() >= 8, "REQ-0010-85: the scan sees the sim-side capsule messages (%d)" % sim_lines.size())
+	ok(_stale_hits(sim_lines).is_empty(), "REQ-0010-40/85: sim capsule MSG_* carry no stale claim (%s)" % str(_stale_hits(sim_lines)))
+	# нові рядки капсули не лишаються розсипом по view-файлах: імунітет — лише через таблицю
+	ok(not ("Імунітет" in _read_code("res://scripts/ui/world_panels.gd")) and not ("імунітет" in _read_code("res://scripts/ui/hud_model.gd")),
+		"REQ-0010-85: the immunity strings live in capsule_texts.gd only")
+	# --- динамічний скан ON: спавн (холод) -> панель з імунітетом і тривогою -> смерть -> екран смерті -> респавн ---
+	var s: Variant = _capsule_session(true)
+	var sim: Variant = s.sim
+	var live: Array = []
+	sim.messages.clear()
+	sim.time.frac = 0.0
+	sim.spawn_hint()
+	var cold: bool = sim.hero_felt_c() < HeroHealthMod.Gear.COMFORT_MIN_C
+	for m in sim.messages:
+		live.append(String(m.text))
+	if cold:
+		ok("укриття біля капсули" in " ".join(live) and not ("багаття" in " ".join(live)), "REQ-0010-40: the ON cold spawn hint sends to a shelter by the capsule, not to «campfire first»")
+	else:
+		ok(true, "REQ-0010-40: spawn hint — felt temperature is inside the comfort band (no hint) [skipped]")
+	var panel: Variant = WorldPanels.CapsulePanel.new()
+	get_root().add_child(panel)
+	await process_frame
+	sim.main_capsule.immune_until = int(sim.now_ms) + 5400000
+	sim.capsule_raid.state = String(CapsuleMod.ST_WARNING)
+	panel.bind(_cap_snap(s, {"open_panels": ["capsule_bay"]}))
+	var panel_lines: Array = _all_texts(panel)
+	ok(_stale_hits(panel_lines).is_empty(), "REQ-0010-40: the ON capsule panel carries no stale claim (%s)" % str(_stale_hits(panel_lines)))
+	panel.queue_free()
+	sim.main_capsule.immune_until = 0
+	sim.capsule_raid.state = String(CapsuleMod.ST_NONE)
+	sim.player.born = 1
+	sim.time.day = 3
+	sim.last_death = {"cause": "переохолодження", "day": 3, "born": 1}
+	InventoryMod.add(sim, "wood", 5)
+	sim._on_death()
+	var snap: Dictionary = _cap_snap(s)
+	ok(bool(snap.death.get("capsule", false)) and not _holds_object(snap.death), "REQ-0010-10: the ON death slice carries capsule:true as value data")
+	var ds: Variant = LifecycleScript.DeathScreen.new()
+	get_root().add_child(ds)
+	await process_frame
+	ds.bind(snap.death)
+	var death_lines: Array = _all_texts(ds)
+	ok(_stale_hits(death_lines).is_empty(), "REQ-0010-10/40: the ON death screen carries no stale claim (%s)" % str(_stale_hits(death_lines)))
+	var death_text: String = " ".join(death_lines)
+	ok("З'явитись у капсулі" in death_text and "біля капсули" in death_text and "позначена на мапі" in death_text, "REQ-0010-10: the ON death screen leads to the capsule and shows the bag marker")
+	ok(not ("Торба лежить" in death_text) and not ("годин" in death_text) and not ("підбере" in death_text.to_lower()), "REQ-0010-10: no promise about the bag's fate or TTL (blocked on Q-10(a))")
+	for bad in ["загинув", "загинула", "з'явився", "з'явилась"]:
+		ok(not (bad in death_text.to_lower()), "D8: the ON death text has no grammatical gender («%s»)" % bad)
+	for m in sim.messages:
+		live.append(String(m.text))
+	s.respawn()
+	for m in s.sim.messages:
+		live.append(String(m.text))
+	ok(_stale_hits(live).is_empty(), "REQ-0010-40: ON feed lines (spawn, death, respawn) carry no stale claim (%s)" % str(_stale_hits(live)))
+	# --- OFF: ті самі екрани, рядки смерті/кнопка/підказка ДОСЛІВНО як до спеки ---
+	var off: Variant = _capsule_session(false)
+	var off_snap: Dictionary = _cap_snap(off)
+	ok(not off_snap.death.has("capsule"), "REQ-0010-85: the OFF death slice has no capsule key")
+	var DS = LifecycleScript.DeathScreen
+	ok(DS._fate({"inventory": true, "bag_items": 18}) == "Торба (18 предм.) лежить на місці загибелі — вона позначена на мапі, її можна забрати.\nПоселення й склад лишаються. Новий виживальник прибуде туди й почне з нуля.", "REQ-0010-85: OFF death fate (bag) is verbatim")
+	ok(DS._fate({"inventory": true, "bag_items": 0}) == "Рюкзак був порожній — втрачати нічого.\nПоселення й склад лишаються. Новий виживальник прибуде туди й почне з нуля.", "REQ-0010-85: OFF death fate (empty pack) is verbatim")
+	ok(DS._fate({}) == "Усе, що було при собі, втрачено.\nПоселення й склад лишаються. Новий виживальник прибуде туди й почне з нуля.", "REQ-0010-85: OFF death fate (classic) is verbatim")
+	ok(DS._lesson("переохолодження") == "Порада: багаття, а навколо — стіни з дверима: у приміщенні тепло тримається.", "REQ-0010-85: OFF cold lesson is verbatim")
+	ok(DS._lesson("") == "Порада: тримай тепло, їжу й сон — і будуй оборону до 5-го дня.", "REQ-0010-85: OFF default lesson is verbatim")
+	# кнопка: bind(ON) -> «З'явитись у капсулі», наступний bind(OFF) повертає «Новий виживальник» (екран живе між сесіями)
+	ds.bind(off_snap.death)
+	ok(String(ds._btn.text) == "Новий виживальник", "REQ-0010-85: the OFF button is «Новий виживальник»")
+	ds.bind(snap.death)
+	ok(String(ds._btn.text) == "З'явитись у капсулі", "REQ-0010-10: the ON button is set in bind, not in _ready")
+	ds.queue_free()
+	var hint_src: String = FileAccess.get_file_as_string("res://scripts/sim/hero_health.gd")
+	ok("постав багаття з хотбару (слот 1), потім стіни з дверима навколо" in hint_src and "розпали багаття (9), а тоді обнеси клітинку стінами (1) з дверима (2)" in hint_src, "REQ-0010-85: the OFF spawn hints are verbatim")
+	off.sim.messages.clear()
+	off.sim.time.frac = 0.0
+	off.sim.spawn_hint()
+	if off.sim.hero_felt_c() < HeroHealthMod.Gear.COMFORT_MIN_C:
+		ok("постав багаття з хотбару (слот 1)" in str(off.sim.messages), "REQ-0010-85: the OFF cold spawn hint still sends to the campfire")
+
+# --- REQ-0010-95: жодна дія капсули не заблокована невиконаною ціллю; обов'язкового ланцюга капсула не створює ---
+func _t_capsule_no_goal_gates() -> void:
+	var Goals = load("res://scripts/goals.gd")
+	var router: Variant = _cap_router()
+	var s: Variant = _capsule_session(true)
+	ok((s.goals_done as Dictionary).is_empty(), "REQ-0010-95: a fresh ON session has completed no goal")
+	_grant_cost(s, &"capsule")
+	var acts: Array = []
+	for a in CapsuleMod.actions(s.sim):
+		acts.append(a)
+	ok(acts.has(&"upgrade") and acts.has(&"storage"), "REQ-0010-95: capsule actions are offered with zero goals done")
+	router.dispatch(&"capsule_upgrade", {}, s)
+	ok(int(s.sim.main_capsule.level) == 1, "REQ-0010-95: the upgrade works with every goal unfinished (no goal gate)")
+	_grant_cost(s, &"protection")
+	router.dispatch(&"capsule_protect", {}, s)
+	ok(CapsuleMod.protection_of(s.sim) == 1, "REQ-0010-95: the protection axis works with every goal unfinished")
+	InventoryMod.add(s.sim, "wood", 3)
+	router.dispatch(&"stash_all", {}, s)
+	ok(int(s.sim.stock.get(s.sim.res_key("wood"), 0)) >= 3, "REQ-0010-95: the stash works with every goal unfinished")
+	# жодного коду ланцюга цілей на шляху капсули; жодного запису-орієнтиру з порядковим номером/залежністю
+	for f in ["res://scripts/sim/capsule.gd", "res://scripts/ui/input_verbs.gd", "res://scripts/ui/world_panels.gd", "res://scripts/ui/capsule_texts.gd"]:
+		var body: String = _read_code(f).to_lower()
+		ok(not ("goals_done" in body) and not ("goals.gd" in body) and not ("current_goal" in body), "REQ-0010-95: %s does not read the goal chain" % f.get_file())
+	var capsule_goal := false
+	for g in Goals.GOALS:
+		var gd: Dictionary = g
+		if "капсул" in String(gd.title).to_lower() or "capsule" in str(gd.get("id", "")) or gd.has("requires") or gd.has("after") or gd.has("step"):
+			capsule_goal = true
+	ok(not capsule_goal, "REQ-0010-95: the capsule adds no mandatory goal and no goal entry carries a dependency/ordinal")
+
+# --- W4b (qa-adversary): атаки на tripwire, щит імунітету, ON-смерть з порожньою торбою, стаб-спавн, чистоту знімка, гейти цілей ---
+class _SpawnStub extends RefCounted:
+	var use_main_capsule := false
+	var use_inventory := true
+	var felt := -10.0
+	var logs: Array = []
+	func hero_felt_c() -> float:
+		return felt
+	func _log(t: String, _k: String = "") -> void:
+		logs.append(t)
+
+func _visible_texts(n: Node, out: Array = []) -> Array:
+	if n is CanvasItem and not (n as CanvasItem).visible:
+		return out
+	if n is Label:
+		out.append(String((n as Label).text))
+	elif n is Button:
+		out.append(String((n as Button).text))
+	for c in n.get_children():
+		_visible_texts(c, out)
+	return out
+
+func _t_capsule_w4b_adv() -> void:
+	# --- tripwire чутливий: кожна заборонена фраза зі спеки §2 п.6 ловиться (без регістру), схвалені рядки — ні ---
+	for bad in ["Щоденна капсула", "Новий виживальник", "до 5-го дня", "Постав БАГАТТЯ першим кроком"]:
+		ok(not _stale_hits([bad]).is_empty(), "REQ-0010-40: the tripwire catches «%s»" % bad)
+	ok(_stale_hits(["З'явитись у капсулі", "збудуй укриття біля капсули"]).is_empty(), "REQ-0010-40: the tripwire does not flag the approved ON lines")
+	# --- статичний скан УСІХ рядкових літералів capsule.gd (не лише const MSG*): inline _log-рядки теж під tripwire ---
+	var lit := RegEx.new()
+	lit.compile("\"([^\"\\n]*)\"")
+	var lits: Array = []
+	for m in lit.search_all(_read_code("res://scripts/sim/capsule.gd")):
+		var t: String = m.get_string(1)
+		if " " in t or (t.length() > 0 and t.unicode_at(0) > 127):
+			lits.append(t)
+	ok(lits.size() >= 8, "REQ-0010-85: the literal scan of capsule.gd sees its text (%d)" % lits.size())
+	ok(_stale_hits(lits).is_empty(), "REQ-0010-40/85: no string literal in sim/capsule.gd carries a stale claim (%s)" % str(_stale_hits(lits)))
+	# D8: жодних родових форм у таблиці, літералах capsule.gd і MSG hero_health
+	var gendered := ["загинув", "загинула", "з'явився", "з'явилась", "прибув", "прибула", "померла"]
+	var every: Array = lits.duplicate()
+	for k in CapsuleTexts.TEXTS:
+		every.append(String(CapsuleTexts.TEXTS[k]))
+	every += _msg_consts("res://scripts/sim/hero_health.gd")
+	var g_hits: Array = []
+	for ln in every:
+		for w in gendered:
+			if w in String(ln).to_lower():
+				g_hits.append(w)
+	ok(g_hits.is_empty(), "D8: ON capsule texts carry no grammatical gender (%s)" % str(g_hits))
+	# --- спавн-підказка: детермінований стаб (не залежить від клімату) ---
+	var on := _SpawnStub.new()
+	on.use_main_capsule = true
+	HeroHealthMod.spawn_hint(on)
+	ok(on.logs.size() == 1 and "укриття" in on.logs[0] and "капсул" in on.logs[0] and not ("багаття" in String(on.logs[0]).to_lower()), "REQ-0010-40: ON cold spawn hint = shelter by the capsule, no campfire (stub)")
+	ok(_stale_hits(on.logs).is_empty(), "REQ-0010-40: the ON spawn hint passes the tripwire")
+	var off_inv := _SpawnStub.new()
+	HeroHealthMod.spawn_hint(off_inv)
+	ok(off_inv.logs.size() == 1 and "постав багаття з хотбару (слот 1)" in off_inv.logs[0], "REQ-0010-85: OFF+inventory spawn hint is the campfire one (stub)")
+	var off_cls := _SpawnStub.new()
+	off_cls.use_inventory = false
+	HeroHealthMod.spawn_hint(off_cls)
+	ok(off_cls.logs.size() == 1 and "розпали багаття (9)" in off_cls.logs[0], "REQ-0010-85: OFF classic spawn hint is the campfire one (stub)")
+	var warm := _SpawnStub.new()
+	warm.use_main_capsule = true
+	warm.felt = 20.0
+	HeroHealthMod.spawn_hint(warm)
+	ok(warm.logs.is_empty(), "REQ-0010-40: no spawn hint inside the comfort band even at ON")
+	# --- екран смерті ON: порожня торба, слайс без last_death, ON->OFF->ON перемикання bind ---
+	var DS = LifecycleScript.DeathScreen
+	var empty_on: String = DS._fate({"capsule": true, "inventory": true, "bag_items": 0})
+	ok("Рюкзак був порожній" in empty_on and "біля капсули" in empty_on and _stale_hits([empty_on]).is_empty(), "REQ-0010-10: ON death with an empty pack leads to the capsule, no stale claim")
+	ok(not ("Торба (" in empty_on), "REQ-0010-10: ON empty-pack death does not mention a bag")
+	var bag_on: String = DS._fate({"capsule": true, "inventory": true, "bag_items": 7})
+	ok("(7 предм.)" in bag_on and "позначена на мапі" in bag_on, "REQ-0010-10: ON death shows the bag count and map marker")
+	ok(DS._fate({"capsule": false, "inventory": true, "bag_items": 18}) == DS._fate({"inventory": true, "bag_items": 18}), "REQ-0010-85: capsule:false is exactly the OFF text")
+	for c in ["переохолодження", "голод", "тепловий удар", "втрата крові", ""]:
+		var l: String = DS._lesson(c, true)
+		ok(l != "" and _stale_hits([l]).is_empty(), "REQ-0010-40: ON lesson for «%s» is stale-free" % c)
+		ok(DS._lesson(c) == DS._lesson(c, false), "REQ-0010-85: the lesson defaults to the OFF text for «%s»" % c)
+	var sx: Variant = _capsule_session(true)
+	var fresh_slice: Dictionary = _cap_snap(sx).death
+	ok(bool(fresh_slice.get("capsule", false)), "REQ-0010-10: the ON death slice carries capsule:true even before any death")
+	var ds: Variant = LifecycleScript.DeathScreen.new()
+	get_root().add_child(ds)
+	await process_frame
+	ds.bind(fresh_slice)
+	ok(String(ds._btn.text) == "З'явитись у капсулі", "REQ-0010-10: ON button on a death-less slice")
+	ds.bind({"cause": "переохолодження", "day": 2, "lived": 2})
+	ok(String(ds._btn.text) == "Новий виживальник" and not ("капсул" in String(ds._what.text)), "REQ-0010-85: a slice without the capsule key restores the OFF screen (no ON leak)")
+	ok(String(ds._epitaph.text) == "Порада: багаття, а навколо — стіни з дверима: у приміщенні тепло тримається.", "REQ-0010-85: the OFF bind restores the OFF lesson verbatim (epitaph does not keep the ON branch)")
+	ds.bind(fresh_slice)
+	ok(String(ds._btn.text) == "З'явитись у капсулі" and _stale_hits(_all_texts(ds)).is_empty(), "REQ-0010-10: ON again after OFF, tripwire clean")
+	ds.queue_free()
+	# --- щит і рядок імунітету (REQ-0010-27 UI): рівно поки діє, зникає на межі ---
+	var s: Variant = _capsule_session(true)
+	var sim: Variant = s.sim
+	var panel: Variant = WorldPanels.CapsulePanel.new()
+	get_root().add_child(panel)
+	await process_frame
+	panel.bind(_cap_snap(s, {"open_panels": ["capsule_bay"]}))
+	ok(int(_cap_snap(s).capsule.main.immune_left_ms) == 0 and not ("Імунітет" in " ".join(_visible_texts(panel))), "REQ-0010-27: no immunity line without immunity")
+	ok(not ("імунітет" in " ".join(HudModel._inspect_capsule(sim).lines).to_lower()), "REQ-0010-27: the inspector has no immunity line without immunity")
+	var now: int = int(sim.now_ms)
+	sim.main_capsule.immune_until = now + 90 * 60000
+	var sn: Dictionary = _cap_snap(s, {"open_panels": ["capsule_bay"]})
+	ok(int(sn.capsule.main.immune_left_ms) == 90 * 60000, "REQ-0010-27: the snapshot carries the exact remaining ms")
+	panel.bind(sn)
+	var vis: String = " ".join(_visible_texts(panel))
+	ok("Імунітет" in vis and "1 год 30 хв" in vis, "REQ-0010-27: the panel row shows the remaining time (%s)" % vis)
+	ok("імунітет ще 1 год 30 хв" in " ".join(HudModel._inspect_capsule(sim).lines), "REQ-0010-27: the inspector row shows the remaining time")
+	sim.main_capsule.immune_until = now + 1
+	ok(CapsuleMod.is_immune(sim) and int(_cap_snap(s).capsule.main.immune_left_ms) == 1, "REQ-0010-27: one ms before the end the capsule is still immune")
+	sim.main_capsule.immune_until = now
+	var edge: Dictionary = _cap_snap(s, {"open_panels": ["capsule_bay"]})
+	panel.bind(edge)
+	ok(not CapsuleMod.is_immune(sim) and int(edge.capsule.main.immune_left_ms) == 0 and not ("Імунітет" in " ".join(_visible_texts(panel))), "REQ-0010-27: at immune_until == now the shield and the row are gone")
+	sim.main_capsule.immune_until = now - 5000
+	ok(int(_cap_snap(s).capsule.main.immune_left_ms) == 0, "REQ-0010-27: an expired mark never yields a negative remaining time")
+	# щит у world_view: гейт is_immune прямо перед бульбашкою (greybox, без тексту)
+	var wv_src: String = _read_code("res://scripts/world_view.gd")
+	var at: int = wv_src.find("func _draw_capsule_marks")
+	var body: String = wv_src.substr(at, wv_src.find("\nfunc ", at + 10) - at)
+	var gate: int = body.find("\tif MainCapsule.is_immune(sim):\n\t\tdraw_circle(")
+	ok(gate > 0 and body.find("draw_arc", gate) > gate and body.count("is_immune") == 1, "REQ-0010-27: the shield is drawn only under is_immune (no unconditional bubble)")
+	ok(not ("draw_string" in body), "REQ-0010-27/87: the shield and marks carry no text (diegetic)")
+	# знімок — чисте читання
+	sim.main_capsule.immune_until = now + 90 * 60000
+	var h0: String = PersistenceMod.world_hash(sim)
+	var a1: Dictionary = _cap_snap(s, {"open_panels": ["capsule_bay"]})
+	var a2: Dictionary = _cap_snap(s, {"open_panels": ["capsule_bay"]})
+	ok(PersistenceMod.world_hash(sim) == h0, "REQ-0010-27: HudModel.snapshot (ON) does not touch the sim (world_hash stable)")
+	ok(JSON.stringify(a1.capsule) == JSON.stringify(a2.capsule) and JSON.stringify(a1.death) == JSON.stringify(a2.death), "REQ-0010-27: the capsule/death slices are deterministic")
+	# --- панель у всіх станах: рівень 0 / 1 / макс × тривога/контакт — без застарілих рядків і без гейтів ---
+	sim.main_capsule.immune_until = 0
+	for lvl in [0, 1, CapsuleMod.max_level(sim)]:
+		sim.main_capsule.level = lvl
+		for st in [CapsuleMod.ST_NONE, CapsuleMod.ST_WARNING, CapsuleMod.ST_CONTACT]:
+			sim.capsule_raid.state = String(st)
+			panel.bind(_cap_snap(s, {"open_panels": ["capsule_bay"]}))
+			var hits: Array = _stale_hits(_all_texts(panel))
+			ok(hits.is_empty(), "REQ-0010-40: panel L%d/%s is stale-free (%s)" % [lvl, st, str(hits)])
+			var low: String = " ".join(_all_texts(panel)).to_lower()
+			ok(not ("спершу" in low) and not ("виконай ціль" in low), "REQ-0010-95: panel L%d/%s gates nothing behind a goal" % [lvl, st])
+	panel.queue_free()
+	# OFF: жодного capsule.main, жодного capsule у слайсі смерті
+	var off: Variant = _capsule_session(false)
+	var osn: Dictionary = _cap_snap(off)
+	ok(not osn.capsule.has("main") and not osn.death.has("capsule"), "REQ-0010-85: OFF slices carry no capsule keys")
+	# --- ON-логи рейду (попередження) під tripwire ---
+	var r: Variant = _capsule_session(true)
+	r.sim.messages.clear()
+	var fr: Dictionary = CapsuleMod.force_raid(r.sim, true)
+	ok(bool(fr.get("ok", false)), "REQ-0010-40: the dev raid hook arms a raid (log scan fixture)")
+	CapsuleMod._announce(r.sim, int(r.sim.now_ms))
+	var raid_lines: Array = []
+	for m in r.sim.messages:
+		raid_lines.append(String(m.text))
+	ok(raid_lines.size() >= 1 and _stale_hits(raid_lines).is_empty(), "REQ-0010-40: ON raid feed lines are stale-free (%s)" % str(raid_lines))
+	# --- REQ-95: той самий результат дії з порожніми й з УСІМА виконаними цілями ---
+	var Goals = load("res://scripts/goals.gd")
+	var router: Variant = _cap_router()
+	var done: Variant = _capsule_session(true)
+	for g in Goals.GOALS:
+		done.goals_done[String(g.id)] = true
+	var none: Variant = _capsule_session(true)
+	_grant_cost(done, &"capsule")
+	_grant_cost(none, &"capsule")
+	router.dispatch(&"capsule_upgrade", {}, done)
+	router.dispatch(&"capsule_upgrade", {}, none)
+	ok(int(done.sim.main_capsule.level) == 1 and int(none.sim.main_capsule.level) == 1 and PersistenceMod.world_hash(done.sim) == PersistenceMod.world_hash(none.sim),
+		"REQ-0010-95: capsule upgrade is identical with no goals done and with all goals done (twin hash)")
+
 func _t_rule_tripwires() -> void:
 	# R1 — one-way flow: no sim/kernel/session/social/persistence file references res://scripts/ui
 	var sim_side := ["res://scripts/sim.gd", "res://scripts/session.gd", "res://scripts/social.gd",

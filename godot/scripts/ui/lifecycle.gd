@@ -14,6 +14,7 @@ const WidgetBase = preload("res://scripts/ui/widget.gd")
 const Fmt = preload("res://scripts/ui/format.gd")
 const GameData = preload("res://scripts/data.gd")
 const ArtIcons = preload("res://scripts/ui/art_icons.gd")
+const CapsuleTexts = preload("res://scripts/ui/capsule_texts.gd")
 
 # --- shared chrome helpers -------------------------------------------------------------------------
 class Chrome extends RefCounted:
@@ -311,6 +312,7 @@ class DeathScreen extends Control:
 
 	var _epitaph: Label
 	var _what: Label
+	var _btn: Button
 	var cause := ""
 
 	# The death's value data (HudModel death slice): WHY and HOW LONG — a death you can read is a
@@ -326,17 +328,26 @@ class DeathScreen extends Control:
 		if lived > 0:
 			head.append("прожито днів: %d" % lived)
 		_what.text = (" · ".join(head) + "\n" if not head.is_empty() else "") + _fate(vm)
-		_epitaph.text = _lesson(cause)
+		var on: bool = bool(vm.get("capsule", false))   # ключ є лише при ON (HudModel); OFF — старі рядки дослівно
+		_epitaph.text = _lesson(cause, on)
+		if _btn != null:
+			_btn.text = CapsuleTexts.t("death_button") if on else "Новий виживальник"   # текст — у bind, не в _ready: екран живе між сесіями
 
 	# What survives the death — the truth per world rules (spec 0009 bag vs the classic "all carried is lost").
 	static func _fate(vm: Dictionary) -> String:
+		if bool(vm.get("capsule", false)):   # ON (spec 0010 REQ-0010-10): гравця чекає капсула, а не «новий виживальник у поселенні»
+			var nb: int = int(vm.get("bag_items", 0))
+			var head: String = (CapsuleTexts.t("death_fate_bag") % nb) if nb > 0 else CapsuleTexts.t("death_fate_empty")
+			return head + CapsuleTexts.t("death_fate_tail")
 		if bool(vm.get("inventory", false)):
 			var n: int = int(vm.get("bag_items", 0))
 			var bag: String = ("Торба (%d предм.) лежить на місці загибелі — вона позначена на мапі, її можна забрати." % n) if n > 0 else "Рюкзак був порожній — втрачати нічого."
 			return bag + "\nПоселення й склад лишаються. Новий виживальник прибуде туди й почне з нуля."
 		return "Усе, що було при собі, втрачено.\nПоселення й склад лишаються. Новий виживальник прибуде туди й почне з нуля."
 
-	static func _lesson(c: String) -> String:
+	static func _lesson(c: String, capsule: bool = false) -> String:
+		if capsule:
+			return _lesson_capsule(c)
 		if "переохолод" in c:
 			return "Порада: багаття, а навколо — стіни з дверима: у приміщенні тепло тримається."
 		if "голод" in c:
@@ -346,6 +357,17 @@ class DeathScreen extends Control:
 		if "кров" in c or "рани" in c:
 			return "Порада: бийся біля турелей і шипів, а рани лікуй сном у ліжку."
 		return "Порада: тримай тепло, їжу й сон — і будуй оборону до 5-го дня."
+
+	static func _lesson_capsule(c: String) -> String:
+		if "переохолод" in c:
+			return CapsuleTexts.t("lesson_cold")
+		if "голод" in c:
+			return CapsuleTexts.t("lesson_hunger")
+		if "тепловий" in c:
+			return CapsuleTexts.t("lesson_heat")
+		if "кров" in c or "рани" in c:
+			return CapsuleTexts.t("lesson_blood")
+		return CapsuleTexts.t("lesson_default")
 
 	func _ready() -> void:
 		# та сама CanvasLayer-гоча, що й у SpawnScreen: явний розмір замість FULL_RECT
@@ -391,6 +413,7 @@ class DeathScreen extends Control:
 		_epitaph.add_theme_color_override("font_color", Tokens.WARN)
 		vb.add_child(_epitaph)
 		var b := Button.new()
+		_btn = b
 		b.text = "Новий виживальник"
 		b.custom_minimum_size = Vector2(260, 48)
 		b.theme_type_variation = UITheme.V_PRIMARY   # the only way forward must out-weigh the text above it

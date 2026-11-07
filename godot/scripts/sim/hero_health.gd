@@ -360,12 +360,16 @@ static func _cap_list(names: Array) -> Array:
 		out.append(StringName(str(c)))
 	return out
 
+const MSG_COLD_CAPSULE := "❄ Тут холодно (%.0f°C): збудуй укриття біля капсули — стіни з дверима тримають тепло в приміщенні."   # ON (spec 0010): без «постав багаття»
+
 # Spawn-time onboarding hint: if the felt °C is already outside the comfort band, say so before the
 # first hediff does (a Kyiv game starts on day 1 == deep winter; the player must learn "fire first").
 static func spawn_hint(s) -> void:
 	var felt: float = s.hero_felt_c()
 	if felt < Gear.COMFORT_MIN_C:
-		if s.get("use_inventory") == true:   # spec 0009: the campfire is an item in the hotbar, not a build-bar key
+		if s.get("use_main_capsule") == true:   # spec 0010 REQ-0010-40: капсула — домівка, «багаття першим кроком» не нав'язуємо
+			s._log(MSG_COLD_CAPSULE % felt, "warn")
+		elif s.get("use_inventory") == true:   # spec 0009: the campfire is an item in the hotbar, not a build-bar key
 			s._log("❄ Тут холодно (%.0f°C): постав багаття з хотбару (слот 1), потім стіни з дверима навколо — у приміщенні тепло тримається." % felt, "warn")   # gdlint: ignore=max-line-length
 		else:
 			s._log("❄ Тут холодно (%.0f°C): розпали багаття (9), а тоді обнеси клітинку стінами (1) з дверима (2) — у приміщенні тепло тримається." % felt, "warn")   # gdlint: ignore=max-line-length

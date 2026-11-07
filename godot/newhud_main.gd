@@ -463,7 +463,7 @@ func _shot_step(dt: float) -> void:
 		if "light" in OS.get_cmdline_user_args():
 			oreg.toggle(&"light")          # `shot light`: radio-on the L/Light overlay (default frame = what a player sees)
 		if bool(session.sim.use_main_capsule):
-			_stage_capsule_shot()          # `shot capsule [lvl=N] [cpanel] [poor tap]`: spec 0010 W4a frames
+			_stage_capsule_shot()          # `shot capsule [lvl=N] [cpanel] [poor tap] [immune] [warn|contact] [death]`: spec 0010 W4a/W4b frames
 		session.sim.time.frac = 0.86       # dusk so daylight darkening is visible
 		if "death" in OS.get_cmdline_user_args():   # `shot death`: a REAL death (epitaph + bag), not a bare flag
 			session.sim.player.born = 1
@@ -518,6 +518,13 @@ func _stage_capsule_shot() -> void:
 		for sl in sim.player.inv:
 			sl.id = ""
 			sl.n = 0
+	if "immune" in args:   # W4b: вікно імунітету — щит на корпусі + рядок у панелі (20 год лишилось)
+		sim.main_capsule.immune_until = int(sim.now_ms) + 20 * 3600000
+	if "warn" in args or "contact" in args:   # W4b: тривога рейду через dev-хук G5 (debug-збірка); `contact` — одразу наступний тік веде в контакт
+		MainCapsule.force_raid(sim, OS.has_feature("debug"))
+		if "contact" in args:
+			MainCapsule._announce(sim, int(sim.now_ms))
+			sim.capsule_raid.contact_at = int(sim.now_ms)
 	if "cpanel" in args:
 		router.dispatch(&"open_panel", {"id": "capsule_bay"}, session)
 
