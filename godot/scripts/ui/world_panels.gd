@@ -118,6 +118,7 @@ class CapsulePanel extends PanelBase.Base:
 	var _inv_head: Widgets.H2Header
 	var _m_nodes: Array = []        # усі вузли ON-режиму (bind перемикає їх разом із легасі-вузлами — одне місце правди про режим)
 	var _m_levels: Label
+	var _m_legend: Label
 	var _m_immune: Label
 	var _m_raid: Label
 	var _m_up: Button
@@ -126,6 +127,7 @@ class CapsulePanel extends PanelBase.Base:
 	var _m_more: Button
 	var _m_more_box: VBoxContainer
 	var _m_more_open := false       # view-стан розкриття (D1): за замовчуванням згорнуто
+	var _m_prot_what: Label
 	var _m_prot: Button
 	var _m_prot_cost: Label
 	var _m_prot_why: Label
@@ -199,6 +201,10 @@ class CapsulePanel extends PanelBase.Base:
 		_m_more_box.visible = false
 		vb.add_child(_m_more_box)
 		_m_nodes.append(_m_more_box)
+		_m_legend = _m_label(_m_more_box, Tokens.MUT)   # пояснення знаків — під «Ще»: на телефоні головна дія й ціна мусять вміститись над молотком
+		_m_legend.text = CapsuleTexts.t("legend_marks")
+		_m_prot_what = _m_label(_m_more_box, Tokens.MUT)
+		_m_prot_what.text = CapsuleTexts.t("protect_what")
 		_m_prot = _m_button(_m_more_box, 40)
 		_m_prot.pressed.connect(func() -> void: emit_intent(&"capsule_protect", {}))
 		_m_prot_cost = _m_label(_m_more_box, Tokens.MUT)
@@ -241,25 +247,27 @@ class CapsulePanel extends PanelBase.Base:
 	func _on_more() -> void:
 		_m_more_open = not _m_more_open
 		_m_more_box.visible = _m_more_open
-		_m_more.text = ("▾ " if _m_more_open else "▸ ") + "Ще: захист і склад"
+		_m_more.text = ("▾ " if _m_more_open else "▸ ") + CapsuleTexts.t("more_label")
 	func _on_store(slot: int) -> void:
 		if String(_m_store_res[slot]) != "":
 			emit_intent(&"take_storage", {"res": String(_m_store_res[slot]), "n": 10})
 	func _bind_main(main: Dictionary) -> void:
 		var acts: Array = main.get("actions", [])
 		_m_levels.visible = true
-		_m_levels.text = "◎ Рівень %d/%d · 🛡 Захист %d/%d" % [int(main.level), int(main.max), int(main.protection), int(main.max_protection)]
+		_m_legend.visible = true
+		_m_prot_what.visible = true
+		_m_levels.text = "◎ Рівень %d/%d · ▣ Захист %d/%d" % [int(main.level), int(main.max), int(main.protection), int(main.max_protection)]
 		var left: int = int(main.get("immune_left_ms", 0))
 		_m_immune.visible = left > 0
 		_m_immune.text = CapsuleTexts.t("immune_panel") % Fmt.left_ms(left)
 		var rs: StringName = StringName(main.get("raid_state", &"none"))
 		_m_raid.visible = rs == &"warning" or rs == &"contact"
-		_m_raid.text = "⚠ Рейд на підході" if rs == &"warning" else "⚔ Рейд: бій за ядро"
-		_axis_rows(acts.has(&"upgrade"), main.get("upgrade", {}), _m_up, _m_up_cost, _m_up_why, "⬆ Прокачати → рівень %d")
-		_axis_rows(acts.has(&"protection"), main.get("protect", {}), _m_prot, _m_prot_cost, _m_prot_why, "🛡 Захист → рівень %d")
+		_m_raid.text = "⚠ Рейд на підході — підготуй оборону" if rs == &"warning" else "⚔ Рейд: бій за ядро капсули"
+		_axis_rows(acts.has(&"upgrade"), main.get("upgrade", {}), _m_up, _m_up_cost, _m_up_why, "⬆ Прокачати до %d")
+		_axis_rows(acts.has(&"protection"), main.get("protect", {}), _m_prot, _m_prot_cost, _m_prot_why, "▣ Захист до %d")
 		_m_more.visible = true
 		_m_more_box.visible = _m_more_open
-		_m_more.text = ("▾ " if _m_more_open else "▸ ") + "Ще: захист і склад"
+		_m_more.text = ("▾ " if _m_more_open else "▸ ") + CapsuleTexts.t("more_label")
 		_m_stash.visible = acts.has(&"storage")
 		var st: Array = main.get("storage", []) if acts.has(&"storage") else []
 		for i in STORE_MAX:

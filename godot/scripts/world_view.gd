@@ -6,6 +6,8 @@ const GameData = preload("res://scripts/data.gd")
 const InventoryMod = preload("res://scripts/sim/inventory.gd")
 const MainCapsule = preload("res://scripts/sim/capsule.gd")   # лише читання рівнів/імунітету для знаків на корпусі
 const ViewGeom = preload("res://scripts/ui/view_geom.gd")
+const CapsuleTexts = preload("res://scripts/ui/capsule_texts.gd")
+const Fmt = preload("res://scripts/ui/format.gd")
 const TILE := ViewGeom.TILE
 
 var sim: Variant
@@ -468,37 +470,66 @@ func _draw_building(b) -> void:
 		var bc := Color.html("5fd38a") if fr > 0.5 else (Color.html("ffcf5c") if fr > 0.25 else Color.html("ff6b6b"))
 		draw_rect(Rect2(p.x + 2, p.y - 2, (TILE - 4) * fr, 3), bc)
 
-# Основна капсула, greybox (spec 0010 REQ-0010-87; арт — лише після G0–G1, P4): три РІЗНІ знаки різної ФОРМИ (R11: не лише колір).
-# Рівень капсули 0..5 — ряд кружків-вогнів над корпусом (горить стільки, який рівень; решта — порожні контури); рівень захисту 0..5 —
-# ряд квадратних пластин під корпусом; тимчасовий щит імунітету — суцільна бульба навколо. Шість станів кожної осі читаються за ЧИСЛОМ знаків.
+# Основна капсула, greybox (spec 0010 REQ-0010-87; арт — лише після G0–G1, P4): ОДНА підписана табличка під корпусом (T-Ніколая: знаки без слів
+# лежали на спрайтах і не читались). Рядки: назва; «Рівень n/5» + ряд кружків; «Захист n/5» + ряд квадратів (R11: різна ФОРМА, не лише колір);
+# під імунітетом — ще рядок із часом і щит-кільце навколо корпусу. Корпус обведений, щоб серед столу/бочки було видно, ЩО саме капсула.
 func _draw_capsule_marks(p: Vector2, c: Vector2) -> void:
 	var cap: Dictionary = sim.main_capsule
 	var lvl: int = int(cap.get("level", 0))
 	var prot: int = int(cap.get("protection", 0))
 	var lamp_n: int = maxi(1, MainCapsule.max_level(sim))
 	var plate_n: int = maxi(1, MainCapsule.max_protection(sim))
-	var step := 5.2
 	var amber := Color(0.88, 0.69, 0.44, 1.0)
 	var steel := Color(0.53, 0.82, 0.84, 1.0)
-	var empty := Color(0.78, 0.83, 0.86, 0.45)
-	var x0: float = c.x - step * float(lamp_n - 1) * 0.5
+	var empty := Color(0.78, 0.83, 0.86, 0.5)
+	var fs := 10
+	var step := 7.0
+	var t_level: String = CapsuleTexts.t("mark_level") % [lvl, lamp_n]
+	var t_prot: String = CapsuleTexts.t("mark_protect") % [prot, plate_n]
+	var title: String = CapsuleTexts.t("capsule_title")
+	var imm: bool = MainCapsule.is_immune(sim)
+	var t_imm: String = CapsuleTexts.t("mark_immune") % Fmt.left_ms(MainCapsule.immune_left_ms(sim)) if imm else ""
+	var tw: float = 0.0
+	for s in [t_level, t_prot]:
+		tw = maxf(tw, _font.get_string_size(String(s), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x)
+	var w: float = maxf(tw + step * float(maxi(lamp_n, plate_n)) + 14.0, _font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 10.0)
+	w = maxf(w, _font.get_string_size(t_imm, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 10.0)
+	var rows: int = 4 if imm else 3
+	var box := Rect2(c.x - w * 0.5, p.y + TILE + 4.0, w, 13.0 * float(rows) + 3.0)
+	draw_rect(Rect2(p, Vector2(TILE, TILE)), amber, false, 1.5)
+	draw_line(Vector2(c.x, p.y + TILE), Vector2(c.x, box.position.y), amber, 1.0)
+	draw_rect(box, Color(0.04, 0.05, 0.06, 0.92))
+	draw_rect(box, Color(amber.r, amber.g, amber.b, 0.8), false, 1.0)
+	var y: float = box.position.y + 11.0
+	draw_string(_font, Vector2(box.position.x + 5.0, y), title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1.0, 0.93, 0.8))
+	y += 13.0
+	draw_string(_font, Vector2(box.position.x + 5.0, y), t_level, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, amber)
 	for i in lamp_n:
-		var at := Vector2(x0 + step * float(i), p.y - 4.0)
+		var at := Vector2(box.end.x - 5.0 - step * float(lamp_n - i) + step * 0.5, y - 3.5)
 		if i < lvl:
-			draw_circle(at, 3.2, Color(amber.r, amber.g, amber.b, 0.28))
-			draw_circle(at, 2.0, amber)
+			draw_circle(at, 2.6, amber)
 		else:
-			draw_arc(at, 1.9, 0.0, TAU, 12, empty, 1.0)
-	var px0: float = c.x - step * float(plate_n - 1) * 0.5
+			draw_arc(at, 2.2, 0.0, TAU, 12, empty, 1.0)
+	y += 13.0
+	draw_string(_font, Vector2(box.position.x + 5.0, y), t_prot, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, steel)
 	for i in plate_n:
-		var r := Rect2(px0 + step * float(i) - 1.9, p.y + TILE + 1.5, 3.8, 3.8)
+		var r := Rect2(box.end.x - 5.0 - step * float(plate_n - i) + step * 0.5 - 2.2, y - 5.7, 4.4, 4.4)
 		if i < prot:
 			draw_rect(r, steel)
 		else:
 			draw_rect(r, empty, false, 1.0)
-	if MainCapsule.is_immune(sim):
+	if imm:
+		y += 13.0
+		draw_string(_font, Vector2(box.position.x + 5.0, y), t_imm, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, steel)
 		draw_circle(c, TILE * 0.80, Color(steel.r, steel.g, steel.b, 0.12))
 		draw_arc(c, TILE * 0.80, 0.0, TAU, 32, Color(steel.r, steel.g, steel.b, 0.85), 2.0)
+
+func _mark_text(at: Vector2, text: String, col: Color) -> void:
+	var fs := 11
+	var w: float = _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var pos := Vector2(at.x - w * 0.5, at.y)
+	draw_string_outline(_font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 3, Color(0.04, 0.05, 0.06, 0.9))
+	draw_string(_font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 
 func _draw_raider(e, idx: int = 0) -> void:
 	var c := Vector2(e.px * TILE, e.py * TILE)

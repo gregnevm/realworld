@@ -171,7 +171,8 @@ static func _capsule_main(sim, ctx: Dictionary) -> Dictionary:
 		"protect": _capsule_axis(MainCapsule.quote(sim, &"protection")),
 		"immune_left_ms": MainCapsule.immune_left_ms(sim),
 		"raid_state": raid_state,
-		"ring": {"show": selected or alert, "alert": alert, "x": at.x, "y": at.y, "radius": MainCapsule.zone_radius(sim)},
+		"ring": {"show": selected or alert, "alert": alert, "x": at.x, "y": at.y, "radius": MainCapsule.zone_radius(sim),
+			"dir": int((sim.get("capsule_raid") as Dictionary).get("dir", 0))},
 		"storage": stock_rows,
 	}
 
@@ -739,7 +740,7 @@ static func _inspect_node(sim, node: Dictionary, t: Vector2i) -> Dictionary:
 		"hint": "ЛКМ — %s · повну торбу пішак сам віднесе на склад" % Fmt.node_verb(kind)}
 
 static func _inspect_capsule(sim) -> Dictionary:
-	var lines: Array = ["◎ рівень %d/%d · 🛡 захист %d/%d" % [int(sim.main_capsule.get("level", 0)), MainCapsule.max_level(sim),
+	var lines: Array = ["◎ рівень %d/%d · ▣ захист %d/%d" % [int(sim.main_capsule.get("level", 0)), MainCapsule.max_level(sim),
 		MainCapsule.protection_of(sim), MainCapsule.max_protection(sim)]]
 	if MainCapsule.is_immune(sim):
 		lines.append(CapsuleTexts.t("immune_inspect") % Fmt.left_ms(MainCapsule.immune_left_ms(sim)))

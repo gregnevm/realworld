@@ -663,8 +663,11 @@ func _tick_action(dt: float) -> void:
 	view.action_target = act_target
 	view.action_mode = act_mode
 	view.action_build = act_build
+	# підпис дії над кнопкою ховається, поки відкрита панель капсули: інакше він лягає на рядок ціни (T-Ніколая, кадр 05)
+	var cap_pn: Variant = preg.get_panel(&"capsule_bay")
+	var cap_open: bool = cap_pn != null and bool(cap_pn.visible)
 	tc.bind_state({"mode": act_mode, "slots": _act_slots, "active": act_slot, "overview": act_overview,
-		"target": _target_label(act_target), "guide": _guide_slot()})
+		"target": "" if cap_open else _target_label(act_target), "guide": _guide_slot()})
 	var bb: Variant = preg.get_panel(&"build_bar")
 	if bb != null and not bool(sim.use_inventory) and bool(bb._open) != (act_mode == &"build"):
 		bb.set_drawer(act_mode == &"build")   # proactive drawer: Build mode opens it, any other mode closes it

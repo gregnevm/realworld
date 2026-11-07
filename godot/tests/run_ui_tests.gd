@@ -1476,7 +1476,7 @@ func _t_capsule_adv() -> void:
 		_count_primary(panel, fr)
 		ok(int(fr[0]) == (1 if c[0] < 5 else 0), "REQ-0010-37 L%d/P%d: at most ONE filled button (%d)" % [c[0], c[1], int(fr[0])])
 		ok("Рівень %d/5" % c[0] in String(panel._m_levels.text) and "Захист %d/5" % c[1] in String(panel._m_levels.text), "M5 L%d/P%d: the printed levels equal the sim" % [c[0], c[1]])
-		ok(not panel._m_up.visible or ("рівень %d" % (c[0] + 1)) in String(panel._m_up.text), "M5 L%d: the button names the NEXT level" % c[0])
+		ok(not panel._m_up.visible or ("до %d" % (c[0] + 1)) in String(panel._m_up.text), "M5 L%d: the button names the NEXT level" % c[0])
 	# --- щит і рейд-рядки зникають разом зі станом (текст не залишається неправдою) ---
 	fresh.sim.main_capsule.immune_until = int(fresh.sim.now_ms) + 60000
 	panel.bind(_cap_snap(fresh))
@@ -1870,9 +1870,14 @@ func _t_capsule_w4b_adv() -> void:
 	var wv_src: String = _read_code("res://scripts/world_view.gd")
 	var at: int = wv_src.find("func _draw_capsule_marks")
 	var body: String = wv_src.substr(at, wv_src.find("\nfunc ", at + 10) - at)
-	var gate: int = body.find("\tif MainCapsule.is_immune(sim):\n\t\tdraw_circle(")
+	var gate: int = body.find("\tif imm:\n\t\ty += 13.0\n\t\tdraw_string(_font, Vector2(box.position.x + 5.0, y), t_imm")
+	gate = body.find("draw_circle(c, TILE", gate) if gate > 0 else -1
 	ok(gate > 0 and body.find("draw_arc", gate) > gate and body.count("is_immune") == 1, "REQ-0010-27: the shield is drawn only under is_immune (no unconditional bubble)")
-	ok(not ("draw_string" in body), "REQ-0010-27/87: the shield and marks carry no text (diegetic)")
+	var literal_text := false   # T-Ніколая: знаки підписані словами, але слова лише з таблиці capsule_texts.gd (R1/R2: жодного літерала в малюванні)
+	for ln in body.split("\n"):
+		if "draw_string(" in ln and "\"" in ln:
+			literal_text = true
+	ok(not literal_text, "REQ-0010-27/87: the plate texts come from the capsule text table (no string literal in the drawing code)")
 	# знімок — чисте читання
 	sim.main_capsule.immune_until = now + 90 * 60000
 	var h0: String = PersistenceMod.world_hash(sim)

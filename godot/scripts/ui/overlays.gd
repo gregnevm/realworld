@@ -10,6 +10,7 @@ const OverlayBase = preload("res://scripts/ui/overlay.gd")
 const Tokens = preload("res://scripts/ui/tokens.gd")
 const ViewGeom = preload("res://scripts/ui/view_geom.gd")
 const TILE := ViewGeom.TILE
+const CapsuleTexts = preload("res://scripts/ui/capsule_texts.gd")
 
 # ---- Ambient night (ALWAYS on — not a toggle). Every visible tile darkens by its OWN light level, so
 # campfires, torches and lamps carve warm pools out of the dark: the night the player SEES is the
@@ -86,6 +87,33 @@ class CapsuleRing extends OverlayBase.Overlay:
 			var sy: float = 1.0 if corner.y <= area.position.y else -1.0
 			host.draw_line(corner, corner + Vector2(tick * sx, 0.0), Tokens.with_alpha(col, 1.0), 4.0)
 			host.draw_line(corner, corner + Vector2(0.0, tick * sy), Tokens.with_alpha(col, 1.0), 4.0)
+		# підпис рамки (T-Ніколая: рамка без слів читалась як межа мапи) — табличка ПІД табличкою капсули (world_view), у кольорі рамки: верхній
+		# край рамки часто під топ-баром, а бічні краї — під боковими панелями. Під час тривоги — «сюди йде рейд» + ціль, і стрілки «звідки» (OD-88)
+		var font: Font = ThemeDB.fallback_font
+		var l1: String = CapsuleTexts.t("zone_label_alert" if alert else "zone_label")
+		var l2: String = CapsuleTexts.t("zone_label_alert2" if alert else "zone_label2")
+		var fs := 10
+		var w: float = maxf(font.get_string_size(l1, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x, font.get_string_size(l2, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x) + 12.0
+		var pill_rows: int = 4 if int(main.get("immune_left_ms", 0)) > 0 else 3   # висота таблички капсули (world_view._draw_capsule_marks)
+		var box := Rect2((float(ring.x) + 0.5) * TILE - w * 0.5, (float(ring.y) + 1.0) * TILE + 4.0 + 13.0 * float(pill_rows) + 6.0, w, 29.0)
+		host.draw_rect(box, Tokens.with_alpha(Tokens.BG, 0.92))
+		host.draw_rect(box, Tokens.with_alpha(col, 0.9), false, 1.0)
+		host.draw_string(font, box.position + Vector2(6.0, 11.0), l1, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Tokens.with_alpha(col, 1.0))
+		host.draw_string(font, box.position + Vector2(6.0, 24.0), l2, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Tokens.INK)
+		if alert:
+			_draw_incoming(host, area, int(ring.get("dir", 0)), col)
+
+	# Три шеврони, що вказують на капсулу з того краю рамки, з якого йде рейд (0 захід, 1 схід, 2 північ, 3 південь — Threats.edge_cell).
+	func _draw_incoming(host: CanvasItem, area: Rect2, dir: int, col: Color) -> void:
+		var mid: Vector2 = area.get_center()
+		var inward: Vector2 = [Vector2.RIGHT, Vector2.LEFT, Vector2.DOWN, Vector2.UP][clampi(dir, 0, 3)]
+		var side: Vector2 = Vector2(-inward.y, inward.x)
+		var edge: Vector2 = mid - inward * (area.size.x * 0.5)
+		for i in 3:
+			var tip: Vector2 = edge - inward * (TILE * (0.2 + 0.7 * float(i)))
+			var back: Vector2 = tip - inward * (TILE * 0.7)
+			host.draw_line(back + side * TILE * 0.55, tip, Tokens.with_alpha(col, 1.0), 4.0)
+			host.draw_line(back - side * TILE * 0.55, tip, Tokens.with_alpha(col, 1.0), 4.0)
 
 # Shared light math (sim.light_at parity: Manhattan distance, linear falloff to the source radius).
 class Lit extends RefCounted:
