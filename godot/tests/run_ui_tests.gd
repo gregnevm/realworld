@@ -97,6 +97,8 @@ func _init() -> void:
 	await _t_capsule_adv()
 	_t_capsule_adv_pure()
 	await _t_capsule_texts()
+	_t_capsule_g3()
+	_t_capsule_g3_qa()
 	_t_capsule_no_goal_gates()
 	await _t_capsule_w4b_adv()
 	_t_rule_tripwires()
@@ -1857,7 +1859,9 @@ func _t_capsule_w4b_adv() -> void:
 	panel.bind(sn)
 	var vis: String = " ".join(_visible_texts(panel))
 	ok("Імунітет" in vis and "1 год 30 хв" in vis, "REQ-0010-27: the panel row shows the remaining time (%s)" % vis)
-	ok("імунітет ще 1 год 30 хв" in " ".join(HudModel._inspect_capsule(sim).lines), "REQ-0010-27: the inspector row shows the remaining time")
+	ok("Імунітет до рейдів · 1 год 30 хв" in " ".join(HudModel._inspect_capsule(sim).lines), "REQ-0010-27: the inspector row shows the remaining time")
+	ok("Імунітет до рейдів · 1 год 30 хв" in vis, "G3: the panel row says WHAT the immunity is for («до рейдів») and shows hours + minutes (%s)" % vis)
+	ok(CapsuleTexts.t("mark_immune") % Fmt.left_ms(20 * 3600000) == "Імунітет до рейдів · 20 год 0 хв", "G3: the hull plate row reads «Імунітет до рейдів · 20 год 0 хв»")
 	sim.main_capsule.immune_until = now + 1
 	ok(CapsuleMod.is_immune(sim) and int(_cap_snap(s).capsule.main.immune_left_ms) == 1, "REQ-0010-27: one ms before the end the capsule is still immune")
 	sim.main_capsule.immune_until = now
@@ -1924,6 +1928,268 @@ func _t_capsule_w4b_adv() -> void:
 	router.dispatch(&"capsule_upgrade", {}, none)
 	ok(int(done.sim.main_capsule.level) == 1 and int(none.sim.main_capsule.level) == 1 and PersistenceMod.world_hash(done.sim) == PersistenceMod.world_hash(none.sim),
 		"REQ-0010-95: capsule upgrade is identical with no goals done and with all goals done (twin hash)")
+
+# G3 (тест Ніколая): банер без «~0», справжня назва ворога, коротка причина відмови, картка капсули, позначки рейдерів у контакті, ширина картки відмови.
+func _t_capsule_g3() -> void:
+	# 1. банер: склад невідомий (0) -> без числа; відомий -> «~N»
+	var warn0: String = CapsuleTexts.raid_banner("warning", {"dir": 2, "count": 0, "contact_at": 15 * 60000}, 0)
+	var warn5: String = CapsuleTexts.raid_banner("warning", {"dir": 2, "count": 5, "contact_at": 15 * 60000}, 0)
+	var con0: String = CapsuleTexts.raid_banner("contact", {"dir": 1, "count": 0}, 0)
+	var con5: String = CapsuleTexts.raid_banner("contact", {"dir": 1, "count": 5}, 0)
+	ok(warn0 != "" and not ("~0" in warn0) and not (" 0 рейдер" in warn0) and "15 хв" in warn0 and "з півночі" in warn0, "G3/REQ-0010-19: an unknown composition names no number, never «~0» (%s)" % warn0)
+	ok("~5 рейдерів" in warn5 and "15 хв" in warn5, "G3: a known composition is named (%s)" % warn5)
+	ok(con0 != "" and not (" 0 рейдер" in con0) and "РЕЙД" in con0, "G3: the contact banner without a count names no zero (%s)" % con0)
+	ok("5 рейдерів" in con5, "G3: the contact banner names the known count (%s)" % con5)
+	# 2. дев-хук називає ворога реальним словом, не «тестові»
+	var r: Variant = _capsule_session(true)
+	r.sim.main_capsule.level = 1
+	var fr: Dictionary = CapsuleMod.force_raid(r.sim, true)
+	var fac: String = String(r.sim.capsule_raid.faction)
+	ok(bool(fr.get("ok", false)) and fac != "" and not ("тест" in fac.to_lower()), "G3: the forced raid's enemy has a real name, not a debug leftover (%s)" % fac)
+	var bsrc: String = " ".join(CapsuleTexts.TEXTS.values()).to_lower()
+	ok(not ("тест" in bsrc), "G3: no «тест…» word in any capsule UI string")
+	# 3. причина відмови: перша причина словами, без ланцюжка залежностей
+	var why: String = Fmt.capsule_shortfall({"planks": 3, "wood": 8}, false)
+	ok(why.begins_with("Бракує: ") and why.count("×") == 1 and "«" in why and not ("дослідження" in why) and not (" з " in why) and not ("•" in why), "G3/REQ-0010-38: one reason, no dependency chain (%s)" % why)
+	ok(not ("дослідження" in Fmt.capsule_shortfall({"planks": 3}, true)), "G3: even with the walk-back hint no research chain is spelled out")
+	# 5/4. картка капсули: що дає рівень (число з даних) і що дає захист
+	var lines: String = " ".join(HudModel._inspect_capsule(r.sim).lines)
+	var pct: int = int(round(CapsuleMod.buff_bonus(r.sim, "gather_mult", 1) * 100.0))
+	ok(pct > 0 and ("+%d%% збір, крафт, відпочинок, дослідження за рівень" % pct) in lines, "G3: the card says what a level gives, the number from the data (+%d%%)" % pct)
+	ok("рейдери довше ламають ядро" in lines, "G3: the card says what protection gives")
+	ok("межа бази" in CapsuleTexts.t("zone_label"), "G3: the zone caption explains the boundary")
+	# 6. контакт: позначки рейдерів у слайсі лише в контакті, і оверлей їх малює
+	var calm: Dictionary = _cap_snap(r).capsule.main.ring
+	ok((calm.raiders as Array).is_empty(), "G3: no raider marks before the contact")
+	CapsuleMod._announce(r.sim, int(r.sim.now_ms))
+	r.sim.capsule_raid.contact_at = int(r.sim.now_ms)
+	r.sim.update(0.05)
+	var hot: Dictionary = _cap_snap(r).capsule.main
+	ok(String(hot.raid_state) == "contact" and (hot.ring.raiders as Array).size() > 0 and bool(hot.ring.alert) and bool(hot.ring.show), "G3: in the contact state the ring is alert and carries %d raider marks" % (hot.ring.raiders as Array).size())
+	var ov_src: String = _read_code("res://scripts/ui/overlays.gd")
+	ok("ring.get(\"raiders\"" in ov_src, "G3: the ring overlay draws the raider marks")
+	# 3. картка відмови над героєм не схлопується в стовпчик: мінімальна ширина = природна ширина тексту (до стелі)
+	var fw: Widgets.FlashWidget = Widgets.FlashWidget.new()
+	fw.build_once()
+	var bus: Variant = FeedbackBus.FeedbackBus.new()
+	fw.subscribe(bus)
+	bus.flash.emit({"params": {"text": "Бракує: камінь ×1 — добувай у скелях"}})
+	var lw: float = float((fw._card.label as Label).custom_minimum_size.x)
+	ok(lw >= 150.0 and lw <= Widgets.FlashWidget.CAP_W, "G3: the refusal card has a real width (%.0f px), not a one-letter column" % lw)
+	fw.free()
+	r.sim.dispose_farm()
+	r.sim.dispose_power()
+
+# ---- QA-противник G3 (REQ-0010-19/27/38/40/85): властивості й крайні стани, незалежно від тестів автора ----
+func _g3_contact_session(level: int) -> Variant:
+	var r: Variant = _capsule_session(true)
+	r.sim.main_capsule.level = level
+	if level > 0:
+		r.sim.main_capsule.first_upgrade_at = int(r.sim.now_ms)
+	CapsuleMod.force_raid(r.sim, true)
+	r.sim.update(0.05)   # planned -> warning
+	return r
+
+func _g3_to_contact(r: Variant) -> void:
+	r.sim.set_clock(int(r.sim.capsule_raid.contact_at))
+	r.sim.update(0.05)
+
+func _t_capsule_g3_qa() -> void:
+	# --- REQ-19: «~0» неможливе за жодного складу (властивість), число названо, коли відоме ---
+	var bad_count: Array = []
+	for n in [-1000, -5, -1, 0, 1, 2, 5, 32, 1000]:
+		for st in ["warning", "contact"]:
+			var rr: Dictionary = {"dir": 1, "count": n, "contact_at": 900000}
+			var txt: String = CapsuleTexts.raid_banner(st, rr, 0)
+			if txt == "" or "~0" in txt or "~-" in txt or " 0 рейдер" in txt or (n < 0 and ("%d рейдер" % n) in txt):
+				bad_count.append("%s/%d: %s" % [st, n, txt])
+			if n > 0 and not (str(n) in txt and "рейдерів" in txt):
+				bad_count.append("%s/%d lacks the known count: %s" % [st, n, txt])
+			if "%" in txt:
+				bad_count.append("unexpanded format in %s" % txt)
+	ok(bad_count.is_empty(), "G3-QA/REQ-0010-19: for any count the banner never says 0/negative and always names a known count (%s)" % str(bad_count))
+	ok(CapsuleTexts.raid_banner("warning", {}, 0) != "" and CapsuleTexts.raid_banner("none", {"count": 3}, 0) == "" and CapsuleTexts.raid_banner("planned", {"count": 3}, 0) == "",
+		"G3-QA/REQ-0010-19: empty record still gives a banner; non-alert states give none (sim banner stays)")
+	for d in [-7, 0, 3, 9]:
+		ok(CapsuleTexts.dir_word(d) != "", "G3-QA: direction %d out of/in range still yields a word" % d)
+	# реальний потік по рівнях 1..max: банер через шину (те, що бачить гравець) без нуля й без «тест»
+	var lvl_max: int = 5
+	for lvl in range(1, lvl_max + 1):
+		var r: Variant = _g3_contact_session(lvl)
+		if lvl == 1:
+			lvl_max = CapsuleMod.max_level(r.sim)
+		var bus: Variant = FeedbackBus.FeedbackBus.new()
+		var wb: String = bus._raid_banner(r.sim, String(r.sim.banner))
+		ok(String(r.sim.capsule_raid.state) == "warning" and int(r.sim.capsule_raid.count) > 0, "G3-QA: L%d forced raid is in warning with a real composition (%d)" % [lvl, int(r.sim.capsule_raid.count)])
+		ok("~%d рейдерів" % int(r.sim.capsule_raid.count) in wb and not ("~0" in wb) and "НАБЛИЖАЄТЬСЯ" in wb, "G3-QA/REQ-0010-19: L%d player-visible warning banner names the sim count (%s)" % [lvl, wb])
+		ok("тест" not in wb.to_lower() and "test" not in wb.to_lower(), "G3-QA: L%d warning banner has no debug word" % lvl)
+		_g3_to_contact(r)
+		var cb: String = bus._raid_banner(r.sim, String(r.sim.banner))
+		ok(String(r.sim.capsule_raid.state) == "contact" and "РЕЙД" in cb and not (" 0 рейдер" in cb) and "тест" not in cb.to_lower(),
+			"G3-QA: L%d contact banner is a real raid banner (%s)" % [lvl, cb])
+		var logs: String = " ".join(PackedStringArray((r.sim.messages as Array).map(func(m): return String(m.text)))).to_lower()
+		ok("тест" not in logs and "test" not in logs and ".gd" not in logs, "G3-QA/REQ-0010-40: L%d feed lines of the raid carry no debug leftover" % lvl)
+		r.sim.dispose_farm()
+		r.sim.dispose_power()
+	# рівень 0 (хук без прокачки): банер чесний, ніколи «0 рейдерів»
+	var r0: Variant = _g3_contact_session(0)
+	var bus0: Variant = FeedbackBus.FeedbackBus.new()
+	var w0: String = bus0._raid_banner(r0.sim, String(r0.sim.banner))
+	_g3_to_contact(r0)
+	var c0: String = bus0._raid_banner(r0.sim, String(r0.sim.banner))
+	ok(not ("~0" in w0) and not ("0 рейдер" in w0) and not ("0 рейдер" in c0), "G3-QA/REQ-0010-19: level-0 forced raid never shows a zero count (%s | %s)" % [w0, c0])
+	r0.sim.dispose_farm()
+	r0.sim.dispose_power()
+	# OFF: банер sim-а проходить дослівно
+	var off: Variant = _capsule_session(false)
+	off.sim.banner = "⚔ РЕЙД! 3 рейдерів — x"
+	var offbus: Variant = FeedbackBus.FeedbackBus.new()
+	ok(offbus._raid_banner(off.sim, String(off.sim.banner)) == "⚔ РЕЙД! 3 рейдерів — x", "G3-QA/OFF: raid banner untouched with the capsule flag off")
+	ok(not (_cap_snap(off).capsule as Dictionary).has("main"), "G3-QA/OFF: no capsule.main in the OFF snapshot")
+	off.sim.dispose_farm()
+	off.sim.dispose_power()
+
+	# --- «тест» ніколи не з'являється: усі рядкові літерали UI/капсули та таблиця ---
+	var rx := RegEx.new()
+	rx.compile("\"[^\"\n]*[Тт][Ее][Сс][Тт][^\"\n]*\"")
+	var leaks: Array = []
+	var files: Array = ["res://scripts/sim/capsule.gd", "res://scripts/world_view.gd"]
+	for f in DirAccess.get_files_at("res://scripts/ui"):
+		if String(f).ends_with(".gd"):
+			files.append("res://scripts/ui/" + String(f))
+	for f in files:
+		for m in rx.search_all(_read_code(String(f))):
+			leaks.append("%s: %s" % [String(f).get_file(), m.get_string()])
+	ok(leaks.is_empty(), "G3-QA/REQ-0010-40: no string literal with «тест» in ui/*, world_view, sim/capsule (%s)" % str(leaks))
+
+	# --- REQ-38: перша причина словами — для КОЖНОГО рівня обох осей, обох станів `far` ---
+	var rs: Variant = _capsule_session(true)
+	var shorts: Array = []
+	var checked: int = 0
+	for axis in [&"capsule", &"protection"]:
+		var top: int = CapsuleMod.max_protection(rs.sim) if axis == &"protection" else CapsuleMod.max_level(rs.sim)
+		for lv in range(0, top):
+			rs.sim.main_capsule["protection" if axis == &"protection" else "level"] = lv
+			var q: Dictionary = CapsuleMod.quote(rs.sim, axis)
+			if (q.missing as Dictionary).is_empty():
+				continue
+			for far in [false, true]:
+				var w: String = Fmt.capsule_shortfall(q.missing, far)
+				checked += 1
+				if not w.begins_with("Бракує: ") or w.count("×") != 1 or "дослідження" in w or " з " in w or "(" in w or w.count("Бракує") != 1:
+					shorts.append("%s L%d far=%s: %s" % [axis, lv, far, w])
+				for k in (q.missing as Dictionary).keys():
+					var id: String = String(k)
+					if id == id.to_lower() and id.is_valid_identifier() and (id + " ") in (w + " "):
+						shorts.append("raw id '%s' in %s" % [id, w])
+	ok(checked >= 4 and shorts.is_empty(), "G3-QA/REQ-0010-38: every ladder refusal is one reason in words, no chain, no raw id (%d checked; %s)" % [checked, str(shorts)])
+	rs.sim.main_capsule.level = 0
+	rs.sim.main_capsule.protection = 0
+	var q0: Dictionary = CapsuleMod.quote(rs.sim, &"capsule")
+	var snap_why: String = String(_cap_snap(rs).capsule.main.upgrade.why)
+	ok(snap_why == Fmt.capsule_shortfall(q0.missing, bool(q0.far)) and (bool(q0.can) or snap_why.begins_with("Бракує: ")), "G3-QA/REQ-0010-38: the snapshot refusal text is exactly the formatter's output for the sim quote (%s)" % snap_why)
+	_grant_cost(rs, &"capsule")
+	var afford: Dictionary = _cap_snap(rs).capsule.main.upgrade
+	ok(bool(afford.can) and String(afford.why) == "", "G3-QA/REQ-0010-38: when affordable there is no refusal text")
+	ok(Fmt.capsule_shortfall({}, false) == "" and Fmt.capsule_shortfall({}, true) == "", "G3-QA: empty shortfall -> empty string")
+
+	# --- ширина картки відмови ---
+	var fw: Widgets.FlashWidget = Widgets.FlashWidget.new()
+	fw.build_once()
+	var fbus: Variant = FeedbackBus.FeedbackBus.new()
+	fw.subscribe(fbus)
+	var lbl: Label = fw._card.label
+	var longt: String = Fmt.capsule_shortfall({"planks": 3}, true) + " · " + "дуже довгий додатковий пояснювальний хвіст, що мусить переноситись, а не розтягувати картку"
+	fbus.flash.emit({"params": {"text": longt}})
+	var w_long: float = lbl.custom_minimum_size.x
+	fbus.flash.emit({"params": {"text": "Бракує: камінь ×1"}})
+	var w_short: float = lbl.custom_minimum_size.x
+	fbus.flash.emit({"params": {"text": longt}})
+	ok(w_long == Widgets.FlashWidget.CAP_W, "G3-QA/REQ-0010-38: a very long refusal is capped at CAP_W and wraps (%.0f)" % w_long)
+	ok(w_short > 40.0 and w_short < w_long, "G3-QA: a short refusal after a long one shrinks the card, never stays stale or a letter column (%.0f < %.0f)" % [w_short, w_long])
+	fbus.flash.emit({"params": {"text": ""}})
+	ok(not fw.visible, "G3-QA: an empty flash hides the card")
+	fw.free()
+
+	# --- REQ-27: імунітет читається однаково в картці, панелі й на табличці ---
+	var imm: Variant = _capsule_session(true)
+	var now: int = int(imm.sim.now_ms)
+	imm.sim.main_capsule.immune_until = now + 20 * 3600000
+	var card: String = " ".join(HudModel._inspect_capsule(imm.sim).lines)
+	ok("Імунітет до рейдів · 20 год 0 хв" in card, "G3-QA/REQ-0010-27: card reads «Імунітет до рейдів · 20 год 0 хв»")
+	ok(CapsuleTexts.t("mark_immune") % Fmt.left_ms(CapsuleMod.immune_left_ms(imm.sim)) == "Імунітет до рейдів · 20 год 0 хв", "G3-QA/REQ-0010-27: the hull plate text has the same words")
+	var pn: Variant = WorldPanels.CapsulePanel.new()
+	pn.build_once()
+	pn.bind(_cap_snap(imm, {"open_panels": ["capsule_bay"]}))
+	ok(pn._m_immune.visible and "Імунітет до рейдів · 20 год 0 хв" in pn._m_immune.text, "G3-QA/REQ-0010-27: panel line reads the same (%s)" % pn._m_immune.text)
+	imm.sim.main_capsule.immune_until = now + 1
+	ok(Fmt.left_ms(1) == "1 хв" and "Імунітет до рейдів · 1 хв" in " ".join(HudModel._inspect_capsule(imm.sim).lines), "G3-QA/REQ-0010-27: 1 ms left is shown as «1 хв», never «0 хв» while immune")
+	imm.sim.main_capsule.immune_until = now
+	ok(not ("Імунітет" in " ".join(HudModel._inspect_capsule(imm.sim).lines)), "G3-QA/REQ-0010-27: immune_until == now means no immunity and no line")
+	pn.bind(_cap_snap(imm, {"open_panels": ["capsule_bay"]}))
+	ok(not pn._m_immune.visible, "G3-QA/REQ-0010-27: panel hides the immunity line when it has expired")
+	var imm_bad: Array = []
+	for k in CapsuleTexts.TEXTS:
+		var v: String = String(CapsuleTexts.TEXTS[k])
+		if "мунітет" in v and not ("до рейдів" in v):
+			imm_bad.append(k)
+	ok(imm_bad.is_empty(), "G3-QA/REQ-0010-27: every capsule string that says immunity says «до рейдів» (%s)" % str(imm_bad))
+	pn.free()
+	imm.sim.dispose_farm()
+	imm.sim.dispose_power()
+
+	# --- картка: твердження про рівень правдиве за даними (лінійність «за рівень», 4 осі) ---
+	var lin: Array = []
+	for key in CapsuleMod.BUFF_KEYS:
+		var b1: float = CapsuleMod.buff_bonus(rs.sim, String(key), 1)
+		for lv in range(1, CapsuleMod.max_level(rs.sim) + 1):
+			if absf(CapsuleMod.buff_bonus(rs.sim, String(key), lv) - b1 * float(lv)) > 0.005:
+				lin.append("%s L%d=%.3f vs %.3f" % [key, lv, CapsuleMod.buff_bonus(rs.sim, String(key), lv), b1 * lv])
+	ok(lin.is_empty() and CapsuleMod.BUFF_KEYS.size() == 4, "G3-QA/REQ-0010-85: «за рівень» on the card is true for the four axes at every level (%s)" % str(lin))
+	var zl: String = CapsuleTexts.t("zone_label") + " " + CapsuleTexts.t("zone_label2")
+	ok("межа бази" in zl and "бафи" in zl and "склад" in zl, "G3-QA: zone caption names the boundary, buffs and storage")
+
+	# --- контакт: позначки лише в контакті, межі, боти, значення-дані ---
+	var rc: Variant = _g3_contact_session(1)
+	var warn_ring: Dictionary = _cap_snap(rc).capsule.main.ring
+	ok(bool(warn_ring.alert) and bool(warn_ring.show) and (warn_ring.raiders as Array).is_empty(), "G3-QA: in warning the ring alerts (shown without selecting) but carries no raider marks")
+	_g3_to_contact(rc)
+	var hot: Dictionary = _cap_snap(rc).capsule.main
+	var alive: int = 0
+	for e in rc.sim.enemies:
+		if String(e.get("kind", "raider")) != "bot":
+			alive += 1
+	ok(String(hot.raid_state) == "contact" and bool(hot.ring.show) and bool(hot.ring.alert), "G3-QA: contact is visible without the capsule being selected (ring show+alert)")
+	ok((hot.ring.raiders as Array).size() == mini(alive, 32) and alive == int(rc.sim.capsule_raid.count), "G3-QA: one mark per living raider (%d marks, %d alive, %d planned)" % [(hot.ring.raiders as Array).size(), alive, int(rc.sim.capsule_raid.count)])
+	ok(not _holds_object(hot), "G3-QA/R8: the contact slice (with marks) is value data")
+	var n_map: int = int(rc.sim.n)
+	var in_map := true
+	for m in hot.ring.raiders:
+		if float(m.x) < 0.0 or float(m.y) < 0.0 or float(m.x) > float(n_map) or float(m.y) > float(n_map):
+			in_map = false
+	ok(in_map, "G3-QA: raider marks lie inside the map")
+	var first_raider: Dictionary = {}
+	for e in rc.sim.enemies:
+		if String(e.get("kind", "raider")) != "bot":
+			first_raider = e
+			break
+	if not first_raider.is_empty():
+		var bot: Dictionary = first_raider.duplicate(true)
+		bot["kind"] = "bot"
+		rc.sim.enemies.append(bot)
+		for i in 40:
+			rc.sim.enemies.append(first_raider.duplicate(true))
+		var capped: Array = _cap_snap(rc).capsule.main.ring.raiders
+		ok(capped.size() == 32, "G3-QA: marks are capped at 32 and a patrol bot adds none (%d)" % capped.size())
+		rc.sim.enemies.clear()
+		rc.sim.update(0.05)   # рейдерів нема -> розв'язка
+		var after: Dictionary = _cap_snap(rc).capsule.main
+		ok(String(after.raid_state) != "contact" and (after.ring.raiders as Array).is_empty(), "G3-QA: after the raid resolves no stale marks remain (%s)" % String(after.raid_state))
+	rc.sim.dispose_farm()
+	rc.sim.dispose_power()
+	rs.sim.dispose_farm()
+	rs.sim.dispose_power()
+
 
 func _t_rule_tripwires() -> void:
 	# R1 — one-way flow: no sim/kernel/session/social/persistence file references res://scripts/ui

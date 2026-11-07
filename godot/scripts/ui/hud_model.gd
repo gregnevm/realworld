@@ -172,9 +172,21 @@ static func _capsule_main(sim, ctx: Dictionary) -> Dictionary:
 		"immune_left_ms": MainCapsule.immune_left_ms(sim),
 		"raid_state": raid_state,
 		"ring": {"show": selected or alert, "alert": alert, "x": at.x, "y": at.y, "radius": MainCapsule.zone_radius(sim),
-			"dir": int((sim.get("capsule_raid") as Dictionary).get("dir", 0))},
+			"dir": int((sim.get("capsule_raid") as Dictionary).get("dir", 0)), "raiders": _capsule_raiders(sim, raid_state)},
 		"storage": stock_rows,
 	}
+
+# Позначки рейдерів на полі (лише в контакті): клітинки живих НЕ-ботів — value-data (R8), максимум RAIDER_MARKS.
+const RAIDER_MARKS := 32
+static func _capsule_raiders(sim, raid_state: StringName) -> Array:
+	var out: Array = []
+	if raid_state != MainCapsule.ST_CONTACT:
+		return out
+	for e in sim.enemies:
+		if String((e as Dictionary).get("kind", "raider")) == "bot" or out.size() >= RAIDER_MARKS:
+			continue
+		out.append({"x": float(e.px), "y": float(e.py)})
+	return out
 
 static func _capsule_axis(q: Dictionary) -> Dictionary:
 	return {"next": int(q.next), "can": bool(q.can), "cost": Fmt.cost_words(q.cost), "why": Fmt.capsule_shortfall(q.missing, bool(q.far))}
@@ -739,9 +751,26 @@ static func _inspect_node(sim, node: Dictionary, t: Vector2i) -> Dictionary:
 	return {"shown": true, "state": &"good", "title": Fmt.node_title(kind), "lines": lines,
 		"hint": "ЛКМ — %s · повну торбу пішак сам віднесе на склад" % Fmt.node_verb(kind)}
 
+# Що дає рівень: відсоток приросту ЗА РІВЕНЬ береться з даних (бафи рівня 1 по чотирьох осях); різні осі -> «від +N%» за найменшим.
+static func _capsule_gives_level(sim) -> String:
+	var lo: float = 1.0e9
+	var hi: float = -1.0e9
+	for key in MainCapsule.BUFF_KEYS:
+		var b: float = MainCapsule.buff_bonus(sim, String(key), 1)
+		lo = minf(lo, b)
+		hi = maxf(hi, b)
+	var pct: int = int(round(lo * 100.0))
+	if pct <= 0:
+		return ""   # даних про приріст нема -> рядка нема (не вигадуємо число)
+	return CapsuleTexts.t("gives_level") % pct if is_equal_approx(lo, hi) else CapsuleTexts.t("gives_level_from") % pct
+
 static func _inspect_capsule(sim) -> Dictionary:
 	var lines: Array = ["◎ рівень %d/%d · ▣ захист %d/%d" % [int(sim.main_capsule.get("level", 0)), MainCapsule.max_level(sim),
 		MainCapsule.protection_of(sim), MainCapsule.max_protection(sim)]]
+	var gives: String = _capsule_gives_level(sim)
+	if gives != "":
+		lines.append(gives)
+	lines.append(CapsuleTexts.t("gives_protect"))
 	if MainCapsule.is_immune(sim):
 		lines.append(CapsuleTexts.t("immune_inspect") % Fmt.left_ms(MainCapsule.immune_left_ms(sim)))
 	return {"shown": true, "state": &"info", "title": String(sim.building_def(MainCapsule.KIND).get("name", "")), "lines": lines,

@@ -483,6 +483,7 @@ class BannerWidget extends WidgetBase.Widget:
 
 class FlashWidget extends WidgetBase.Widget:
 	const HOLD := 2.2
+	const CAP_W := 340.0   # найширша картка відмови; довший текст переноситься
 	var _bus: Variant
 	var _card: Dictionary = {}
 	var _t := 0.0
@@ -505,6 +506,10 @@ class FlashWidget extends WidgetBase.Widget:
 	func _on_flash(evt: Dictionary) -> void:
 		text = String(evt.get("params", {}).get("text", ""))
 		_card.label.text = text
+		# Автоперенос без мінімальної ширини схлопує картку до однієї літери (довга відмова капсули читалась вертикально): ширина = природна ширина тексту, не більше CAP_W
+		var font: Font = (_card.label as Label).get_theme_font("font")
+		var nat: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x + 8.0
+		(_card.label as Label).custom_minimum_size.x = minf(nat, CAP_W)
 		_t = HOLD
 		modulate = Tokens.WHITE
 		visible = text != ""

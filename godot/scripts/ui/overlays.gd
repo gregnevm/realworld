@@ -102,6 +102,14 @@ class CapsuleRing extends OverlayBase.Overlay:
 		host.draw_string(font, box.position + Vector2(6.0, 24.0), l2, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Tokens.INK)
 		if alert:
 			_draw_incoming(host, area, int(ring.get("dir", 0)), col)
+		# контакт: кожен рейдер — червоний ромб-позначка з обводкою (R11: форма, не лише колір) і лінія до ядра, щоб бій читався й коли спрайт далеко/малий
+		var core: Vector2 = area.get_center()
+		for rd in ring.get("raiders", []):
+			var at := Vector2(float(rd.x) * TILE, float(rd.y) * TILE)
+			var pts := PackedVector2Array([at + Vector2(0, -9), at + Vector2(9, 0), at + Vector2(0, 9), at + Vector2(-9, 0)])
+			host.draw_line(at, core, Tokens.with_alpha(col, 0.28), 1.5)
+			host.draw_colored_polygon(pts, Tokens.with_alpha(col, 0.55))
+			host.draw_polyline(PackedVector2Array([pts[0], pts[1], pts[2], pts[3], pts[0]]), Tokens.with_alpha(Tokens.INK, 0.95), 1.5)
 
 	# Три шеврони, що вказують на капсулу з того краю рамки, з якого йде рейд (0 захід, 1 схід, 2 північ, 3 південь — Threats.edge_cell).
 	func _draw_incoming(host: CanvasItem, area: Rect2, dir: int, col: Color) -> void:

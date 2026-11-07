@@ -1204,7 +1204,7 @@ static func force_raid(s, debug_build: bool) -> Dictionary:
 	if _active(s):
 		return {"ok": false, "reason": &"active"}
 	var now: int = maxi(0, int(s.now_ms))
-	_plan(s, {"faction": "тестові мародери"}, 0.0, now)
+	_plan(s, {"faction": "мародери"}, 0.0, now)
 	s.capsule_raid.contact_at = now + int(raid_data(s).get("warn_min_ms", 0))
 	return {"ok": true, "raid_id": int(s.capsule_raid.id), "contact_at": int(s.capsule_raid.contact_at)}
 

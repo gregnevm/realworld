@@ -15,7 +15,7 @@ static func capsule_result_text(r: Dictionary) -> String:
 	if bool(r.get("ok", false)):
 		return ("▣ Захист капсули: рівень %d" % int(r.get("protection", 0))) if prot else ("◎ Капсула: рівень %d" % int(r.get("level", 0)))
 	match StringName(r.get("reason", &"")):
-		&"cost": return Fmt.capsule_shortfall(r.get("missing", {}), bool(r.get("far", false)), false)
+		&"cost": return Fmt.capsule_shortfall(r.get("missing", {}), bool(r.get("far", false)))
 		&"max": return "Вищого рівня нема."
 		&"no_capsule": return "Капсули нема."
 		&"dead": return "Зараз недоступно."
