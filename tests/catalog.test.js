@@ -392,8 +392,19 @@ test("capsule_levels: closed schema, version 2, still PROPOSED until the owner a
   assert.ok(["proposed", "approved"].includes(t.status), `status is "proposed" (agent numbers) or "approved" (owner), got "${t.status}"`);
   assert.strictEqual(t.metric, "chebyshev", "the zone metric lives in the data (REQ-0010-80); only chebyshev is implemented");
   assert.ok(typeof t.note === "string" && t.note.length > 0, "the note says where the numbers come from");
-  assert.ok(typeof t.feasibility_note === "string" && /НЕ ЗДІЙСНЕННО|не здійсненно/.test(t.feasibility_note),
-    "the feasibility note says honestly that the owner's formula does not fit the finite map (not a map-fitted number)");
+  assert.ok(typeof t.feasibility_note === "string" && /ЗДІЙСНЕННА/.test(t.feasibility_note) && /OD-109/.test(t.feasibility_note) && /g = 0\.\d+/.test(t.feasibility_note),
+    "the feasibility note says the ladder is feasible AFTER OD-109 and names the scale g");
+  assert.ok(/НЕ ЗДІЙСНЕННО/.test(t.feasibility_note) && /НЕ 60\.\.120/.test(t.feasibility_note),
+    "the note stays honest: it was infeasible before OD-109 and level 1 is NOT the 60..120 gather-minutes of OD-93 (the two requirements do not both hold on 56x56)");
+});
+
+test("capsule_levels: the level-1 price fits the 24-slot backpack even at one unit per slot (OD-109, bot criterion C2)", () => {
+  const { levels, protection } = capsuleTable();
+  assert.ok(totalUnits(levels[1].cost) <= 24, `level 1 = ${totalUnits(levels[1].cost)} units`);
+  assert.ok(totalUnits(protection.levels[1].cost) <= 24, "defence level 1 likewise");
+  for (let i = 1; i < levels.length; i++) {
+    assert.deepStrictEqual(protection.levels[i].cost, levels[i].cost, `Q-5 A: the defence price of level ${i} equals the capsule price (the bot prices both axes by the same rules)`);
+  }
 });
 
 test("capsule_levels: the capsule axis — levels 0..5 are continuous, L0 is the bare capsule (REQ-0010-11/12/91)", () => {

@@ -15,11 +15,18 @@
 #      the prices get RARER with the level (OD-75: level 1 — basic raw wood/stone; planks (processed) from level 2; scrap (the rarest node) from
 #      level 3 on, growing): the shares are PROPOSED hypotheses, the rarity rank wood < stone < planks < scrap mirrors the finite supply order.
 #      The same method prices the defence axis (Q-5 A: «за тими самими правилами, що й рівня»).
-#   3. FEASIBILITY — HONESTLY: the finite map cannot pay the owner's formula (a level-5 price is ~16x the level-1 one, 24 h of gathering). The bot
-#      prints the cumulative supply use per preset, «НЕ ЗДІЙСНЕННО на карті 56x56» where it exceeds the region's nodes, the pack/storage payability,
-#      and the two QUESTIONS for the owner: (a) scale the ladder to the supply (the largest uniform scale that fits the poorest region's budget),
-#      (b) regrow resources (OD-84: wood only — stone and scrap stay finite, so regrowth alone does not fix it). The data keep the OD formula, NOT a
-#      map-fitted number (feasibility_note says so).
+#   3. FEASIBILITY + SCALE (OD-109, 2026-11-07: «ціни вниз», x2 per level stays, the number is PROPOSED by this method): the owner's literal formula
+#      (scale 1.0 = T_1 90 gather-min) does not fit the finite 56x56 map (the BEFORE table). The bot therefore SOLVES one uniform scale g (the same for every
+#      level and resource, so x2 per level and the composition stay) by an EXPLICIT CRITERION, checked on the ROUNDED integer prices that go into the data:
+#        C1 supply — for EVERY one of the 5 presets and EVERY finite resource (wood-equivalent: planks count 1/ratio wood, stone, scrap) the cumulative price of
+#           levels 1..5 of BOTH axes (capsule + protection, Q-5 A: the same prices) <= RESERVE_CAP of the region's nodes (nodes never regrow here; the other
+#           1 - RESERVE_CAP stays for building, tools, crafting);
+#        C2 pack — the level-1 price fits the backpack (PACK_SLOTS slots, stacks by Inventory.stack_max);
+#        C3 ladder — total units of level L / level L-1 within LADDER_TOL of x2 AFTER rounding, and every listed resource >= 1;
+#        C4 order — level 1 is basic raw only (OD-75) and the rarest ingredient never gets more common (RARITY rank).
+#      g = the largest multiple of SCALE_STEP that passes C1..C4. HONEST output: level 1 is then g x 90 gather-minutes, NOT 60..120 — the owner's 1–2 h
+#      holds only if gathering is g x 90 / (60..120) of the PLAY time (printed). Alternatives printed as a diagnosis: composition balanced to the supply,
+#      tools (pace, not supply), map size (OD-110 open: neighbouring maps are not in this work).
 #   4. DEFENCE — core_hp(P) = base x FACTOR^(P-1), P >= 1 (OD-103: x2 per level, x16 at 5), P = 0 is base / FACTOR; base = what the REFERENCE raid
 #      (the weakest: day_equiv 4 through the EXISTING GameData.make_raider / raid_wave_size) deals to an undefended core in T_OPEN_REF seconds
 #      (working interpretation until Q-5; the raider strength by capsule level is Balance.assess, a later wave).
@@ -69,7 +76,7 @@ const LEVELS := 5
 
 # ---- the OWNER's numbers (decisions.md) ----
 const LADDER := 2.0                # OD-65/93: every level costs ~x2 (the same coefficient for the defence axis, OD-103)
-const T1_MIN := 90.0               # OD-93: level 1 ~ 1–2 hours of gathering at 1:1 -> the middle, 1.5 h
+const T1_MIN := 90.0               # OD-93: level 1 ~ 1–2 hours of gathering at 1:1 -> the middle, 1.5 h (the UNSCALED weight; OD-109 scales it down by g)
 const BUFF_STEP := 0.10            # OD-98: +10% per level, +50% at level 5
 const RADIUS_M := 50.0             # OD-99: ~50 m, static
 const PROTECTION_FACTOR := 2.0     # OD-103: x2 per defence level, x16 at level 5 (relative to level 1)
@@ -88,10 +95,15 @@ const CELL_M := 760.0 / 56.0       # frozen main.gd _fetch_osm: 2 x 380 m over M
 const REF_DAY_EQUIV := 4           # the weakest raid the old ladder opened with (GameData.make_raider day_equiv)
 const T_OPEN_REF_S := 20.0         # seconds an UNDEFENDED core holds against the reference raid (hypothesis 20–30 s)
 const BUILDING_ATK_CD := 1.0       # threats.gd: a raider swings at a building once per 1.0 s
-const SUPPLY_BUDGET := 0.30        # alternative (a): the whole ladder may take this fraction of the POOREST region's nodes
 const PACK_SLOTS := 24             # the backpack proper (slots 8..31); the hotbar holds tools/buildings
 const BASE_STORAGE_ROOM := 450     # storage_cap() at the start: 200 + the capsule's 250 (GameData.BUILDINGS.storage.capacity)
 const STORAGE_STEP := 250
+
+# ---- the SCALE criterion (OD-109): PROPOSED knobs of the method ----
+const AXES := 2                    # the capsule axis and the protection axis carry the same prices (Q-5 A): a full 0->5 on both buys the ladder twice
+const RESERVE_CAP := 0.60          # C1: both axes together may take at most this fraction of a region's finite nodes (= 30% per axis, the former SUPPLY_BUDGET)
+const SCALE_STEP := 0.0001         # the scale is a multiple of this (the data carries rounded integers)
+const LADDER_TOL := 0.15           # C3: |total(L)/total(L-1) - LADDER| <= LADDER * LADDER_TOL after rounding (tests/catalog.test.js accepts 1.6..2.4)
 
 # ---- RAID (W3a): the OWNER's numbers ----
 const IMMUNITY_MS := 86400000          # OD-24: 24 h
@@ -106,6 +118,9 @@ const DAY_EQUIV_MAX := 60
 const SPREAD_CANDIDATES := [0.0, 0.1, 0.25, 0.5]
 const BAND := 0.10                     # +-10% power band around the core for the spread rule
 const RAID_TICKS := 100000             # Balance ticks per preset for the queue_max measurement (dt 0.1 s -> ~2.8 h of sim)
+
+
+var _scale: float = 1.0            # the solved g (OD-109); 1.0 = the owner's literal formula
 
 
 func _init() -> void:
@@ -134,10 +149,13 @@ func _init() -> void:
 		var arr: Array = (supply[res] as Array).duplicate()
 		arr.sort()
 		print("   %-6s min %5d  median %5d  max %5d" % [String(res), int(arr[0]), int(arr[arr.size() / 2]), int(arr[arr.size() - 1])])
-	var capsule: Array = _ladder(inc_hand)
-	_print_ladder("PROPOSAL: level-of-capsule axis — T_1=%.0f min x %.0f per level over the bare-hand income (OD-93/65)" % [T1_MIN, LADDER], capsule, inc_hand)
-	print("   protection axis (Q-5 A: the SAME rules) — identical prices by construction: %s" % str(capsule == _ladder(inc_hand)))
-	_feasibility_report(capsule, inc_hand, inc_tool, by_preset, supply, planks_ratio)
+	var before: Array = _ladder(inc_hand, 1.0)
+	_scale = _solve_scale(inc_hand, by_preset, planks_ratio)
+	var capsule: Array = _ladder(inc_hand, _scale)
+	_print_ladder("BEFORE (OD-93/65 literal, scale 1.0): T_1=%.0f min x %.0f per level over the bare-hand income — the former catalog.json table" % [T1_MIN, LADDER], before, inc_hand)
+	_print_ladder("AFTER (OD-109): the same method x g = %.4f -> T_1 = %.2f gather-min x %.0f per level (the PROPOSAL; both axes, Q-5 A: identical prices)" % [_scale, T1_MIN * _scale, LADDER], capsule, inc_hand)
+	print("   protection axis (Q-5 A: the SAME rules) — identical prices by construction: %s" % str(capsule == _ladder(inc_hand, _scale)))
+	_feasibility_report(before, capsule, inc_hand, inc_tool, by_preset, supply, planks_ratio)
 	var hp: Array = _defence_report()
 	var cells: int = _radius_report()
 	_buff_report(capsule, inc_hand)
@@ -352,15 +370,15 @@ func _planks_per_wood() -> float:
 
 
 # the method's ladder: Array[level 1..5] of {level, cost:{res:n}}; cost = round(T_L * income_hand * share), T_L = T_1 * LADDER^(L-1)
-func _ladder(inc_hand: Dictionary) -> Array:
+func _ladder(inc_hand: Dictionary, scale: float) -> Array:
 	var out: Array = []
 	for level in range(1, LEVELS + 1):
-		var minutes: float = T1_MIN * pow(LADDER, level - 1)
+		var minutes: float = T1_MIN * scale * pow(LADDER, level - 1)
 		var cost: Dictionary = {}
 		var shares: Dictionary = SHARES[level]
 		for res in ["wood", "stone", "planks", "scrap"]:
 			if shares.has(res):
-				cost[res] = roundi(minutes * float(inc_hand[res]) * float(shares[res]))
+				cost[res] = maxi(1, roundi(minutes * float(inc_hand[res]) * float(shares[res])))
 		out.append({"level": level, "cost": cost, "minutes": minutes})
 	return out
 
@@ -417,7 +435,7 @@ func _print_ladder(title: String, ladder: Array, inc_hand: Dictionary) -> void:
 		rank_ok = rank_ok and rank >= prev_rank
 		prev_rank = rank
 		prev_units = int(p.units)
-	print("   rarest ingredient never gets more common with the level (OD-75): %s · level-1 price = %.1f min of gathering (OD-93: 60..120): %s" % [
+	print("   rarest ingredient never gets more common with the level (OD-75): %s · level-1 price = %.2f min of gathering (OD-93 literal 60..120 — true only BEFORE; OD-109 scales it down): %s" % [
 		str(rank_ok), float(ladder[0].minutes), str(float(ladder[0].minutes) >= 60.0 and float(ladder[0].minutes) <= 120.0)])
 	var total_min: float = 0.0
 	for row in ladder:
@@ -425,70 +443,118 @@ func _print_ladder(title: String, ladder: Array, inc_hand: Dictionary) -> void:
 	print("   whole ladder (levels 1..5): %.0f min = %.1f h of pure gathering (level 5 alone: %.1f h)" % [total_min, total_min / 60.0, float(ladder[LEVELS - 1].minutes) / 60.0])
 
 
-# is the owner's formula payable on the real finite map? cumulative supply use per preset + the two alternatives (QUESTIONS for the owner)
-func _feasibility_report(ladder: Array, inc_hand: Dictionary, inc_tool: Dictionary, by_preset: Array, supply: Dictionary, planks_ratio: float) -> void:
-	print("\n== FEASIBILITY on the finite 56x56 map (cumulative price of levels 1..L vs the region's nodes; >100%% = НЕ ЗДІЙСНЕННО) ==")
+# wood-equivalent units a ladder takes of each FINITE resource, both axes, levels 1..L (the planks are processed wood: 1/ratio wood each)
+func _cum_use(ladder: Array, upto: int, planks_ratio: float) -> Dictionary:
 	var cum: Dictionary = {"wood": 0.0, "stone": 0.0, "scrap": 0.0}
-	var cum_rows: Array = []
+	for i in upto:
+		var c: Dictionary = (ladder[i] as Dictionary).cost
+		cum["wood"] = float(cum["wood"]) + float(AXES) * (float(c.get("wood", 0)) + float(c.get("planks", 0)) / planks_ratio)
+		cum["stone"] = float(cum["stone"]) + float(AXES) * float(c.get("stone", 0))
+		cum["scrap"] = float(cum["scrap"]) + float(AXES) * float(c.get("scrap", 0))
+	return cum
+
+
+# C1: the worst (preset, resource) use of the region's nodes by the whole ladder of both axes -> {pct, preset, res}
+func _worst_use(ladder: Array, by_preset: Array, planks_ratio: float) -> Dictionary:
+	var cum: Dictionary = _cum_use(ladder, LEVELS, planks_ratio)
+	var worst: Dictionary = {"pct": 0.0, "preset": "", "res": ""}
+	for ps in by_preset:
+		for res in GATHERED:
+			var pct: float = 100.0 * float(cum[res]) / float((ps.supply as Dictionary)[res])
+			if pct > float(worst.pct):
+				worst = {"pct": pct, "preset": String(ps.name), "res": String(res)}
+	return worst
+
+
+# C1..C4 on the ROUNDED ladder -> "" when it passes, else the first failed criterion
+func _criterion_fail(ladder: Array, by_preset: Array, planks_ratio: float) -> String:
+	var w: Dictionary = _worst_use(ladder, by_preset, planks_ratio)
+	if float(w.pct) > RESERVE_CAP * 100.0:
+		return "C1 supply: %s/%s %.1f%% > %.0f%%" % [String(w.preset), String(w.res), float(w.pct), RESERVE_CAP * 100.0]
+	var p1: Dictionary = _payable(ladder[0].cost)
+	if int(p1.slots) > PACK_SLOTS:
+		return "C2 pack: level 1 needs %d slots > %d" % [int(p1.slots), PACK_SLOTS]
+	var prev_units: int = 0
+	var prev_rank: int = 0
 	for row in ladder:
-		cum["wood"] = float(cum["wood"]) + float(row.cost.get("wood", 0)) + float(row.cost.get("planks", 0)) / planks_ratio
-		cum["stone"] = float(cum["stone"]) + float(row.cost.get("stone", 0))
-		cum["scrap"] = float(cum["scrap"]) + float(row.cost.get("scrap", 0))
-		cum_rows.append(cum.duplicate())
-	print("   preset     |  L1 wood-eq/stone/scrap use     |  L2                           |  L3                           |  L4                           |  L5")
-	var worst_level_poorest: int = LEVELS + 1
+		var units: int = 0
+		var rank: int = 0
+		for res in (row.cost as Dictionary):
+			units += int(row.cost[res])
+			rank = maxi(rank, int(RARITY[res]))
+			if int(row.cost[res]) < 1:
+				return "C3 ladder: level %d has a zero price" % int(row.level)
+		if prev_units > 0 and absf(float(units) / float(prev_units) - LADDER) > LADDER * LADDER_TOL:
+			return "C3 ladder: level %d / level %d = %.2f, not within %.0f%% of x%.0f" % [int(row.level), int(row.level) - 1, float(units) / float(prev_units), LADDER_TOL * 100.0, LADDER]
+		if rank < prev_rank:
+			return "C4 order: level %d is more common than the previous" % int(row.level)
+		if int(row.level) == 1:
+			for res in (row.cost as Dictionary):
+				if not ["wood", "stone"].has(String(res)):
+					return "C4 order: level 1 is not basic raw"
+		prev_units = units
+		prev_rank = rank
+	return ""
+
+
+# the largest multiple of SCALE_STEP that passes C1..C4 (searched downwards from the analytic C1 bound)
+func _solve_scale(inc_hand: Dictionary, by_preset: Array, planks_ratio: float) -> float:
+	var unit: Array = _ladder(inc_hand, 1.0)
+	var worst: Dictionary = _worst_use(unit, by_preset, planks_ratio)
+	var bound: float = RESERVE_CAP * 100.0 / float(worst.pct)    # use is linear in the scale (before rounding)
+	var g: float = floorf(bound / SCALE_STEP) * SCALE_STEP
+	while g > SCALE_STEP:
+		if _criterion_fail(_ladder(inc_hand, g), by_preset, planks_ratio) == "":
+			return snappedf(g, SCALE_STEP)
+		g -= SCALE_STEP
+	return SCALE_STEP
+
+
+# OD-109: the BEFORE ladder (the owner's literal formula) vs the AFTER ladder (scaled down), per preset, by the criterion above
+func _feasibility_report(before: Array, after: Array, inc_hand: Dictionary, inc_tool: Dictionary, by_preset: Array, supply: Dictionary, planks_ratio: float) -> void:
+	print("\n== FEASIBILITY on the finite 56x56 map: both axes (x%d), levels 1..5 cumulative, share of each region's nodes (wood-eq / stone / scrap); criterion C1 <= %.0f%% ==" % [AXES, RESERVE_CAP * 100.0])
+	print("   preset     |  BEFORE (scale 1.0)               |  AFTER (g = %.4f)" % _scale)
+	var all_ok: bool = true
 	for ps in by_preset:
 		var line: String = "   %-10s |" % String(ps.name)
-		var first_bad: int = LEVELS + 1
-		for li in LEVELS:
-			var u: Array = []
+		for ladder in [before, after]:
+			var cum: Dictionary = _cum_use(ladder, LEVELS, planks_ratio)
 			var bad: bool = false
 			for res in GATHERED:
-				var pct: float = 100.0 * float((cum_rows[li] as Dictionary)[res]) / float((ps.supply as Dictionary)[res])
-				u.append("%4.0f%%" % pct)
-				bad = bad or pct > 100.0
-			if bad and first_bad > li + 1:
-				first_bad = li + 1
-			line += " %s %s %s%s |" % [u[0], u[1], u[2], " X" if bad else "  "]
-		print(line + ("  first infeasible level: %s" % (str(first_bad) if first_bad <= LEVELS else "none")))
-		worst_level_poorest = mini(worst_level_poorest, first_bad)
-	print("   -> НЕ ЗДІЙСНЕННО на карті 56x56 за формулою OD-93/65: у найбіднішому регіоні рівень %d уже неоплатний (деревина/камінь/брухт — скінченні);" % worst_level_poorest)
+				var pct: float = 100.0 * float(cum[res]) / float((ps.supply as Dictionary)[res])
+				line += " %7.1f%%" % pct
+				bad = bad or pct > RESERVE_CAP * 100.0
+			line += "  %s  |" % ("НЕ ЗДІЙСНЕННО" if bad else "ok            ")
+			if ladder == after:
+				all_ok = all_ok and not bad
+		print(line)
+	var fail: String = _criterion_fail(after, by_preset, planks_ratio)
+	var w: Dictionary = _worst_use(after, by_preset, planks_ratio)
+	print("   CRITERION on the AFTER ladder: %s (worst use %.1f%% at %s/%s, cap %.0f%%)" % ["PASS C1..C4" if fail == "" else "FAIL " + fail, float(w.pct), String(w.preset), String(w.res), RESERVE_CAP * 100.0])
+	var wb: Dictionary = _worst_use(before, by_preset, planks_ratio)
+	print("   BEFORE: worst use %.0f%% at %s/%s -> НЕ ЗДІЙСНЕННО (the owner's literal formula; OD-109 scales it down)" % [float(wb.pct), String(wb.preset), String(wb.res)])
+	print("   level 1 = %.2f gather-min at the bare-hand income (NOT the 60..120 of OD-93); it equals 1–2 h of PLAY only if gathering is %.1f%%..%.1f%% of the play time" % [
+		T1_MIN * _scale, 100.0 * T1_MIN * _scale / 120.0, 100.0 * T1_MIN * _scale / 60.0])
+	# diagnosis: what the composition alone could give (shares balanced to the poorest supply) — NOT applied, the composition stays (OD-109 changes prices only)
 	var supply_min: Dictionary = {}
-	var supply_med: Dictionary = {}
 	for res in GATHERED:
 		var arr: Array = (supply[res] as Array).duplicate()
 		arr.sort()
 		supply_min[res] = float(arr[0])
-		supply_med[res] = float(arr[arr.size() / 2])
-	var demand: Dictionary = cum_rows[LEVELS - 1]
-	var scale_a: float = 1.0
-	var binding: String = ""
-	for res in GATHERED:
-		var s_res: float = SUPPLY_BUDGET * float(supply_min[res]) / float(demand[res])
-		if s_res < scale_a:
-			scale_a = s_res
-			binding = String(res)
-	var scale_med: float = 1.0
-	for res in GATHERED:
-		scale_med = minf(scale_med, SUPPLY_BUDGET * float(supply_med[res]) / float(demand[res]))
-	print("   QUESTION (a) scale the ladder to the supply: the largest uniform scale keeping the 5 levels within %.0f%% of the POOREST region" % [SUPPLY_BUDGET * 100.0])
-	print("      is x%.4f (binding: %s) -> level 1 would cost %.2f min (not 60..120);" % [scale_a, binding, T1_MIN * scale_a])
-	print("      for the MEDIAN region x%.4f -> level 1 = %.2f min. Either way the owner's 1–2 h at level 1 and x2 per level cannot both hold on this map" % [scale_med, T1_MIN * scale_med])
-	var wood_free: float = 1.0
-	for res in ["stone", "scrap"]:
-		wood_free = minf(wood_free, SUPPLY_BUDGET * float(supply_min[res]) / float(demand[res]))
-	print("   QUESTION (b) regrowth (OD-84: only wood is renewable): wood-eq demand of levels 1..5 = %.0f vs the poorest region's %.0f; stone %.0f vs %.0f; scrap %.0f vs %.0f —" % [
-		float(demand["wood"]), float(supply_min["wood"]), float(demand["stone"]), float(supply_min["stone"]), float(demand["scrap"]), float(supply_min["scrap"])])
-	print("      stone and scrap stay finite, so regrowing wood alone leaves the ladder %.1fx over the stone/scrap budget (scale x%.4f needed even then)" % [1.0 / maxf(wood_free, 0.000001), wood_free])
-	print("   QUESTION (c) map size (OD-21: «карти великі, ресурси дуже численні, але скінченні»): the supply would have to grow x%.0f to pay the formula" % [1.0 / scale_a])
-	var side: float = float(MAP_N) * sqrt(1.0 / scale_a)
-	print("      within %.0f%% (the 56x56 prototype has %d cells; that is %.0f x %.0f cells)" % [SUPPLY_BUDGET * 100.0, MAP_N * MAP_N, side, side])
+	var unit_use: Dictionary = _cum_use(before, LEVELS, planks_ratio)
+	var total_demand: float = float(unit_use["wood"]) + float(unit_use["stone"]) + float(unit_use["scrap"])
+	var total_supply: float = float(supply_min["wood"]) + float(supply_min["stone"]) + float(supply_min["scrap"])
+	print("   DIAGNOSIS (not applied): with the composition balanced to the poorest region's supply the same cap would allow g <= %.4f (now %.4f) — still ~%.1f gather-min at level 1; the supply, not the composition, is the limit" % [
+		RESERVE_CAP * total_supply / total_demand, _scale, T1_MIN * RESERVE_CAP * total_supply / total_demand])
 	var tool_gain: float = float(inc_tool["wood"]) / float(inc_hand["wood"])
 	print("   tools do not rescue it: the tier-1 tool speeds wood x%.2f, stone x%.2f, scrap x%.2f (the supply, not the pace, is the limit)" % [
 		tool_gain, float(inc_tool["stone"]) / float(inc_hand["stone"]), float(inc_tool["scrap"]) / float(inc_hand["scrap"])])
-	var p1: Dictionary = _payable(ladder[0].cost)
-	print("   payability of level 1 alone: %d pack slots needed (the backpack has %d) and %d extra storages beyond the capsule's (+%d units each)" % [
-		int(p1.slots), PACK_SLOTS, int(p1.extra_storages), STORAGE_STEP])
+	print("   more supply is OD-110 (open): neighbouring maps / travel are NOT in this work; regrowth and a bigger map were rejected by the owner (OD-109)")
+	var p1: Dictionary = _payable(after[0].cost)
+	print("   payability of level 1 (AFTER): %d pack slots needed (the backpack has %d), %d units, %d extra storages beyond the capsule's (+%d units each)" % [
+		int(p1.slots), PACK_SLOTS, int(p1.units), int(p1.extra_storages), STORAGE_STEP])
+	var pb: Dictionary = _payable(before[0].cost)
+	print("   (BEFORE it needed %d slots and %d extra storages)" % [int(pb.slots), int(pb.extra_storages)])
 
 
 # core_hp(P) per defence level: base x FACTOR^(P-1) (P >= 1), P = 0 -> base / FACTOR; base from the weakest reference raid
@@ -835,13 +901,13 @@ func _hold_report(by: Dictionary, prot: Array, inc_hand: Dictionary) -> void:
 		var power: float = _power_of(nmin, int(row.day_equiv)) if nmin > 0 else INF
 		var attack_x: float = power / ref_power
 		var minutes: float = _minutes(_prot_cost(prot, level), inc_hand) if not inc_hand.is_empty() else -1.0
-		var a: float = minutes / (T1_MIN * attack_x) if minutes >= 0.0 and nmin > 0 else -1.0
+		var a: float = minutes / (T1_MIN * _scale * attack_x) if minutes >= 0.0 and nmin > 0 else -1.0
 		worst_a = maxf(worst_a, a)
 		print("       %d  %2d x %-3d          %7.0f  %-17s  %-18s  %-9s   %-20s  %-26s  %s" % [level, int(row.count), int(row.day_equiv), hp, "%.1f s" % float(row_run.seconds) if bool(row_run.resolved) else "never",
 			str(nmin) if nmin > 0 else ">%d" % COUNT_CAP, "x%.2f" % k if nmin > 0 else "-", "%.2f" % attack_x if nmin > 0 else "-",
 			"%.1f" % minutes if minutes >= 0.0 else "(run the full bot)", "%.3f" % a if a >= 0.0 else "-"])
 	if worst_a > 0.0:
-		print("       worst a = %.3f  (REQ-0010-18 wants a < 1: holding is cheaper than breaking; the attack price anchor «the level-1 reference raid = T_1 = %.0f gather-minutes» is PROPOSED)" % [worst_a, T1_MIN])
+		print("       worst a = %.3f  (REQ-0010-18 wants a < 1: holding is cheaper than breaking; the attack price anchor «the level-1 reference raid = the level-1 price = T_1 x g = %.2f gather-minutes» is PROPOSED)" % [worst_a, T1_MIN * _scale])
 
 
 func _prot_cost(prot: Array, level: int) -> Dictionary:

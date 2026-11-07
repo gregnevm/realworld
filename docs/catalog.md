@@ -28,8 +28,13 @@ reachable ones that `data_bridge` maps 1:1. The owner decided the coefficients (
 x2 price per level — OD-65/93; defence x2 per level and x16 at level 5 — OD-103; ~50 m zone radius — OD-99; `raid.immunity_ms` and
 `raid.take_percent` — OD-24/107, listed in `raid.decided`); every other number (the concrete resources of a price, the defence price,
 the radius in cells, the core-HP base) is `status:"proposed"` — the economy bot `godot/tests/run_capsule_balance.gd` derives it, the
-owner approves at merge. The prices follow the owner's formula, NOT the finite map: `feasibility_note` states honestly that it does
-not fit a 56x56 map (questions to the owner), so do not "fix" the numbers to the map.
+owner approves at merge. **Prices (OD-109, 2026-11-07):** the owner's literal formula (level 1 = 90 gather-min, x2 per level) does not fit a 56x56
+map, so the owner decided "prices down, x2 per level stays". The bot solves ONE uniform scale `g = 0.0018` (proposed) by an explicit criterion on the
+rounded integer prices: for each of the 5 presets and each finite resource the full ladder 1..5 of BOTH axes uses <= 60% of the region's nodes (C1),
+level 1 fits the 24-slot pack (C2), total units x2 per level +-15% (C3), level 1 is basic raw and the rarest ingredient never gets commoner (C4).
+Result: level 1 = 4 wood + 1 stone, level 5 = 24 wood + 10 stone + 16 planks + 46 scrap (the defence axis has the same prices). `feasibility_note`
+says honestly that this is feasible AFTER OD-109 but that level 1 is ~0.16 gather-min, NOT the 60..120 of OD-93 (both cannot hold on this map;
+more supply is OD-110, open). Do not edit the prices by hand: change the bot, re-run, re-sync.
 
 Design canon: **RimWorld** for the survival/needs/quality/medical flavour, **Factorio** for the
 multi-step automation chains (ore → bar → intermediate → advanced) where RimWorld is thin on

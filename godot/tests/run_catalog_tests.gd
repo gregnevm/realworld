@@ -325,7 +325,11 @@ func _t_capsule_levels_data() -> void:
 	ok(int(t.get("version", 0)) == 2 and ["proposed", "approved"].has(String(t.get("status", ""))), "capsule_levels: version 2 (two axes + one static zone; REQ-0010-60), status proposed|approved")
 	ok(String(t.get("metric", "")) == "chebyshev" and MainCapsule.ZONE_METRICS.has(String(t.get("metric", ""))),
 		"REQ-0010-80: the zone metric is data, and the code implements it (MainCapsule.ZONE_METRICS) — else in_zone would be empty for everyone")
-	ok(String(t.get("feasibility_note", "")).contains("НЕ ЗДІЙСНЕННО"), "the feasibility note says honestly that the owner's formula does not fit the finite map (not a map-fitted number)")
+	var fnote: String = String(t.get("feasibility_note", ""))
+	var gre := RegEx.new()
+	gre.compile("g = 0\\.\\d+")
+	ok(fnote.contains("ЗДІЙСНЕННА") and fnote.contains("OD-109") and gre.search(fnote) != null, "the feasibility note says the ladder is feasible AFTER OD-109 and names the scale g")
+	ok(fnote.contains("НЕ ЗДІЙСНЕННО") and fnote.contains("НЕ 60..120"), "the note stays honest: infeasible before OD-109, and level 1 is NOT the 60..120 gather-minutes of OD-93")
 	var obtainable: Dictionary = Catalog.reachability(cat).obtainable
 	# --- the capsule axis ---
 	var levels: Array = t.get("levels", [])
@@ -362,6 +366,11 @@ func _t_capsule_levels_data() -> void:
 			price_ok = false
 			why = "level %d: %s" % [i, pp]
 	ok(price_ok, "REQ-0010-11/13: capsule prices are positive integers over ids data_bridge maps 1:1, data.gd owns and the catalogue reaches %s" % why)
+	var pk_ok: bool = _total_units(levels[1].cost) <= 24
+	var prot_rows_c: Array = (t.get("protection", {}) as Dictionary).get("levels", [])
+	for i in range(1, levels.size()):
+		pk_ok = pk_ok and i < prot_rows_c.size() and str(levels[i].cost.keys().map(func(k: Variant) -> String: return "%s=%d" % [k, int(levels[i].cost[k])])) == str((prot_rows_c[i] as Dictionary).cost.keys().map(func(k: Variant) -> String: return "%s=%d" % [k, int((prot_rows_c[i] as Dictionary).cost[k])]))
+	ok(pk_ok, "OD-109 (bot criterion C2 + Q-5 A): level 1 fits the 24-slot backpack even at one unit per slot; the defence prices equal the capsule prices")
 	var grows: bool = true
 	var ratio_ok: bool = true
 	var rarer_ok: bool = true
