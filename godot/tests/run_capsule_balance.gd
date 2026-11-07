@@ -26,6 +26,16 @@
 #   5. RADIUS — R_cells = ceil(RADIUS_M / CELL_M); CELL_M is the ONLY trace of a map scale in the code (the frozen main.gd _fetch_osm: a 380 m radius
 #      over the 56-cell map = 760 m / 56 cells); the live procedural map has none — Q-4, a proposal until the owner fixes N m per cell.
 #   6. BUFFS — the owner's +10% per level (OD-98): printed, with the payback of a level's price through the gather buff (informational).
+#   7. RAID (W3a, REQ-0010-62/81/112; OD-65/87/88): the numbers the owner did NOT decide, PROPOSED by this method: (a) wealth_ref_points = the median
+#      Balance.assess threat of the freshly landed base over the 5 presets (a base at this wealth meets the by_level row as written; richer — more raiders, REQ-0010-87);
+#      (b) by_level = {count, day_equiv} per capsule level: the raider POWER measure count x dmg x hp (the two things the defender must out-last and out-kill) doubles
+#      per level (OD-65 decided) starting from the reference raid (day_equiv 4 x raid_wave_size = the SAME raid that anchors core_hp(1)); a grid search over count
+#      (non-decreasing, <= COUNT_MAX) and day_equiv (non-decreasing) picks the row with the smallest relative error; (c) roll_spread = the smallest candidate that
+#      leaves the breach probability strictly inside (0,1) across a +-10% power band around the core (a spread of 0 turns the roll into a coin that never lands: the
+#      raid either always or never breaks); (d) queue_max = the largest number of raid payloads the Balance roster fires in ONE tick (it fires <= 1 big threat per
+#      tick and gates on threat_active), over 5 presets x RAID_TICKS ticks — a waiting raid needs no more room than that; (e) take_round = the rounding mode that never
+#      lets the attacker take MORE than the defender keeps, checked over every ledger row the proposed prices can produce. DECIDED numbers (immunity 24 h, 50%, grace
+#      3 days, warning 10..30 min — OD-24/107/66/88) are printed verbatim, not derived.
 # Finally it prints MATCH/DIFF of every proposed number against godot/content/catalog.json (capsule_levels), so the data cannot drift from the
 # method unnoticed. The pass/fail counter only says the probe ran — read the printed tables.
 extends "res://tests/harness.gd"
@@ -36,6 +46,8 @@ const GameData = preload("res://scripts/data.gd")
 const Inventory = preload("res://scripts/sim/inventory.gd")
 const MainCapsule = preload("res://scripts/sim/capsule.gd")
 const Catalog = preload("res://scripts/kernel/catalog.gd")
+const Director = preload("res://scripts/sim/director.gd")
+const KernelBalance = preload("res://scripts/kernel/balance.gd")
 
 const DT := 0.1                    # the production tick step
 const MEASURE_S := 600.0           # 10 sim-minutes of continuous gathering per (preset, resource, tier)
@@ -74,6 +86,20 @@ const PACK_SLOTS := 24             # the backpack proper (slots 8..31); the hotb
 const BASE_STORAGE_ROOM := 450     # storage_cap() at the start: 200 + the capsule's 250 (GameData.BUILDINGS.storage.capacity)
 const STORAGE_STEP := 250
 
+# ---- RAID (W3a): the OWNER's numbers ----
+const IMMUNITY_MS := 86400000          # OD-24: 24 h
+const TAKE_PERCENT := 50               # OD-107: 50% of invested[L]
+const GRACE_MS := 259200000            # OD-66: 3 days from the first landing
+const WARN_MIN_MS := 600000            # OD-88: 10 min
+const WARN_MAX_MS := 1800000           # OD-88: 30 min
+const LEVEL_FACTOR := 2.0              # OD-65: the raid is x2 harder per capsule level
+# ---- RAID (W3a): the method's knobs ----
+const COUNT_MAX := 30                  # Balance._exec_raid clamps a raid to 1..30 raiders
+const DAY_EQUIV_MAX := 60
+const SPREAD_CANDIDATES := [0.0, 0.1, 0.25, 0.5]
+const BAND := 0.10                     # +-10% power band around the core for the spread rule
+const RAID_TICKS := 100000             # Balance ticks per preset for the queue_max measurement (dt 0.1 s -> ~2.8 h of sim)
+
 
 func _init() -> void:
 	print("== RealWorld capsule ECONOMY BOT (spec 0010, informational) ==")
@@ -103,7 +129,9 @@ func _init() -> void:
 	var hp: Array = _defence_report()
 	var cells: int = _radius_report()
 	_buff_report(capsule, inc_hand)
+	var raid: Dictionary = _raid_report(capsule)
 	_compare_with_catalog(capsule, hp, cells)
+	_compare_raid(raid)
 	ok(true, "probe completed — read the tables above (they are the PROPOSAL; the owner approves at merge)")
 	finish()
 
@@ -536,3 +564,127 @@ func _same_cost(a: Dictionary, b: Dictionary) -> bool:
 		if int(a.get(res, -1)) != int(b[res]):
 			return false
 	return true
+
+
+# ---------------- RAID (W3a) ----------------
+func _power_of(count: int, day: int) -> float:
+	var r: Dictionary = GameData.make_raider(0.0, 0.0, day)
+	return float(count) * float(r.dmg) * float(r.maxhp)
+
+
+func _raid_report(capsule: Array) -> Dictionary:
+	print("\n== RAID (W3a): proposed numbers + their evidence ==")
+	print("   DECIDED (verbatim, not derived): immunity %d ms (OD-24) · take %d%% (OD-107) · grace %d ms (OD-66) · warning %d..%d ms (OD-88) · raid x%.0f per level (OD-65)" % [
+		IMMUNITY_MS, TAKE_PERCENT, GRACE_MS, WARN_MIN_MS, WARN_MAX_MS, LEVEL_FACTOR])
+	# (a) wealth_ref_points
+	var pts: Array = []
+	for preset in GameData.SPAWN_PRESETS:
+		var sim: Variant = _new_world(preset)
+		var b: Variant = KernelBalance.Balance.new()
+		pts.append(float(b.assess(Director.world_of(sim), {"day": 0, "hostile_pressure": 1.0}).threat))
+	pts.sort()
+	var ref_pts: int = roundi(float(pts[pts.size() / 2]))
+	print("   (a) Balance.assess(threat) of the landed base per preset: %s -> wealth_ref_points = %d (median)" % [str(pts), ref_pts])
+	# (b) by_level
+	var ref_count: int = GameData.raid_wave_size(REF_DAY_EQUIV)
+	var p1: float = _power_of(ref_count, REF_DAY_EQUIV)
+	var by_level: Dictionary = {"1": {"count": ref_count, "day_equiv": REF_DAY_EQUIV}}
+	var prev_c: int = ref_count
+	var prev_d: int = REF_DAY_EQUIV
+	print("   (b) raider power = count x dmg x hp ; L1 = reference raid (%d raiders, day_equiv %d) = %.0f ; target x%.0f per level" % [ref_count, REF_DAY_EQUIV, p1, LEVEL_FACTOR])
+	print("       L  count  day_equiv  power      target     err%    ratio-to-previous")
+	print("       1  %5d  %9d  %9.0f  %9.0f  %5.2f   -" % [ref_count, REF_DAY_EQUIV, p1, p1, 0.0])
+	var prev_p: float = p1
+	for level in range(2, LEVELS + 1):
+		var target: float = p1 * pow(LEVEL_FACTOR, level - 1)
+		var best_c: int = prev_c
+		var best_d: int = prev_d
+		var best_e: float = INF
+		for c in range(prev_c, COUNT_MAX + 1):
+			for d in range(prev_d, DAY_EQUIV_MAX + 1):
+				var e: float = absf(_power_of(c, d) - target) / target
+				if e < best_e - 1.0e-12:
+					best_e = e
+					best_c = c
+					best_d = d
+		var pw: float = _power_of(best_c, best_d)
+		by_level[str(level)] = {"count": best_c, "day_equiv": best_d}
+		print("       %d  %5d  %9d  %9.0f  %9.0f  %5.2f   x%.2f" % [level, best_c, best_d, pw, target, best_e * 100.0, pw / prev_p])
+		prev_c = best_c
+		prev_d = best_d
+		prev_p = pw
+	# (c) roll_spread
+	print("   (c) roll_spread: P(breach) over power/core = %.2f .. %.2f (a strictly-inside-(0,1) spread keeps the roll meaningful)" % [1.0 - BAND, 1.0 + BAND])
+	var chosen: float = -1.0
+	for sp in SPREAD_CANDIDATES:
+		var line: String = "       spread %.2f:" % float(sp)
+		var inside: bool = true
+		for ratio in [1.0 - BAND, 1.0, 1.0 + BAND]:
+			var prob: float = _breach_prob(float(ratio), float(sp))
+			line += "  ratio %.2f -> P=%.2f" % [float(ratio), prob]
+			inside = inside and prob > 0.0 and prob < 1.0
+		print(line + ("   <- inside (0,1)" if inside else ""))
+		if inside and chosen < 0.0:
+			chosen = float(sp)
+	print("       -> roll_spread = %s (the smallest candidate that works)" % str(chosen))
+	# (d) queue_max
+	var burst: int = 0
+	for preset in GameData.SPAWN_PRESETS:
+		var sim2: Variant = _new_world(preset)
+		var b2: Variant = KernelBalance.Balance.new()
+		b2.category_weight[KernelBalance.CAT_THREAT_BIG] = Director.THREAT_BIG_WEIGHT
+		var rng := RandomNumberGenerator.new()
+		rng.seed = int(sim2.region_seed()) ^ 0x0D1EC70
+		var world: Dictionary = Director.world_of(sim2)
+		world["threat_active"] = false
+		for tick in RAID_TICKS:
+			var raids: int = 0
+			for pl in b2.tick(world, {"day": 1 + tick / 1500, "dday": DT / 150.0, "hostile_pressure": 1.0, "hostile_faction": "x"}, rng):
+				if String(pl.get("incident", "")) == "raid":
+					raids += 1
+			burst = maxi(burst, raids)
+	print("   (d) most raid payloads Balance fired in ONE tick over 5 presets x %d ticks = %d -> queue_max = %d" % [RAID_TICKS, burst, maxi(1, burst)])
+	# (e) take_round
+	var attacker_floor: int = 0
+	var attacker_ceil: int = 0
+	var attacker_round: int = 0
+	var rows: int = 0
+	for row in capsule:
+		for res in (row.cost as Dictionary):
+			var inv: int = int(row.cost[res])
+			rows += 1
+			var kept_f: int = inv - MainCapsule.take_of(inv, TAKE_PERCENT, "floor")
+			attacker_floor += 1 if MainCapsule.take_of(inv, TAKE_PERCENT, "floor") > kept_f else 0
+			attacker_ceil += 1 if MainCapsule.take_of(inv, TAKE_PERCENT, "ceil") > inv - MainCapsule.take_of(inv, TAKE_PERCENT, "ceil") else 0
+			attacker_round += 1 if MainCapsule.take_of(inv, TAKE_PERCENT, "round") > inv - MainCapsule.take_of(inv, TAKE_PERCENT, "round") else 0
+	var odd: int = 0
+	for n in [1, 3, 5, 7, 99]:   # odd amounts are where the rules differ
+		odd += 1 if MainCapsule.take_of(n, TAKE_PERCENT, "ceil") > n - MainCapsule.take_of(n, TAKE_PERCENT, "ceil") else 0
+	print("   (e) take rounding over %d ledger rows of the proposed prices: attacker takes MORE than the defender keeps — floor %d · ceil %d · round %d ; on odd amounts 1/3/5/7/99 ceil does so %d times -> take_round = floor" % [
+		rows, attacker_floor, attacker_ceil, attacker_round, odd])
+	return {"wealth_ref_points": ref_pts, "by_level": by_level, "roll_spread": chosen, "queue_max": maxi(1, burst), "take_round": "floor", "count_max": COUNT_MAX}
+
+
+# P(breach) when the raid's power is `ratio` x the core's HP and the damage is power x (1 - spread + 2 x spread x roll), roll uniform [0,1): breach iff damage >= core
+func _breach_prob(ratio: float, spread: float) -> float:
+	if spread <= 0.0:
+		return 1.0 if ratio >= 1.0 else 0.0
+	var need: float = ((1.0 / ratio) - (1.0 - spread)) / (2.0 * spread)   # roll >= need breaks the core
+	return clampf(1.0 - need, 0.0, 1.0)
+
+
+func _compare_raid(raid: Dictionary) -> void:
+	print("\n-- catalog.json capsule_levels.raid vs this proposal (MATCH / DIFF) --")
+	var rd: Dictionary = (Catalog.load_json().get("capsule_levels", {}) as Dictionary).get("raid", {})
+	if rd.is_empty() or not rd.has("by_level"):
+		print("   catalog.json has no raid proposal yet")
+		return
+	var decided: Dictionary = {"immunity_ms": IMMUNITY_MS, "take_percent": TAKE_PERCENT, "grace_ms": GRACE_MS, "warn_min_ms": WARN_MIN_MS, "warn_max_ms": WARN_MAX_MS}
+	for k in decided:
+		print("   decided %-12s %s (data %s, owner %s)" % [String(k), "MATCH" if int(rd.get(k, -1)) == int(decided[k]) else "DIFF", str(rd.get(k)), str(decided[k])])
+	for k in ["wealth_ref_points", "roll_spread", "queue_max", "take_round", "count_max"]:
+		print("   proposed %-18s %s (data %s, bot %s)" % [String(k), "MATCH" if str(rd.get(k)) == str(raid[k]) or (rd.get(k) is float and absf(float(rd.get(k)) - float(raid[k])) < 1.0e-9) else "DIFF", str(rd.get(k)), str(raid[k])])
+	for level in range(1, LEVELS + 1):
+		var want: Dictionary = raid.by_level[str(level)]
+		var got: Dictionary = (rd.by_level as Dictionary).get(str(level), {})
+		print("   proposed by_level[%d]        %s (data %s, bot %s)" % [level, "MATCH" if int(got.get("count", -1)) == int(want.count) and int(got.get("day_equiv", -1)) == int(want.day_equiv) else "DIFF", str(got), str(want)])

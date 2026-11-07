@@ -14,6 +14,8 @@ extends "res://tests/harness.gd"
 const Sim = preload("res://scripts/sim.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
 const Persistence = preload("res://scripts/persistence.gd")
+const MainCapsule = preload("res://scripts/sim/capsule.gd")
+const Director = preload("res://scripts/sim/director.gd")
 
 const LAT := 50.4501
 const LON := 30.5234
@@ -29,6 +31,7 @@ func _init() -> void:
 	_t_seed_contrast()
 	_t_region_roundtrip_hash()
 	_t_twin_capsule_on()
+	_t_twin_capsule_raid()
 	_print_final_hash()
 	_print_capsule_hash()
 	finish()
@@ -179,6 +182,69 @@ func _t_twin_capsule_on() -> void:
 	var same: Variant = _capsule_on(CAPSULE_CLOCK_MS)
 	same.set_clock(CAPSULE_CLOCK_MS + 5000)   # later pushes move now_ms, not the world record
 	ok(Persistence.world_hash(same) == Persistence.world_hash(_capsule_on(CAPSULE_CLOCK_MS)), "now_ms itself is NOT in world_hash (only the instants stored in the capsule record are)")
+
+
+# spec 0010 W3a (REQ-0010-17/34/62/82): TWO independent ON worlds, a FORCED raid driven by the same injected clock and the same hits -> the same
+# world_hash at every probe through warning, contact, raiders' spawn and the breach; and the PROTECTION level decides the outcome (the same blow:
+# protection 0 is breached, protection 1 holds), so a raid whose result ignored the defence axis would give equal twins here too — the contrast catches it.
+func _raid_on(protection: int) -> Variant:
+	var sim: Variant = _capsule_on(CAPSULE_CLOCK_MS)
+	sim.stock[sim.res_key("wood")] = 20000
+	sim.stock[sim.res_key("stone")] = 20000
+	sim.upgrade_capsule()
+	sim.main_capsule["protection"] = protection
+	sim.set_clock(CAPSULE_CLOCK_MS + 259200001)
+	return sim
+
+
+func _drive_raid(sim: Variant, blow: float) -> void:
+	Director.apply(sim, {"incident": "raid", "count": 3, "faction": "Тестові мародери"})
+	sim.update(DT)
+	sim.set_clock(int(sim.capsule_raid.contact_at))
+	for t in 4:
+		sim.update(DT)
+		_topup(sim)
+	MainCapsule.on_hit(sim, blow)
+	sim.update(DT)
+
+
+func _t_twin_capsule_raid() -> void:
+	var a: Variant = _raid_on(0)
+	var b: Variant = _raid_on(0)
+	var diverged := -1
+	Director.apply(a, {"incident": "raid", "count": 3, "faction": "Тестові мародери"})
+	Director.apply(b, {"incident": "raid", "count": 3, "faction": "Тестові мародери"})
+	for t in 6:
+		a.update(DT)
+		b.update(DT)
+		if Persistence.world_hash(a) != Persistence.world_hash(b):
+			diverged = t
+			break
+	var at: int = int(a.capsule_raid.contact_at)
+	a.set_clock(at)
+	b.set_clock(at)
+	for t in 300:
+		a.update(DT)
+		b.update(DT)
+		_topup(a)
+		_topup(b)
+		if diverged < 0 and Persistence.world_hash(a) != Persistence.world_hash(b):
+			diverged = 100 + t
+		if str(a.capsule_raid.state) != "contact":
+			break
+	ok(diverged < 0 and str(a.capsule_raid.state) == "contact", "twin ON raid run (forced, same clock): world_hash identical at every probe through warning, contact and the raiders' spawn (first divergence %d, state %s)" % [diverged, str(a.capsule_raid.state)])
+	# the protection level changes the outcome of the SAME blow
+	var p0: Variant = _raid_on(0)
+	var p1: Variant = _raid_on(1)
+	var hp0: float = float(MainCapsule.core_hp(p0, 0))
+	_drive_raid(p0, hp0 + 1.0)
+	_drive_raid(p1, hp0 + 1.0)
+	ok(int(p0.main_capsule.level) == 0 and int(p1.main_capsule.level) == 1, "REQ-0010-17: the same blow (%.0f) breaches protection 0 (level 1 -> %d) and is held by protection 1 (level -> %d)" % [hp0 + 1.0, int(p0.main_capsule.level), int(p1.main_capsule.level)])
+	ok(Persistence.world_hash(p0) != Persistence.world_hash(p1), "REQ-0010-17/82: the two outcomes are different worlds")
+	var q0: Variant = _raid_on(0)
+	_drive_raid(q0, hp0 + 1.0)
+	ok(Persistence.world_hash(q0) == Persistence.world_hash(p0), "REQ-0010-82: an independent third instance replays the breach to the same world_hash")
+	ok(MainCapsule.core_hp(p1, 1) > hp0 * 1.9, "REQ-0010-102 stub: protection 1 holds ~x2 the core of protection 0")
 
 
 # canonical scenario for the cross-process check: CI runs the suite twice and diffs this line

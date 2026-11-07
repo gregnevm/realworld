@@ -83,8 +83,9 @@ static func apply(s, payload: Dictionary) -> void:
 	var kind := str(payload.get("incident", ""))
 	if not LIVE_INCIDENTS.has(kind):
 		return   # no live substrate yet (fauna/quests) — dropped, not faked
-	if kind == "raid" and MainCapsule.holds_npc_threats(s):
-		return   # ON (spec 0010 OD-107/D8): рейд на неруйнівну капсулу не може ні вдатись, ні скінчитись — dropped до W3
+	if kind == "raid" and s.get("use_main_capsule") == true:
+		_apply_capsule_raid(s, payload)   # ON (spec 0010): рейд іде крізь автомат капсули (ворота OD-107/66, REQ-0010-111); легасі-цикл не армується
+		return
 	match kind:
 		"raid":
 			_apply_raid(s, payload)
@@ -95,6 +96,15 @@ static func apply(s, payload: Dictionary) -> void:
 			s._log("🌨 Різке похолодання: −%d°C на %d дн. Тримай тепло." % [int(payload.get("drop_c", 15.0)), int(payload.get("days", 2))], "warn")
 		"cargo":
 			_apply_cargo(s, payload)
+
+# ON: режисер лише «кидає» рейд, а армує його автомат капсули, якщо ворота відкриті (інакше payload DROPPED — без банера й без прихованої черги).
+# Сила — Balance.assess від багатства бази (REQ-0010-87/112: рівень капсули множить рядок by_level у MainCapsule.composition; day/pressure не входи).
+static func _apply_capsule_raid(s, payload: Dictionary) -> void:
+	if s.balance == null:
+		s.balance = KernelBalance.Balance.new()
+		s.balance.category_weight[KernelBalance.CAT_THREAT_BIG] = THREAT_BIG_WEIGHT
+	var points: float = float(s.balance.assess(world_of(s), {"day": 0, "hostile_pressure": 1.0}).get("threat", 0.0))
+	MainCapsule.on_director_raid(s, payload, points)
 
 # Arm the shipped raid cycle: warning banner now, the wave in RAID_WARN_LEAD seconds, its size
 # carried by the payload (threat-point-scaled) for threats.spawn_wave to honour.

@@ -4464,10 +4464,51 @@
     "raid": {
       "decided": [
         "immunity_ms",
-        "take_percent"
+        "take_percent",
+        "grace_ms",
+        "warn_min_ms",
+        "warn_max_ms"
       ],
       "immunity_ms": 86400000,
-      "take_percent": 50
+      "take_percent": 50,
+      "grace_ms": 259200000,
+      "warn_min_ms": 600000,
+      "warn_max_ms": 1800000,
+      "proposed": [
+        "take_round",
+        "queue_max",
+        "roll_spread",
+        "wealth_ref_points",
+        "count_max",
+        "by_level"
+      ],
+      "take_round": "floor",
+      "queue_max": 1,
+      "roll_spread": 0.25,
+      "wealth_ref_points": 58,
+      "count_max": 30,
+      "by_level": {
+        "1": {
+          "count": 5,
+          "day_equiv": 4
+        },
+        "2": {
+          "count": 10,
+          "day_equiv": 4
+        },
+        "3": {
+          "count": 20,
+          "day_equiv": 4
+        },
+        "4": {
+          "count": 20,
+          "day_equiv": 8
+        },
+        "5": {
+          "count": 24,
+          "day_equiv": 12
+        }
+      }
     }
   }
 }

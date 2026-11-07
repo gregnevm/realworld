@@ -323,6 +323,7 @@ func restore_game(path: String = SAVE_PATH) -> bool:
 		home["region_key"] = WorldGen.canon_coord(float(home.lat), float(home.lon))
 		home["tile"] = [cap_tile.x, cap_tile.y]
 		has_home = true
+		MainCapsule.mark_reentry(sim)   # «Продовжити» = власник був поза грою: рейд, що не дійшов до контакту, переплановується (REQ-0010-62/119, стаб до Q-1)
 	var st: Variant = d.get("store", {})
 	store = st if (st is Dictionary and (st as Dictionary).has("regions")) else Persistence.store_new()
 	progression = Progression.new(Catalog.load_json())

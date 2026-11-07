@@ -167,7 +167,7 @@ static func serialize_runtime(sim) -> Dictionary:
 	var shots: Array = []
 	for sh in sim.shots:
 		shots.append(_pick(sh, SHOT_HASH_FIELDS))
-	return {
+	var rt := {
 		"dead": bool(sim.dead),
 		"craft_timer": float(sim.craft_timer),
 		"weather": String(sim.weather),
@@ -202,6 +202,10 @@ static func serialize_runtime(sim) -> Dictionary:
 			"dep_cd": float(sim.player.get("dep_cd", 0.0)),
 		},
 	}
+	# spec 0010 W3a: runtime-автомат рейду на капсулу (стан, UTC-мс таймери, core_hp, черга) — лише при ON; OFF-runtime без нового ключа (REQ-0010-01)
+	if sim.get("use_main_capsule") == true:
+		rt["capsule_raid"] = MainCapsule.serialize_raid(sim)
+	return rt
 
 
 # An action carries an A* path (Vector2i) and, when attacking, a LIVE enemy reference — neither
@@ -260,6 +264,8 @@ static func apply_runtime(sim, rec: Dictionary) -> void:
 	sim.env_rng.state = _rng_state(rec.get("env_rng_state"), sim.env_rng.state)
 	sim.threat_rng.state = _rng_state(rec.get("threat_rng_state"), sim.threat_rng.state)
 	sim.director_rng.state = _rng_state(rec.get("director_rng_state"), sim.director_rng.state)
+	if sim.get("use_main_capsule") == true and rec.has("capsule_raid"):
+		MainCapsule.apply_raid(sim, rec.capsule_raid)   # курсор рейд-потоку вже в записі капсули (load_region -> init_raid); тут лише автомат
 	sim.enemies = []
 	for e in (rec.get("enemies", []) as Array):
 		var live: Dictionary = (e as Dictionary).duplicate(true)

@@ -277,7 +277,8 @@ const CAPSULE_ZONE_KEYS := ["radius_m", "cell_m", "radius_cells"]
 const CAPSULE_LEVEL_KEYS := ["level", "cost", "buffs"]
 const CAPSULE_PROT_TOP_KEYS := ["factor", "levels"]
 const CAPSULE_PROT_KEYS := ["level", "cost", "core_hp"]
-const CAPSULE_RAID_KEYS := ["decided", "immunity_ms", "take_percent"]
+const CAPSULE_RAID_DECIDED := {"immunity_ms": 86400000, "take_percent": 50, "grace_ms": 259200000, "warn_min_ms": 600000, "warn_max_ms": 1800000}   # OD-24/107/66/88 verbatim
+const CAPSULE_RAID_PROPOSED := ["take_round", "queue_max", "roll_spread", "wealth_ref_points", "count_max", "by_level"]                          # the bot's proposals (W3a)
 const CAPSULE_BUFF_STEP := 0.1       # OD-98
 const CAPSULE_RARITY := {"wood": 0, "stone": 1, "planks": 2, "scrap": 3, "components": 4}   # rank by the finite supply order (planks = processed wood)
 const CAPSULE_BASIC_RAW := ["wood", "stone"]                                               # OD-75: level 1 is basic raw
@@ -416,11 +417,36 @@ func _t_capsule_levels_data() -> void:
 	var blob: String = JSON.stringify(t.duplicate(true).merged({"note": "", "feasibility_note": ""}, true))
 	var clones: RegEx = RegEx.create_from_string("(?i)clone|roster|genome|orbit|implant")
 	ok(clones.search(blob) == null, "REQ-0010-17/97: no clone-roster, orbit or implant entry anywhere in capsule_levels")
-	# --- the raid block: only the owner's decided numbers ---
+	# --- the raid block: the owner's decided numbers verbatim + the bot's proposals, each named as such ---
 	var raid: Dictionary = t.get("raid", {})
-	ok(_sorted_keys(raid) == _sorted(CAPSULE_RAID_KEYS), "raid block: only the owner's decided numbers (warning 10–30 min is OD-88, the raider is Balance.assess — W3): %s" % str(_sorted_keys(raid)))
-	ok(int(raid.get("immunity_ms", 0)) == 86400000 and int(raid.get("take_percent", 0)) == 50, "OD-24/107: immunity 86 400 000 ms and 50% are the owner's numbers")
-	ok(_sorted(raid.get("decided", []) as Array) == ["immunity_ms", "take_percent"], "raid.decided names exactly the two owner-decided numbers")
+	var want_keys: Array = ["decided", "proposed"] + CAPSULE_RAID_DECIDED.keys() + CAPSULE_RAID_PROPOSED
+	ok(_sorted_keys(raid) == _sorted(want_keys), "raid block: no key outside the schema (no cadence/min-gap: OD-86 sets none): %s" % str(_sorted_keys(raid)))
+	var decided_ok: bool = true
+	for k in CAPSULE_RAID_DECIDED:
+		decided_ok = decided_ok and int(raid.get(k, -1)) == int(CAPSULE_RAID_DECIDED[k])
+	ok(decided_ok, "OD-24/107/66/88: immunity 86 400 000 ms, 50%, grace 259 200 000 ms, warning 600 000..1 800 000 ms are the owner's numbers")
+	ok(_sorted(raid.get("decided", []) as Array) == _sorted(CAPSULE_RAID_DECIDED.keys()) and _sorted(raid.get("proposed", []) as Array) == _sorted(CAPSULE_RAID_PROPOSED),
+		"raid.decided / raid.proposed name exactly the owner-decided and the agent-proposed numbers")
+	ok(["floor", "ceil", "round"].has(String(raid.get("take_round", ""))) and int(raid.get("queue_max", 0)) >= 1 and float(raid.get("roll_spread", 0.0)) > 0.0 and float(raid.get("roll_spread", 0.0)) < 1.0 \
+		and float(raid.get("wealth_ref_points", 0.0)) > 0.0, "the proposed scalars are usable: rounding rule the code implements, a queue slot, a spread strictly inside (0,1), a positive reference wealth")
+	var by: Dictionary = raid.get("by_level", {})
+	var by_ok: bool = _sorted_keys(by) == ["1", "2", "3", "4", "5"]
+	var prev_p: float = 0.0
+	var prev_c: int = 0
+	var prev_d: int = 0
+	var power_ok: bool = true
+	for lk in ["1", "2", "3", "4", "5"]:
+		var row: Dictionary = by.get(lk, {})
+		by_ok = by_ok and _sorted_keys(row) == ["count", "day_equiv"] and int(row.get("count", 0)) >= 1 and int(row.get("count", 0)) <= int(raid.get("count_max", 0)) and int(row.get("day_equiv", 0)) >= 1
+		var rd: Dictionary = GameData.make_raider(0.0, 0.0, int(row.get("day_equiv", 1)))
+		var power: float = float(int(row.get("count", 0))) * float(rd.dmg) * float(rd.maxhp)
+		if prev_p > 0.0:
+			power_ok = power_ok and absf(power / prev_p - 2.0) < 0.05 and int(row.get("count", 0)) >= prev_c and int(row.get("day_equiv", 0)) >= prev_d
+		prev_p = power
+		prev_c = int(row.get("count", 0))
+		prev_d = int(row.get("day_equiv", 0))
+	ok(by_ok, "REQ-0010-112: one raider row {count, day_equiv} per capsule level 1..5, within 1..count_max")
+	ok(power_ok, "OD-65: the raider power (count x dmg x hp of the REAL GameData.make_raider) is ~x2 per level and never shrinks")
 	ok(not cat.get("meta", {}).is_empty() and Catalog.validate_catalog(cat).is_empty(), "the extra top-level key does not break validate_catalog")
 
 # The accessors read the table, and the code holds NO copy of its numbers (REQ-0010-11: «код не містить цих чисел»; REQ-0010-91/99).

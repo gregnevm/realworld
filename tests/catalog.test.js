@@ -369,7 +369,10 @@ const CAPSULE_ZONE_KEYS = ["radius_m", "cell_m", "radius_cells"];
 const CAPSULE_LEVEL_KEYS = ["level", "cost", "buffs"];
 const CAPSULE_PROT_TOP_KEYS = ["factor", "levels"];
 const CAPSULE_PROT_KEYS = ["level", "cost", "core_hp"];
-const CAPSULE_RAID_KEYS = ["decided", "immunity_ms", "take_percent"];
+const CAPSULE_RAID_DECIDED = { immunity_ms: 86400000, take_percent: 50, grace_ms: 259200000, warn_min_ms: 600000, warn_max_ms: 1800000 }; // OD-24 / OD-107 / OD-66 / OD-88: verbatim
+const CAPSULE_RAID_PROPOSED = ["take_round", "queue_max", "roll_spread", "wealth_ref_points", "count_max", "by_level"];               // the bot's proposals (status: proposed, W3a)
+const CAPSULE_RAID_KEYS = ["decided", "proposed", ...Object.keys(CAPSULE_RAID_DECIDED), ...CAPSULE_RAID_PROPOSED];
+const RAIDER_POWER = (count, day) => count * (7 + 1.2 * day) * (28 * (1 + 0.18 * day));                                              // mirrors GameData.make_raider: dmg x hp per raider
 const CAPSULE_BUFF_STEP = 0.1;                                                          // OD-98: +10% per level, +50% at level 5
 const CAPSULE_RARITY = { wood: 0, stone: 1, planks: 2, scrap: 3, components: 4 };       // rank by the finite supply order (planks = processed wood), mirrors the bot
 const CAPSULE_BASIC_RAW = ["wood", "stone"];                                            // OD-75: level 1 is basic raw
@@ -500,11 +503,28 @@ test("capsule_levels: exactly TWO axes and no clone-roster entries anywhere in t
   assert.deepStrictEqual(Object.keys(capsuleTable()).filter((k) => ["levels", "protection"].includes(k)), ["levels", "protection"], "two axes: the capsule level and the defence level");
 });
 
-test("capsule_levels: the raid block carries ONLY the owner's decided numbers (OD-24/107); grace, cadence and warning are a later wave", () => {
+test("capsule_levels: the raid block — the owner's decided numbers verbatim + the bot's PROPOSED ones, each named as such (OD-24/66/88/107, REQ-0010-62/81/112)", () => {
   const { raid } = capsuleTable();
-  assert.deepStrictEqual(Object.keys(raid).sort(), [...CAPSULE_RAID_KEYS].sort(),
-    "no proposed raider ladder / warning here: warning 10–30 min is OD-88 (REQ-0010-108), the raider's strength is Balance.assess (OD-87) — W3");
-  assert.strictEqual(raid.immunity_ms, 86400000, "24 h in UTC ms (OD-24)");
-  assert.strictEqual(raid.take_percent, 50, "50% of invested[L] is destroyed (OD-107)");
-  assert.deepStrictEqual([...raid.decided].sort(), ["immunity_ms", "take_percent"], "both are owner-decided");
+  assert.deepStrictEqual(Object.keys(raid).sort(), [...CAPSULE_RAID_KEYS].sort(), "no key outside the schema: cadence/min-gap are NOT here (OD-86 sets no lower bound between raids)");
+  for (const [k, v] of Object.entries(CAPSULE_RAID_DECIDED)) assert.strictEqual(raid[k], v, `${k} is the owner's number (${v})`);
+  assert.deepStrictEqual([...raid.decided].sort(), Object.keys(CAPSULE_RAID_DECIDED).sort(), "raid.decided names exactly the owner-decided numbers");
+  assert.deepStrictEqual([...raid.proposed].sort(), [...CAPSULE_RAID_PROPOSED].sort(), "raid.proposed names exactly the agent-proposed numbers (the owner approves them at merge)");
+  assert.ok(["floor", "ceil", "round"].includes(raid.take_round), "the rounding rule is one the code implements");
+  assert.ok(Number.isInteger(raid.queue_max) && raid.queue_max >= 1, "the queue has room for at least one waiting raid");
+  assert.ok(raid.roll_spread > 0 && raid.roll_spread < 1, "the roll spread is strictly inside (0,1): a spread of 0 turns the roll into a coin that never lands");
+  assert.ok(raid.wealth_ref_points > 0, "the reference wealth is positive");
+  const rows = Object.entries(raid.by_level);
+  assert.deepStrictEqual(rows.map(([k]) => k), ["1", "2", "3", "4", "5"], "one raider row per capsule level 1..5 (level 0 has no raid consequence)");
+  let prev = null;
+  for (const [k, row] of rows) {
+    assert.deepStrictEqual(Object.keys(row).sort(), ["count", "day_equiv"], `level ${k}: exactly {count, day_equiv}`);
+    assert.ok(Number.isInteger(row.count) && row.count >= 1 && row.count <= raid.count_max, `level ${k}: count within 1..count_max`);
+    assert.ok(Number.isInteger(row.day_equiv) && row.day_equiv >= 1, `level ${k}: day_equiv is a positive integer`);
+    const power = RAIDER_POWER(row.count, row.day_equiv);
+    if (prev) {
+      assert.ok(row.count >= prev.row.count && row.day_equiv >= prev.row.day_equiv, `level ${k}: the raid never gets smaller (REQ-0010-112)`);
+      assert.ok(Math.abs(power / prev.power - 2) < 0.05, `level ${k}: raid power ~x2 per level (OD-65), got x${(power / prev.power).toFixed(3)}`);
+    }
+    prev = { row, power };
+  }
 });

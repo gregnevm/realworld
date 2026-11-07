@@ -136,10 +136,13 @@ static func canon_cell(m: Dictionary, occupied: Dictionary = {}) -> Vector2i:
 # (int64) з ВХОДУ sim.now_ms (Session пушить годинник ДО new_game; 0 == годинник не подано — явний стан, а не «зараз»).
 # Рівень 0 = базова капсула без бафів; protection 0 = базовий захист ядра (REQ-0010-99: окреме поле, осі незалежні). Поля схеми додаються
 # ПОСТУПОВО, щоб кожна хвиля мала власні хеш-докази (REQ-0010-35/82): W1b — tile/owner/landed_at/grace_start/level; invested — W2a;
-# protection/protection_invested — W2c; immune_until/first_upgrade_at/жетон/курсор рейду — W3.
+# protection/protection_invested — W2c; W3a — immune_until (UTC-мс; 0 = нема), first_upgrade_at (UTC-мс; 0 = капсулу ще не прокачували, OD-107),
+# reinforcement_used (0/1, OD-96), free_transport_token (0/1), next_raid_at (UTC-мс; 0 = не заплановано; пише планувальник W3b),
+# raid_rng_cursor (курсор рейд-потоку, рядок int64). Стан АКТИВНОГО рейду (+core_hp) — runtime-половина `sim.capsule_raid`, не цей запис.
 static func new_record(cell: Vector2i, now_ms: int = 0) -> Dictionary:
 	return {"kind": "main", "tile": [cell.x, cell.y], "level": 0, "owner": OWNER_LOCAL, "landed_at": now_ms, "grace_start": now_ms, "invested": {},
-		"protection": 0, "protection_invested": {}}
+		"protection": 0, "protection_invested": {},
+		"immune_until": 0, "first_upgrade_at": 0, "reinforcement_used": 0, "free_transport_token": 0, "next_raid_at": 0, "raid_rng_cursor": "0"}
 
 static func tile(s) -> Vector2i:
 	var t: Array = s.main_capsule.tile
@@ -154,6 +157,9 @@ static func to_record(s) -> Dictionary:
 	var t: Vector2i = tile(s)
 	return {"version": RECORD_VERSION, "kind": String(c.get("kind", "main")), "tile": [t.x, t.y], "level": int(c.get("level", 0)),
 		"protection": int(c.get("protection", 0)),
+		"immune_until": Clock.to_wire(int(c.get("immune_until", 0))), "first_upgrade_at": Clock.to_wire(int(c.get("first_upgrade_at", 0))),
+		"reinforcement_used": int(c.get("reinforcement_used", 0)), "free_transport_token": int(c.get("free_transport_token", 0)),
+		"next_raid_at": Clock.to_wire(int(c.get("next_raid_at", 0))), "raid_rng_cursor": String(c.get("raid_rng_cursor", "0")),
 		"owner": String(c.get("owner", OWNER_LOCAL)), "landed_at": Clock.to_wire(int(c.get("landed_at", 0))),
 		"grace_start": Clock.to_wire(int(c.get("grace_start", 0))), "invested": ledger(c.get("invested", {})),
 		"protection_invested": ledger(c.get("protection_invested", {}))}
@@ -201,6 +207,13 @@ static func from_record(s, rec: Dictionary) -> void:
 	s.main_capsule.grace_start = Clock.from_wire(rec.get("grace_start"), 0)
 	s.main_capsule.invested = ledger(rec.get("invested", {}))
 	s.main_capsule.protection_invested = ledger(rec.get("protection_invested", {}))
+	# W3a: відсутнє поле = типове значення (запис W2c без рейдових полів лишається читабельним; версія запису не міняється, бо це та сама ревізія спеки)
+	s.main_capsule.immune_until = Clock.from_wire(rec.get("immune_until"), 0)
+	s.main_capsule.first_upgrade_at = Clock.from_wire(rec.get("first_upgrade_at"), 0)
+	s.main_capsule.reinforcement_used = clampi(int(rec.get("reinforcement_used", 0)), 0, 1)
+	s.main_capsule.free_transport_token = clampi(int(rec.get("free_transport_token", 0)), 0, 1)
+	s.main_capsule.next_raid_at = Clock.from_wire(rec.get("next_raid_at"), 0)
+	s.main_capsule.raid_rng_cursor = String(rec.get("raid_rng_cursor", "0"))
 	s._place_building(KIND, cell.x, cell.y, -1)
 
 # Найперший крок load_region — ДО будь-якої мутації світу: &"" == можна завантажувати, інакше явна причина
@@ -243,7 +256,21 @@ static func _fields_ok(c: Dictionary, n: int) -> bool:
 	return String(c.get("kind", "")) == "main" and c.get("owner") is String and _whole(c.get("level")) and int(c.level) >= 0 \
 		and _whole(c.get("protection")) and int(c.protection) >= 0 \
 		and Clock.from_wire(c.get("landed_at"), -1) >= 0 and Clock.from_wire(c.get("grace_start"), -1) >= 0 \
-		and _ledger_ok(c.get("invested", {})) and _ledger_ok(c.get("protection_invested", {}))
+		and _ledger_ok(c.get("invested", {})) and _ledger_ok(c.get("protection_invested", {})) and _raid_fields_ok(c)
+
+# Рейдові поля W3a (REQ-0010-26/35/82/113): відсутнє — ок (типове), присутнє — мусить бути цілим UTC-мс >= 0 / 0..1 / рядком int64 курсора.
+static func _raid_fields_ok(c: Dictionary) -> bool:
+	for f in ["immune_until", "first_upgrade_at", "next_raid_at"]:
+		if c.has(f) and Clock.from_wire(c.get(f), -1) < 0:
+			return false
+	for f in ["reinforcement_used", "free_transport_token"]:
+		if c.has(f) and not (_whole(c.get(f)) and int(c.get(f)) >= 0 and int(c.get(f)) <= 1):
+			return false
+	if c.has("raid_rng_cursor"):
+		var cur: Variant = c.get("raid_rng_cursor")
+		if not (cur is String) or not (cur as String).is_valid_int():
+			return false
+	return true
 
 # Журнал: {"<рівень>": {"<ресурс>": n}} — ключ-рівень десятковий рядок ≥ 1, n ціле ≥ 0. Відсутній ключ журналу == порожній журнал.
 static func _ledger_ok(v: Variant) -> bool:
@@ -629,6 +656,8 @@ static func _upgrade_axis(s, axis: StringName, cmd_id: int) -> Dictionary:
 		book[str(next)] = entry
 		s.main_capsule[book_key] = book
 	s.main_capsule[field] = next
+	if not prot and int(s.main_capsule.get("first_upgrade_at", 0)) <= 0:
+		s.main_capsule["first_upgrade_at"] = maxi(1, int(s.now_ms))   # «є що втрачати» (OD-107): 0 == ніколи; годинник не подано (0) -> 1 мс, мітка завжди > 0
 	return {"ok": true, "axis": axis, field: next, "paid": cost.duplicate()}
 
 # ---------------- region swaps (REQ-0010-04 / 75) ----------------
@@ -652,11 +681,428 @@ static func on_map_change(s) -> bool:
 	return true
 
 # ---------------- NPC-загрози й неруйнівна капсула (OD-107, critique-0010 #2, D8) ----------------
-# Легасі-рейд (Director.apply -> Threats.update_raids/spawn_wave) і патруль націлюються на base_center() = капсулу, яку
-# Threats.damage_building не шкодить (indestructible): рейдери стоять і б'ють без кінця — облога, що не може ні вдатися,
-# ні скінчитись, з банером «РЕЙД». OD-107 (власник): перший NPC-рейд — лише після першої прокачки (до W2a її нема, рівень 0),
-# а саме пробиття ядра (core_hp<=0) з'являється у W3. До рейд-автомата капсули (W3) усі ці загрози при ON ПРИДУШЕНІ —
-# DROPPED, не відкладені (жодного прихованого стану-черги), а їхні кидки RNG лишаються (курсори потоків не зсуваються).
-# Хвиля W3 замінює тіло цього предиката на ворота «рівень>=1, імунітет, грейс, один активний» (REQ-0010-20/62/65).
+# Патруль націлюється на base_center() = капсулу, яку Threats.damage_building не шкодить (indestructible): боти стояли б і били без кінця —
+# облога, що не може ні вдатися, ні скінчитись. Патрулі при ON ПРИДУШЕНІ (ІНТЕРИМ до вимірювання/рішення власника — питання власнику, не рішення
+# дизайну), їхні кидки RNG лишаються (курсори потоків не зсуваються). Легасі-цикл рейду (Threats.update_raids/spawn_wave) при ON теж не армується:
+# його замінює автомат нижче (W3a) — рейд на капсулу має початок (контакт), кінець (ядро пробито / рейдерів нема) і наслідок.
 static func holds_npc_threats(s) -> bool:
 	return s.get("use_main_capsule") == true
+
+# ---------------- raid core (W3a: REQ-0010-17/21…26/34/62/65…67/69/81/82/84/104/113/119) ----------------
+# РЕЙД = фізична облога (OD-58/107): рейдери (GameData.make_raider) з краю карти йдуть до капсули й б'ють перешкоди через Threats.damage_building;
+# удар по неруйнівній капсулі потрапляє у on_hit й знижує HP ядра (runtime `capsule_raid.core_hp`). УСПІХ рейду — РІВНО HP ядра <= 0
+# (core_breached, REQ-0010-21); об'єкт капсули не видаляється ніколи (REQ-0010-75). Максимум HP ядра = рядок осі ЗАХИСТУ (core_hp(P), ×2 на
+# рівень — OD-103; зв'язок «захист -> HP ядра» — РОБОЧЕ тлумачення до Q-5). Наслідок успіху — ЧИСТА функція resolve_raid.
+# Автомат (runtime, один активний — REQ-0010-62): planned -> warning -> contact -> розв'язано (none); чергу довжини raid.queue_max
+# заповнюють рейди, що прийшли під час активного. УСІ часи — UTC-мс (REQ-0010-114): sim-секунди не беруть участі.
+const STREAM_SALT := 0xCA5D1E   # окремий seeded-потік рейдів: seed = region_seed ^ сіль; курсор — main_capsule.raid_rng_cursor (REQ-0010-34/82)
+const ST_NONE := "none"
+const ST_PLANNED := "planned"       # заплановано: warn_at у майбутньому (або щойно армовано)
+const ST_WARNING := "warning"       # попередження оголошено; рейдерів ще нема
+const ST_CONTACT := "contact"       # рейдери на мапі, HP ядра тратиться
+const RAID_STATES := [ST_NONE, ST_PLANNED, ST_WARNING, ST_CONTACT]
+const EVENTS_KEEP := 24             # довжина журналу подій (view-пам'ять, не хеш)
+const MSG_WARNING := "⚠ НАБЛИЖАЄТЬСЯ РЕЙД"
+const MSG_BREACH := "💥 Ядро капсули пробито: рівень %d → %d. Частину вкладеного знищено."   # без роду (D8)
+const MSG_BREACH_ZERO := "💥 Ядро капсули пробито — на базовому рівні втрачати нічого."
+const MSG_DEFENDED := "✅ Рейд відбито!"
+
+# ---- дані: блок `raid` таблиці (рішення власника — `decided`, пропозиції бота — `proposed`; код чисел не має, REQ-0010-11) ----
+static func raid_data(s_or_tbl: Variant) -> Dictionary:
+	var tbl: Dictionary = s_or_tbl if s_or_tbl is Dictionary else table(s_or_tbl)
+	return tbl.get("raid", {})
+
+# ---- чисті предикати й функції (без sim, без годинника) ----
+# REQ-0010-21: ЄДИНИЙ предикат успіху рейду — HP ядра вичерпано.
+static func core_breached(core_hp: float) -> bool:
+	return core_hp <= 0.0
+
+static func raid_succeeded(core_hp: float) -> bool:
+	return core_breached(core_hp)
+
+# Імунітет — чиста перевірка цілого UTC-мс (REQ-0010-26): діє, поки `now` менший за мітку.
+static func immune_at(cap: Dictionary, now_ms: int) -> bool:
+	return now_ms < int(cap.get("immune_until", 0))
+
+static func is_immune(s) -> bool:
+	return not (s.main_capsule as Dictionary).is_empty() and immune_at(s.main_capsule, int(s.now_ms))
+
+static func immune_left_ms(s) -> int:
+	return maxi(0, int(s.main_capsule.get("immune_until", 0)) - int(s.now_ms)) if not (s.main_capsule as Dictionary).is_empty() else 0
+
+# REQ-0010-69: «соло» = актор не член команди/клану. У К1 команд нема (соцграф 0002 симульований), тож усі соло.
+static func is_solo(_actor: String) -> bool:
+	return true
+
+# Скільки одиниць знищує рейд з `invested[L][res]` (OD-107: частка `take_percent`; правило округлення — дані, пропозиція Q-8).
+static func take_of(amount: int, percent: int, mode: String) -> int:
+	var x: float = float(amount) * float(percent) / 100.0
+	match mode:
+		"ceil":
+			return int(ceil(x))
+		"round":
+			return int(round(x))
+		_:
+			return int(floor(x))
+
+# ЧИСТА функція розв'язку рейду (REQ-0010-17/21…25/65/66/67/81/104/113): однакові входи -> однаковий вихід, жодного читання sim/годинника/RNG
+# (потік випадковості приходить ЯК ВХІД: inp.roll ∈ [0,1)). Входи inp:
+#   now_ms     — UTC-мс розв'язання (від нього імунітет);
+#   core_hp    — поточне HP ядра (немає ключа -> повний максимум рівня ЗАХИСТУ з таблиці: опір ядра — функція protection, ×2 на рівень);
+#   power      — сила рейдера в одиницях HP ядра, що вона знімає за облогу (0 = «шкоду вже нанесено фізично»: живий шлях викликає з 0);
+#   structures — внесок споруд, частка сили, що вони гасять, [0,1];   autodefense — автооборона (OD-33), частка, [0,1];
+#   roll       — потік випадковості [0,1), розкид шкоди ±raid.roll_spread (пропозиція бота).
+# Формула поєднання (параметр балансу Q-6, у даних, `proposed`): шкода = power × (1−structures) × (1−autodefense) × (1 − spread + 2·spread·roll).
+# Повертає {kind: &"immune"|&"noop_l0"|&"breach"|&"defended"|&"no_data", core_hp_max, core_hp_before, core_hp (після), damage, breached,
+#   destroyed:{res:n}, destroyed_level, token_granted, immune_until, cap_after} — cap_after = копія cap зі змінами НАСЛІДКУ (рівень −1, invested[L]
+# мінус знищене, імунітет, жетон, reinforcement_used=0); protection і protection_invested НЕ чіпаються (REQ-0010-104, стаб до Q-5).
+static func resolve_raid(cap: Dictionary, inp: Dictionary, tbl: Dictionary) -> Dictionary:
+	var rd: Dictionary = raid_data(tbl)
+	var level: int = int(cap.get("level", 0))
+	var prot: int = int(cap.get("protection", 0))
+	var pl: Array = (tbl.get("protection", {}) as Dictionary).get("levels", [])
+	var hp_max: float = float((pl[prot] as Dictionary).get("core_hp", 0.0)) if prot >= 0 and prot < pl.size() else 0.0
+	var hp_before: float = float(inp.get("core_hp", hp_max))
+	var out: Dictionary = {"kind": &"no_data", "core_hp_max": hp_max, "core_hp_before": hp_before, "core_hp": hp_before, "damage": 0.0, "breached": false,
+		"destroyed": {}, "destroyed_level": 0, "token_granted": false, "immune_until": int(cap.get("immune_until", 0)), "cap_after": cap.duplicate(true)}
+	if not rd.has("immunity_ms") or not rd.has("take_percent"):
+		return out   # без рішень власника в даних наслідок не вигадуємо
+	var now: int = int(inp.get("now_ms", 0))
+	if immune_at(cap, now):
+		out.kind = &"immune"   # REQ-0010-25: під імунітетом — без змін стану
+		return out
+	var spread: float = float(rd.get("roll_spread", 0.0))
+	var mit_s: float = clampf(float(inp.get("structures", 0.0)), 0.0, 1.0)
+	var mit_a: float = clampf(float(inp.get("autodefense", 0.0)), 0.0, 1.0)
+	var roll: float = clampf(float(inp.get("roll", 0.5)), 0.0, 1.0)
+	var damage: float = maxf(0.0, float(inp.get("power", 0.0))) * (1.0 - mit_s) * (1.0 - mit_a) * (1.0 - spread + 2.0 * spread * roll)
+	out.damage = damage
+	out.core_hp = hp_before - damage
+	out.breached = core_breached(float(out.core_hp))
+	if level <= 0:
+		out.kind = &"noop_l0"   # REQ-0010-23/65: на базовому рівні рейд нічого не змінює (капсула не знищується, жетон не видається)
+		return out
+	if not bool(out.breached):
+		out.kind = &"defended"
+		return out
+	out.kind = &"breach"
+	var after: Dictionary = out.cap_after
+	var inv: Dictionary = (after.get("invested", {}) as Dictionary)
+	var book: Dictionary = (inv.get(str(level), {}) as Dictionary)
+	var destroyed: Dictionary = {}
+	for res in book:
+		var cut: int = take_of(int(book[res]), int(rd.take_percent), String(rd.get("take_round", "floor")))
+		cut = clampi(cut, 0, int(book[res]))
+		destroyed[String(res)] = cut
+		book[res] = int(book[res]) - cut   # забране + залишок == значення до рейду (REQ-0010-66)
+	if inv.has(str(level)):
+		inv[str(level)] = book
+	after["invested"] = inv
+	after["level"] = level - 1
+	var granted: bool = level - 1 == 0 and int(after.get("free_transport_token", 0)) < 1   # REQ-0010-24/67: жетон лише за падіння до 0, ≤ 1
+	if granted:
+		after["free_transport_token"] = 1
+	after["immune_until"] = now + int(rd.immunity_ms)   # REQ-0010-25: від МОМЕНТУ розв'язання
+	after["reinforcement_used"] = 0                      # REQ-0010-113: починається нове вікно — виклик знову доступний
+	out.destroyed = destroyed
+	out.destroyed_level = level
+	out.token_granted = granted
+	out.immune_until = int(after.immune_until)
+	return out
+
+# ---- runtime-половина: sim.capsule_raid (core_hp тут, НЕ в регіональному записі; у runtime-хеші й resume) ----
+# `reentry` — ТРАНЗИТНИЙ прапор (Session.restore_game / on_catch_up): у словнику є, але НЕ серіалізується й не хешується — «продовжений» світ хешується так само,
+# як збережений (REQ-0010-02/35); прапор лише наказує першому тіку перепланувати рейд, що не дійшов до контакту.
+static func idle_raid() -> Dictionary:
+	return {"state": ST_NONE, "id": 0, "seq": 0, "warn_at": 0, "contact_at": 0, "warned_at": 0, "dir": 0, "count": 0, "day_equiv": 0,
+		"faction": "", "core_hp": 0.0, "spawned": false, "queue": [], "reentry": false}
+
+static func serialize_raid(s) -> Dictionary:
+	var r: Dictionary = s.capsule_raid
+	var q: Array = []
+	for e in (r.get("queue", []) as Array):
+		q.append({"faction": String((e as Dictionary).get("faction", "")), "points": float((e as Dictionary).get("points", 0.0))})
+	return {"state": String(r.get("state", ST_NONE)), "id": int(r.get("id", 0)), "seq": int(r.get("seq", 0)),
+		"warn_at": Clock.to_wire(int(r.get("warn_at", 0))), "contact_at": Clock.to_wire(int(r.get("contact_at", 0))),
+		"warned_at": Clock.to_wire(int(r.get("warned_at", 0))), "dir": int(r.get("dir", 0)), "count": int(r.get("count", 0)),
+		"day_equiv": int(r.get("day_equiv", 0)), "faction": String(r.get("faction", "")), "core_hp": float(r.get("core_hp", 0.0)),
+		"spawned": bool(r.get("spawned", false)), "queue": q}
+
+# Обернене до serialize_raid (Persistence.apply_runtime; лише ON). Невідомий стан -> none (безпечно: рейду нема, а не напівживий).
+static func apply_raid(s, rec: Dictionary) -> void:
+	var r: Dictionary = idle_raid()
+	var st: String = String(rec.get("state", ST_NONE))
+	r.state = st if RAID_STATES.has(st) else ST_NONE
+	r.id = int(rec.get("id", 0))
+	r.seq = int(rec.get("seq", 0))
+	for f in ["warn_at", "contact_at", "warned_at"]:
+		r[f] = Clock.from_wire(rec.get(f), 0)
+	r.dir = clampi(int(rec.get("dir", 0)), 0, 3)
+	r.count = int(rec.get("count", 0))
+	r.day_equiv = int(rec.get("day_equiv", 0))
+	r.faction = String(rec.get("faction", ""))
+	r.core_hp = float(rec.get("core_hp", 0.0))
+	r.spawned = bool(rec.get("spawned", false))
+	for e in (rec.get("queue", []) as Array):
+		(r.queue as Array).append({"faction": String((e as Dictionary).get("faction", "")), "points": float((e as Dictionary).get("points", 0.0))})
+	s.capsule_raid = r
+
+# Потік рейдів: seed від координат регіону (як потоки environment.gd), курсор — із запису капсули (переживає сейв). Викликає sim._env_init (ON).
+static func init_raid(s) -> void:
+	s.capsule_raid = idle_raid()
+	s.capsule_events = []
+	s.capsule_rng = RandomNumberGenerator.new()
+	s.capsule_rng.seed = s.region_seed() ^ STREAM_SALT
+	var cur: String = String(s.main_capsule.get("raid_rng_cursor", "0"))
+	if cur != "0" and cur.is_valid_int():
+		s.capsule_rng.state = cur.to_int()
+
+# Курсор потоку -> запис капсули (входить у регіональний хеш і сейв, REQ-0010-82): викликається після КОЖНОГО блоку, що тягнув з capsule_rng.
+static func _sync_cursor(s) -> void:
+	s.main_capsule["raid_rng_cursor"] = str(s.capsule_rng.state)
+
+static func _event(s, e: Dictionary) -> void:
+	var ev: Array = s.capsule_events
+	ev.append(e)
+	while ev.size() > EVENTS_KEEP:
+		ev.pop_front()
+
+static func _active(s) -> bool:
+	return String((s.capsule_raid as Dictionary).get("state", ST_NONE)) != ST_NONE
+
+# ---- ворота планувальника (REQ-0010-65/111): усі умови РАЗОМ; жодна сама рейд не відкриває ----
+# &"" — можна планувати; інакше причина: &"off" · &"no_data" · &"level0" (капсулу жодного разу не прокачано, OD-107) · &"grace" (3 доби від першої
+# посадки, OD-66, UTC-мс) · &"immune" (REQ-0010-27) · &"queued" (є активний рейд, у черзі є місце) · &"active" (є активний, черга повна).
+static func gate(s, _payload: Dictionary = {}) -> StringName:
+	if s.get("use_main_capsule") != true or (s.main_capsule as Dictionary).is_empty():
+		return &"off"
+	var rd: Dictionary = raid_data(s)
+	if not rd.has("grace_ms") or not rd.has("queue_max"):
+		return &"no_data"
+	var cap: Dictionary = s.main_capsule
+	if int(cap.get("first_upgrade_at", 0)) <= 0:
+		return &"level0"
+	if int(s.now_ms) - int(cap.get("grace_start", 0)) < int(rd.grace_ms):
+		return &"grace"
+	if immune_at(cap, int(s.now_ms)):
+		return &"immune"
+	if _active(s):
+		return &"queued" if (s.capsule_raid.queue as Array).size() < int(rd.queue_max) else &"active"
+	return &""
+
+# Вхід від режисера (Director.apply при ON): `points` = Balance.assess(...).threat бази (REQ-0010-112; 0 -> без множника багатства).
+# Повертає причину відмови чи &"" (заплановано). &"queued" кладе рейд у чергу. Відхилений рейд — DROPPED (жодного прихованого стану).
+static func on_director_raid(s, payload: Dictionary, points: float = 0.0) -> StringName:
+	var why: StringName = gate(s, payload)
+	if why == &"":
+		_plan(s, payload, points, maxi(0, int(s.now_ms)))
+		return &""
+	if why == &"queued":
+		(s.capsule_raid.queue as Array).append({"faction": String(payload.get("faction", "невідомі мародери")), "points": points})
+	_event(s, {"kind": &"dropped", "reason": why})
+	return why
+
+# Склад рейду (REQ-0010-87/112): рядок by_level для рівня капсули × множник багатства (assess.threat / wealth_ref_points, не нижче 1).
+static func composition(s, points: float) -> Dictionary:
+	var rd: Dictionary = raid_data(s)
+	var by: Dictionary = rd.get("by_level", {})
+	var level: int = int(s.main_capsule.get("level", 0))
+	var row: Dictionary = {}
+	for k in range(level, 0, -1):   # рівень поза таблицею -> найближчий нижчий рядок
+		if by.has(str(k)):
+			row = by[str(k)]
+			break
+	if row.is_empty():
+		return {"count": 0, "day_equiv": 0}
+	var ref: float = float(rd.get("wealth_ref_points", 0.0))
+	var mult: float = maxf(1.0, points / ref) if ref > 0.0 and points > 0.0 else 1.0
+	var count: int = clampi(int(round(float(row.count) * mult)), 1, int(rd.get("count_max", int(row.count))))
+	return {"count": count, "day_equiv": int(row.day_equiv)}
+
+# Інтервал попередження: рівномірно з [warn_min, warn_max] (OD-88; спосіб вибору — параметр рейд-потоку, REQ-0010-108, TBD) — ОДИН кидок потоку.
+static func _warn_interval(s) -> int:
+	var rd: Dictionary = raid_data(s)
+	var lo: int = int(rd.get("warn_min_ms", 0))
+	var hi: int = maxi(lo, int(rd.get("warn_max_ms", lo)))
+	return lo + int(floor(float(s.capsule_rng.randf()) * float(hi - lo)))
+
+static func _plan(s, payload: Dictionary, points: float, warn_at: int) -> void:
+	var r: Dictionary = s.capsule_raid
+	r.seq = int(r.seq) + 1
+	r.id = int(r.seq)
+	r.state = ST_PLANNED
+	r.warn_at = warn_at
+	r.contact_at = warn_at + _warn_interval(s)
+	r.warned_at = 0
+	r.dir = int(s.capsule_rng.randi() % 4)
+	var comp: Dictionary = composition(s, points)
+	r.count = int(comp.count)
+	r.day_equiv = int(comp.day_equiv)
+	r.faction = String(payload.get("faction", "невідомі мародери"))
+	r.core_hp = 0.0
+	r.spawned = false
+	_sync_cursor(s)
+
+# Повернення в «заплановано» з новим warn_at (REQ-0010-62/119): рейд не дійшов до контакту, бо власник був поза грою.
+static func _reschedule(s, now: int) -> void:
+	var r: Dictionary = s.capsule_raid
+	r.state = ST_PLANNED
+	r.warn_at = now
+	r.contact_at = now + _warn_interval(s)
+	r.warned_at = 0
+	r.core_hp = 0.0
+	r.spawned = false
+	s.raid.warned = false
+	s.raid.active = false
+	if String(s.banner) == MSG_WARNING:
+		s.banner = ""
+	_sync_cursor(s)
+
+# Вхід у гру після відсутності (REQ-0010-94/119; хук для catch-up spec 0012): годинник -> sim (монотонно), рейд, що ще не дійшов до контакту
+# (planned/warning), повертається в planned з warn_at = now. КОНТАКТ лишається як є: sim у фоні не тікає, тож він «заморожений без втрат» (REQ-0010-63,
+# стаб до Q-1). Жодних рейд-подій, жодних змін level/invested; `raid_events` — завжди 0.
+static func on_catch_up(s, now_ms: int) -> Dictionary:
+	s.set_clock(now_ms)
+	if s.get("use_main_capsule") != true or (s.main_capsule as Dictionary).is_empty():
+		return {"raid_events": 0, "rescheduled": false}
+	s.capsule_raid["reentry"] = true
+	return {"raid_events": 0, "rescheduled": _reenter(s)}
+
+# Session.restore_game: «Продовжити» = власник був поза грою. Годинник ще не подано (0) -> перепланування відкладається до першого тіка з now > 0.
+static func mark_reentry(s) -> void:
+	if s.get("use_main_capsule") == true and not (s.main_capsule as Dictionary).is_empty():
+		s.capsule_raid["reentry"] = true
+
+static func _reenter(s) -> bool:
+	var r: Dictionary = s.capsule_raid
+	if not bool(r.get("reentry", false)) or int(s.now_ms) <= 0:
+		return false
+	r.reentry = false
+	var st: String = String(r.state)
+	if st == ST_PLANNED or st == ST_WARNING:
+		_reschedule(s, int(s.now_ms))
+		return true
+	return false
+
+# ---- тік автомата (sim.update, ПІСЛЯ турелей: команди гравця цього тіка вже застосовано — REQ-0010-84; один перехід за тік) ----
+static func update(s, _dt: float) -> void:
+	if s.get("use_main_capsule") != true or (s.main_capsule as Dictionary).is_empty():
+		return
+	var r: Dictionary = s.capsule_raid
+	if r.is_empty():
+		return
+	_reenter(s)
+	var now: int = int(s.now_ms)
+	match String(r.state):
+		ST_PLANNED:
+			if now >= int(r.warn_at):
+				_announce(s, now)
+		ST_WARNING:
+			_hold_banner(s, MSG_WARNING)
+			if now >= int(r.contact_at):
+				_contact(s)
+		ST_CONTACT:
+			_contact_tick(s)
+
+static func _hold_banner(s, text: String) -> void:
+	if String(s.banner) == "":
+		s.banner = text   # банер — view (не хеш): після «Продовжити» відновлюємо його з автомата
+
+static func _announce(s, now: int) -> void:
+	var r: Dictionary = s.capsule_raid
+	var rd: Dictionary = raid_data(s)
+	r.state = ST_WARNING
+	r.warned_at = now
+	r.warn_at = now   # ОДИН warn_at: запис == подія (REQ-0010-108/109), навіть після стрибка годинника
+	r.contact_at = maxi(int(r.contact_at), now + int(rd.get("warn_min_ms", 0)))   # попередження ДО контакту не менш ніж warn_min (REQ-0010-19/108), навіть якщо годинник стрибнув
+	s.raid.warned = true
+	s.banner = MSG_WARNING
+	s._log("⚠ Рейдери на підході (%s) — укріплюй базу!" % String(r.faction), "warn")
+	_event(s, {"kind": &"warning", "raid_id": int(r.id), "warn_at": now, "contact_at": int(r.contact_at), "dir": int(r.dir),
+		"composition": {"count": int(r.count), "day_equiv": int(r.day_equiv)}})
+
+static func _contact(s) -> void:
+	var r: Dictionary = s.capsule_raid
+	r.state = ST_CONTACT
+	r.core_hp = core_hp_max(s)
+	var edge: int = int(r.dir)
+	var placed: int = 0
+	var guard: int = 0
+	while placed < int(r.count) and guard < 500:
+		guard += 1
+		var c: Vector2i = s._edge_cell(edge, s.capsule_rng)   # рейд-потік, НЕ threat_rng (REQ-0010-34)
+		if WorldGen.is_terrain_blocked(s.map.tiles[c.y * int(s.n) + c.x]):
+			continue
+		s.enemies.append(GameData.make_raider(float(c.x) + 0.5, float(c.y) + 0.5, int(r.day_equiv)))
+		placed += 1
+	r.spawned = true
+	s.raid.active = true
+	s.raid.warned = true
+	s.raid.wave = int(s.raid.wave) + 1
+	s.banner = "⚔ РЕЙД! %d рейдерів — %s" % [placed, String(r.faction)]
+	s._log("⚔ Рейд #%d: %d рейдерів (%s) атакують капсулу!" % [int(r.id), placed, String(r.faction)], "bad")
+	_event(s, {"kind": &"contact", "raid_id": int(r.id), "count": placed})
+	_sync_cursor(s)
+
+static func _raiders_alive(s) -> bool:
+	for e in s.enemies:
+		if String((e as Dictionary).get("kind", "raider")) != "bot":
+			return true
+	return false
+
+static func _contact_tick(s) -> void:
+	var r: Dictionary = s.capsule_raid
+	_hold_banner(s, "⚔ РЕЙД! %d рейдерів — %s" % [int(r.count), String(r.faction)])
+	if core_breached(float(r.core_hp)) or (bool(r.spawned) and not _raiders_alive(s)):
+		apply_raid_outcome(s)
+
+# Удар по неруйнівній капсулі (Threats.damage_building): лише в стані contact — HP ядра -= amt. Поза рейдом (патруль, трап) — ігнор.
+static func on_hit(s, amt: float) -> void:
+	var r: Variant = s.get("capsule_raid")
+	if r is Dictionary and String((r as Dictionary).get("state", ST_NONE)) == ST_CONTACT:
+		(r as Dictionary).core_hp = float((r as Dictionary).core_hp) - amt
+
+# Розв'язати активний рейд і застосувати наслідок (REQ-0010-21…25/66/104/113): resolve_raid (ЧИСТА) + запис у капсулу + лог + відхід рейдерів + скидання
+# HP ядра й дзеркала s.raid. `inp` доповнює/перекриває входи (тести й сим-бот): now_ms/core_hp беруться з sim, power = 0 (шкоду нанесено фізично).
+static func apply_raid_outcome(s, inp: Dictionary = {}) -> Dictionary:
+	var r: Dictionary = s.capsule_raid
+	var full: Dictionary = {"now_ms": int(s.now_ms), "core_hp": float(r.get("core_hp", 0.0)), "power": 0.0}
+	for k in inp:
+		full[k] = inp[k]
+	var res: Dictionary = resolve_raid(s.main_capsule, full, table(s))
+	var kind: StringName = res.kind
+	if kind == &"no_data":
+		return res
+	if kind == &"breach":
+		s.main_capsule = res.cap_after
+		s._log(MSG_BREACH % [int(res.destroyed_level), int(res.destroyed_level) - 1], "bad")
+	elif kind == &"noop_l0":
+		s._log(MSG_BREACH_ZERO, "warn")
+	elif kind == &"defended":
+		s._log(MSG_DEFENDED, "good")
+	if kind == &"immune" and String(r.state) == ST_NONE:
+		return res   # REQ-0010-25/68: рейду нема, імунітет діє — ні капсула, ні автомат, ні хеш не змінюються
+	_end_raid(s, res)   # (живий рейд, що застав імунітет, скасовується без наслідків: недосяжно з воріт, але автомат не зависає)
+	return res
+
+static func _end_raid(s, res: Dictionary) -> void:
+	var r: Dictionary = s.capsule_raid
+	var kept: Array = []
+	for e in s.enemies:   # рейдери відходять (патрульні роботи — ні: вони не частина рейду)
+		if String((e as Dictionary).get("kind", "raider")) == "bot":
+			kept.append(e)
+	s.enemies = kept
+	s.raid.active = false
+	s.raid.warned = false
+	s.raid.timer = 0.0
+	s.raid.next = s.RAID_IDLE
+	s.banner = ""
+	_event(s, {"kind": res.kind, "raid_id": int(r.id), "destroyed": res.destroyed, "token_granted": res.token_granted, "immune_until": res.immune_until})
+	r.state = ST_NONE
+	r.core_hp = 0.0
+	r.spawned = false
+	r.warned_at = 0
+	var q: Array = r.queue
+	if not q.is_empty():   # чергу розбирає той самий автомат: наступний рейд чекає кінця імунітету (REQ-0010-27)
+		var nxt: Dictionary = q.pop_front()
+		_plan(s, nxt, float(nxt.get("points", 0.0)), maxi(int(s.now_ms), int(s.main_capsule.get("immune_until", 0))))

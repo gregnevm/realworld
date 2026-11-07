@@ -208,6 +208,41 @@ func _init() -> void:
 	_t_need_recovery_through_body()
 	_t_need_onset_unchanged()
 	_t_comfort_recover_scale_kernel()
+	# --- wave 0010-W3a (raid core: predicate, consequence, state machine, immunity, token, own stream, hash) ---
+	_t_raid_pure_predicate()
+	_t_raid_pure_breach()
+	_t_raid_take_rounding_proposed()
+	_t_raid_pure_immune()
+	_t_raid_pure_level0_and_token()
+	_t_raid_pure_reinforcement_window()
+	_t_raid_resolve_inputs()
+	_t_raid_automaton_flow()
+	_t_raid_warning_interval_series()
+	_t_raid_warning_clock_jump()
+	_t_raid_one_active_and_queue()
+	_t_raid_gates_table()
+	_t_raid_breach_live()
+	_t_raid_defended_live()
+	_t_raid_hits_outside_contact()
+	_t_raid_series_to_zero()
+	_t_raid_token_two_falls()
+	_t_raid_death_during_contact()
+	_t_raid_hash_fields()
+	_t_raid_resume_lockstep()
+	_t_raid_immunity_save_load()
+	_t_raid_race_same_tick()
+	_t_raid_ledger_property()
+	_t_raid_reupgrade_adds_proposed()
+	_t_raid_streams()
+	_t_raid_catch_up()
+	_t_raid_continue_reschedules()
+	_t_raid_is_solo()
+	_t_raid_off_isolation()
+	_t_raid_director_by_level()
+	_t_raid_composition_by_level()
+	_t_raid_patrols_by_level()
+	_t_raid_physical_siege_ends()
+	_t_raid_fuzz()
 	chk.skip_banner()
 	finish()
 
@@ -3641,7 +3676,10 @@ func _t_upgrade_side_effects() -> void:
 	b.set_clock(CLOCK_T + 86400000 * 3)
 	a.upgrade_capsule()
 	b.upgrade_capsule()
-	ok(Persistence.world_hash(a) == Persistence.world_hash(b) and _ledger_sig(a) == _ledger_sig(b), "REQ-0010-92: the upgrade does not depend on the device clock (same ledger and hash with now_ms +3 days)")
+	# W3a (REQ-0010-35/82: `first_upgrade_at` IS hashed and is the instant of the first upgrade): the clock may move ONLY that one field
+	ok(int(b.main_capsule.first_upgrade_at) == CLOCK_T + 86400000 * 3 and int(a.main_capsule.first_upgrade_at) == CLOCK_T, "REQ-0010-35/92: first_upgrade_at is the pushed instant of the first upgrade (OD-107)")
+	b.main_capsule["first_upgrade_at"] = int(a.main_capsule.first_upgrade_at)
+	ok(Persistence.world_hash(a) == Persistence.world_hash(b) and _ledger_sig(a) == _ledger_sig(b), "REQ-0010-92: the upgrade does not depend on the device clock (same ledger; the hash differs ONLY through first_upgrade_at, now_ms +3 days)")
 	# twins: the same commands in the same order -> the same world, across updates in between
 	for w in [a, b]:
 		_fund_cost(w, _cost_of(rows, 2), 0.3)
@@ -6307,3 +6345,1497 @@ func _t_comfort_recover_scale_kernel() -> void:
 			if not grows and d1 <= 0.0:
 				bad.append("condition %d did not recede at all" % i)
 		ok(bad.is_empty(), "REQ-0010-107 [%s]: scale 2 doubles what recedes and leaves what grows exactly alone — %s" % [String((b as Array)[0]), str(bad)])
+
+
+# =============================================================================================
+# WAVE 0010-W3a — the raid core (new edition of spec 0010; expectations come from the REQ rows and the owner's decisions OD-24/66/88/107,
+# NOT from capsule.gd): REQ-0010-17 (protection decides the raid, buffs do not), 21 (ONE pure predicate core_hp <= 0), 22 (level -1,
+# 50% of invested[L] gone, nothing reappears), 23 (level 0: no-op, the object lives, respawn works), 24/67 (one token, <= 1, survives save),
+# 25/26 (24 h = 86 400 000 ms immunity, int64 on the wire, a pure comparison), 34 (own seeded stream, the other cursors do not move; no
+# global RNG in the module), 35/82 (every raid field moves world_hash; round trip), 62 (state machine, ONE active raid, a queue),
+# 65 (level-0 / grace gates), 66 (ledger conservation — property test), 69 (is_solo), 75 (fuzz with raids), 81 (resolve_raid is pure and
+# takes protection / hp / structures / autodefense / roll), 84 (command-vs-raid race in one tick), 102 (stub: breach cost by protection),
+# 104 (a raid never touches protection), 108 (warning interval in UTC ms, not sim seconds), 113 (reinforcement_used resets with a NEW immunity
+# window), 119 (re-entry stub). Rounding of the 50% (floor) and «add on re-upgrade» are PROPOSALS (Q-8): they are pinned in their OWN
+# tests (`proposed`); every other test states the rounding-independent invariant (|2*destroyed - x| <= 1, destroyed + kept == before).
+# =============================================================================================
+const DAY_MS := 86400000                 # OD-24: 24 h in UTC ms
+const GRACE_MS := 259200000              # OD-66: 3 days
+const WARN_MIN_MS := 600000              # OD-88: 10 min
+const WARN_MAX_MS := 1800000             # OD-88: 30 min
+const RAID_T0 := 1800000000000           # the landing instant of the raid worlds
+const RAID_FACTION := "Тестові мародери"
+
+var _raid_probe_i: int = 0
+
+
+func _raid_tbl() -> Dictionary:
+	return _raw_table().duplicate(true)
+
+
+func _prot_hp(p: int) -> float:
+	return float((((_raw_table().get("protection", {}) as Dictionary).get("levels", []) as Array)[p] as Dictionary).get("core_hp", -1.0))
+
+
+# a hand-built capsule record: ODD amounts, so that «50%» has to round, and every level has its own ledger
+func _cap_rec(level: int, prot: int = 0) -> Dictionary:
+	var inv: Dictionary = {}
+	for L in range(1, level + 1):
+		inv[str(L)] = {"wood": 100 * L + 1, "stone": 5 * L, "planks": 1}
+	var pinv: Dictionary = {}
+	for P in range(1, prot + 1):
+		pinv[str(P)] = {"wood": 9 * P + 4}
+	return {"kind": "main", "tile": [8, 8], "level": level, "protection": prot, "owner": "local", "landed_at": RAID_T0, "grace_start": RAID_T0,
+		"invested": inv, "protection_invested": pinv, "immune_until": 0, "first_upgrade_at": RAID_T0 + 5, "reinforcement_used": 1,
+		"free_transport_token": 0, "next_raid_at": 0, "raid_rng_cursor": "0"}
+
+
+func _inv_sum(inv: Dictionary) -> int:
+	var t: int = 0
+	for k in inv:
+		for res in (inv[k] as Dictionary):
+			t += int((inv[k] as Dictionary)[res])
+	return t
+
+
+func _breach_in(now: int = RAID_T0 + 10) -> Dictionary:
+	return {"now_ms": now, "core_hp": 0.0}
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-21 / 22 / 23 / 24 / 25 / 65 / 66 / 67 / 104 / 113 / 81: the PURE consequence function and the predicate
+# ---------------------------------------------------------------------------------------------
+func _t_raid_pure_predicate() -> void:
+	ok(not MainCapsule.core_breached(1.0) and not MainCapsule.core_breached(1.0e-9) and not MainCapsule.core_breached(590.0), "REQ-0010-21: core_hp > 0 is NOT a breach (1, 1e-9, 590)")
+	ok(MainCapsule.core_breached(0.0) and MainCapsule.core_breached(-0.0) and MainCapsule.core_breached(-1.0e-9) and MainCapsule.core_breached(-500.0), "REQ-0010-21: core_hp <= 0 IS a breach (0, -0, -1e-9, -500)")
+	ok(MainCapsule.raid_succeeded(0.0) and not MainCapsule.raid_succeeded(0.5) and MainCapsule.raid_succeeded(-3.0), "REQ-0010-21: raid_succeeded is the same single predicate")
+	var tbl: Dictionary = _raid_tbl()
+	var cap: Dictionary = _cap_rec(3, 2)
+	var live: Dictionary = MainCapsule.resolve_raid(cap, {"now_ms": RAID_T0, "core_hp": 0.5}, tbl)
+	ok(StringName(live.kind) == &"defended" and var_to_str(live.cap_after) == var_to_str(cap) and not bool(live.breached), "REQ-0010-21: core_hp 0.5 -> defended, the capsule record is byte-identical (level does not fall)")
+	var hit: Dictionary = MainCapsule.resolve_raid(cap, _breach_in(), tbl)
+	ok(StringName(hit.kind) == &"breach" and bool(hit.breached) and int(hit.cap_after.level) == 2, "REQ-0010-21/22: core_hp 0 -> breach, level 3 -> 2")
+
+
+func _t_raid_pure_breach() -> void:
+	var tbl: Dictionary = _raid_tbl()
+	var tbl_sig: String = var_to_str(tbl)
+	var cap: Dictionary = _cap_rec(3, 2)
+	cap["free_transport_token"] = 0
+	var cap_sig: String = var_to_str(cap)
+	var T: int = RAID_T0 + 777
+	var r: Dictionary = MainCapsule.resolve_raid(cap, _breach_in(T), tbl)
+	var after: Dictionary = r.cap_after
+	ok(var_to_str(cap) == cap_sig and var_to_str(tbl) == tbl_sig, "REQ-0010-81: resolve_raid is PURE — neither the capsule record nor the table is mutated")
+	ok(var_to_str(MainCapsule.resolve_raid(cap, _breach_in(T), tbl)) == var_to_str(r), "REQ-0010-81: the same inputs give the same output")
+	ok(StringName(r.kind) == &"breach" and int(after.level) == 2, "REQ-0010-22: L=3 -> 2 (exactly -1)")
+	var inv0: Dictionary = cap.invested
+	var inv1: Dictionary = after.invested
+	var bad: Array = []
+	var gone_sum: int = 0
+	for res in (inv0["3"] as Dictionary):
+		var x: int = int((inv0["3"] as Dictionary)[res])
+		var kept: int = int((inv1["3"] as Dictionary).get(res, -999))
+		var destroyed: int = int((r.destroyed as Dictionary).get(res, -999))
+		gone_sum += destroyed
+		if destroyed + kept != x:
+			bad.append("%s: destroyed %d + kept %d != %d" % [res, destroyed, kept, x])
+		if absi(2 * destroyed - x) > 1:
+			bad.append("%s: destroyed %d is not ~50%% of %d" % [res, destroyed, x])
+	ok(bad.is_empty(), "REQ-0010-22/66: for every resource of invested[3] destroyed + kept == before and destroyed is 50%% (rounding-independent) %s" % str(bad))
+	ok(_inv_sum(inv0) - _inv_sum(inv1) == gone_sum and gone_sum > 0, "REQ-0010-66: sum(invested) fell by EXACTLY the destroyed sum (%d) — nothing created, nothing lost" % gone_sum)
+	ok(var_to_str(inv1["1"]) == var_to_str(inv0["1"]) and var_to_str(inv1["2"]) == var_to_str(inv0["2"]), "REQ-0010-22: ledgers of the OTHER levels (1, 2) are untouched")
+	ok(inv1.size() == inv0.size(), "REQ-0010-22: no ledger level appears or vanishes")
+	ok(int(after.protection) == 2 and var_to_str(after.protection_invested) == var_to_str(cap.protection_invested), "REQ-0010-104: protection and protection_invested are untouched by a successful raid")
+	ok(int(after.immune_until) == T + DAY_MS and int(r.immune_until) == T + DAY_MS, "REQ-0010-25: immune_until = resolution instant + 86 400 000 ms (%s)" % str(after.immune_until))
+	ok(int(after.free_transport_token) == 0 and not bool(r.token_granted), "REQ-0010-24: a fall 3 -> 2 grants NO token")
+	ok(int(after.reinforcement_used) == 0, "REQ-0010-113: a successful raid resets reinforcement_used to 0 (a new immunity window starts)")
+	for f in ["kind", "tile", "owner", "landed_at", "grace_start", "first_upgrade_at", "next_raid_at", "raid_rng_cursor"]:
+		if var_to_str(after[f]) != var_to_str(cap[f]):
+			bad.append(f)
+	ok(bad.is_empty(), "REQ-0010-22: the raid changes ONLY level / invested[L] / immune_until / token / reinforcement_used — the rest of the record is as it was %s" % str(bad))
+	ok(typeof(after.level) == TYPE_INT and typeof(after.immune_until) == TYPE_INT, "REQ-0010-26/66: level and immune_until stay integers")
+	for res in (inv1["3"] as Dictionary):
+		if typeof((inv1["3"] as Dictionary)[res]) != TYPE_INT:
+			bad.append(res)
+	ok(bad.is_empty(), "REQ-0010-66: every ledger value stays an INT %s" % str(bad))
+
+
+# the Q-8 PROPOSAL of the agent (floor), pinned on its own: if the owner picks another rule only THIS test changes
+func _t_raid_take_rounding_proposed() -> void:
+	var tbl: Dictionary = _raid_tbl()
+	var cap: Dictionary = _cap_rec(1, 0)
+	cap.invested = {"1": {"wood": 101, "stone": 5, "planks": 1, "scrap": 0, "components": 2}}
+	var r: Dictionary = MainCapsule.resolve_raid(cap, _breach_in(), tbl)
+	var d: Dictionary = r.destroyed
+	ok(int(d.wood) == 50 and int(d.stone) == 2 and int(d.planks) == 0 and int(d.scrap) == 0 and int(d.components) == 1,
+		"REQ-0010-22 [proposed Q-8: floor]: 101->50 gone/51 kept, 5->2/3, 1->0/1, 0->0, 2->1 (destroyed %s)" % str(d))
+	ok(int(r.cap_after.invested["1"].wood) == 51 and int(r.cap_after.invested["1"].planks) == 1, "REQ-0010-22 [proposed Q-8]: the kept half is the remainder (51 and 1)")
+	var rows: Array = _raw_rows()
+	ok(int(_raw_table().raid.take_percent) == 50 and int(_raw_table().raid.immunity_ms) == DAY_MS and int(_raw_table().raid.grace_ms) == GRACE_MS,
+		"OD-24/66/107 data: take_percent 50, immunity 86 400 000, grace 259 200 000 are in the catalog (`decided`)")
+	ok(int(_raw_table().raid.warn_min_ms) == WARN_MIN_MS and int(_raw_table().raid.warn_max_ms) == WARN_MAX_MS and rows.size() == 6, "OD-88 data: the warning window is 600 000..1 800 000 ms")
+
+
+func _t_raid_pure_immune() -> void:
+	var tbl: Dictionary = _raid_tbl()
+	var T: int = RAID_T0 + 50
+	for off in [1, 1000, DAY_MS - 1, DAY_MS]:
+		var cap: Dictionary = _cap_rec(3, 1)
+		cap.immune_until = T + int(off)
+		var r: Dictionary = MainCapsule.resolve_raid(cap, {"now_ms": T, "core_hp": -9999.0}, tbl)
+		ok(StringName(r.kind) == &"immune" and var_to_str(r.cap_after) == var_to_str(cap) and (r.destroyed as Dictionary).is_empty() and not bool(r.token_granted),
+			"REQ-0010-25: a raid %d ms before the end of immunity changes NOTHING (kind immune, record identical, nothing destroyed)" % int(off))
+	var gone: Dictionary = _cap_rec(3, 1)
+	gone.immune_until = T - 1
+	ok(StringName(MainCapsule.resolve_raid(gone, {"now_ms": T, "core_hp": 0.0}, tbl).kind) == &"breach", "REQ-0010-25/26: 1 ms AFTER the end of the window the capsule is raidable again")
+	var wide: Dictionary = _cap_rec(3, 1)
+	wide.immune_until = BIG_MS
+	ok(StringName(MainCapsule.resolve_raid(wide, {"now_ms": T, "core_hp": 0.0}, tbl).kind) == &"immune" and MainCapsule.immune_at(wide, T), "REQ-0010-26: an int64 mark beyond 2^53 compares exactly (no float rounding)")
+	var hi: Dictionary = _cap_rec(2, 0)
+	var rr: Dictionary = MainCapsule.resolve_raid(hi, _breach_in(BIG_MS), tbl)
+	ok(int(rr.cap_after.immune_until) == BIG_MS + DAY_MS, "REQ-0010-25/26: now = 2^53+1 -> immune_until = now + 86 400 000 exactly (%s)" % str(rr.cap_after.immune_until))
+	var seq: Dictionary = MainCapsule.resolve_raid(rr.cap_after, _breach_in(BIG_MS + 5), tbl)
+	ok(StringName(seq.kind) == &"immune", "REQ-0010-25: a SECOND raid right after a successful one is the «immune» answer — one raid, one level")
+
+
+func _t_raid_pure_level0_and_token() -> void:
+	var tbl: Dictionary = _raid_tbl()
+	var zero: Dictionary = _cap_rec(0, 3)
+	var r0: Dictionary = MainCapsule.resolve_raid(zero, _breach_in(), tbl)
+	ok(StringName(r0.kind) == &"noop_l0" and var_to_str(r0.cap_after) == var_to_str(zero) and (r0.destroyed as Dictionary).is_empty() and not bool(r0.token_granted),
+		"REQ-0010-23/65: a raid on level 0 is a NO-OP (record identical, nothing destroyed, no token, no immunity)")
+	ok(int(r0.cap_after.level) == 0 and int(r0.cap_after.immune_until) == 0, "REQ-0010-23: level stays 0 (never below), no immunity window is opened")
+	var one: Dictionary = _cap_rec(1, 0)
+	var r1: Dictionary = MainCapsule.resolve_raid(one, _breach_in(), tbl)
+	ok(int(r1.cap_after.level) == 0 and int(r1.cap_after.free_transport_token) == 1 and bool(r1.token_granted), "REQ-0010-24: the fall 1 -> 0 grants exactly ONE token")
+	ok(int(r1.cap_after.immune_until) == RAID_T0 + 10 + DAY_MS, "REQ-0010-24/25: ... and the fall to 0 also opens the immunity window")
+	var again: Dictionary = r1.cap_after.duplicate(true)
+	again.immune_until = 0
+	var r2: Dictionary = MainCapsule.resolve_raid(again, _breach_in(RAID_T0 + 20), tbl)
+	ok(StringName(r2.kind) == &"noop_l0" and int(r2.cap_after.free_transport_token) == 1 and not bool(r2.token_granted), "REQ-0010-24: a raid on level 0 gives NO new token (token stays 1)")
+	var held: Dictionary = _cap_rec(1, 0)
+	held.free_transport_token = 1
+	var rh: Dictionary = MainCapsule.resolve_raid(held, _breach_in(), tbl)
+	ok(int(rh.cap_after.free_transport_token) == 1, "REQ-0010-67: a second 1 -> 0 fall with a token in hand keeps it at 1 (never 2)")
+	var two: Dictionary = MainCapsule.resolve_raid(_cap_rec(2, 0), _breach_in(), tbl)
+	ok(int(two.cap_after.level) == 1 and int(two.cap_after.free_transport_token) == 0, "REQ-0010-24: 2 -> 1 grants no token")
+	var ok_l0: Dictionary = MainCapsule.resolve_raid(_cap_rec(1, 0), {"now_ms": RAID_T0, "core_hp": 3.0}, tbl)
+	ok(StringName(ok_l0.kind) == &"defended" and int(ok_l0.cap_after.free_transport_token) == 0, "REQ-0010-24: a DEFENDED raid on level 1 grants no token")
+	# a record whose ledger of level L is missing / empty does not break the fall
+	var odd: Dictionary = _cap_rec(2, 0)
+	odd.invested = {}
+	var ro: Dictionary = MainCapsule.resolve_raid(odd, _breach_in(), tbl)
+	ok(StringName(ro.kind) == &"breach" and int(ro.cap_after.level) == 1 and _inv_sum(ro.cap_after.invested) == 0, "REQ-0010-22: level 2 with an empty ledger falls to 1 without inventing anything")
+
+
+func _t_raid_pure_reinforcement_window() -> void:
+	var tbl: Dictionary = _raid_tbl()
+	var cap: Dictionary = _cap_rec(3, 0)
+	cap.reinforcement_used = 1
+	ok(int(MainCapsule.resolve_raid(cap, _breach_in(), tbl).cap_after.reinforcement_used) == 0, "REQ-0010-113: breach -> reinforcement_used 1 -> 0 (the new window)")
+	var imm: Dictionary = cap.duplicate(true)
+	imm.immune_until = RAID_T0 + DAY_MS
+	ok(int(MainCapsule.resolve_raid(imm, _breach_in(), tbl).cap_after.reinforcement_used) == 1, "REQ-0010-113: a raid answered «immune» does NOT open a new window — the flag keeps 1")
+	ok(int(MainCapsule.resolve_raid(cap, {"now_ms": RAID_T0, "core_hp": 4.0}, tbl).cap_after.reinforcement_used) == 1, "REQ-0010-113: a defended raid opens no window — the flag keeps 1")
+	var zero: Dictionary = _cap_rec(0, 0)
+	zero.reinforcement_used = 1
+	ok(int(MainCapsule.resolve_raid(zero, _breach_in(), tbl).cap_after.reinforcement_used) == 1, "REQ-0010-113/65: a no-op on level 0 opens no window — the flag keeps 1")
+
+
+# REQ-0010-17 / 81 / 102 — protection (not the capsule level, not the buffs) is the core's resistance; the function takes its inputs
+func _t_raid_resolve_inputs() -> void:
+	var tbl: Dictionary = _raid_tbl()
+	var hp: Array = []
+	for p in 6:
+		var r: Dictionary = MainCapsule.resolve_raid(_cap_rec(2, p), {"now_ms": RAID_T0, "power": 0.0}, tbl)
+		hp.append(float(r.core_hp_max))
+	var bad: Array = []
+	for p in 6:
+		if absf(float(hp[p]) - _prot_hp(p)) > 1.0e-9:
+			bad.append("P%d: %s vs table %s" % [p, str(hp[p]), str(_prot_hp(p))])
+	ok(bad.is_empty(), "REQ-0010-17/102: the core's maximum HP for protection 0..5 is the table's defence row %s" % str(bad))
+	ok(absf(float(hp[5]) / float(hp[1]) - 16.0) < 0.5 and absf(float(hp[2]) / float(hp[1]) - 2.0) < 0.05 and absf(float(hp[4]) / float(hp[3]) - 2.0) < 0.05, "REQ-0010-102 [stub to Q-5]: x2 per level, x16 from 1 to 5 (%s)" % str(hp))
+	# the SAME power (inside the spread): breach at protection 0, defended at 1 — protection changes the verdict
+	var p0: Dictionary = MainCapsule.resolve_raid(_cap_rec(2, 0), {"now_ms": RAID_T0, "power": 800.0, "roll": 0.5}, tbl)
+	var p1: Dictionary = MainCapsule.resolve_raid(_cap_rec(2, 1), {"now_ms": RAID_T0, "power": 800.0, "roll": 0.5}, tbl)
+	ok(StringName(p0.kind) == &"breach" and StringName(p1.kind) == &"defended", "REQ-0010-17: one raider strength (800): protection 0 (core %s) is breached, protection 1 (core %s) holds" % [str(hp[0]), str(hp[1])])
+	for roll in [0.0, 1.0]:
+		var a: Dictionary = MainCapsule.resolve_raid(_cap_rec(2, 0), {"now_ms": RAID_T0, "power": 800.0, "roll": roll}, tbl)
+		var b: Dictionary = MainCapsule.resolve_raid(_cap_rec(2, 1), {"now_ms": RAID_T0, "power": 800.0, "roll": roll}, tbl)
+		ok(StringName(a.kind) == &"breach" and StringName(b.kind) == &"defended", "REQ-0010-17: the verdict holds at the extreme stream draws too (roll %s)" % str(roll))
+	# the capsule LEVEL does not move the resistance, the buffs do not either
+	var l1: Dictionary = MainCapsule.resolve_raid(_cap_rec(1, 1), {"now_ms": RAID_T0, "power": 800.0, "roll": 0.5}, tbl)
+	var l4: Dictionary = MainCapsule.resolve_raid(_cap_rec(4, 1), {"now_ms": RAID_T0, "power": 800.0, "roll": 0.5}, tbl)
+	ok(float(l1.core_hp_max) == float(l4.core_hp_max) and StringName(l1.kind) == StringName(l4.kind) and float(l1.core_hp) == float(l4.core_hp), "REQ-0010-17: capsule level 1 vs 4 at the same protection -> the same core maximum, hp and verdict")
+	var tbl2: Dictionary = _raid_tbl()
+	for row in (tbl2.levels as Array):
+		(row as Dictionary).buffs = {"gather_mult": 9.0, "craft_mult": 9.0, "need_recovery_mult": 9.0, "research_mult": 9.0}
+	var buffed: Dictionary = MainCapsule.resolve_raid(_cap_rec(4, 1), {"now_ms": RAID_T0, "power": 800.0, "roll": 0.5}, tbl2)
+	ok(var_to_str(buffed) == var_to_str(l4), "REQ-0010-17: resolve_raid does not depend on the buffs (a table with x9 buffs gives the SAME result)")
+	# inputs: hp, structures, autodefense, roll
+	var hp_in: Dictionary = MainCapsule.resolve_raid(_cap_rec(2, 3), {"now_ms": RAID_T0, "core_hp": 77.0, "power": 0.0}, tbl)
+	ok(absf(float(hp_in.core_hp_before) - 77.0) < 1.0e-9 and absf(float(hp_in.core_hp) - 77.0) < 1.0e-9 and StringName(hp_in.kind) == &"defended", "REQ-0010-81: the current core HP is an input (77 stays 77 under zero power)")
+	var prev: float = -1.0
+	var mono: Array = []
+	for st in [0.0, 0.25, 0.5, 0.75, 1.0]:
+		var dmg: float = float(MainCapsule.resolve_raid(_cap_rec(2, 0), {"now_ms": RAID_T0, "power": 5000.0, "structures": st, "roll": 0.5}, tbl).damage)
+		mono.append(dmg)
+		if prev >= 0.0 and dmg > prev + 1.0e-9:
+			bad.append("structures %s: %s > %s" % [str(st), str(dmg), str(prev)])
+		prev = dmg
+	ok(bad.is_empty() and float(mono[0]) > float(mono[4]), "REQ-0010-81: structures reduce the damage (monotone, not a dead input) %s" % str(mono))
+	prev = -1.0
+	mono = []
+	for ad in [0.0, 0.5, 1.0]:
+		var dmg: float = float(MainCapsule.resolve_raid(_cap_rec(2, 0), {"now_ms": RAID_T0, "power": 5000.0, "autodefense": ad, "roll": 0.5}, tbl).damage)
+		mono.append(dmg)
+	ok(float(mono[0]) > float(mono[1]) and float(mono[1]) > float(mono[2]) - 1.0e-9 and float(mono[0]) > float(mono[2]), "REQ-0010-81/OD-33: autodefense reduces the damage (not a dead input) %s" % str(mono))
+	var d0: float = float(MainCapsule.resolve_raid(_cap_rec(2, 0), {"now_ms": RAID_T0, "power": 5000.0, "roll": 0.0}, tbl).damage)
+	var d1: float = float(MainCapsule.resolve_raid(_cap_rec(2, 0), {"now_ms": RAID_T0, "power": 5000.0, "roll": 0.999}, tbl).damage)
+	ok(d0 != d1, "REQ-0010-81: the random stream is an INPUT that matters (roll 0 vs 0.999 -> different damage)")
+	var huge: Dictionary = MainCapsule.resolve_raid(_cap_rec(2, 5), {"now_ms": RAID_T0, "power": 1.0e9, "structures": 7.0, "autodefense": -3.0}, tbl)
+	ok(float(huge.damage) >= 0.0 and is_finite(float(huge.damage)), "REQ-0010-81: out-of-range structures/autodefense are clamped, damage stays finite and >= 0")
+	# no data -> no invention
+	var empty: Dictionary = MainCapsule.resolve_raid(_cap_rec(3, 0), _breach_in(), {})
+	ok(StringName(empty.kind) == &"no_data" and var_to_str(empty.cap_after) == var_to_str(_cap_rec(3, 0)), "REQ-0010-11: with NO data the consequence is not invented (kind no_data, record identical)")
+
+
+# ---------------------------------------------------------------------------------------------
+# live raid worlds
+# ---------------------------------------------------------------------------------------------
+# ON pad whose landing instant is RAID_T0; `level` reached through REAL upgrades at that instant (first_upgrade_at = RAID_T0); the clock is then
+# pushed past the 3-day grace (OD-66) so the gates are open; `prot` is set on the record (the defence axis has its own tests)
+func _raid_pad(level: int, lat_shift: float = 0.0, prot: int = 0, grace_done: bool = true) -> Variant:
+	return _raid_world(level, lat_shift, prot, grace_done, false)
+
+
+# the REAL generated map (the map is a pure function of lat/lon, so ONLY such a world can be resumed from a payload and keep going in lock-step —
+# a hand-made pad is regenerated from its coordinates on load)
+func _raid_real(level: int, lat_shift: float = 0.0, prot: int = 0, grace_done: bool = true) -> Variant:
+	return _raid_world(level, lat_shift, prot, grace_done, true)
+
+
+func _raid_world(level: int, lat_shift: float, prot: int, grace_done: bool, real: bool) -> Variant:
+	var m: Dictionary = _gen(float(Scenarios.LAT) + lat_shift, Scenarios.LON) if real else _pad_map(PAD_N, Vector2i(8, 8))
+	if not real:
+		m.lat = float(Scenarios.LAT) + lat_shift
+	var s: Variant = Sim.new()
+	s.use_inventory = true
+	s.use_catalog = true
+	s.use_main_capsule = true
+	s.set_clock(RAID_T0)
+	s.new_game(m, false)
+	_quiet(s)
+	_wipe(s)
+	var rows: Array = _raw_rows()
+	for L in range(1, level + 1):
+		_fund_cost(s, _cost_of(rows, L), 0.4)
+		var r: Dictionary = s.upgrade_capsule()
+		if not bool(r.get("ok", false)):
+			ok(false, "setup: upgrade to level %d failed: %s" % [L, str(r)])
+	_wipe(s)
+	if prot > 0:
+		s.main_capsule["protection"] = prot
+	if grace_done:
+		s.set_clock(RAID_T0 + GRACE_MS + 1)
+	return s
+
+
+func _arm_raid(s: Variant) -> void:
+	Director.apply(s, {"incident": "raid", "count": 3, "faction": RAID_FACTION})
+
+
+func _rstate(s: Variant) -> String:
+	return String((s.capsule_raid as Dictionary).get("state", "?"))
+
+
+func _cap_b(s: Variant) -> Variant:
+	var t: Vector2i = _cap_tile(s)
+	return s.bgrid[t.y * int(s.n) + t.x]
+
+
+func _hit(s: Variant, amt: float) -> void:
+	s._damage_building(_cap_b(s), amt, false)
+
+
+# planned -> warning (one tick) -> contact (clock to contact_at, one tick)
+func _to_warning(s: Variant) -> void:
+	s.update(Scenarios.DT)
+
+
+func _to_contact(s: Variant) -> void:
+	s.set_clock(int((s.capsule_raid as Dictionary).contact_at))
+	s.update(Scenarios.DT)
+
+
+func _raiders(s: Variant) -> int:
+	var c: int = 0
+	for e in s.enemies:
+		if String((e as Dictionary).get("kind", "raider")) != "bot":
+			c += 1
+	return c
+
+
+func _ev_kinds(s: Variant) -> Array:
+	var out: Array = []
+	for e in s.capsule_events:
+		out.append(String((e as Dictionary).get("kind", "")))
+	return out
+
+
+func _funds_total(s: Variant) -> int:
+	var t: int = 0
+	for id in PAY_IDS:
+		t += _have(s, String(id))
+	return t
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-62 / 108 / 114 / 34: the state machine, the warning interval in UTC ms, one active raid, the queue
+# ---------------------------------------------------------------------------------------------
+func _t_raid_automaton_flow() -> void:
+	var s: Variant = _raid_pad(1)
+	ok(_rstate(s) == "none" and not bool(s.raid.active) and not bool(s.raid.warned) and String(s.banner) == "", "REQ-0010-62 setup: no raid before anyone throws one (state none, no banner, raid mirror idle)")
+	_arm_raid(s)
+	ok(_rstate(s) == "planned" and _raiders(s) == 0 and not bool(s.raid.warned) and String(s.banner) == "", "REQ-0010-62: the director's throw ARMS the machine -> «заплановано» (nothing visible yet, no raiders)")
+	var rid: int = int(s.capsule_raid.id)
+	_to_warning(s)
+	var hud_w: Dictionary = HudModel._raid_slice(s)
+	ok(_rstate(s) == "warning" and bool(s.raid.warned) and not bool(s.raid.active) and String(s.banner) != "" and _raiders(s) == 0, "REQ-0010-62/88: -> «попередження»: the banner is up, raid.warned mirrored, no raiders yet")
+	ok(StringName(hud_w.state) == &"incoming", "REQ-0010-62/D9: what the player sees (HudModel raid slice) is «incoming» while the machine says warning (hud %s)" % str(hud_w))
+	var ev: Array = []
+	for e in s.capsule_events:
+		if String((e as Dictionary).get("kind", "")) == "warning":
+			ev.append(e)
+	ok(ev.size() == 1, "REQ-0010-108/109: exactly ONE raid_warning event is emitted (%d)" % ev.size())
+	var w: Dictionary = ev[0] if not ev.is_empty() else {}
+	ok(int(w.get("raid_id", -1)) == rid and int(w.get("dir", -1)) >= 0 and int(w.get("dir", 9)) <= 3 and (w.get("composition", {}) as Dictionary).has("count") and int((w.get("composition", {}) as Dictionary).get("count", 0)) >= 1,
+		"REQ-0010-108/109: the event carries raid_id, a direction and the composition (%s)" % str(w))
+	var span: int = int(w.get("contact_at", 0)) - int(w.get("warn_at", 0))
+	ok(span >= WARN_MIN_MS and span <= WARN_MAX_MS, "REQ-0010-108: contact_at - warn_at = %d ms is within [600 000; 1 800 000]" % span)
+	# hold the clock still: no amount of SIM time brings the contact (the interval is UTC, not sim seconds, REQ-0010-114/93)
+	var stamp: int = int(s.now_ms)
+	for t in 2000:
+		s.update(0.3)
+		_topup(s)
+	ok(_rstate(s) == "warning" and _raiders(s) == 0 and int(s.now_ms) == stamp, "REQ-0010-108/114: 600 sim-seconds at x3 do NOT shorten the warning — still «попередження», no raiders, the UTC clock untouched")
+	s.set_clock(int(s.capsule_raid.contact_at) - 1)
+	s.update(Scenarios.DT)
+	ok(_rstate(s) == "warning" and _raiders(s) == 0, "REQ-0010-108: 1 ms before contact_at the raid is still only a warning")
+	s.set_clock(int(s.capsule_raid.contact_at))
+	s.update(Scenarios.DT)
+	ok(_rstate(s) == "contact" and _raiders(s) == int(s.capsule_raid.count) and bool(s.raid.active) and bool(s.raid.warned), "REQ-0010-62: AT contact_at -> «контакт»: %d raiders on the map = the announced count, raid.active mirrored" % _raiders(s))
+	var hud_c: Dictionary = HudModel._raid_slice(s)
+	ok(StringName(hud_c.state) == &"active", "REQ-0010-62/D9: the HUD says «active» in contact")
+	ok(is_equal_approx(float(s.capsule_raid.core_hp), _prot_hp(0)), "REQ-0010-21: at contact the core stands at the table's maximum for protection 0 (%s)" % str(s.capsule_raid.core_hp))
+	var edge_ok: bool = true
+	for e in s.enemies:
+		var cx: int = int(float(e.px))
+		var cy: int = int(float(e.py))
+		edge_ok = edge_ok and (cx <= 4 or cy <= 4 or cx >= PAD_N - 5 or cy >= PAD_N - 5)
+	ok(edge_ok, "REQ-0010-62: the raiders appear at the map edge (not on top of the capsule)")
+	_dispose(s)
+
+
+# REQ-0010-108 for a whole series and for different seeds / dts: the interval is always in range; the stream is seeded (same seed -> same numbers)
+func _t_raid_warning_interval_series() -> void:
+	var spans: Array = []
+	var dirs: Dictionary = {}
+	for i in 12:
+		var s: Variant = _raid_pad(1, float(i) * 0.37)
+		_arm_raid(s)
+		var rec0: Dictionary = MainCapsule.serialize_raid(s)
+		_to_warning(s)
+		for e in s.capsule_events:
+			if String((e as Dictionary).get("kind", "")) == "warning":
+				spans.append(int(e.contact_at) - int(e.warn_at))
+				dirs[int(e.dir)] = true
+		ok(int(_wire_int(rec0.contact_at)) - int(_wire_int(rec0.warn_at)) >= WARN_MIN_MS and int(_wire_int(rec0.contact_at)) - int(_wire_int(rec0.warn_at)) <= WARN_MAX_MS,
+			"REQ-0010-108 [seed %d]: the PLANNED record already has contact_at - warn_at within [10; 30] min (%d ms)" % [i, int(_wire_int(rec0.contact_at)) - int(_wire_int(rec0.warn_at))])
+		_dispose(s)
+	var lo: int = 1 << 40
+	var hi: int = 0
+	for sp in spans:
+		lo = mini(lo, int(sp))
+		hi = maxi(hi, int(sp))
+	ok(spans.size() == 12 and lo >= WARN_MIN_MS and hi <= WARN_MAX_MS, "REQ-0010-108: 12 raids on 12 seeds, every interval in [600 000; 1 800 000] ms (min %d, max %d)" % [lo, hi])
+	ok(lo != hi, "REQ-0010-110/34: the interval is a SEEDED random draw, not one fixed number (12 seeds gave min %d max %d)" % [lo, hi])
+	ok(dirs.size() >= 2, "REQ-0010-108: the direction varies with the seed (%d distinct of 4)" % dirs.size())
+	# same seed -> same numbers; dt does not matter
+	var a: Variant = _raid_pad(2, 0.5)
+	var b: Variant = _raid_pad(2, 0.5)
+	_arm_raid(a)
+	_arm_raid(b)
+	a.update(0.05)
+	b.update(0.3)
+	ok(var_to_str(MainCapsule.serialize_raid(a)) == var_to_str(MainCapsule.serialize_raid(b)), "REQ-0010-34/82: the same seed gives the same raid (dir/count/interval) at dt 0.05 and dt 0.3")
+	ok(Persistence.content_hash(Persistence.serialize_region(a).main_capsule) == Persistence.content_hash(Persistence.serialize_region(b).main_capsule), "REQ-0010-82: ... and the same capsule record hash (cursor included)")
+	_dispose(a)
+	_dispose(b)
+
+
+func _wire_int(v: Variant) -> int:
+	return int(String(v)) if v is String else int(v)
+
+
+# ONE active raid, a queue of length raid.queue_max, nobody gets in through the side door
+func _t_raid_one_active_and_queue() -> void:
+	var qmax: int = int(_raw_table().raid.queue_max)
+	var s: Variant = _raid_pad(2)
+	_arm_raid(s)
+	var id1: int = int(s.capsule_raid.id)
+	var cursor1: String = String(s.main_capsule.raid_rng_cursor)
+	for k in 4:
+		_arm_raid(s)
+	ok(int(s.capsule_raid.id) == id1 and _rstate(s) == "planned", "REQ-0010-62: more throws while a raid is active never replace it (id %d stays, state planned)" % id1)
+	ok((s.capsule_raid.queue as Array).size() == mini(4, qmax), "REQ-0010-62: the queue holds exactly queue_max (%d) waiting raids, the rest is dropped (%d queued)" % [qmax, (s.capsule_raid.queue as Array).size()])
+	ok(String(s.main_capsule.raid_rng_cursor) == cursor1, "REQ-0010-34: a queued/dropped raid draws nothing from the raid stream")
+	_to_warning(s)
+	_to_contact(s)
+	ok(_rstate(s) == "contact" and _raiders(s) == int(s.capsule_raid.count), "REQ-0010-62: the first raid goes to contact alone (%d raiders = ITS count, the queued ones did not spawn)" % _raiders(s))
+	_hit(s, 1.0e9)
+	s.update(Scenarios.DT)
+	var until: int = int(s.main_capsule.immune_until)
+	ok(until == int(s.now_ms) + DAY_MS and int(s.main_capsule.level) == 1, "REQ-0010-22/25: the first raid resolves as a breach: level 2 -> 1, immune until now + 24 h")
+	if qmax >= 1:
+		ok(_rstate(s) == "planned" and int(s.capsule_raid.warn_at) >= until, "REQ-0010-62/27: the QUEUED raid waits for the end of the immunity (warn_at %d >= immune_until %d)" % [int(s.capsule_raid.warn_at), until])
+		ok(int(s.capsule_raid.id) != id1, "REQ-0010-62: ... and it is a NEW raid id")
+		s.update(Scenarios.DT)
+		ok(_rstate(s) == "planned", "REQ-0010-25/62: inside the immunity the queued raid does not announce itself")
+		s.set_clock(until)
+		s.update(Scenarios.DT)
+		ok(_rstate(s) == "warning", "REQ-0010-62: at the end of the immunity the queued raid becomes the warning")
+	_dispose(s)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-65 / 111-ish gates: first upgrade AND grace AND not immune — every cell of the 2x2x2 table
+# ---------------------------------------------------------------------------------------------
+func _gate_world(upgraded: bool, grace: bool, immune: bool) -> Variant:
+	var m: Dictionary = _pad_map(PAD_N, Vector2i(8, 8))
+	var s: Variant = Sim.new()
+	s.use_inventory = true
+	s.use_catalog = true
+	s.use_main_capsule = true
+	s.set_clock(RAID_T0)
+	s.new_game(m, false)
+	_quiet(s)
+	_wipe(s)
+	if upgraded:
+		_fund_cost(s, _cost_of(_raw_rows(), 1), 0.4)
+		s.upgrade_capsule()
+		_wipe(s)
+	s.set_clock(RAID_T0 + (GRACE_MS + 5 if grace else GRACE_MS - 5))
+	if immune:
+		s.main_capsule["immune_until"] = int(s.now_ms) + 1000
+	return s
+
+
+func _t_raid_gates_table() -> void:
+	for up in [false, true]:
+		for gr in [false, true]:
+			for im in [false, true]:
+				var s: Variant = _gate_world(bool(up), bool(gr), bool(im))
+				var sig0: String = Persistence.world_hash(s)
+				_arm_raid(s)
+				var armed: bool = _rstate(s) != "none"
+				var want: bool = bool(up) and bool(gr) and not bool(im)
+				ok(armed == want, "REQ-0010-65/111 [prog=%s grace=%s immune=%s]: a director raid is %s (state %s)" % [str(up), str(gr), str(im), "ARMED" if want else "dropped", _rstate(s)])
+				if not want:
+					ok(Persistence.world_hash(s) == sig0 and String(s.banner) == "" and not bool(s.raid.warned) and not bool(s.raid.active), "REQ-0010-65 [prog=%s grace=%s immune=%s]: a dropped raid leaves NO trace (same world_hash, no banner, no mirror flag)" % [str(up), str(gr), str(im)])
+				_dispose(s)
+	# the grace is counted from the FIRST landing in UTC ms, to the millisecond
+	for off in [GRACE_MS - 1, GRACE_MS, GRACE_MS + 1]:
+		var s: Variant = _gate_world(true, true, false)
+		s.main_capsule["grace_start"] = int(s.now_ms) - int(off)
+		_arm_raid(s)
+		ok((_rstate(s) != "none") == (int(off) >= GRACE_MS), "REQ-0010-65/OD-66: %d ms after the first landing the raid is %s (3 days = 259 200 000 ms)" % [int(off), "possible" if int(off) >= GRACE_MS else "NOT possible"])
+		_dispose(s)
+	# a raid is never thrown at a level-0 capsule that was never upgraded, even long after the grace
+	var z: Variant = _gate_world(false, true, false)
+	z.set_clock(RAID_T0 + 90 * DAY_MS)
+	_arm_raid(z)
+	ok(_rstate(z) == "none", "OD-107/REQ-0010-65: 90 days after landing a never-upgraded capsule is still not raided")
+	_dispose(z)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-21 / 22 / 25 / 66 / 104 / 113 live: contact -> hits through the REAL damage seam -> breach -> consequence
+# ---------------------------------------------------------------------------------------------
+func _raid_to_contact(s: Variant) -> void:
+	_arm_raid(s)
+	_to_warning(s)
+	_to_contact(s)
+
+
+func _t_raid_breach_live() -> void:
+	var s: Variant = _raid_pad(3, 0.0, 1)
+	var cap: Vector2i = _cap_tile(s)
+	_fund_n(s, "wood", 1000, 0.3)
+	_fund_n(s, "stone", 500, 0.3)
+	s.main_capsule["reinforcement_used"] = 1
+	var inv0: Dictionary = (s.main_capsule.invested as Dictionary).duplicate(true)
+	var pinv0: String = var_to_str(s.main_capsule.protection_invested)
+	var funds0: int = _funds_total(s)
+	var stock0: String = var_to_str(s.stock)
+	var bags0: int = (s.bags as Array).size()
+	_raid_to_contact(s)
+	ok(is_equal_approx(float(s.capsule_raid.core_hp), _prot_hp(1)), "REQ-0010-17/21 live: protection 1 -> core HP %s at contact (not the level-3 or protection-0 value)" % str(s.capsule_raid.core_hp))
+	# the boundary: hp - 1 -> still standing; exactly 0 -> breach
+	_hit(s, _prot_hp(1) - 1.0)
+	s.update(Scenarios.DT)
+	ok(_rstate(s) == "contact" and int(s.main_capsule.level) == 3 and is_equal_approx(float(s.capsule_raid.core_hp), 1.0), "REQ-0010-21: core HP 1.0 -> the raid goes on, level 3 intact")
+	_hit(s, 1.0)
+	ok(is_equal_approx(float(s.capsule_raid.core_hp), 0.0), "REQ-0010-21 setup: the last hit brings the core to exactly 0")
+	var t_res: int = int(s.now_ms)
+	s.update(Scenarios.DT)
+	var c: Dictionary = s.main_capsule
+	ok(int(c.level) == 2 and _rstate(s) == "none", "REQ-0010-21/22: core HP 0 (<= 0) -> breach: level 3 -> 2, the machine is back to «none»")
+	var bad: Array = []
+	for res in (inv0["3"] as Dictionary):
+		var x: int = int((inv0["3"] as Dictionary)[res])
+		var kept: int = int((c.invested as Dictionary).get("3", {}).get(res, -1))
+		if absi(2 * (x - kept) - x) > 1:
+			bad.append("%s %d -> %d" % [res, x, kept])
+	ok(bad.is_empty(), "REQ-0010-22 live: invested[3] lost 50%% per resource (rounding-independent) %s" % str(bad))
+	ok(var_to_str((c.invested as Dictionary)["1"]) == var_to_str(inv0["1"]) and var_to_str((c.invested as Dictionary)["2"]) == var_to_str(inv0["2"]), "REQ-0010-22 live: ledgers 1 and 2 are untouched")
+	ok(int(c.protection) == 1 and var_to_str(c.protection_invested) == pinv0, "REQ-0010-104 live: protection and its ledger are untouched")
+	ok(int(c.immune_until) == t_res + DAY_MS, "REQ-0010-25 live: immune_until = the resolution instant + 86 400 000 (%d vs %d)" % [int(c.immune_until), t_res + DAY_MS])
+	ok(int(c.reinforcement_used) == 0, "REQ-0010-113 live: reinforcement_used 1 -> 0 at the new window")
+	var destroyed_sum: int = _inv_sum(inv0) - _inv_sum(c.invested)
+	ok(destroyed_sum > 0 and _funds_total(s) == funds0 and var_to_str(s.stock) == stock0 and (s.bags as Array).size() == bags0,
+		"REQ-0010-22: the destroyed %d units are in NO pack, NO stock, NO bag (funds %d -> %d)" % [destroyed_sum, funds0, _funds_total(s)])
+	ok(_raiders(s) == 0 and not bool(s.raid.active) and not bool(s.raid.warned) and String(s.banner) == "", "REQ-0010-21: the raiders leave, the mirror flags and the banner clear")
+	ok(_cap_problem(s, cap) == "" and float(_cap_b(s).hp) > 0.0, "REQ-0010-75: the capsule object stands (one building, on its tile, hp > 0)")
+	ok(_ev_kinds(s).has("breach"), "REQ-0010-22: a «breach» event was emitted")
+	# a raid during the immunity is answered with NOTHING
+	var h0: String = Persistence.world_hash(s)
+	_arm_raid(s)
+	ok(_rstate(s) == "none" and Persistence.world_hash(s) == h0, "REQ-0010-25 live: a raid thrown inside the 24 h window changes neither state nor world_hash")
+	s.update(Scenarios.DT)
+	_arm_raid(s)
+	h0 = Persistence.world_hash(s)
+	var direct: Dictionary = MainCapsule.apply_raid_outcome(s, {"core_hp": -50.0})
+	ok(StringName(direct.kind) == &"immune" and Persistence.world_hash(s) == h0 and int(s.main_capsule.level) == 2, "REQ-0010-25: apply_raid_outcome inside the window answers «immune» and changes nothing (level, hash)")
+	s.set_clock(int(s.main_capsule.immune_until) - 1)
+	_arm_raid(s)
+	ok(_rstate(s) == "none", "REQ-0010-25: 1 ms before the end of the window the raid is still refused")
+	s.set_clock(int(s.main_capsule.immune_until) + 1)
+	_arm_raid(s)
+	ok(_rstate(s) == "planned", "REQ-0010-25: 1 ms after the window the capsule can be raided again")
+	_dispose(s)
+
+
+# a raid that is DEFEATED (raiders gone, core alive): no loss, no immunity, the machine resets — and the NEXT raid is not blocked by a ghost
+func _t_raid_defended_live() -> void:
+	var s: Variant = _raid_pad(2, 0.0, 0)
+	var before: Dictionary = (Persistence.serialize_region(s).main_capsule as Dictionary).duplicate(true)
+	_raid_to_contact(s)
+	_hit(s, 100.0)
+	ok(is_equal_approx(float(s.capsule_raid.core_hp), _prot_hp(0) - 100.0), "REQ-0010-21 setup: a partial hit lowers the core")
+	s.enemies = []
+	s.update(Scenarios.DT)
+	ok(_rstate(s) == "none" and not bool(s.raid.active) and String(s.banner) == "", "REQ-0010-21: the raiders are neutralised -> the raid is DEFENDED, machine and mirror reset")
+	var m: Dictionary = Persistence.serialize_region(s).main_capsule
+	var diff: Array = []
+	for k in m:
+		if k == "raid_rng_cursor":
+			continue   # the stream legitimately advanced (the raid drew its direction / interval / cells)
+		if var_to_str(m[k]) != var_to_str(before.get(k)):
+			diff.append(k)
+	ok(diff.is_empty(), "REQ-0010-21/22: a defended raid leaves the capsule record unchanged (level, ledgers, immunity, token) — changed: %s" % str(diff))
+	ok(int(s.main_capsule.immune_until) == 0, "REQ-0010-25: a DEFENDED raid opens no immunity (immunity follows a SUCCESSFUL raid)")
+	ok(_ev_kinds(s).has("defended"), "REQ-0010-21: a «defended» event was emitted")
+	_arm_raid(s)
+	ok(_rstate(s) == "planned", "REQ-0010-62: after a defended raid a new one can be armed (no ghost active raid)")
+	_dispose(s)
+
+
+# hits that are NOT a siege do not hurt the core: outside contact, after the raid, from a patrol bot
+func _t_raid_hits_outside_contact() -> void:
+	var s: Variant = _raid_pad(2, 0.0, 0)
+	_hit(s, 1.0e9)
+	ok(int(s.main_capsule.level) == 2 and _rstate(s) == "none", "REQ-0010-21: a hit with NO raid (state none) is ignored — the level does not fall")
+	_arm_raid(s)
+	_hit(s, 1.0e9)
+	s.update(Scenarios.DT)
+	ok(_rstate(s) == "warning" and int(s.main_capsule.level) == 2, "REQ-0010-21: a hit while the raid is only «заплановано/попередження» is ignored")
+	_to_contact(s)
+	ok(is_equal_approx(float(s.capsule_raid.core_hp), _prot_hp(0)), "REQ-0010-21: ... and the core starts the contact at FULL hp (the early hits were not stored) — %s" % str(s.capsule_raid.core_hp))
+	_dispose(s)
+
+
+# REQ-0010-23: the capsule is never destroyed; a series of successful raids ends at level 0; respawn still works
+func _t_raid_series_to_zero() -> void:
+	var s: Variant = _raid_pad(2, 0.0, 0)
+	var cap: Vector2i = _cap_tile(s)
+	var levels: Array = [int(s.main_capsule.level)]
+	var tokens: Array = []
+	for i in 5:
+		_raid_to_contact(s)
+		_hit(s, 1.0e9)
+		s.update(Scenarios.DT)
+		levels.append(int(s.main_capsule.level))
+		tokens.append(int(s.main_capsule.free_transport_token))
+		s.set_clock(int(s.main_capsule.immune_until) + 1)
+		if int(s.main_capsule.level) == 0:
+			var r: Dictionary = MainCapsule.apply_raid_outcome(s, {"core_hp": 0.0, "now_ms": int(s.now_ms)})
+			levels.append(int(s.main_capsule.level))
+			ok(StringName(r.kind) == &"noop_l0", "REQ-0010-23: a breach-grade raid on level 0 is answered with a no-op (kind %s)" % String(r.kind))
+			break
+	ok(levels.slice(0, 3) == [2, 1, 0] and int(levels.min()) == 0, "REQ-0010-22/23: levels fall by exactly one per successful raid and stop at 0: %s" % str(levels))
+	ok(_cap_problem(s, cap) == "", "REQ-0010-23/75: after the series the capsule object exists (%s)" % _cap_problem(s, cap))
+	ok(tokens.size() >= 2 and tokens[0] == 0 and tokens[1] == 1, "REQ-0010-24: no token at 2 -> 1, ONE token at 1 -> 0 (%s)" % str(tokens))
+	var inv_after: Dictionary = s.main_capsule.invested
+	ok(int(s.main_capsule.level) == 0 and int(s.main_capsule.free_transport_token) == 1, "REQ-0010-24: after the series token == 1, level == 0")
+	_kill(s)
+	ok(s.dead, "REQ-0010-23 setup: the hero is dead")
+	s.respawn_new_pawn()
+	var hero: Vector2i = _hero_cell(s)
+	ok(not s.dead and _cheb(hero, cap) <= 3 and hero != cap, "REQ-0010-23/08: respawn works on a level-0 capsule after the raid series (hero at %s, capsule %s)" % [str(hero), str(cap)])
+	ok(_inv_sum(inv_after) >= 0, "REQ-0010-66: the ledger is never negative")
+	_dispose(s)
+
+
+# REQ-0010-24 / 67: two falls 1 -> 0 in a row (with a re-upgrade between) -> the token stays 1; it survives save/load/respawn
+func _t_raid_token_two_falls() -> void:
+	var s: Variant = _raid_real(1, 0.0, 0)
+	var rows: Array = _raw_rows()
+	_raid_to_contact(s)
+	_hit(s, 1.0e9)
+	s.update(Scenarios.DT)
+	ok(int(s.main_capsule.level) == 0 and int(s.main_capsule.free_transport_token) == 1, "REQ-0010-24: the 1 -> 0 fall -> token 1")
+	var h1: String = Persistence.world_hash(s)
+	s.set_clock(int(s.main_capsule.immune_until) + 1)
+	_fund_cost(s, _cost_of(rows, 1), 0.4)
+	ok(bool(s.upgrade_capsule().get("ok", false)) and int(s.main_capsule.level) == 1, "REQ-0010-67 setup: the capsule is re-upgraded to 1")
+	_raid_to_contact(s)
+	_hit(s, 1.0e9)
+	s.update(Scenarios.DT)
+	ok(int(s.main_capsule.level) == 0 and int(s.main_capsule.free_transport_token) == 1, "REQ-0010-67: the SECOND 1 -> 0 fall -> token still 1 (never 2)")
+	# round trip + respawn keep it
+	var y: Variant = Sim.new()
+	ok(Persistence.restore(y, _json_rt(Persistence.resume_payload(s))) and int(y.main_capsule.free_transport_token) == 1, "REQ-0010-67: the token survives a JSON save/restore")
+	ok(Persistence.world_hash(y) == Persistence.world_hash(s), "REQ-0010-35: ... with the same world_hash")
+	_kill(s)
+	s.respawn_new_pawn()
+	ok(int(s.main_capsule.free_transport_token) == 1, "REQ-0010-67: the token survives death + respawn")
+	var m: Variant = _raid_pad(1, 0.0, 0)
+	var hm: String = Persistence.world_hash(m)
+	m.main_capsule["free_transport_token"] = 1
+	ok(Persistence.world_hash(m) != hm, "REQ-0010-35: the token is in world_hash")
+	ok(h1 != "", "sanity")
+	_dispose(s)
+	_dispose(y)
+	_dispose(m)
+
+
+# REQ-0010-63 (stub, blocked on Q-14 only for the numbers): a death in contact does not cancel the raid and costs the capsule nothing
+func _t_raid_death_during_contact() -> void:
+	var s: Variant = _raid_pad(2, 0.0, 0)
+	_raid_to_contact(s)
+	var cnt: int = _raiders(s)
+	var lvl: int = int(s.main_capsule.level)
+	var inv: String = var_to_str(s.main_capsule.invested)
+	_kill(s)
+	s.respawn_new_pawn()
+	ok(_rstate(s) == "contact" and _raiders(s) == cnt and bool(s.raid.active), "REQ-0010-63 (stub): the hero's death does not cancel or resolve the raid (state %s, %d/%d raiders)" % [_rstate(s), _raiders(s), cnt])
+	ok(int(s.main_capsule.level) == lvl and var_to_str(s.main_capsule.invested) == inv and int(s.main_capsule.immune_until) == 0, "REQ-0010-63/22: ... and no loss and no immunity came out of the death")
+	_hit(s, 1.0e9)
+	s.update(Scenarios.DT)
+	ok(int(s.main_capsule.level) == lvl - 1 and not s.dead, "REQ-0010-22: after the respawn the same raid can still be decided (level %d -> %d), the new body lives" % [lvl, int(s.main_capsule.level)])
+	_dispose(s)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-35 / 82 / 26: every raid field moves world_hash; int64 on the wire; the round trip is hash-exact
+# ---------------------------------------------------------------------------------------------
+func _t_raid_hash_fields() -> void:
+	var base: Variant = _raid_pad(2)
+	var h0: String = Persistence.world_hash(base)
+	ok(Persistence.world_hash(_raid_pad(2)) == h0, "REQ-0010-82 setup: twin raid worlds hash the same")
+	var cases: Array = [["immune_until", 12345], ["first_upgrade_at", RAID_T0 + 99], ["reinforcement_used", 1], ["free_transport_token", 1], ["next_raid_at", 777], ["raid_rng_cursor", "424242"]]
+	for c in cases:
+		var m: Variant = _raid_pad(2)
+		m.main_capsule[String((c as Array)[0])] = (c as Array)[1]
+		ok(Persistence.world_hash(m) != h0, "REQ-0010-35/82 [%s]: mutating the field changes world_hash" % String((c as Array)[0]))
+		_dispose(m)
+	# the live raid state (the `raid` slice of REQ-0010-82)
+	var armed: Variant = _raid_pad(2)
+	_arm_raid(armed)
+	var ha: String = Persistence.world_hash(armed)
+	ok(ha != h0, "REQ-0010-82: ARMING a raid changes world_hash (state, id, times, stream cursor)")
+	var runtime_fields: Array = [["state", "contact"], ["id", 9], ["warn_at", 5], ["contact_at", 7], ["core_hp", 3.5], ["dir", 3], ["count", 99], ["day_equiv", 77], ["spawned", true], ["queue", [{"faction": "x", "points": 1.0}]]]
+	for c in runtime_fields:
+		var m: Variant = _raid_pad(2)
+		_arm_raid(m)
+		var f: String = String((c as Array)[0])
+		if var_to_str(m.capsule_raid[f]) == var_to_str((c as Array)[1]):
+			(m.capsule_raid as Dictionary)[f] = 1234 if typeof((c as Array)[1]) == TYPE_INT else (c as Array)[1]
+		else:
+			(m.capsule_raid as Dictionary)[f] = (c as Array)[1]
+		ok(Persistence.world_hash(m) != ha, "REQ-0010-82 [raid.%s]: mutating the active-raid field changes world_hash" % f)
+		_dispose(m)
+	# wire: instants are decimal strings, ints exact; round trip is hash-exact
+	var x: Variant = _raid_real(3)
+	x.main_capsule["immune_until"] = I64_MAX
+	x.main_capsule["first_upgrade_at"] = BIG_MS
+	x.main_capsule["next_raid_at"] = BIG_MS + 2
+	x.main_capsule["free_transport_token"] = 1
+	x.main_capsule["reinforcement_used"] = 1
+	var rec: Dictionary = Persistence.serialize_region(x).main_capsule
+	ok(rec.immune_until is String and rec.first_upgrade_at is String and rec.next_raid_at is String and rec.reinforcement_used is int and rec.free_transport_token is int, "REQ-0010-26/82: immune_until / first_upgrade_at / next_raid_at ride as STRINGS, the flags as ints")
+	var text: String = JSON.stringify(rec, "", true, true)
+	ok(text.contains(str(I64_MAX)) and text.contains(str(BIG_MS)) and text.contains(str(BIG_MS + 2)), "REQ-0010-26: int64-max and 2^53+1 appear digit-exact in the JSON text")
+	var y: Variant = Sim.new()
+	ok(Persistence.restore(y, _json_rt(Persistence.resume_payload(x))), "REQ-0010-26 setup: the payload restores")
+	ok(int(y.main_capsule.immune_until) == I64_MAX and int(y.main_capsule.first_upgrade_at) == BIG_MS and int(y.main_capsule.next_raid_at) == BIG_MS + 2 and int(y.main_capsule.free_transport_token) == 1 and int(y.main_capsule.reinforcement_used) == 1,
+		"REQ-0010-26/35: every raid field comes back EXACT from JSON (immune_until=%s)" % str(y.main_capsule.immune_until))
+	ok(Persistence.world_hash(y) == Persistence.world_hash(x), "REQ-0010-35: the round-tripped world has the same world_hash")
+	var n0: Variant = _raid_pad(2)
+	var rec0: Dictionary = Persistence.serialize_region(n0).main_capsule
+	ok(String(rec0.immune_until) == "0" and String(rec0.next_raid_at) == "0" and int(rec0.free_transport_token) == 0 and int(rec0.reinforcement_used) == 0, "REQ-0010-26: a fresh capsule has immune_until \"0\" (no immunity), token 0, flag 0")
+	ok(int(String(rec0.first_upgrade_at)) == 0 or n0.main_capsule.level > 0, "REQ-0010-65: first_upgrade_at is 0 only for a never-upgraded capsule")
+	for w in [base, armed, x, y, n0]:
+		_dispose(w)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-62 / 82 / 34: resume mid-raid (warning, contact) lands hash-exact and then STAYS in lock-step; the raiders spawn on the same cells
+# ---------------------------------------------------------------------------------------------
+func _joiner(a: Variant, wire: bool = false) -> Variant:
+	var b: Variant = Sim.new()
+	b.set_clock(int(a.now_ms))
+	var payload: Dictionary = Persistence.resume_payload(a)
+	var done: bool = Persistence.restore(b, _json_rt(payload) if wire else payload)
+	if not done:
+		ok(false, "setup: the resume payload was refused (%s)" % String(b.load_error))
+	_mute(b)
+	return b
+
+
+func _t_raid_resume_lockstep() -> void:
+	for stage in ["planned", "warning", "contact"]:
+		var a: Variant = _raid_real(2)
+		_arm_raid(a)
+		if String(stage) != "planned":
+			_to_warning(a)
+		if String(stage) == "contact":
+			_to_contact(a)
+			_hit(a, 200.0)
+			for t in 5:
+				a.update(Scenarios.DT)
+		var w: Variant = _joiner(a, true)   # through a JSON text: the CAPSULE half must come back exact (raiders' float coordinates can drift 1 ULP in decimal JSON — a known wire hazard, spec 0006, not a capsule field)
+		ok(_rstate(w) == String(stage) and Persistence.content_hash(Persistence.serialize_region(w).main_capsule) == Persistence.content_hash(Persistence.serialize_region(a).main_capsule)
+			and Persistence.content_hash(MainCapsule.serialize_raid(w)) == Persistence.content_hash(MainCapsule.serialize_raid(a)), "REQ-0010-62/82 [%s]: through a JSON text the capsule record AND the raid machine come back exact" % String(stage))
+		if String(stage) != "contact":
+			ok(Persistence.world_hash(w) == Persistence.world_hash(a), "REQ-0010-62/82 [%s]: with no raiders on the map the whole world is hash-exact through JSON" % String(stage))
+		_dispose(w)
+		var b: Variant = _joiner(a)
+		ok(_rstate(b) == String(stage) and int(b.capsule_raid.id) == int(a.capsule_raid.id), "REQ-0010-62 [%s]: the resumed machine is in the same state with the same raid id" % String(stage))
+		ok(Persistence.world_hash(b) == Persistence.world_hash(a), "REQ-0010-62/82 [%s]: resume lands hash-exact" % String(stage))
+		ok(String(b.main_capsule.raid_rng_cursor) == String(a.main_capsule.raid_rng_cursor) and is_equal_approx(float(b.capsule_raid.core_hp), float(a.capsule_raid.core_hp)), "REQ-0010-82 [%s]: the raid stream cursor and the core hp survive" % String(stage))
+		var diverged: int = -1
+		for t in 80:
+			if String(stage) != "contact" and t == 3:
+				var target: int = int(a.capsule_raid.contact_at)
+				a.set_clock(target)
+				b.set_clock(target)
+			a.update(Scenarios.DT)
+			b.update(Scenarios.DT)
+			_topup(a)
+			_topup(b)
+			if Persistence.world_hash(a) != Persistence.world_hash(b):
+				diverged = t + 1
+				break
+		ok(diverged < 0 and _rstate(a) == "contact", "REQ-0010-62/82 [%s]: 80 further ticks (through the contact) stay hash-identical%s" % [String(stage), "" if diverged < 0 else " — DIVERGED at +%d" % diverged])
+		_hit(a, 1.0e9)
+		_hit(b, 1.0e9)
+		a.update(Scenarios.DT)
+		b.update(Scenarios.DT)
+		ok(Persistence.world_hash(a) == Persistence.world_hash(b) and int(a.main_capsule.level) == 1 and int(b.main_capsule.level) == 1 and int(a.main_capsule.immune_until) == int(b.main_capsule.immune_until),
+			"REQ-0010-22/82 [%s]: the breach lands identically on both sides (level 1, same immunity, same hash)" % String(stage))
+		_dispose(a)
+		_dispose(b)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-25 / 26: save/load and the passage of time across the immunity boundary
+# ---------------------------------------------------------------------------------------------
+func _t_raid_immunity_save_load() -> void:
+	var s: Variant = _raid_real(2)
+	_raid_to_contact(s)
+	_hit(s, 1.0e9)
+	s.update(Scenarios.DT)
+	var until: int = int(s.main_capsule.immune_until)
+	ok(until == int(s.now_ms) + DAY_MS and until > 0, "REQ-0010-25 setup: a breach opened the window (until %d)" % until)
+	var h_in: String = Persistence.world_hash(s)
+	# SIM time passes (x3 speed, 10 minutes), the UTC clock is not told: the window does not move and the world keeps its hash
+	for t in 2000:
+		s.update(0.3)
+		_topup(s)
+	ok(int(s.main_capsule.immune_until) == until and MainCapsule.is_immune(s), "REQ-0010-26/114: 600 sim-seconds of ticks do not touch immune_until and do not end the immunity (UTC is the only clock)")
+	# the saved window comes back and then expires by the UTC comparison only
+	var y: Variant = Sim.new()
+	y.set_clock(int(s.now_ms))
+	ok(Persistence.restore(y, _json_rt(Persistence.resume_payload(s))), "REQ-0010-26 setup: restore inside the window")
+	ok(int(y.main_capsule.immune_until) == until and MainCapsule.is_immune(y) and MainCapsule.immune_left_ms(y) == until - int(y.now_ms), "REQ-0010-26: the restored capsule is still immune, %d ms left" % MainCapsule.immune_left_ms(y))
+	_mute(y)
+	y.set_clock(until - 1)
+	var hy: String = Persistence.world_hash(y)
+	ok(MainCapsule.is_immune(y), "REQ-0010-25: 1 ms before the mark the capsule is immune")
+	y.set_clock(until)
+	ok(not MainCapsule.is_immune(y) and MainCapsule.immune_left_ms(y) == 0, "REQ-0010-25/26: AT the mark (24 h elapsed) the immunity is over, 0 ms left")
+	ok(Persistence.world_hash(y) == hy, "REQ-0010-35/92: passing the boundary changes no hashed state (now is an input, not state)")
+	y.set_clock(until - 5000)
+	ok(not MainCapsule.is_immune(y), "REQ-0010-68: setting an EARLIER clock does not bring the immunity back (the clock is monotone)")
+	# save made after the window: a raid is possible again
+	var z: Variant = Sim.new()
+	z.set_clock(until + 10)
+	ok(Persistence.restore(z, _json_rt(Persistence.resume_payload(s))) and not MainCapsule.is_immune(z), "REQ-0010-26: a save restored AFTER the boundary is no longer immune")
+	_mute(z)
+	z.set_clock(until + GRACE_MS)
+	_arm_raid(z)
+	ok(_rstate(z) == "planned", "REQ-0010-25: ... and a raid can be armed on it")
+	ok(h_in != "", "sanity")
+	for w in [s, y, z]:
+		_dispose(w)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-84: the race — a player command and a raid result in ONE tick; the commands go first, deterministically, repeatably
+# ---------------------------------------------------------------------------------------------
+func _race_world(order: String) -> Variant:
+	var s: Variant = _raid_pad(1, 0.0, 0)
+	var rows: Array = _raw_rows()
+	_raid_to_contact(s)
+	_hit(s, 1.0e9)   # the breach is already decided; the machine resolves it on the next tick
+	var need: Dictionary = _cost_of(rows, 2)   # the level-2 price AND the protection-1 price in ONE funding (a second _fund_cost would overwrite the first)
+	var pc: Dictionary = _cost_of(_protection_rows(), 1)
+	for res in pc:
+		need[res] = int(need.get(res, 0)) + int(pc[res])
+	_fund_cost(s, need, 0.4)
+	match order:
+		"command_first":
+			s.upgrade_capsule()
+			MainCapsule.upgrade_protection(s)
+			s.update(Scenarios.DT)
+		"tick_first":
+			s.update(Scenarios.DT)
+			s.upgrade_capsule()
+			MainCapsule.upgrade_protection(s)
+	return s
+
+
+func _protection_rows() -> Array:
+	return ((_raw_table().get("protection", {}) as Dictionary).get("levels", []) as Array)
+
+
+func _t_raid_race_same_tick() -> void:
+	var a1: Variant = _race_world("command_first")
+	var a2: Variant = _race_world("command_first")
+	var b1: Variant = _race_world("tick_first")
+	var b2: Variant = _race_world("tick_first")
+	ok(Persistence.world_hash(a1) == Persistence.world_hash(a2), "REQ-0010-84: the same command-then-raid sequence gives the same world_hash twice")
+	ok(Persistence.world_hash(b1) == Persistence.world_hash(b2), "REQ-0010-84: the same raid-then-command sequence gives the same world_hash twice")
+	# commands of the tick are applied BEFORE the result: the upgraded level 2 is what the raid takes from
+	var rows: Array = _raw_rows()
+	var c2: Dictionary = _cost_of(rows, 2)
+	var inv: Dictionary = a1.main_capsule.invested
+	ok(int(a1.main_capsule.level) == 1, "REQ-0010-84: command first: 1 -> 2 (command) -> 1 (breach) — the command was NOT lost and NOT applied after the result")
+	var bad: Array = []
+	for res in c2:
+		var kept: int = int((inv.get("2", {}) as Dictionary).get(res, -1))
+		if absi(2 * (int(c2[res]) - kept) - int(c2[res])) > 1:
+			bad.append("%s paid %d kept %d" % [res, int(c2[res]), kept])
+	ok(bad.is_empty(), "REQ-0010-84/22: command first: the breach took 50%% of invested[2] — the level the command had just reached %s" % str(bad))
+	ok(var_to_str(inv.get("1", {})) == var_to_str(_cap_ledger_after_first(a1)), "REQ-0010-84: ... and left invested[1] alone")
+	ok(int(b1.main_capsule.level) == 1, "REQ-0010-84: raid first: 1 -> 0 (breach) -> 1 (command)")
+	ok(Persistence.world_hash(a1) != Persistence.world_hash(b1), "REQ-0010-84: the two orders are DIFFERENT outcomes (the order matters and the world records which one happened)")
+	# the defence upgrade in the same tick does not rescue a core that is already at 0
+	ok(int(a1.main_capsule.protection) == 1 and int(b1.main_capsule.protection) == 1, "REQ-0010-84/104: the protection command in the same tick is applied and the raid does not take it away")
+	ok(int(a1.main_capsule.immune_until) > 0, "REQ-0010-84: the breach was NOT cancelled by the defence upgrade made in the same tick (the immunity opened)")
+	# a repeated command with the same id in the same tick: one debit
+	var d: Variant = _raid_pad(0)
+	_fund_cost(d, _cost_of(_raw_rows(), 1), 0.4)
+	var r1: Dictionary = d.upgrade_capsule(77)
+	var r2: Dictionary = d.upgrade_capsule(77)
+	ok(bool(r1.get("ok", false)) and not bool(r2.get("ok", true)) and int(d.main_capsule.level) == 1, "REQ-0010-84/100: a repeated command id in the same tick is applied once")
+	for w in [a1, a2, b1, b2, d]:
+		_dispose(w)
+
+
+# the invested[1] ledger of a level-1 capsule reached by the real upgrade (a pure function of the catalog)
+func _cap_ledger_after_first(_s: Variant) -> Dictionary:
+	return _cost_of(_raw_rows(), 1)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-66 (property): prokachka-raid-prokachka-raid. sum(invested) == paid - destroyed; kept + destroyed == before; never negative / invented
+# + the Q-8 proposal «a re-upgrade ADDS to invested[L]» pinned on its own
+# ---------------------------------------------------------------------------------------------
+func _t_raid_ledger_property() -> void:
+	for seed_i in 3:
+		var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+		rng.seed = 6600 + seed_i
+		var s: Variant = _raid_pad(0)
+		var rows: Array = _raw_rows()
+		var paid: int = 0
+		var gone: int = 0
+		var bad: Array = []
+		var steps: int = 0
+		var breaches: int = 0
+		for i in 60:
+			var act: int = rng.randi() % 3
+			var lvl: int = int(s.main_capsule.level)
+			if act == 0 and lvl < 5:
+				_fund_cost(s, _cost_of(rows, lvl + 1), 0.5)
+				var r: Dictionary = s.upgrade_capsule()
+				if not bool(r.get("ok", false)):
+					bad.append("step %d upgrade refused %s" % [i, str(r)])
+					continue
+				for res in r.paid:
+					paid += int(r.paid[res])
+			elif act == 1:
+				s.set_clock(int(s.now_ms) + DAY_MS + 1 + (rng.randi() % 1000))
+				var before_l: Dictionary = ((s.main_capsule.invested as Dictionary).get(str(lvl), {}) as Dictionary).duplicate(true)
+				var res2: Dictionary = MainCapsule.apply_raid_outcome(s, {"core_hp": 0.0 - float(rng.randi() % 3)})
+				steps += 1
+				if StringName(res2.kind) == &"breach":
+					breaches += 1
+					for k in (res2.destroyed as Dictionary):
+						gone += int((res2.destroyed as Dictionary)[k])
+						var kept: int = int(((s.main_capsule.invested as Dictionary).get(str(lvl), {}) as Dictionary).get(k, -1))
+						if int(before_l.get(k, -1)) != int((res2.destroyed as Dictionary)[k]) + kept:
+							bad.append("step %d %s: before %s != destroyed %s + kept %d" % [i, k, str(before_l.get(k)), str(res2.destroyed[k]), kept])
+				elif lvl > 0:
+					bad.append("step %d: a core-0 raid on level %d was %s" % [i, lvl, String(res2.kind)])
+			else:
+				s.set_clock(int(s.now_ms) + 1000)
+			var total: int = _inv_sum(s.main_capsule.invested)
+			if total != paid - gone:
+				bad.append("step %d: sum(invested) %d != paid %d - destroyed %d" % [i, total, paid, gone])
+				break
+			for k in (s.main_capsule.invested as Dictionary):
+				for res in (s.main_capsule.invested[k] as Dictionary):
+					if typeof(s.main_capsule.invested[k][res]) != TYPE_INT or int(s.main_capsule.invested[k][res]) < 0:
+						bad.append("step %d: ledger %s/%s is %s" % [i, str(k), str(res), str(s.main_capsule.invested[k][res])])
+			if int(s.main_capsule.level) < 0 or int(s.main_capsule.level) > 5 or int(s.main_capsule.free_transport_token) > 1:
+				bad.append("step %d: level %d token %d out of range" % [i, int(s.main_capsule.level), int(s.main_capsule.free_transport_token)])
+		ok(bad.is_empty(), "REQ-0010-66 [seed %d]: 60 random steps (%d raids, %d breaches): sum(invested) == paid - destroyed at EVERY step, kept + destroyed == before %s" % [seed_i, steps, breaches, str(bad.slice(0, 3))])
+		ok(breaches >= 3 and paid > 0, "REQ-0010-66 [seed %d] setup: the run really mixed upgrades and breaches (%d breaches, paid %d)" % [seed_i, breaches, paid])
+		_dispose(s)
+
+
+func _t_raid_reupgrade_adds_proposed() -> void:
+	var s: Variant = _raid_pad(0)
+	var rows: Array = _raw_rows()
+	var c1: Dictionary = _cost_of(rows, 1)
+	_fund_cost(s, c1, 0.5)
+	s.upgrade_capsule()
+	s.set_clock(int(s.now_ms) + 5)
+	var r: Dictionary = MainCapsule.apply_raid_outcome(s, {"core_hp": 0.0})
+	ok(StringName(r.kind) == &"breach" and int(s.main_capsule.level) == 0, "REQ-0010-66 setup: 1 -> 0")
+	var kept: Dictionary = ((s.main_capsule.invested as Dictionary).get("1", {}) as Dictionary).duplicate(true)
+	var kept_sum: int = 0
+	for res in c1:
+		kept_sum += int(kept.get(res, 0))
+	s.set_clock(int(s.main_capsule.immune_until) + 1)
+	_fund_cost(s, c1, 0.5)
+	ok(bool(s.upgrade_capsule().get("ok", false)), "REQ-0010-66 setup: re-upgrade to 1")
+	var after: Dictionary = (s.main_capsule.invested as Dictionary).get("1", {})
+	var bad: Array = []
+	for res in c1:
+		if int(after.get(res, -1)) != int(kept.get(res, 0)) + int(c1[res]):
+			bad.append("%s: %s != kept %s + paid %d" % [res, str(after.get(res)), str(kept.get(res)), int(c1[res])])
+	ok(bad.is_empty(), "REQ-0010-66 [proposed Q-8: ADD]: after a re-upgrade invested[1] = what survived + what was paid now — NOT just the new price (a replace would lose the kept half out of the books) %s" % str(bad))
+	var paid_total: int = 0
+	var gone_total: int = 0
+	for res in c1:
+		paid_total += 2 * int(c1[res])
+		gone_total += int((r.destroyed as Dictionary).get(res, 0))
+	ok(_inv_sum(s.main_capsule.invested) == paid_total - gone_total, "REQ-0010-66: sum(invested) == 2 prices paid - what the raid destroyed (%d vs %d)" % [_inv_sum(s.main_capsule.invested), paid_total - gone_total])
+	ok(kept_sum > 0, "sanity: something survived the raid")
+	_dispose(s)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-34: the raid stream is its own; the director / environment / threat cursors do not move; no global RNG in the module
+# ---------------------------------------------------------------------------------------------
+func _t_raid_streams() -> void:
+	var a: Variant = _raid_pad(2, 0.2)
+	var c: Variant = _raid_pad(2, 0.2)
+	var cur0: Array = _cursors(a)
+	ok(_cursors(c) == cur0 and String(a.main_capsule.raid_rng_cursor) == "0", "REQ-0010-34 setup: twin worlds start with the same cursors, the raid cursor is untouched")
+	_raid_to_contact(a)
+	c.update(Scenarios.DT)
+	c.set_clock(int(a.now_ms))
+	c.update(Scenarios.DT)
+	ok(_cursors(a) == _cursors(c), "REQ-0010-34: arming + warning + contact (raiders spawned on map edges) did not move the director / env / threat cursors (%s vs %s)" % [str(_cursors(a)), str(_cursors(c))])
+	ok(String(a.main_capsule.raid_rng_cursor) != "0" and String(c.main_capsule.raid_rng_cursor) == "0", "REQ-0010-34/82: the RAID stream moved (cursor %s) while the control's stayed at 0" % String(a.main_capsule.raid_rng_cursor))
+	ok(_raiders(a) > 0 and _raiders(c) == 0, "REQ-0010-34 setup: the raid really spawned raiders (%d vs %d)" % [_raiders(a), _raiders(c)])
+	# a long WARNING (300 ticks) next to a quiet control
+	var w: Variant = _raid_pad(2, 0.2)
+	var q: Variant = _raid_pad(2, 0.2)
+	_arm_raid(w)
+	for t in 300:
+		w.update(Scenarios.DT)
+		q.update(Scenarios.DT)
+	ok(_rstate(w) == "warning" and _cursors(w) == _cursors(q), "REQ-0010-34: 300 ticks of an active warning leave the three older streams exactly where the quiet control has them")
+	# the module draws from no global stream
+	var src: String = FileAccess.get_file_as_string("res://scripts/sim/capsule.gd")
+	var re: RegEx = RegEx.new()
+	re.compile("(?m)^[^#\\n]*(?<![.\\w])(randi|randf|randi_range|randf_range|randomize|rand_from_seed|shuffle)\\s*\\(")
+	var hits: Array = []
+	for m in re.search_all(src):
+		hits.append(m.get_string().strip_edges())
+	ok(hits.is_empty(), "REQ-0010-34 (lint part): capsule.gd calls no global RNG function %s" % str(hits.slice(0, 3)))
+	var code: PackedStringArray = PackedStringArray()
+	for line in src.split("\n"):
+		code.append(String(line).get_slice("#", 0))
+	var code_txt: String = "\n".join(code)
+	ok(not code_txt.contains("Math.random") and not code_txt.contains("threat_rng") and not code_txt.contains("director_rng") and not code_txt.contains("env_rng"), "REQ-0010-34: capsule.gd code never touches the director / env / threat streams")
+	var n_draws: int = src.count("capsule_rng.rand") + src.count("_edge_cell(edge, s.capsule_rng)")
+	ok(n_draws >= 3, "REQ-0010-34 setup: the module really draws from capsule_rng (%d call sites: interval, direction, spawn cells)" % n_draws)
+	for x in [a, c, w, q]:
+		_dispose(x)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-119 / 94 / 62: the owner leaves in the warning -> on return: no loss, a NEW warn_at >= now, interval in [10; 30] min, no raid events
+# ---------------------------------------------------------------------------------------------
+func _t_raid_catch_up() -> void:
+	var s: Variant = _raid_pad(2)
+	_arm_raid(s)
+	_to_warning(s)
+	var inv0: String = var_to_str(s.main_capsule.invested)
+	var lvl0: int = int(s.main_capsule.level)
+	var ev0: int = (s.capsule_events as Array).size()
+	var warn0: int = int(s.capsule_raid.warn_at)
+	var later: int = int(s.now_ms) + 8 * 3600000   # eight hours offline — the raid's contact_at is long past
+	var r: Dictionary = MainCapsule.on_catch_up(s, later)
+	ok(int(r.get("raid_events", -1)) == 0, "REQ-0010-94: catch-up reports ZERO raid events")
+	ok(int(s.now_ms) == later and _rstate(s) == "planned", "REQ-0010-119/62: the raid that did not reach contact returns to «заплановано» (state %s)" % _rstate(s))
+	ok(int(s.capsule_raid.warn_at) >= later and int(s.capsule_raid.warn_at) > warn0, "REQ-0010-119: the NEW warn_at (%d) is >= now (%d)" % [int(s.capsule_raid.warn_at), later])
+	var span: int = int(s.capsule_raid.contact_at) - int(s.capsule_raid.warn_at)
+	ok(span >= WARN_MIN_MS and span <= WARN_MAX_MS, "REQ-0010-119/108: the new interval is %d ms, within [10; 30] min" % span)
+	ok(int(s.main_capsule.level) == lvl0 and var_to_str(s.main_capsule.invested) == inv0 and int(s.main_capsule.immune_until) == 0 and _raiders(s) == 0, "REQ-0010-119/94: level, invested, immunity unchanged and NO raiders appeared")
+	ok((s.capsule_events as Array).size() == ev0, "REQ-0010-94: catch-up itself emitted no raid events (%d -> %d)" % [ev0, (s.capsule_events as Array).size()])
+	s.update(Scenarios.DT)
+	ok(_rstate(s) == "warning" and _raiders(s) == 0 and int(s.capsule_raid.contact_at) - later >= WARN_MIN_MS, "REQ-0010-119/88: the player gets a FRESH warning with at least 10 min to contact (%d ms)" % (int(s.capsule_raid.contact_at) - later))
+	ok(int(s.main_capsule.level) == lvl0, "REQ-0010-119: ... and the level still stands")
+	# no raid at all -> catch-up is a clock push and nothing else
+	var q: Variant = _raid_pad(2)
+	var hq: String = Persistence.world_hash(q)
+	var rq: Dictionary = MainCapsule.on_catch_up(q, int(q.now_ms) + 5 * DAY_MS)
+	ok(int(rq.raid_events) == 0 and Persistence.world_hash(q) == hq and _rstate(q) == "none" and _raiders(q) == 0, "REQ-0010-94: 5 days offline with no raid: no raid appears, the world hash is unchanged")
+	for t in 50:
+		q.update(Scenarios.DT)
+	ok(_rstate(q) == "none" and int(q.main_capsule.level) == 2 and _inv_sum(q.main_capsule.invested) > 0, "REQ-0010-94: ... and nothing is raided after the return either")
+	# OFF world: the hook is inert
+	var off: Variant = _sim_with(_pad_map(PAD_N, Vector2i(8, 8)), false, false, false)
+	var ho: String = Persistence.world_hash(off)
+	var ro: Dictionary = MainCapsule.on_catch_up(off, 123456)
+	ok(int(ro.raid_events) == 0 and Persistence.world_hash(off) == ho, "REQ-0010-01: the catch-up hook on an OFF world changes nothing")
+	for x in [s, q, off]:
+		_dispose(x)
+
+
+# the same through the real Continue path: Session.restore_game marks the re-entry, the first tick after the clock push reschedules
+func _t_raid_continue_reschedules() -> void:
+	var a: Variant = _session_on(RAID_T0)
+	var s: Variant = a.sim
+	_quiet(s)
+	_wipe(s)
+	_fund_cost(s, _cost_of(_raw_rows(), 1), 0.4)
+	s.upgrade_capsule()
+	_wipe(s)
+	a.push_clock(RAID_T0 + GRACE_MS + 1)
+	_arm_raid(s)
+	_to_warning(s)
+	ok(_rstate(s) == "warning", "REQ-0010-119 setup: saved in the warning")
+	ok(bool(a.save_game(SAVE_TMP)), "REQ-0010-119 setup: the session saves")
+	var lvl0: int = int(s.main_capsule.level)
+	var inv0: String = var_to_str(s.main_capsule.invested)
+	var b: Variant = SessionScript.new()
+	b.autosave = false
+	ok(bool(b.restore_game(SAVE_TMP)), "REQ-0010-119 setup: Continue restores")
+	var later: int = RAID_T0 + GRACE_MS + 1 + 6 * 3600000
+	b.push_clock(later)
+	_mute(b.sim)
+	b.sim.update(Scenarios.DT)
+	var r: Dictionary = b.sim.capsule_raid
+	ok(String(r.state) == "warning" and int(r.warn_at) >= later and int(r.contact_at) - later >= WARN_MIN_MS and _raiders(b.sim) == 0, "REQ-0010-119/62: after Continue + 6 h offline the raid is a FRESH warning (contact in %d ms), no raiders" % (int(r.contact_at) - later))
+	ok(int(b.sim.main_capsule.level) == lvl0 and var_to_str(b.sim.main_capsule.invested) == inv0 and int(b.sim.main_capsule.immune_until) == 0, "REQ-0010-119/94: level / invested / immunity are exactly as saved")
+	var ct: int = int(r.contact_at)
+	ok(ct - int(r.warn_at) >= WARN_MIN_MS, "REQ-0010-119: contact_at - warn_at >= 10 min after the re-entry (%d)" % (ct - int(r.warn_at)))
+	_dispose_session(a)
+	_dispose_session(b)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-69: «solo»
+# ---------------------------------------------------------------------------------------------
+func _t_raid_is_solo() -> void:
+	ok(MainCapsule.is_solo("local") and MainCapsule.is_solo("some_actor") and MainCapsule.is_solo(""), "REQ-0010-69 [K1 stub: no teams/clans exist]: every actor is solo")
+	var s: Variant = _raid_pad(1)
+	ok(MainCapsule.is_solo(String(s.main_capsule.owner)), "REQ-0010-69: the capsule's owner is solo")
+	_dispose(s)
+
+
+# ---------------------------------------------------------------------------------------------
+# D4/OFF: the raid core is invisible with the flag OFF
+# ---------------------------------------------------------------------------------------------
+func _t_raid_off_isolation() -> void:
+	var off: Variant = _sim_with(_pad_map(PAD_N, Vector2i(8, 8)), true, true, false)
+	_quiet(off)
+	ok((off.capsule_raid as Dictionary).is_empty() and not Persistence.serialize_runtime(off).has("capsule_raid"), "REQ-0010-01: OFF — no capsule_raid in the runtime half, the automaton dictionary is empty")
+	ok(not Persistence.serialize_region(off).has("main_capsule"), "REQ-0010-01: OFF — no main_capsule key in the region record")
+	Director.apply(off, {"incident": "raid", "count": 3, "faction": RAID_FACTION})
+	ok(bool(off.raid.warned) and String(off.banner) != "" and (off.raid as Dictionary).has("director"), "REQ-0010-01: OFF — the director's raid arms the LEGACY cycle exactly as before")
+	for t in 20:
+		off.update(Scenarios.DT)
+	ok((off.capsule_raid as Dictionary).is_empty() and (off.capsule_events as Array).is_empty(), "REQ-0010-01: OFF — the raid automaton never wakes (no state, no events)")
+	var on: Variant = _raid_pad(1)
+	ok(Persistence.serialize_runtime(on).has("capsule_raid"), "REQ-0010-82 control: ON — the runtime half carries capsule_raid")
+	_dispose(off)
+	_dispose(on)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-108: the warning interval survives a stalled clock (the app was in the background between the throw and the first tick)
+# ---------------------------------------------------------------------------------------------
+func _t_raid_warning_clock_jump() -> void:
+	for jump_min in [3, 25, 90]:
+		var s: Variant = _raid_pad(1, 0.4)
+		_arm_raid(s)
+		var planned: int = int(s.capsule_raid.warn_at)
+		s.set_clock(int(s.now_ms) + int(jump_min) * 60000)   # the first tick after a long stall
+		s.update(Scenarios.DT)
+		var w: Dictionary = {}
+		for e in s.capsule_events:
+			if String((e as Dictionary).get("kind", "")) == "warning":
+				w = e
+		var rec: Dictionary = s.capsule_raid
+		var ev_span: int = int(w.get("contact_at", 0)) - int(w.get("warn_at", 0))
+		ok(ev_span >= WARN_MIN_MS and ev_span <= WARN_MAX_MS, "REQ-0010-108 [stall %d min]: the EVENT's contact_at - warn_at = %d ms is within [10; 30] min" % [int(jump_min), ev_span])
+		var rec_span: int = int(rec.contact_at) - int(rec.warn_at)
+		ok(rec_span >= WARN_MIN_MS and rec_span <= WARN_MAX_MS, "REQ-0010-108 [stall %d min]: the RECORD's contact_at - warn_at = %d ms is within [10; 30] min (the raid was planned at %d, warned at %d)" % [int(jump_min), rec_span, planned, int(w.get("warn_at", 0))])
+		ok(int(rec.warn_at) == int(w.get("warn_at", -1)), "REQ-0010-108/109/D9: ONE warn_at — the record (%d) and the raid_warning event (%d) agree" % [int(rec.warn_at), int(w.get("warn_at", -1))])
+		_dispose(s)
+
+
+# ---------------------------------------------------------------------------------------------
+# the interim tests of the first wave rewritten LEVEL BY LEVEL (OD-107 / REQ-0010-65 / D8): what the director's raid and the patrols do at levels 0..5
+# ---------------------------------------------------------------------------------------------
+func _t_raid_director_by_level() -> void:
+	for L in 6:
+		var s: Variant = _raid_pad(L)
+		var banner0: String = String(s.banner)
+		Director.apply(s, {"incident": "raid", "count": 3, "faction": RAID_FACTION})
+		var armed: bool = _rstate(s) == "planned"
+		ok(armed == (L >= 1), "OD-107/REQ-0010-65 [L%d]: a director raid is %s on a capsule of level %d (state %s)" % [L, "ARMED" if L >= 1 else "dropped", L, _rstate(s)])
+		ok(String(s.banner) == banner0 and not bool(s.raid.warned) and not bool(s.raid.active) and _raiders(s) == 0, "REQ-0010-62 [L%d]: the throw itself raises no banner and spawns nobody (the warning comes on the machine's tick)" % L)
+		if L >= 1:
+			_to_warning(s)
+			ok(_rstate(s) == "warning" and String(s.banner) != "" and bool(s.raid.warned), "REQ-0010-62/88 [L%d]: one tick later the player is warned (banner + mirror)" % L)
+		_dispose(s)
+
+
+# composition by level: nobody is raided below level 1; strength never falls with the level (OD-87); the count is capped by data; wealth never lowers it
+func _t_raid_composition_by_level() -> void:
+	var prev_power: float = 0.0
+	var powers: Array = []
+	for L in range(1, 6):
+		var s: Variant = _raid_pad(L)
+		var comp: Dictionary = MainCapsule.composition(s, 0.0)
+		var rich: Dictionary = MainCapsule.composition(s, 100000.0)
+		var rr: Dictionary = GameData.make_raider(0.0, 0.0, int(comp.day_equiv))
+		var power: float = float(comp.count) * float(rr.maxhp) * float(rr.dmg)
+		powers.append(power)
+		ok(int(comp.count) >= 1 and int(comp.day_equiv) >= 1, "REQ-0010-87 [L%d]: a raid has at least one raider (count %d, day_equiv %d)" % [L, int(comp.count), int(comp.day_equiv)])
+		ok(power > prev_power, "REQ-0010-87 [L%d]: the raid is STRONGER than the one at level %d (%.0f > %.0f)" % [L, L - 1, power, prev_power])
+		ok(int(rich.count) >= int(comp.count) and int(rich.count) <= int(_raw_table().raid.count_max), "REQ-0010-87 [L%d]: base wealth never lowers the count and the count stays within count_max (%d -> %d)" % [L, int(comp.count), int(rich.count)])
+		prev_power = power
+		_dispose(s)
+	var z: Variant = _raid_pad(0)
+	var c0: Dictionary = MainCapsule.composition(z, 50.0)
+	ok(int(c0.count) == 0, "REQ-0010-65: a level-0 capsule has no raid composition (count %d)" % int(c0.count))
+	_dispose(z)
+
+
+func _patrol_probe_lv(level: int) -> Dictionary:
+	var s: Variant = _raid_pad(level)
+	s.patrol.timer = 0.0
+	s.patrol.next = 0.0
+	var bots: int = 0
+	for t in 600:
+		s.update(Scenarios.DT)
+		_topup(s)
+		for e in s.enemies:
+			if String((e as Dictionary).get("kind", "raider")) == "bot":
+				bots += 1
+	var out: Dictionary = {"bots": bots, "wave": int(s.patrol.wave), "state": _rstate(s)}
+	_dispose(s)
+	return out
+
+
+# INTERIM (until W3b/the owner's patrol decision, D8): at ON no patrol enters the region at ANY level; the patrol must not be the thing that breaks the core either
+func _t_raid_patrols_by_level() -> void:
+	for L in [0, 1, 3, 5]:
+		var r: Dictionary = _patrol_probe_lv(int(L))
+		ok(int(r.bots) == 0 and int(r.wave) == 0, "INTERIM D8/OD-107 [L%d]: with the patrol roll due on the first tick, 600 ticks bring NO robot (bot-ticks %d, wave %d)" % [int(L), int(r.bots), int(r.wave)])
+		ok(String(r.state) == "none", "REQ-0010-21 [L%d]: ... and a patrol never starts a raid on the capsule (state %s)" % [int(L), String(r.state)])
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-21 / 62 / D8 — a FULL physical siege: nobody pushes the core by hand. A raid at level 1 on a real map with the hero far away must END
+# (the raiders walk to the capsule, hit it through the damage seam, the core goes to 0, the consequence lands) — not a siege without end
+# ---------------------------------------------------------------------------------------------
+func _siege_world() -> Variant:
+	var s: Variant = Sim.new()
+	s.use_inventory = true
+	s.use_catalog = true
+	s.use_main_capsule = true
+	s.set_clock(RAID_T0)
+	s.new_game(_gen(Scenarios.LAT, Scenarios.LON), false)
+	_mute(s)
+	s.patrol.next = 1.0e9
+	s.time.day = 195
+	s.time.frac = 0.5
+	s.weather = &"clear"
+	_wipe(s)
+	_fund_cost(s, _cost_of(_raw_rows(), 1), 0.4)
+	s.upgrade_capsule()
+	_wipe(s)
+	s.set_clock(RAID_T0 + GRACE_MS + 1)
+	return s
+
+
+func _t_raid_physical_siege_ends() -> void:
+	var s: Variant = _siege_world()
+	var cap: Vector2i = _cap_tile(s)
+	var away: Vector2i = _far_cell(s, cap, 20)
+	ok(away != NO_CELL and int(s.main_capsule.level) == 1, "REQ-0010-21 setup: level 1, a far cell for the hero %s" % str(away))
+	_arm_raid(s)
+	_to_warning(s)
+	_to_contact(s)
+	var announced: int = _raiders(s)
+	var ticks: int = 0
+	var hp_min: float = float(s.capsule_raid.core_hp)
+	while ticks < 6000 and _rstate(s) == "contact":
+		s.update(Scenarios.DT)
+		_topup(s)
+		if s.dead:
+			s.respawn_new_pawn()
+		s.player.px = float(away.x) + 0.5
+		s.player.py = float(away.y) + 0.5
+		hp_min = minf(hp_min, float(s.capsule_raid.core_hp))
+		ticks += 1
+	ok(announced >= 1, "REQ-0010-62 setup: %d raiders came" % announced)
+	ok(_rstate(s) != "contact", "REQ-0010-21/D8: after %d ticks (%.0f s of sim) the physical raid is OVER — it is not a siege without end (state %s, %d raiders still alive, core hp min %.1f)" % [ticks, float(ticks) * Scenarios.DT, _rstate(s), _raiders(s), hp_min])
+	ok(int(s.main_capsule.level) == 0 and int(s.main_capsule.free_transport_token) == 1 and int(s.main_capsule.immune_until) > RAID_T0, "REQ-0010-21/22/24/25: the raiders broke the core by blows alone -> level 1 -> 0, one token, an immunity window (level %d, token %d)" % [int(s.main_capsule.level), int(s.main_capsule.free_transport_token)])
+	ok(_raiders(s) == 0 and not bool(s.raid.active) and String(s.banner) == "", "REQ-0010-21: the raiders left and the alarm cleared")
+	ok(_cap_problem(s, cap) == "", "REQ-0010-75: the capsule object stands after the siege")
+	_dispose(s)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-75 (fuzz with raids): random commands, raids, clock jumps, hits, deaths, save/restore — the invariants hold at EVERY step
+# ---------------------------------------------------------------------------------------------
+func _fuzz_step_problem(s: Variant, tile: Vector2i, qmax: int) -> String:
+	var p: String = _cap_problem(s, tile)
+	if p != "":
+		return p
+	var c: Dictionary = s.main_capsule
+	if int(c.get("protection", 0)) < 0 or int(c.get("protection", 0)) > 5:
+		return "protection %s outside 0..5" % str(c.get("protection"))
+	if int(c.get("free_transport_token", 0)) < 0 or int(c.get("free_transport_token", 0)) > 1 or int(c.get("reinforcement_used", 0)) < 0 or int(c.get("reinforcement_used", 0)) > 1:
+		return "token %s / reinforcement_used %s outside 0..1" % [str(c.get("free_transport_token")), str(c.get("reinforcement_used"))]
+	if int(c.get("immune_until", 0)) < 0:
+		return "immune_until negative"
+	for lk in (c.protection_invested as Dictionary):
+		for res in ((c.protection_invested as Dictionary)[lk] as Dictionary):
+			if int(((c.protection_invested as Dictionary)[lk] as Dictionary)[res]) < 0:
+				return "negative protection ledger"
+	var st: String = _rstate(s)
+	if not MainCapsule.RAID_STATES.has(st):
+		return "unknown raid state %s" % st
+	if (s.capsule_raid.queue as Array).size() > qmax:
+		return "queue %d > queue_max %d" % [(s.capsule_raid.queue as Array).size(), qmax]
+	if bool(s.raid.active) != (st == "contact"):
+		return "raid.active=%s but state %s" % [str(s.raid.active), st]
+	if _raiders(s) > 0 and st != "contact":
+		return "%d raiders on the map in state %s" % [_raiders(s), st]
+	if st != "contact" and float(s.capsule_raid.core_hp) != 0.0:
+		return "core_hp %s outside contact" % str(s.capsule_raid.core_hp)
+	return ""
+
+
+func _raid_fuzz(seed_v: int, steps: int) -> Dictionary:
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = seed_v
+	var s: Variant = _raid_real(0, float(seed_v % 7) * 0.13)
+	var rows: Array = _raw_rows()
+	var prow: Array = _protection_rows()
+	var qmax: int = int(_raw_table().raid.queue_max)
+	var tile: Vector2i = _cap_tile(s)
+	var bad: Array = []
+	var cnt: Dictionary = {"upgrade": 0, "protection": 0, "arm": 0, "contact": 0, "breach": 0, "defended": 0, "restore": 0, "death": 0, "hit": 0, "noop": 0}
+	var tok_prev: int = 0
+	var imm_prev: int = 0
+	for i in steps:
+		if s.dead:
+			s.respawn_new_pawn()
+		var act: int = rng.randi() % 15
+		var st0: String = _rstate(s)
+		if st0 == "warning" and rng.randi() % 3 == 0:
+			act = 4
+		var lvl0: int = int(s.main_capsule.level)
+		var prot0: int = int(s.main_capsule.protection)
+		var inv0: Dictionary = (s.main_capsule.invested as Dictionary).duplicate(true)
+		var pinv0: String = var_to_str(s.main_capsule.protection_invested)
+		var now0: int = int(s.now_ms)
+		var kind: String = "other"
+		var paid: Dictionary = {}
+		match act:
+			0, 1:
+				if lvl0 < 5:
+					_fund_cost(s, _cost_of(rows, lvl0 + 1), 0.5)
+					var r: Dictionary = s.upgrade_capsule()
+					if bool(r.get("ok", false)):
+						kind = "upgrade"
+						paid = r.paid
+						cnt.upgrade += 1
+					else:
+						bad.append("step %d: a funded upgrade was refused %s" % [i, str(r)])
+			2:
+				if prot0 < 5:
+					_fund_cost(s, _cost_of(prow, prot0 + 1), 0.5)
+					var rp: Dictionary = MainCapsule.upgrade_protection(s)
+					if bool(rp.get("ok", false)):
+						kind = "protection"
+						paid = rp.paid
+						cnt.protection += 1
+					else:
+						bad.append("step %d: a funded protection upgrade was refused %s" % [i, str(rp)])
+			3:
+				_arm_raid(s)
+				cnt.arm += 1
+			4:
+				if st0 == "warning":
+					s.set_clock(int(s.capsule_raid.contact_at))
+				else:
+					s.set_clock(now0 + rng.randi() % 7200000)
+			5:
+				s.set_clock(now0 + DAY_MS + 1 + rng.randi() % 5000)
+			6:
+				_hit(s, float(1 + rng.randi() % 2500))
+				cnt.hit += 1
+			7:
+				var keep: Array = []
+				for e in s.enemies:
+					if String((e as Dictionary).get("kind", "raider")) == "bot":
+						keep.append(e)
+				s.enemies = keep
+			8:
+				var cx: int = tile.x
+				var cy: int = tile.y
+				s.demolish(cx, cy)
+				s.try_build("wall", cx, cy)
+				s._damage_building(_cap_b(s), 1.0e9, true)
+			9:
+				_kill(s)
+				kind = "tick"
+				cnt.death += 1
+			10:
+				if rng.randi() % 4 == 0:
+					var y: Variant = Sim.new()
+					y.set_clock(int(s.now_ms))
+					var hs: String = Persistence.world_hash(s)
+					var pl: Dictionary = Persistence.resume_payload(s)
+					if Persistence.restore(y, pl if st0 == "contact" else _json_rt(pl)):   # raiders' float coordinates drift 1 ULP in decimal JSON (known wire hazard, not a capsule field): in contact the payload goes as is
+						_mute(y)
+						if Persistence.world_hash(y) != hs:
+							bad.append("step %d: restore changed world_hash in state %s" % [i, st0])
+						_dispose(s)
+						s = y
+						cnt.restore += 1
+					else:
+						bad.append("step %d: own payload refused (%s)" % [i, String(y.load_error)])
+						_dispose(y)
+			_:
+				var n_t: int = 1 + rng.randi() % 4
+				for t in n_t:
+					s.update(Scenarios.DT)
+					_topup(s)
+				kind = "tick"
+		# --- accounting by kind ---
+		var c: Dictionary = s.main_capsule
+		var lvl1: int = int(c.level)
+		var inv1: Dictionary = c.invested
+		if kind == "upgrade":
+			var d_ok: bool = lvl1 == lvl0 + 1 and var_to_str(c.protection_invested) == pinv0
+			var paid_sum: int = 0
+			for res in paid:
+				paid_sum += int(paid[res])
+			d_ok = d_ok and _inv_sum(inv1) - _inv_sum(inv0) == paid_sum
+			for k in inv0:
+				if str(k) != str(lvl1) and var_to_str(inv0[k]) != var_to_str(inv1.get(k, {})):
+					d_ok = false
+			if not d_ok:
+				bad.append("step %d: upgrade accounting off (level %d -> %d, paid %d, ledger delta %d)" % [i, lvl0, lvl1, paid_sum, _inv_sum(inv1) - _inv_sum(inv0)])
+		elif kind == "protection":
+			if not (int(c.protection) == prot0 + 1 and lvl1 == lvl0 and var_to_str(inv1) == var_to_str(inv0)):
+				bad.append("step %d: protection upgrade touched the capsule axis or did not step" % i)
+		else:
+			if lvl1 > lvl0:
+				bad.append("step %d: level ROSE %d -> %d without an upgrade (act %d)" % [i, lvl0, lvl1, act])
+			elif lvl1 < lvl0:
+				cnt.breach += 1
+				if kind != "tick" or lvl1 != lvl0 - 1:
+					bad.append("step %d: level fell %d -> %d in an action of kind %s (act %d)" % [i, lvl0, lvl1, kind, act])
+				var before: Dictionary = inv0.get(str(lvl0), {})
+				for res in before:
+					var x: int = int(before[res])
+					var kept: int = int((inv1.get(str(lvl0), {}) as Dictionary).get(res, -999))
+					if kept < 0 or absi(2 * (x - kept) - x) > 1:
+						bad.append("step %d: invested[%d][%s] %d -> %d is not a 50%% cut" % [i, lvl0, res, x, kept])
+				for k in inv0:
+					if str(k) != str(lvl0) and var_to_str(inv0[k]) != var_to_str(inv1.get(k, {})):
+						bad.append("step %d: ledger %s changed by a raid on level %d" % [i, str(k), lvl0])
+				if int(c.immune_until) != now0 + DAY_MS:
+					bad.append("step %d: immune_until %d != now %d + 24 h" % [i, int(c.immune_until), now0])
+				if int(c.protection) != prot0 or var_to_str(c.protection_invested) != pinv0:
+					bad.append("step %d: a raid changed protection" % i)
+				if lvl1 == 0 and int(c.free_transport_token) != 1:
+					bad.append("step %d: 1 -> 0 without a token" % i)
+			else:
+				if var_to_str(inv1) != var_to_str(inv0) or int(c.protection) != prot0 or var_to_str(c.protection_invested) != pinv0:
+					bad.append("step %d: a non-upgrade, non-breach step changed a ledger / protection (act %d)" % [i, act])
+		if st0 == "contact" and _rstate(s) == "none" and lvl1 == lvl0:
+			cnt.defended += 1
+		if int(s.now_ms) < now0 or int(c.free_transport_token) < tok_prev or int(c.immune_until) < imm_prev:
+			bad.append("step %d: time / token / immunity went BACKWARDS" % i)
+		tok_prev = int(c.free_transport_token)
+		imm_prev = int(c.immune_until)
+		var prob: String = _fuzz_step_problem(s, tile, qmax)
+		if prob != "":
+			bad.append("step %d (act %d, %s): %s" % [i, act, st0, prob])
+		if bad.size() >= 4:
+			break
+	cnt["final_level"] = int(s.main_capsule.level)
+	var out: Dictionary = {"bad": bad, "cnt": cnt}
+	_dispose(s)
+	return out
+
+
+func _t_raid_fuzz() -> void:
+	for sd in [20261107, 77701]:
+		var r: Dictionary = _raid_fuzz(int(sd), 900)
+		ok((r.bad as Array).is_empty(), "REQ-0010-75 fuzz seed %d: 900 random steps (upgrades, protection, raids, clock jumps, hits, demolish, deaths, restores): every invariant holds %s" % [int(sd), str((r.bad as Array).slice(0, 3))])
+		var c: Dictionary = r.cnt
+		ok(int(c.upgrade) >= 5 and int(c.arm) >= 10 and int(c.breach) >= 1 and int(c.restore) >= 1 and int(c.death) >= 1, "REQ-0010-75 fuzz seed %d: the run really exercised raids (%s)" % [int(sd), str(c)])
+		var twin: Dictionary = _raid_fuzz(int(sd), 900)
+		ok(str(twin.cnt) == str(c), "REQ-0010-75/82 fuzz seed %d: the same seed replays to the same counters (determinism: %s)" % [int(sd), str(twin.cnt)])
