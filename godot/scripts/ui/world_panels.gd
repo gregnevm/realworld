@@ -187,11 +187,11 @@ class CapsulePanel extends PanelBase.Base:
 		_m_levels = _m_label(vb, Tokens.INK)
 		_m_immune = _m_label(vb, Tokens.TEAL)
 		_m_raid = _m_label(vb, Tokens.WARN)
+		_m_up_why = _m_label(vb, Tokens.WARN)   # причина відмови — НАД кнопкою: нижче її перекриває молоток телефону (T-Ніколая: «чому неактивна?»)
 		_m_up = _m_button(vb, 44)
 		_m_up.theme_type_variation = UITheme.V_PRIMARY   # єдина залита кнопка панелі
 		_m_up.pressed.connect(func() -> void: emit_intent(&"capsule_upgrade", {}))
 		_m_up_cost = _m_label(vb, Tokens.MUT)
-		_m_up_why = _m_label(vb, Tokens.WARN)
 		_m_more = _m_button(vb, 36)
 		_m_more.flat = true
 		_m_more.alignment = HORIZONTAL_ALIGNMENT_LEFT   # the phone's action circle sits over the dock's bottom-right: keep the label clear of it
@@ -256,15 +256,16 @@ class CapsulePanel extends PanelBase.Base:
 		_m_levels.visible = true
 		_m_legend.visible = true
 		_m_prot_what.visible = true
-		_m_levels.text = "◎ Рівень %d/%d · ▣ Захист %d/%d" % [int(main.level), int(main.max), int(main.protection), int(main.max_protection)]
+		_m_levels.text = "◎ Рівень %d/%d (бафи%s) · ▣ Захист %d/%d (ядро%s)" % [int(main.level), int(main.max), CapsuleTexts.t("level_max") if int(main.level) >= int(main.max) else "",
+			int(main.protection), int(main.max_protection), CapsuleTexts.t("level_max") if int(main.protection) >= int(main.max_protection) else ""]
 		var left: int = int(main.get("immune_left_ms", 0))
 		_m_immune.visible = left > 0
-		_m_immune.text = CapsuleTexts.t("immune_panel") % Fmt.left_ms(left)
+		_m_immune.text = CapsuleTexts.t("immune_panel") % Fmt.left_ms(left)   # «пауза, а не бонус» — на знаку щита й в інспекторі; тут кожен рядок витісняє причину відмови під молоток
 		var rs: StringName = StringName(main.get("raid_state", &"none"))
 		_m_raid.visible = rs == &"warning" or rs == &"contact"
-		_m_raid.text = "⚠ Рейд на підході — підготуй оборону" if rs == &"warning" else "⚔ Рейд: бій за ядро капсули"
+		_m_raid.text = "⚠ Рейд на підході — підготуй турелі й стіни біля ядра" if rs == &"warning" else "⚔ Рейд: бій за ядро капсули"
 		_axis_rows(acts.has(&"upgrade"), main.get("upgrade", {}), _m_up, _m_up_cost, _m_up_why, "⬆ Прокачати до %d")
-		_axis_rows(acts.has(&"protection"), main.get("protect", {}), _m_prot, _m_prot_cost, _m_prot_why, "▣ Захист до %d")
+		_axis_rows(acts.has(&"protection"), main.get("protect", {}), _m_prot, _m_prot_cost, _m_prot_why, "▣ Прокачати захист до %d")
 		_m_more.visible = true
 		_m_more_box.visible = _m_more_open
 		_m_more.text = ("▾ " if _m_more_open else "▸ ") + CapsuleTexts.t("more_label")
@@ -290,7 +291,7 @@ class CapsulePanel extends PanelBase.Base:
 		btn.text = fmt % int(ax.get("next", 0))
 		btn.modulate = Tokens.WHITE if can else Tokens.DIMMED
 		cost.visible = can   # one line at a time (phone height): the price while affordable, the first missing resource when not
-		cost.text = "Ціна: " + String(ax.get("cost", ""))
+		cost.text = "Ціна: " + String(ax.get("cost", "")) + " · " + CapsuleTexts.t("price_grows")
 		why.text = String(ax.get("why", ""))
 	func _set_legacy(on: bool) -> void:
 		_status.visible = on

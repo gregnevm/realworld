@@ -172,7 +172,9 @@ static func _capsule_main(sim, ctx: Dictionary) -> Dictionary:
 		"immune_left_ms": MainCapsule.immune_left_ms(sim),
 		"raid_state": raid_state,
 		"ring": {"show": selected or alert, "alert": alert, "x": at.x, "y": at.y, "radius": MainCapsule.zone_radius(sim),
-			"dir": int((sim.get("capsule_raid") as Dictionary).get("dir", 0)), "raiders": _capsule_raiders(sim, raid_state)},
+			"dir": int((sim.get("capsule_raid") as Dictionary).get("dir", 0)), "raiders": _capsule_raiders(sim, raid_state),
+			"core_hp": float((sim.get("capsule_raid") as Dictionary).get("core_hp", 0.0)) if raid_state == MainCapsule.ST_CONTACT else -1.0,
+			"core_max": MainCapsule.core_hp_max(sim), "buff_pct": _capsule_buff_pct(sim)},
 		"storage": stock_rows,
 	}
 
@@ -751,6 +753,16 @@ static func _inspect_node(sim, node: Dictionary, t: Vector2i) -> Dictionary:
 	return {"shown": true, "state": &"good", "title": Fmt.node_title(kind), "lines": lines,
 		"hint": "ЛКМ — %s · повну торбу пішак сам віднесе на склад" % Fmt.node_verb(kind)}
 
+# Поточний сумарний баф рівня (найменша з осей, %), 0 = рівня нема: підпис зони каже, ЩО саме в ній діє (число з даних, не вигадане).
+static func _capsule_buff_pct(sim) -> int:
+	var lvl: int = int(sim.main_capsule.get("level", 0))
+	if lvl <= 0:
+		return 0
+	var lo: float = 1.0e9
+	for key in MainCapsule.BUFF_KEYS:
+		lo = minf(lo, MainCapsule.buff_bonus(sim, String(key), lvl))
+	return int(round(lo * 100.0)) if lo < 1.0e8 else 0
+
 # Що дає рівень: відсоток приросту ЗА РІВЕНЬ береться з даних (бафи рівня 1 по чотирьох осях); різні осі -> «від +N%» за найменшим.
 static func _capsule_gives_level(sim) -> String:
 	var lo: float = 1.0e9
@@ -772,7 +784,7 @@ static func _inspect_capsule(sim) -> Dictionary:
 		lines.append(gives)
 	lines.append(CapsuleTexts.t("gives_protect"))
 	if MainCapsule.is_immune(sim):
-		lines.append(CapsuleTexts.t("immune_inspect") % Fmt.left_ms(MainCapsule.immune_left_ms(sim)))
+		lines.append(CapsuleTexts.t("immune_inspect") % Fmt.left_ms(MainCapsule.immune_left_ms(sim)) + " · " + CapsuleTexts.t("immune_why"))
 	return {"shown": true, "state": &"info", "title": String(sim.building_def(MainCapsule.KIND).get("name", "")), "lines": lines,
 		"hint": "ЛКМ — панель капсули"}
 

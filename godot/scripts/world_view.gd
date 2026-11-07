@@ -302,9 +302,6 @@ func _draw() -> void:
 		_draw_node(sim.map.nodes[key], nx, ny)
 	for b in sim.buildings:
 		_draw_building(b)
-	for b in sim.buildings:   # hull marks go LAST: a neighbour's sprite reaches over the capsule's top edge and would hide the lamps
-		if String(b.kind) == MainCapsule.KIND:
-			_draw_capsule_marks(Vector2(b.x * TILE, b.y * TILE), Vector2(b.x * TILE, b.y * TILE) + Vector2(TILE, TILE) * 0.5)
 	# order feedback: a marching dotted path to the target + a pulsing ring on it (RTS/colony-sim grammar —
 	# the player always sees WHERE the pawn is going and that the click registered)
 	if sim.player.action != null and sim.player.action.has("cell") and int(sim.player.action.cell) >= 0:
@@ -360,6 +357,9 @@ func _draw() -> void:
 		_draw_edge_threats(vrect, cam.zoom.x)
 		_draw_edge_bags(vrect, cam.zoom.x)
 	_draw_player()
+	for b in sim.buildings:   # hull plaque goes AFTER the pawn (T-Ніколая: герой біля капсули закривав підпис і ряди знаків)
+		if String(b.kind) == MainCapsule.KIND:
+			_draw_capsule_marks(Vector2(b.x * TILE, b.y * TILE), Vector2(b.x * TILE, b.y * TILE) + Vector2(TILE, TILE) * 0.5)
 	_draw_fx()
 
 # Shoreline: where land meets water, a thin pale foam line on the LAND edge and a dark wet rim on the
@@ -483,7 +483,7 @@ func _draw_capsule_marks(p: Vector2, c: Vector2) -> void:
 	var steel := Color(0.53, 0.82, 0.84, 1.0)
 	var empty := Color(0.78, 0.83, 0.86, 0.5)
 	var fs := 10
-	var step := 7.0
+	var step := 10.0
 	var t_level: String = CapsuleTexts.t("mark_level") % [lvl, lamp_n]
 	var t_prot: String = CapsuleTexts.t("mark_protect") % [prot, plate_n]
 	var title: String = CapsuleTexts.t("capsule_title")
@@ -507,22 +507,28 @@ func _draw_capsule_marks(p: Vector2, c: Vector2) -> void:
 	for i in lamp_n:
 		var at := Vector2(box.end.x - 5.0 - step * float(lamp_n - i) + step * 0.5, y - 3.5)
 		if i < lvl:
-			draw_circle(at, 2.6, amber)
+			draw_circle(at, 3.6, amber)
 		else:
-			draw_arc(at, 2.2, 0.0, TAU, 12, empty, 1.0)
+			draw_arc(at, 3.2, 0.0, TAU, 12, empty, 1.5)
 	y += 13.0
 	draw_string(_font, Vector2(box.position.x + 5.0, y), t_prot, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, steel)
 	for i in plate_n:
-		var r := Rect2(box.end.x - 5.0 - step * float(plate_n - i) + step * 0.5 - 2.2, y - 5.7, 4.4, 4.4)
+		var r := Rect2(box.end.x - 5.0 - step * float(plate_n - i) + step * 0.5 - 3.2, y - 6.7, 6.4, 6.4)
 		if i < prot:
 			draw_rect(r, steel)
 		else:
-			draw_rect(r, empty, false, 1.0)
+			draw_rect(r, empty, false, 1.5)
 	if imm:
 		y += 13.0
 		draw_string(_font, Vector2(box.position.x + 5.0, y), t_imm, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, steel)
 		draw_circle(c, TILE * 0.80, Color(steel.r, steel.g, steel.b, 0.12))
 		draw_arc(c, TILE * 0.80, 0.0, TAU, 32, Color(steel.r, steel.g, steel.b, 0.85), 2.0)
+		var ring_txt: String = CapsuleTexts.t("immune_ring")   # кільце без слів читалось як радіус; підкладка — напис на тлі будівель нечитний (T-Ніколая)
+		var rw: float = _font.get_string_size(ring_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x + 10.0
+		var rr := Rect2(c.x - rw * 0.5, c.y - TILE * 0.95 - 13.0, rw, 17.0)
+		draw_rect(rr, Color(0.04, 0.05, 0.06, 0.92))
+		draw_rect(rr, Color(steel.r, steel.g, steel.b, 0.85), false, 1.0)
+		_mark_text(c + Vector2(0.0, -TILE * 0.95), ring_txt, Color(0.80, 0.97, 0.98))
 
 func _mark_text(at: Vector2, text: String, col: Color) -> void:
 	var fs := 11
