@@ -52,6 +52,9 @@ var load_error: StringName = &""    # непорожнє => load_region відх
 var now_ms: int = 0                 # ВХІД часу (UTC-мс), лише через set_clock; НЕ в сейві й НЕ в world_hash (REQ-0010-92)
 var capsule_table: Dictionary = {}  # override таблиці capsule_levels (тести/пак контенту); {} = каталог (MainCapsule.table)
 var capsule_cmds_tick: Dictionary = {}   # дедуп cmd_id upgrade_capsule в межах тіка: очищається на початку update(); не хеш
+var capsule_raid: Dictionary = {}   # runtime-автомат рейду на капсулу (лише ON; MainCapsule.idle_raid): стан, таймери UTC-мс, core_hp — у runtime-хеші
+var capsule_rng: RandomNumberGenerator = RandomNumberGenerator.new()   # окремий рейд-потік (region_seed ^ STREAM_SALT; курсор — main_capsule.raid_rng_cursor)
+var capsule_events: Array = []      # view-пам'ять подій рейду (warning/contact/breach/defended/dropped…); не хеш
 var convoys: Array = []
 var regions: Array = []
 var convoy_seq := 0
@@ -456,6 +459,12 @@ func _flash(text: String) -> void:
 # cheap per-tile getters below stay here as the sim's public read API. Delegates preserve the seam.
 func _env_init() -> void:
 	SimEnv.env_init(self)
+	if use_main_capsule and not main_capsule.is_empty():
+		MainCapsule.init_raid(self)   # ON: рейд-потік + порожній автомат (після from_record: курсор уже в записі)
+
+# Єдина точка появи рейдера від краю карти (Threats.edge_cell): капсула не може preload-ити Threats (цикл), тож іде крізь sim; rng — рейд-потік капсули.
+func _edge_cell(edge: int, rng: RandomNumberGenerator) -> Vector2i:
+	return Threats.edge_cell(self, edge, rng)
 
 func _update_environment(dday: float) -> void:
 	SimEnv.update_environment(self, dday)
@@ -735,8 +744,6 @@ func melee_damage() -> float:
 	var wpn: String = player.equipped.get("weapon", "")
 	if wpn != "" and GameData.ITEMS.has(wpn):
 		dmg += float(GameData.ITEMS[wpn].get("dmg_bonus", 0.0))
-	if use_main_capsule:   # spec 0010: баф зони капсули на героя
-		dmg *= MainCapsule.hero_buff(self, "melee_mult")
 	return dmg * HeroHealth.melee_mult(self)   # a mangled arm swings weaker; 1.0 at full health
 
 func has_workbench() -> bool:
@@ -934,6 +941,8 @@ func update(dt: float) -> void:
 	_update_patrols(dt)
 	_update_enemies(dt)
 	_update_turrets(dt)
+	if use_main_capsule:
+		MainCapsule.update(self, dt)   # автомат рейду на капсулу: ПІСЛЯ команд і турелей цього тіка (REQ-0010-84)
 	_update_convoys(dt)
 	for i in range(shots.size() - 1, -1, -1):
 		shots[i].t -= dt
@@ -946,7 +955,10 @@ func _update_player(dt: float) -> void:
 	p.eat_cd = max(0.0, p.eat_cd - dt)
 	p.dep_cd = max(0.0, p.dep_cd - dt)
 	p.hunger = clampf(p.hunger - 0.42 * dt, 0, 100)
+	var rest0: float = p.rest   # spec 0010 (REQ-0010-107): множник відновлення сну застосовується до приросту OFF-рядка нижче
 	p.rest = clampf(p.rest - (-14.0 if p.sleeping else 0.30) * dt, 0, 100)
+	if use_main_capsule and p.sleeping:   # сон у зоні капсули відновлює швидше (need_recovery_mult); наростання втоми (0.30) і межі не чіпаємо
+		p.rest = clampf(rest0 + (p.rest - rest0) * _capsule_recovery(), 0, 100)
 	# located health (sim/hero_health.gd): empty needs and the real climate grow condition hediffs,
 	# wounds heal/bleed, the death verdict falls, and p.hp becomes the derived readout of it all.
 	HeroHealth.update(self, dt)
@@ -1171,6 +1183,10 @@ func upgrade_capsule(cmd_id: int = -1) -> Dictionary:
 
 func capsule_level() -> int:
 	return int(main_capsule.get("level", 0))
+
+# Множник ВІДНОВЛЕННЯ потреб героя в зоні капсули (REQ-0010-107; 1.0 — нейтральний): читають sim._update_player (сон) і HeroHealth.update (комфорт).
+func _capsule_recovery() -> float:
+	return MainCapsule.recovery_mult(self)
 
 # Годинник пристрою -> sim: єдиний вхід абсолютного часу (власник Clock — spec 0012). Монотонний: відкат не скорочує таймери.
 func set_clock(ms: int) -> void:

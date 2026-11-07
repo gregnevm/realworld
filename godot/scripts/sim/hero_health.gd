@@ -60,7 +60,10 @@ static func update(s, dt: float) -> void:
 	# 1) empty needs become located conditions (starvation kills; sleeplessness collapses)
 	Needs.update_deprivation(tracker, float(p.hunger) / 100.0, float(p.rest) / 100.0, dday)
 	# 2) the region's real climate bites: felt °C = tile temp (indoor buffering + emitters) + gear
-	Gear.update_comfort(tracker, s.hero_temp_c(), s.hero_insulation_c(), dday, EXPOSURE_PACE)
+	if s.get("use_main_capsule") == true:   # spec 0010 (REQ-0010-107): у зоні капсули відігрів/комфорт швидший (лише ВІДНОВЛЕННЯ; наростання — EXPOSURE_PACE — не чіпаємо)
+		Gear.update_comfort(tracker, s.hero_temp_c(), s.hero_insulation_c(), dday, EXPOSURE_PACE, s._capsule_recovery())
+	else:
+		Gear.update_comfort(tracker, s.hero_temp_c(), s.hero_insulation_c(), dday, EXPOSURE_PACE)
 	# 3) injuries heal/bleed/fester, blood moves, downed recomputes
 	tracker.tick({"dday": dday})
 	Gear.resolve_to_scar(tracker)

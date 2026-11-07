@@ -19,7 +19,7 @@ const MainCapsule = preload("res://scripts/sim/capsule.gd")
 # ---------------- raids ----------------
 static func update_raids(s, dt: float) -> void:
 	if MainCapsule.holds_npc_threats(s):
-		return   # ON (spec 0010 OD-107/D8): легасі-цикл рейду не армується — вічна облога неруйнівної капсули (до W3)
+		return   # ON (spec 0010): рейд на капсулу веде автомат MainCapsule.update (W3a), легасі-цикл не армується
 	var r: Dictionary = s.raid
 	if r.active:
 		# рейд завершено, коли не лишилось РЕЙДЕРІВ: патрульний робот (kind "bot") живе в тому ж
@@ -80,22 +80,23 @@ static func spawn_wave(s) -> void:
 	s._log("⚔ Рейд #%d: %d рейдерів (%s) атакують базу!" % [r.wave, cnt, faction], "bad")
 
 # A random cell hugging the given map edge (shared by raids and robot patrols; threat_rng stream).
-static func edge_cell(s, edge: int) -> Vector2i:
+static func edge_cell(s, edge: int, rng: RandomNumberGenerator = null) -> Vector2i:
+	var r: RandomNumberGenerator = rng if rng != null else s.threat_rng   # капсульний рейд тягне зі СВОГО потоку (REQ-0010-34); решта — threat_rng як раніше
 	var x := 0
 	var y := 0
-	var o: int = 1 + s.threat_rng.randi() % 3
+	var o: int = 1 + r.randi() % 3
 	match edge:
 		0:
 			x = o
-			y = 2 + s.threat_rng.randi() % (s.n - 4)
+			y = 2 + r.randi() % (s.n - 4)
 		1:
 			x = s.n - 1 - o
-			y = 2 + s.threat_rng.randi() % (s.n - 4)
+			y = 2 + r.randi() % (s.n - 4)
 		2:
-			x = 2 + s.threat_rng.randi() % (s.n - 4)
+			x = 2 + r.randi() % (s.n - 4)
 			y = o
 		_:
-			x = 2 + s.threat_rng.randi() % (s.n - 4)
+			x = 2 + r.randi() % (s.n - 4)
 			y = s.n - 1 - o
 	return Vector2i(x, y)
 
@@ -231,7 +232,8 @@ static func update_turrets(s, dt: float) -> void:
 # destroyer: хто зніс будівлю — для чесного фіда ("рейдерами"/"роботом"); "" = самозношення пастки.
 static func damage_building(s, b, amt: float, steal: bool, destroyer: String = "рейдерами") -> void:
 	if bool(s.building_def(String(b.kind)).get("indestructible", false)):
-		return   # Основна капсула (spec 0010): без HP-до-видалення й без крадіжки складу; хук ядра рейду — хвиля W3
+		MainCapsule.on_hit(s, amt)   # Основна капсула (spec 0010): без HP-до-видалення й без крадіжки складу; удар знижує HP ядра (лише в контакті рейду)
+		return
 	b.hp -= amt
 	if steal and b.kind == "storage":
 		var keys := []

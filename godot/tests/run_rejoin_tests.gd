@@ -15,6 +15,8 @@ const WorldGen = preload("res://scripts/world_gen.gd")
 const Persistence = preload("res://scripts/persistence.gd")
 const Snapshot = preload("res://scripts/net/snapshot.gd")
 const Command = preload("res://scripts/net/command.gd")
+const MainCapsule = preload("res://scripts/sim/capsule.gd")
+const Director = preload("res://scripts/sim/director.gd")
 
 const LAT := 50.4501
 const LON := 30.5234
@@ -30,6 +32,7 @@ func _init() -> void:
 	_t_resume_survives_the_wire()
 	_t_chain_integrity()
 	_t_seq_resume()
+	_t_resume_on_raid_states()
 	finish()
 
 
@@ -195,3 +198,85 @@ func _t_seq_resume() -> void:
 	ok(bool(ib.accept(Command.make(1, resume_at, "cancel_action", {}), ctx).ok), "the resumed seq is accepted")
 	ok(ib.accept(Command.make(1, 1, "cancel_action", {}), ctx).reason == Command.R_STALE,
 		"a replayed pre-disconnect intent is refused as stale (no double-apply on reconnect)")
+
+
+# ---------------------------------------------------------------------------------------------
+# spec 0010 W3a (REQ-0010-62/82/34): a rejoining client resumes an ON world MID-RAID — in the warning and in contact — hash-exact, and STAYS in
+# lock-step through the contact, the raiders' spawn (the raid stream cursor resumed at the right place) and the breach. The capsule world needs
+# the injected clock on BOTH sides (now_ms is an input, not state), so the joiner is told the server's instant before the payload lands.
+# ---------------------------------------------------------------------------------------------
+const CAP_T0 := 1800000000000
+const CAP_GRACE := 259200001
+
+
+func _fresh_on() -> Variant:
+	var sim: Variant = Sim.new()
+	sim.use_inventory = true
+	sim.use_catalog = true
+	sim.use_main_capsule = true
+	sim.set_clock(CAP_T0)
+	sim.new_game(WorldGen.generate_map(LAT, LON, N))
+	sim.stock[sim.res_key("wood")] = 20000
+	sim.stock[sim.res_key("stone")] = 20000
+	var up: Dictionary = sim.upgrade_capsule()
+	ok(bool(up.get("ok", false)), "setup: the ON server's capsule is upgraded to level 1 (first_upgrade_at > 0, OD-107)")
+	sim.set_clock(CAP_T0 + CAP_GRACE)   # the 3-day grace (OD-66) is over: the gates are open
+	return sim
+
+
+func _on_joiner(server: Variant, wire: bool) -> Variant:
+	var j: Variant = Sim.new()
+	j.set_clock(int(server.now_ms))
+	var payload: Dictionary = Persistence.resume_payload(server)
+	var landed: bool = Persistence.restore(j, JSON.parse_string(Snapshot.to_wire(payload)) if wire else payload)
+	ok(landed, "setup: the ON resume payload restores (load_error=%s)" % str(j.load_error))
+	return j
+
+
+func _t_resume_on_raid_states() -> void:
+	for stage in ["warning", "contact"]:
+		var server: Variant = _fresh_on()
+		Director.apply(server, {"incident": "raid", "count": 3, "faction": "Тестові мародери"})
+		server.update(DT)   # planned -> warning
+		if stage == "contact":
+			server.set_clock(int(server.capsule_raid.contact_at))
+			server.update(DT)
+			for i in 6:
+				server.update(DT)
+				_topup(server)
+		ok(str(server.capsule_raid.state) == stage, "[%s] setup: the server raid machine is in `%s` (state %s)" % [stage, stage, str(server.capsule_raid.state)])
+		var joiner: Variant = _on_joiner(server, false)
+		ok(str(joiner.capsule_raid.state) == stage and int(joiner.capsule_raid.id) == int(server.capsule_raid.id) and joiner.enemies.size() == server.enemies.size(),
+			"[%s] the rejoined machine is in the same state, same raid id, %d raiders carried" % [stage, joiner.enemies.size()])
+		ok(Persistence.world_hash(joiner) == Persistence.world_hash(server), "[%s] resume ON mid-raid lands byte-identical to the server (REQ-0010-62/82)" % stage)
+		ok(str(joiner.main_capsule.raid_rng_cursor) == str(server.main_capsule.raid_rng_cursor), "[%s] the raid stream cursor resumed at the same place (%s)" % [stage, str(joiner.main_capsule.raid_rng_cursor)])
+		var diverged := -1
+		for t in 150:
+			if stage == "warning" and t == 3:
+				var at: int = int(server.capsule_raid.contact_at)
+				server.set_clock(at)
+				joiner.set_clock(at)   # the same device instant on both sides: the contact (and the raiders' spawn cells) must land identically
+			server.update(DT)
+			joiner.update(DT)
+			_topup(server)
+			_topup(joiner)
+			if Persistence.world_hash(server) != Persistence.world_hash(joiner):
+				diverged = t + 1
+				break
+		ok(diverged < 0 and str(server.capsule_raid.state) == "contact", "[%s] server and rejoined client stay identical for 150 ticks through the contact%s" % [stage, "" if diverged < 0 else " — DIVERGED at +%d" % diverged])
+		# the breach lands the same on both sides (stream cursor, consequence, immunity)
+		MainCapsule.on_hit(server, 1.0e9)
+		MainCapsule.on_hit(joiner, 1.0e9)
+		server.update(DT)
+		joiner.update(DT)
+		ok(Persistence.world_hash(server) == Persistence.world_hash(joiner) and int(server.main_capsule.level) == 0 and int(joiner.main_capsule.level) == 0 and int(joiner.main_capsule.free_transport_token) == 1,
+			"[%s] the breach lands identically: level 1 -> 0, one token, same immunity, same world_hash" % stage)
+	# the WIRE (a JSON text): the capsule half — the record with its int64 instants and the raid machine — must land EXACT. (The whole-world hash is NOT
+	# asserted here: decimal JSON drifts the odd hero float, e.g. a hypothermia severity by 1 ULP — the spec-0006 delta stream normalizes that; not a capsule field.)
+	var s2: Variant = _fresh_on()
+	Director.apply(s2, {"incident": "raid", "count": 3, "faction": "Тестові мародери"})
+	s2.update(DT)
+	var jw: Variant = _on_joiner(s2, true)
+	ok(Persistence.content_hash(Persistence.serialize_region(jw).main_capsule) == Persistence.content_hash(Persistence.serialize_region(s2).main_capsule)
+		and Persistence.content_hash(MainCapsule.serialize_raid(jw)) == Persistence.content_hash(MainCapsule.serialize_raid(s2)) and str(jw.capsule_raid.state) == "warning",
+		"a warning-state ON resume keeps the capsule record (int64 instants as strings, stream cursor) and the raid machine EXACT after a real wire round-trip")
