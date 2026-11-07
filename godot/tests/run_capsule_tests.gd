@@ -78,6 +78,7 @@ const Director = preload("res://scripts/sim/director.gd")
 const HeroHealth = preload("res://scripts/sim/hero_health.gd")
 const Gear = preload("res://scripts/kernel/gear.gd")
 const MainCapsule = preload("res://scripts/sim/capsule.gd")
+const OrbitStub = preload("res://scripts/sim/orbit_stub.gd")
 const KernelBalance = preload("res://scripts/kernel/balance.gd")
 const InputCtl = preload("res://scripts/ui/input_controller.gd")
 const InputVerbs = preload("res://scripts/ui/input_verbs.gd")
@@ -243,6 +244,22 @@ func _init() -> void:
 	_t_raid_patrols_by_level()
 	_t_raid_physical_siege_ends()
 	_t_raid_fuzz()
+	# --- wave 0010-W3b (director gates, cadence, warning, x1/x3 twin, catch-up/rollback, 0011 stubs, dev hook) ---
+	_t_w3b_gates_live()
+	_t_w3b_cadence_histogram()
+	_t_w3b_schedule_determinism()
+	_t_w3b_twin_hash_and_x3()
+	_t_w3b_clock_rollback()
+	_t_w3b_catch_up_quiet()
+	_t_w3b_mtb_does_not_raid_at_on()
+	_t_w3b_warning_live()
+	_t_w3b_respawn_keeps_grace()
+	_t_w3b_strength_inputs()
+	_t_w3b_defence_vs_attack()
+	_t_w3b_stubs()
+	_t_w3b_actions_by_state()
+	_t_w3b_force_hook()
+	_t_w3b_off_inert()
 	chk.skip_banner()
 	finish()
 
@@ -7839,3 +7856,857 @@ func _t_raid_fuzz() -> void:
 		ok(int(c.upgrade) >= 5 and int(c.arm) >= 10 and int(c.breach) >= 1 and int(c.restore) >= 1 and int(c.death) >= 1, "REQ-0010-75 fuzz seed %d: the run really exercised raids (%s)" % [int(sd), str(c)])
 		var twin: Dictionary = _raid_fuzz(int(sd), 900)
 		ok(str(twin.cnt) == str(c), "REQ-0010-75/82 fuzz seed %d: the same seed replays to the same counters (determinism: %s)" % [int(sd), str(twin.cnt)])
+
+
+# =============================================================================================================================================================
+# WAVE 0010-W3b (qa-adversary; written from the REQ table + owner decisions OD-65/66/86/88/107, NOT from director.gd/capsule.gd):
+# director gates (grace 3 days from the FIRST landing, the first upgrade, immunity), the warning >= 10 min before contact, the cadence ~1 per 3..4 real days
+# (seeded, not a schedule), the strength from the level and the wealth, ON-twin x1 / x3 on ONE injected clock, catch-up without raid events, clock rollback,
+# the 0011 stubs, the panel's actions by state, the dev hook of a forced raid. REQ-0010-18/19/20/27/28(stub)/29(stub)/68/70/71/86/93/94/108/109/110/111/112/114/115/120.
+# Everything below drives the REAL path (Sim.set_clock + Sim.update -> Director.update -> MainCapsule), the clock is INJECTED (nothing reads the wall clock).
+# NOT testable here (reported): REQ-0010-115 matrix use_main_capsule x use_realtime (the flag use_realtime does not exist in the sim yet — Q-2/spec 0012);
+# REQ-0010-18 numeric ratio defence:attack (the unit of an attack «price» is not in any decision — Q-6), only the ladder properties that do not need it.
+# =============================================================================================================================================================
+const W3B_HOUR_MS := 3600000
+
+
+# landed + really upgraded to `level` at RAID_T0, the 3-day grace NOT over (the clock stands at RAID_T0); the pad is a flat grass 16x16, `shift` changes the seed
+func _w3b_world(level: int, shift: float = 0.0, real: bool = false) -> Variant:
+	return _raid_world(level, shift, 0, false, real)
+
+
+# One injected-clock walk: every tick the clock moves `step_ms` (monotone), `per_step` sim updates run at `dt`; a raid that reached contact is resolved by the
+# TEST (no defenders exist): "defend" — the raiders vanish (core intact); "breach" — the core is smashed. Returns the raid_warning events like a push consumer
+# draining them (REQ-0010-109).
+func _w3b_run(s: Variant, end_ms: int, step_ms: int, per_step: int = 1, resolve: String = "defend", dt: float = Scenarios.DT) -> Array:
+	var warns: Array = []
+	while int(s.now_ms) < end_ms:
+		s.set_clock(mini(end_ms, int(s.now_ms) + step_ms))
+		for k in per_step:
+			s.update(dt)
+		_topup(s)
+		if _rstate(s) == "contact":
+			if resolve == "breach":
+				_hit(s, 1.0e9)
+			else:
+				s.enemies = []
+			s.update(dt)
+		for e in MainCapsule.drain_events(s):
+			if String((e as Dictionary).get("kind", "")) == "warning":
+				warns.append(e)
+	return warns
+
+
+func _w3b_sig(warns: Array) -> String:
+	var out: Array = []
+	for e in warns:
+		out.append([int((e as Dictionary).warn_at), int(e.contact_at), int(e.dir), int(e.raid_id), int((e.composition as Dictionary).count)])
+	return var_to_str(out)
+
+
+func _cap_sig(s: Variant) -> String:
+	return String(Persistence.content_hash(Persistence.serialize_region(s).main_capsule))
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-20 / 65 / 111 / 27: the gates on the live path (grace from the FIRST landing, first upgrade, immunity)
+# ---------------------------------------------------------------------------------------------
+func _t_w3b_gates_live() -> void:
+	# (a) a capsule that was never upgraded is never raided, however long the injected clock runs
+	var z: Variant = _w3b_world(0)
+	var wz: Array = _w3b_run(z, RAID_T0 + 100 * DAY_MS, 6 * W3B_HOUR_MS)
+	ok(wz.is_empty() and _rstate(z) == "none" and int(z.capsule_raid.seq) == 0 and _raiders(z) == 0,
+		"REQ-0010-111/OD-107: 100 days of clock, never upgraded -> no warning, no raid planned, no raiders (%d warnings)" % wz.size())
+	# the first upgrade at day 100: nothing may come BEFORE it, and a raid does come later (the gate opened)
+	_fund_cost(z, _cost_of(_raw_rows(), 1), 0.4)
+	var up_at: int = int(z.now_ms)
+	ok(bool(z.upgrade_capsule().get("ok", false)), "REQ-0010-111 setup: the first upgrade succeeds at day 100")
+	_wipe(z)
+	var w2: Array = _w3b_run(z, up_at + 14 * DAY_MS, W3B_HOUR_MS)
+	ok(not w2.is_empty() and int((w2[0] as Dictionary).warn_at) >= up_at, "REQ-0010-111: after the first upgrade a raid is planned, and never earlier than the upgrade instant (%d warnings)" % w2.size())
+	_dispose(z)
+	# (b) the grace: 3 days = 259 200 000 ms from the FIRST landing
+	for shift in [0.0, 0.31, 0.77]:
+		var g: Variant = _w3b_world(2, float(shift))
+		var wg: Array = _w3b_run(g, RAID_T0 + GRACE_MS + 9 * DAY_MS, W3B_HOUR_MS)
+		ok(not wg.is_empty() and int((wg[0] as Dictionary).warn_at) >= RAID_T0 + GRACE_MS, "REQ-0010-20 [seed %.2f]: the first raid is never earlier than 259 200 000 ms after the landing (first warn %d ms after)" % [float(shift), int((wg[0] as Dictionary).warn_at) - RAID_T0 if not wg.is_empty() else -1])
+		ok(not wg.is_empty() and int((wg[0] as Dictionary).warn_at) <= RAID_T0 + GRACE_MS + 4 * DAY_MS + W3B_HOUR_MS, "REQ-0010-110 [seed %.2f]: ... and it comes within one cadence window (<= 4 days + 1 tick) after the grace" % float(shift))
+		_dispose(g)
+	# (c) an old capsule upgraded long after the grace: the grace is over, the FIRST UPGRADE gates alone
+	var late: Variant = _w3b_world(0, 0.5)
+	_w3b_run(late, RAID_T0 + 10 * DAY_MS, 6 * W3B_HOUR_MS)
+	_fund_cost(late, _cost_of(_raw_rows(), 1), 0.4)
+	var late_at: int = int(late.now_ms)
+	late.upgrade_capsule()
+	_wipe(late)
+	var wl: Array = _w3b_run(late, late_at + 10 * DAY_MS, W3B_HOUR_MS)
+	ok(not wl.is_empty() and int((wl[0] as Dictionary).warn_at) >= late_at, "REQ-0010-111: grace over (day 10) + upgrade at day 10 -> a raid, not before the upgrade")
+	_dispose(late)
+	# (d) immunity: a breach opens 24 h; a raid that is DUE inside the window is not planned inside it
+	var im: Variant = _w3b_world(3, 0.2)
+	im.set_clock(RAID_T0 + GRACE_MS + 1)
+	im.main_capsule["next_raid_at"] = int(im.now_ms) + 60000
+	var w3: Array = _w3b_run(im, int(im.now_ms) + 6 * W3B_HOUR_MS, 600000, 1, "breach")
+	ok(w3.size() == 1 and int(im.main_capsule.immune_until) > int(im.now_ms), "REQ-0010-25 setup: one natural raid, it breached, the capsule is immune (%d warnings)" % w3.size())
+	var until: int = int(im.main_capsule.immune_until)
+	im.main_capsule["next_raid_at"] = int(im.now_ms) + W3B_HOUR_MS   # the cadence says «due» one hour from now — INSIDE the window
+	var w4: Array = _w3b_run(im, until + 2 * W3B_HOUR_MS, 600000)
+	var inside: int = 0
+	for e in w4:
+		if int((e as Dictionary).warn_at) < until:
+			inside += 1
+	ok(inside == 0, "REQ-0010-27: no raid is planned/warned while the immunity lasts (%d warnings inside the window, immune until %d)" % [inside, until])
+	_dispose(im)
+	# (e) the 2x2x2 table on the DIRECTOR's own tick: a due cadence mark is acted on only in the cell «grace over, upgraded, not immune»
+	for up in [false, true]:
+		for gr in [false, true]:
+			for imm in [false, true]:
+				var s: Variant = _gate_world(bool(up), bool(gr), bool(imm))
+				s.main_capsule["next_raid_at"] = int(s.now_ms) - 1000
+				var sig0: String = _cap_sig(s)
+				s.update(Scenarios.DT)
+				var armed: bool = _rstate(s) != "none"
+				var want: bool = bool(up) and bool(gr) and not bool(imm)
+				ok(armed == want, "REQ-0010-111 [director tick; upgraded=%s grace-over=%s immune=%s]: a due raid is %s (state %s)" % [str(up), str(gr), str(imm), "PLANNED" if want else "not planned", _rstate(s)])
+				if not want:
+					ok(_cap_sig(s) == sig0 and (s.capsule_events as Array).is_empty() and String(s.banner) == "", "REQ-0010-111 [%s %s %s]: a closed gate leaves the capsule record, the events and the banner untouched" % [str(up), str(gr), str(imm)])
+				_dispose(s)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-70 / 110: the cadence histogram — ~1 raid per 3..4 REAL days, seeded, not a timetable
+# ---------------------------------------------------------------------------------------------
+func _t_w3b_cadence_histogram() -> void:
+	var gaps: Array = []
+	var firsts: Array = []
+	var per_world_series: Array = []
+	var seeds: int = 14
+	for i in seeds:
+		var s: Variant = _w3b_world(5, float(i) * 0.53 + 0.1)
+		var warns: Array = _w3b_run(s, RAID_T0 + GRACE_MS + 46 * DAY_MS, W3B_HOUR_MS)
+		var mine: Array = []
+		for k in warns.size():
+			if k == 0:
+				firsts.append(int((warns[0] as Dictionary).warn_at) - (RAID_T0 + GRACE_MS))
+			else:
+				mine.append(int((warns[k] as Dictionary).warn_at) - int((warns[k - 1] as Dictionary).warn_at))
+		gaps.append_array(mine)
+		per_world_series.append(mine)
+		_dispose(s)
+	ok(gaps.size() >= 100, "REQ-0010-70 setup: %d intervals measured over %d capsules x 46 days after the grace" % [gaps.size(), seeds])
+	var lo: int = 1 << 50
+	var hi: int = 0
+	var sum: float = 0.0
+	for g in gaps:
+		lo = mini(lo, int(g))
+		hi = maxi(hi, int(g))
+		sum += float(g)
+	var mean_d: float = sum / float(maxi(1, gaps.size())) / float(DAY_MS)
+	ok(lo >= 259200000, "REQ-0010-70/110: no interval is shorter than 3 days (min %d ms = %.3f d)" % [lo, float(lo) / float(DAY_MS)])
+	ok(hi <= 345600000 + W3B_HOUR_MS, "REQ-0010-70/110: no interval is longer than 4 days (+ the 1 h tick of the walk) (max %d ms = %.3f d)" % [hi, float(hi) / float(DAY_MS)])
+	ok(mean_d >= 3.0 and mean_d <= 4.0, "REQ-0010-70 (OD-86): the mean interval is within [3; 4] days (%.3f d over %d intervals)" % [mean_d, gaps.size()])
+	var bins: Dictionary = {}
+	for g in gaps:
+		var b: int = int(floor(float(g) / float(DAY_MS) * 4.0))
+		bins[b] = int(bins.get(b, 0)) + 1
+	var line: String = ""
+	var keys: Array = bins.keys()
+	keys.sort()
+	for k in keys:
+		line += " %.2f:%d" % [float(k) / 4.0, int(bins[k])]
+	print("  note: REQ-0010-70 histogram of intervals (days, bin 0.25):", line, " mean %.3f d" % mean_d)
+	ok(bins.size() >= 3, "REQ-0010-110 (S3/D10): the intervals spread over >= 3 quarter-day bins — a random draw, not a timetable (%d bins)" % bins.size())
+	var distinct: Dictionary = {}
+	for g in gaps:
+		distinct[int(g) / W3B_HOUR_MS] = true
+	ok(distinct.size() >= 12, "REQ-0010-110: many distinct intervals (%d distinct hours of %d) — no fixed step" % [distinct.size(), gaps.size()])
+	var constant_worlds: int = 0
+	for ser in per_world_series:
+		var sa: Array = ser
+		if sa.size() >= 4 and sa.min() == sa.max():
+			constant_worlds += 1
+	ok(constant_worlds == 0, "REQ-0010-110: no capsule gets a constant interval (%d of %d have one)" % [constant_worlds, seeds])
+	var fd: Dictionary = {}
+	for f in firsts:
+		fd[int(f)] = true
+	ok(fd.size() >= 6, "REQ-0010-110/34: the FIRST raid offset differs per seed (%d distinct of %d; offsets are quantised to the 1 h walk step)" % [fd.size(), firsts.size()])
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-110 / 34 / 93 / 114 / 115: determinism of the schedule; independence from dt, ticks per clock step (debug x3), day length
+# ---------------------------------------------------------------------------------------------
+func _t_w3b_schedule_determinism() -> void:
+	var end: int = RAID_T0 + GRACE_MS + 21 * DAY_MS
+	var ref_s: Variant = _w3b_world(4, 0.9, true)
+	var ref: Array = _w3b_run(ref_s, end, W3B_HOUR_MS, 1, "breach")
+	ok(ref.size() >= 4, "REQ-0010-110 setup: the reference timeline has %d raids in 21 days after the grace" % ref.size())
+	var cap_ref: Dictionary = {"immune": int(ref_s.main_capsule.immune_until), "next": int(ref_s.main_capsule.next_raid_at), "lvl": int(ref_s.main_capsule.level),
+		"cur": String(ref_s.main_capsule.raid_rng_cursor), "inv": var_to_str(ref_s.main_capsule.invested), "grace": int(ref_s.main_capsule.grace_start), "first": int(ref_s.main_capsule.first_upgrade_at)}
+	var twin_s: Variant = _w3b_world(4, 0.9, true)
+	var twin: Array = _w3b_run(twin_s, end, W3B_HOUR_MS, 1, "breach")
+	ok(_w3b_sig(twin) == _w3b_sig(ref), "REQ-0010-110/34: the same seed + the same injected clock -> the same raid moments, directions, ids, sizes")
+	var variants: Array = [["x3 (3 updates per clock step)", 3, Scenarios.DT], ["x3 (dt x3)", 1, Scenarios.DT * 3.0], ["dt 0.05", 1, 0.05], ["x2", 2, Scenarios.DT]]
+	for v in variants:
+		var w: Variant = _w3b_world(4, 0.9, true)
+		var got: Array = _w3b_run(w, end, W3B_HOUR_MS, int(v[1]), "breach", float(v[2]))
+		ok(_w3b_sig(got) == _w3b_sig(ref), "REQ-0010-93 (a) [%s]: the same injected clock -> the SAME warn_at/contact_at/dir/id/size of every raid" % String(v[0]))
+		var same_marks: bool = int(w.main_capsule.immune_until) == int(cap_ref.immune) and int(w.main_capsule.next_raid_at) == int(cap_ref.next) and int(w.main_capsule.level) == int(cap_ref.lvl) \
+			and String(w.main_capsule.raid_rng_cursor) == String(cap_ref.cur) and var_to_str(w.main_capsule.invested) == String(cap_ref.inv) \
+			and int(w.main_capsule.grace_start) == int(cap_ref.grace) and int(w.main_capsule.first_upgrade_at) == int(cap_ref.first)
+		ok(same_marks, "REQ-0010-93/114 [%s]: immune_until / next_raid_at / level / invested / grace_start / first_upgrade_at / stream cursor — identical" % String(v[0]))
+		_dispose(w)
+	# the day length (a sim-seconds/game-days quantity) does not move a UTC-ms schedule (REQ-0010-114/115)
+	for day_len in [30.0, 86400.0]:
+		var d: Variant = _w3b_world(4, 0.9, true)
+		d.time.day_len = day_len
+		var gd: Array = _w3b_run(d, end, W3B_HOUR_MS, 1, "breach")
+		ok(_w3b_sig(gd) == _w3b_sig(ref), "REQ-0010-114/115 [day_len %s]: the raid schedule does not depend on the sim day length" % str(day_len))
+		_dispose(d)
+	# every time field is UTC ms: 0 or an epoch instant, never a small sim-seconds number (REQ-0010-114)
+	var rec: Dictionary = Persistence.serialize_region(ref_s).main_capsule
+	for f in ["immune_until", "landed_at", "grace_start", "first_upgrade_at", "next_raid_at"]:
+		var v2: int = _wire_int(rec.get(f, "0"))
+		ok(v2 == 0 or v2 >= RAID_T0, "REQ-0010-114: the record field %s is 0 or a UTC-ms instant (%d)" % [String(f), v2])
+	# lint part: the capsule module compares time with `now` only
+	var src: String = FileAccess.get_file_as_string("res://scripts/sim/capsule.gd")
+	var code: PackedStringArray = PackedStringArray()
+	for line in src.split("\n"):
+		code.append(String(line).get_slice("#", 0))
+	var txt: String = "\n".join(code)
+	ok(not txt.contains("s.time") and not txt.contains("day_len") and not txt.contains("OS.get_") and not txt.contains("Time."), "REQ-0010-114/92 (lint part): capsule.gd code reads neither the sim day clock, day_len nor any wall clock")
+	_dispose(ref_s)
+	_dispose(twin_s)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-93 (b): the ON twin — the SAME tick count on the SAME injected clock -> the same world_hash; x3 does not shorten any mark
+# ---------------------------------------------------------------------------------------------
+func _t_w3b_twin_hash_and_x3() -> void:
+	var a: Variant = _w3b_world(3, 0.4, true)
+	var b: Variant = _w3b_world(3, 0.4, true)
+	ok(Persistence.world_hash(a) == Persistence.world_hash(b), "REQ-0010-93 (b) setup: twins start with the same hash")
+	var diverged: int = -1
+	var t0: int = RAID_T0 + GRACE_MS + 1
+	for i in 600:
+		var now: int = t0 + i * 1800000   # a tick = 30 min of the injected clock, fed identically to both
+		a.set_clock(now)
+		b.set_clock(now)
+		a.update(Scenarios.DT)
+		b.update(Scenarios.DT)
+		_topup(a)
+		_topup(b)
+		if _rstate(a) == "contact":
+			a.enemies = []
+			b.enemies = []
+		if Persistence.world_hash(a) != Persistence.world_hash(b):
+			diverged = i
+			break
+	ok(diverged < 0, "REQ-0010-93 (b): 600 ticks (12.5 days of injected clock, several raids) -> world_hash identical on every tick%s" % ("" if diverged < 0 else " — DIVERGED at tick %d" % diverged))
+	ok(int(a.capsule_raid.seq) >= 2, "REQ-0010-93 (b) setup: the twin run really contained raids (%d)" % int(a.capsule_raid.seq))
+	_dispose(a)
+	_dispose(b)
+	# x3 must not shorten the immunity: breach, then one hour of injected clock under x3 -> exactly 23 h left
+	for mode in ["updates", "dt"]:
+		var s: Variant = _raid_real(3, 0.6)
+		_arm_raid(s)
+		_to_warning(s)
+		_to_contact(s)
+		_hit(s, 1.0e9)
+		s.update(Scenarios.DT)
+		var until: int = int(s.main_capsule.immune_until)
+		ok(until == int(s.now_ms) + DAY_MS, "REQ-0010-25/93 [%s] setup: immune_until = resolution + 24 h" % String(mode))
+		var base: int = int(s.now_ms)
+		for i in 60:
+			s.set_clock(base + (i + 1) * 60000)
+			if String(mode) == "updates":
+				for k in 3:
+					s.update(Scenarios.DT)
+			else:
+				s.update(Scenarios.DT * 3.0)
+		ok(int(s.main_capsule.immune_until) == until and MainCapsule.immune_left_ms(s) == DAY_MS - W3B_HOUR_MS, "REQ-0010-93 [x3 %s]: after 1 h of clock the immunity has exactly 23 h left (%d ms), the mark itself did not move" % [String(mode), MainCapsule.immune_left_ms(s)])
+		_dispose(s)
+	# sim ticks WITHOUT the clock moving change no UTC mark and open no gate (x3 for hours of sim time on a frozen `now`)
+	var f: Variant = _w3b_world(2, 0.2)
+	f.set_clock(RAID_T0 + GRACE_MS - 1000)
+	var sig0: String = _cap_sig(f)
+	for i in 3000:
+		f.update(Scenarios.DT * 3.0)
+		_topup(f)
+	ok(MainCapsule.gate(f) == &"grace" and _rstate(f) == "none" and _cap_sig(f) == sig0, "REQ-0010-20/93: 900 sim-seconds of x3 on a FROZEN clock one second before the grace end -> the gate is still «grace», no raid, record untouched")
+	f.set_clock(RAID_T0 + GRACE_MS)
+	ok(MainCapsule.gate(f) == &"", "REQ-0010-20: at exactly 259 200 000 ms the grace is over (gate open)")
+	_dispose(f)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-68: rollback of the clock gives no advantage; catch-up across the immunity boundary
+# ---------------------------------------------------------------------------------------------
+func _t_w3b_clock_rollback() -> void:
+	var s: Variant = _raid_real(3, 0.15)
+	_arm_raid(s)
+	_to_warning(s)
+	_to_contact(s)
+	_hit(s, 1.0e9)
+	s.update(Scenarios.DT)
+	var t_res: int = int(s.now_ms)
+	var until: int = int(s.main_capsule.immune_until)
+	ok(until == t_res + DAY_MS and int(s.main_capsule.level) == 2, "REQ-0010-68 setup: breach at %d, immune until %d" % [t_res, until])
+	# catch-up across the boundary
+	var r1: Dictionary = MainCapsule.on_catch_up(s, until - 1)
+	ok(MainCapsule.is_immune(s) and int(r1.raid_events) == 0 and int(s.main_capsule.level) == 2, "REQ-0010-68: catch-up to 1 ms BEFORE immune_until -> still immune")
+	var r2: Dictionary = MainCapsule.on_catch_up(s, until)
+	ok(not MainCapsule.is_immune(s) and int(r2.raid_events) == 0 and int(s.main_capsule.immune_until) == until, "REQ-0010-68: catch-up to exactly immune_until -> no longer immune, the mark is intact")
+	var r3: Dictionary = MainCapsule.on_catch_up(s, until + 40 * DAY_MS)
+	ok(int(r3.raid_events) == 0 and int(s.main_capsule.level) == 2 and int(s.main_capsule.immune_until) == until, "REQ-0010-68/94: 40 days later: no raid events, level and mark intact")
+	var h0: String = Persistence.world_hash(s)
+	var now0: int = int(s.now_ms)
+	var sig0: String = _cap_sig(s)
+	# rollback: the clock is pushed 5 days BACK
+	s.set_clock(now0 - 5 * DAY_MS)
+	MainCapsule.on_catch_up(s, now0 - 5 * DAY_MS)
+	ok(int(s.now_ms) == now0, "REQ-0010-68/OD-60: a clock set into the past does not move `now` back")
+	ok(_cap_sig(s) == sig0 and Persistence.world_hash(s) == h0, "REQ-0010-68: ... and no mark of the capsule changes (immune_until / next_raid_at / grace_start / cursor), the hash is the same")
+	ok(MainCapsule.gate(s) != &"grace", "REQ-0010-68/20: a rollback does NOT re-open the 3-day grace of a capsule that left it long ago (gate %s)" % String(MainCapsule.gate(s)))
+	ok(not MainCapsule.is_immune(s), "REQ-0010-68/25: a rollback does NOT re-grant an expired immunity")
+	_dispose(s)
+	# rollback INSIDE the immunity: the window is neither shortened nor stretched by it
+	var w: Variant = _raid_real(3, 0.25)
+	_arm_raid(w)
+	_to_warning(w)
+	_to_contact(w)
+	_hit(w, 1.0e9)
+	w.update(Scenarios.DT)
+	var u: int = int(w.main_capsule.immune_until)
+	w.set_clock(int(w.now_ms) + 6 * W3B_HOUR_MS)
+	var left_before: int = MainCapsule.immune_left_ms(w)
+	w.set_clock(int(w.now_ms) - 3 * W3B_HOUR_MS)
+	ok(int(w.main_capsule.immune_until) == u and MainCapsule.immune_left_ms(w) == left_before, "REQ-0010-68: a 3 h rollback inside the immunity changes neither the mark nor the time left (%d ms)" % left_before)
+	# the schedule under a rollback: no advantage in either direction — the due mark is a mark, not a countdown
+	var c: Variant = _w3b_world(5, 0.45)
+	var wc: Array = _w3b_run(c, RAID_T0 + GRACE_MS + 12 * DAY_MS, W3B_HOUR_MS)
+	var due: int = int(c.main_capsule.next_raid_at)
+	c.set_clock(RAID_T0)   # back to the landing instant
+	_topup(c)
+	for i in 50:
+		c.update(Scenarios.DT)
+	ok(int(c.main_capsule.next_raid_at) == due, "REQ-0010-68: after a rollback the planned mark next_raid_at is the same (%d)" % due)
+	ok(wc.size() >= 2, "REQ-0010-68 setup: %d raids happened before the rollback" % wc.size())
+	_dispose(c)
+	_dispose(w)
+	# the same through the Session edge: push_clock into the past
+	var a: Variant = _session_on(RAID_T0)
+	a.push_clock(RAID_T0 + 5 * DAY_MS)
+	var n1: int = int(a.sim.now_ms)
+	a.push_clock(RAID_T0 + 1 * DAY_MS)
+	ok(int(a.sim.now_ms) == n1 and int(a.sim.main_capsule.grace_start) == RAID_T0, "REQ-0010-68/92: Session.push_clock into the past is ignored; grace_start (the first landing) stays")
+	_dispose_session(a)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-94 / 119: catch-up creates no raid events and changes nothing in the capsule, even when raids are overdue
+# ---------------------------------------------------------------------------------------------
+func _t_w3b_catch_up_quiet() -> void:
+	var s: Variant = _w3b_world(4, 0.35)
+	s.set_clock(RAID_T0 + GRACE_MS + 1)
+	s.main_capsule["next_raid_at"] = int(s.now_ms) + 60000
+	var w: Array = _w3b_run(s, int(s.now_ms) + 2 * W3B_HOUR_MS, 600000)
+	ok(w.size() == 1, "REQ-0010-94 setup: one natural raid happened, a next one is scheduled (%d)" % w.size())
+	var lvl: int = int(s.main_capsule.level)
+	var inv: String = var_to_str(s.main_capsule.invested)
+	var pinv: String = var_to_str(s.main_capsule.protection_invested)
+	var seq0: int = int(s.capsule_raid.seq)
+	var ev0: int = (s.capsule_events as Array).size()
+	var hp0: float = float(s.player.hp)
+	for hours in [1, 30, 24 * 12, 24 * 60]:
+		var r: Dictionary = MainCapsule.on_catch_up(s, int(s.now_ms) + int(hours) * W3B_HOUR_MS)
+		ok(int(r.raid_events) == 0 and _rstate(s) == "none" and int(s.capsule_raid.seq) == seq0, "REQ-0010-94 [+%d h]: catch-up planned/started no raid (events %d, state %s, seq %d -> %d)" % [int(hours), int(r.raid_events), _rstate(s), seq0, int(s.capsule_raid.seq)])
+		ok(int(s.main_capsule.level) == lvl and var_to_str(s.main_capsule.invested) == inv and var_to_str(s.main_capsule.protection_invested) == pinv, "REQ-0010-94 [+%d h]: level / invested / protection ledgers unchanged" % int(hours))
+	ok((s.capsule_events as Array).size() == ev0 and _raiders(s) == 0 and is_equal_approx(float(s.player.hp), hp0), "REQ-0010-94/31: no raid events, no raiders, the hero's HP untouched")
+	_dispose(s)
+	# a raid in CONTACT when the owner leaves: catch-up neither resolves it nor hurts (REQ-0010-63 stub), level/invested stay
+	var c: Variant = _raid_real(3, 0.3)
+	_arm_raid(c)
+	_to_warning(c)
+	_to_contact(c)
+	var lv: int = int(c.main_capsule.level)
+	var iv: String = var_to_str(c.main_capsule.invested)
+	var hp: float = float(c.player.hp)
+	var r2: Dictionary = MainCapsule.on_catch_up(c, int(c.now_ms) + 9 * W3B_HOUR_MS)
+	ok(int(r2.raid_events) == 0 and _rstate(c) == "contact" and int(c.main_capsule.level) == lv and var_to_str(c.main_capsule.invested) == iv and is_equal_approx(float(c.player.hp), hp),
+		"REQ-0010-94/63: a raid in contact is frozen by the catch-up — no event, no loss, no damage to the hero (state %s)" % _rstate(c))
+	_dispose(c)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-110: at ON the director's own MTB roll (game days) arms no raid; only the UTC-ms cadence does
+# ---------------------------------------------------------------------------------------------
+func _mtb_world(on: bool) -> Variant:
+	var s: Variant = _raid_pad(2) if on else _sim_with(_pad_map(PAD_N, Vector2i(8, 8)), true, true, false)
+	_quiet(s)
+	s.balance = KernelBalance.Balance.new()   # the REAL storyteller's MTB roll, with the big-threat weight cranked up so a raid is due every few game days
+	for cat in s.balance.category_weight:
+		s.balance.category_weight[cat] = 0.0
+	s.balance.category_weight[KernelBalance.CAT_THREAT_BIG] = 40.0
+	s.time.day = 6
+	return s
+
+
+func _t_w3b_mtb_does_not_raid_at_on() -> void:
+	var off: Variant = _mtb_world(false)
+	var off_raids: int = 0
+	for t in 12000:
+		off.update(Scenarios.DT)
+		_topup(off)
+		off.enemies = []
+		if bool(off.raid.get("warned", false)) or int(off.raid.get("wave", 0)) > off_raids:
+			off_raids = maxi(off_raids + 1, int(off.raid.get("wave", 0)))
+			off.raid.warned = false
+			off.raid.active = false
+	ok(off_raids >= 1, "REQ-0010-110 control (OFF): the MTB roll DOES arm raids in this probe (%d tick-flags) — the probe can see a legacy raid" % off_raids)
+	var on: Variant = _mtb_world(true)
+	var sig0: String = _cap_sig(on)
+	var raids: int = 0
+	var enemies_max: int = 0
+	for t in 12000:
+		on.update(Scenarios.DT)
+		_topup(on)
+		enemies_max = maxi(enemies_max, _raiders(on))
+		if _rstate(on) != "none" or bool(on.raid.get("warned", false)) or bool(on.raid.get("active", false)):
+			raids += 1
+	ok(raids == 0 and enemies_max == 0 and String(on.banner) == "", "REQ-0010-110/OD-86: at ON ~%d game days of the REAL storyteller on a FROZEN clock (cadence not due) -> no raid, no raider, no banner (%d bad ticks)" % [int(on.time.day) - 6, raids])
+	ok(_cap_sig(on) == sig0 and (on.capsule_events as Array).is_empty(), "REQ-0010-110/34: ... and the capsule record / events are untouched by the dropped rolls")
+	_dispose(off)
+	_dispose(on)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-19 / 71 / 108 / 109: warning >= 10 min before the FIRST raider, direction + composition, loudest signal, hash vs consumer
+# ---------------------------------------------------------------------------------------------
+func _t_w3b_warning_live() -> void:
+	for shift in [0.0, 0.43, 0.86, 1.3]:
+		var s: Variant = _w3b_world(2, float(shift))
+		s.set_clock(RAID_T0 + GRACE_MS + 1)
+		s.main_capsule["next_raid_at"] = int(s.now_ms) + 60000
+		var warn_seen: int = -1
+		var raiders_seen: int = -1
+		var ev: Dictionary = {}
+		var banner_ok: bool = true
+		var early_raiders: int = 0
+		var steps: int = 0
+		while steps < 4000 and raiders_seen < 0:
+			steps += 1
+			s.set_clock(int(s.now_ms) + 60000)
+			s.update(Scenarios.DT)
+			_topup(s)
+			for e in MainCapsule.drain_events(s):
+				if String((e as Dictionary).get("kind", "")) == "warning" and warn_seen < 0:
+					warn_seen = int(s.now_ms)
+					ev = e
+			if _raiders(s) > 0 and raiders_seen < 0:
+				raiders_seen = int(s.now_ms)
+			elif warn_seen >= 0 and _rstate(s) == "warning":
+				if _raiders(s) > 0:
+					early_raiders += 1
+				if not String(s.banner).begins_with("⚠"):
+					banner_ok = false
+		ok(warn_seen > 0 and raiders_seen > 0, "REQ-0010-19 [seed %.2f]: a natural raid warned (%d) and then landed raiders (%d)" % [float(shift), warn_seen, raiders_seen])
+		if warn_seen > 0 and raiders_seen > 0:
+			ok(raiders_seen - warn_seen >= WARN_MIN_MS and early_raiders == 0, "REQ-0010-19/71/108 [seed %.2f]: the first raider appears %d ms after the warning (>= 600 000), none during the warning" % [float(shift), raiders_seen - warn_seen])
+			ok(int(ev.contact_at) - int(ev.warn_at) >= WARN_MIN_MS and int(ev.contact_at) - int(ev.warn_at) <= WARN_MAX_MS and raiders_seen >= int(ev.contact_at), "REQ-0010-108 [seed %.2f]: the event says contact in %d ms (within [10; 30] min) and the raiders do not come earlier than it said" % [float(shift), int(ev.contact_at) - int(ev.warn_at)])
+			ok(ev.has("dir") and int(ev.dir) >= 0 and int(ev.dir) <= 3 and ev.has("composition") and int((ev.composition as Dictionary).get("count", 0)) >= 1 and int((ev.composition as Dictionary).get("day_equiv", 0)) >= 1 and int(ev.get("raid_id", 0)) >= 1,
+				"REQ-0010-108/109 [seed %.2f]: the warning carries dir (0..3), composition {count >= 1, day_equiv >= 1} and raid_id" % float(shift))
+			ok(banner_ok, "REQ-0010-19 [seed %.2f]: during the whole warning the banner on screen is the raid's warning (the loudest signal belongs to THIS raid)" % float(shift))
+			ok(_raiders(s) == int((ev.composition as Dictionary).count), "REQ-0010-108 [seed %.2f]: the composition announced (%d) is what lands (%d raiders)" % [float(shift), int((ev.composition as Dictionary).count), _raiders(s)])
+		_dispose(s)
+	# REQ-0010-109: the world does not know whether anyone listened
+	var a: Variant = _w3b_world(3, 0.7, true)
+	var b: Variant = _w3b_world(3, 0.7, true)
+	var end: int = RAID_T0 + GRACE_MS + 14 * DAY_MS
+	_w3b_run(a, end, W3B_HOUR_MS)   # drains every tick (a consumer)
+	while int(b.now_ms) < end:      # never drains
+		b.set_clock(mini(end, int(b.now_ms) + W3B_HOUR_MS))
+		b.update(Scenarios.DT)
+		_topup(b)
+		if _rstate(b) == "contact":
+			b.enemies = []
+			b.update(Scenarios.DT)
+	ok(Persistence.world_hash(a) == Persistence.world_hash(b) and _cap_sig(a) == _cap_sig(b), "REQ-0010-109: world_hash and the capsule record are identical with a consumer draining raid_warning and with none")
+	ok((b.capsule_events as Array).size() <= MainCapsule.EVENTS_KEEP, "REQ-0010-109: an event log nobody drains stays bounded (%d <= %d)" % [(b.capsule_events as Array).size(), MainCapsule.EVENTS_KEEP])
+	_dispose(a)
+	_dispose(b)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-20: death/respawn does not restart the grace; the grace is measured from the FIRST landing
+# ---------------------------------------------------------------------------------------------
+func _t_w3b_respawn_keeps_grace() -> void:
+	var s: Variant = _w3b_world(1, 0.2, true)
+	s.set_clock(RAID_T0 + 2 * DAY_MS)
+	_kill(s)
+	s.set_clock(RAID_T0 + 2 * DAY_MS + 5000)
+	s.respawn_new_pawn()
+	ok(int(s.main_capsule.grace_start) == RAID_T0 and int(s.main_capsule.landed_at) == RAID_T0, "REQ-0010-20: death + respawn on day 2 leave grace_start / landed_at at the FIRST landing (%d, %d)" % [int(s.main_capsule.grace_start), int(s.main_capsule.landed_at)])
+	s.set_clock(RAID_T0 + GRACE_MS - 1)
+	ok(MainCapsule.gate(s) == &"grace", "REQ-0010-20: 1 ms before 3 days after the FIRST landing the gate is still closed after a respawn")
+	s.set_clock(RAID_T0 + GRACE_MS)
+	ok(MainCapsule.gate(s) == &"", "REQ-0010-20: at exactly 3 days after the first landing it opens — the respawn did not push it later")
+	_dispose(s)
+	# the Session path (Continue): the saved first-landing mark survives the round trip
+	var a: Variant = _session_on(RAID_T0)
+	var sim: Variant = a.sim
+	_fund_cost(sim, _cost_of(_raw_rows(), 1), 0.4)
+	sim.upgrade_capsule()
+	ok(bool(a.save_game(SAVE_TMP)), "REQ-0010-20 setup: session saves")
+	var b: Variant = SessionScript.new()
+	b.autosave = false
+	ok(bool(b.restore_game(SAVE_TMP)), "REQ-0010-20 setup: Continue")
+	b.push_clock(RAID_T0 + GRACE_MS - 1)
+	ok(int(b.sim.main_capsule.grace_start) == RAID_T0 and MainCapsule.gate(b.sim) == &"grace", "REQ-0010-20/68: after Continue the grace still counts from the first landing (gate %s)" % String(MainCapsule.gate(b.sim)))
+	_dispose_session(a)
+	_dispose_session(b)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-112 / 87: raid strength = f(capsule level, base wealth) only
+# ---------------------------------------------------------------------------------------------
+# the strength of the raid the director just armed: raiders x their toughness x their bite (day_equiv scales the raider itself)
+func _director_count(s: Variant) -> int:
+	Director.apply(s, {"incident": "raid", "count": 99, "faction": RAID_FACTION})
+	var r: Dictionary = s.capsule_raid
+	var rr: Dictionary = GameData.make_raider(0.0, 0.0, int(r.get("day_equiv", 1)))
+	return int(float(r.get("count", -1)) * float(rr.maxhp) * float(rr.dmg))
+
+
+func _t_w3b_strength_inputs() -> void:
+	var prev: int = 0
+	var counts: Array = []
+	for L in range(1, 6):
+		var s: Variant = _raid_pad(L)
+		var c: int = _director_count(s)
+		counts.append(c)
+		ok(c > prev, "REQ-0010-112 [wealth fixed, L%d]: the raid is bigger than at the level below (%d > %d)" % [L, c, prev])
+		prev = c
+		_dispose(s)
+	# wealth: monotone non-decreasing, and a big enough hoard raises it
+	for L in [1, 3]:
+		var last: int = 0
+		var series: Array = []
+		for pile in [0, 500, 5000, 50000, 500000]:
+			var s2: Variant = _raid_pad(int(L))
+			_fund(s2, "wood", 0, int(pile))
+			var c2: int = _director_count(s2)
+			series.append(c2)
+			ok(c2 >= last, "REQ-0010-112 [L%d, hoard %d]: base wealth never LOWERS the raid (%d >= %d)" % [int(L), int(pile), c2, last])
+			last = c2
+			_dispose(s2)
+		ok(int(series[series.size() - 1]) > int(series[0]), "REQ-0010-87/112 [L%d]: a huge hoard makes a bigger raid than an empty base (%s)" % [int(L), str(series)])
+	# NOT inputs: the day of the game and the diplomatic pressure (OD-87: only level + wealth)
+	var base_c: int = 0
+	for day in [1, 40, 400]:
+		var s3: Variant = _raid_pad(3)
+		s3.time.day = int(day)
+		var c3: int = _director_count(s3)
+		if int(day) == 1:
+			base_c = c3
+		ok(c3 == base_c, "REQ-0010-112/OD-87 [game day %d]: the raid size does not depend on the day of the game (%d vs %d)" % [int(day), c3, base_c])
+		_dispose(s3)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-18: the defence ladder against the breaking attack (live bisection; no unit of an attack «price» is decided — only properties that need none)
+# ---------------------------------------------------------------------------------------------
+func _w3b_breaks(level: int, prot: int, count: int, day_equiv: int, window_ticks: int) -> bool:
+	var s: Variant = _raid_pad(level, 0.0, prot)
+	MainCapsule.on_director_raid(s, {"incident": "raid", "faction": "бот"}, 0.0)
+	s.capsule_raid["count"] = count
+	s.capsule_raid["day_equiv"] = day_equiv
+	s.update(Scenarios.DT)
+	s.set_clock(int(s.capsule_raid.contact_at) + 1)
+	s.update(Scenarios.DT)
+	var breached: bool = false
+	var t: int = 0
+	while t < window_ticks and _rstate(s) != "none":
+		s.player.hp = 1.0e9
+		var best: Vector2 = Vector2(0.5, 0.5)
+		var best_d: float = -1.0
+		for c in [Vector2(0.5, 0.5), Vector2(PAD_N - 0.5, 0.5), Vector2(0.5, PAD_N - 0.5), Vector2(PAD_N - 0.5, PAD_N - 0.5)]:
+			var nearest: float = INF
+			for e in s.enemies:
+				nearest = minf(nearest, c.distance_to(Vector2(float((e as Dictionary).px), float((e as Dictionary).py))))
+			if nearest > best_d:
+				best_d = nearest
+				best = c
+		s.player.px = best.x
+		s.player.py = best.y
+		s.update(Scenarios.DT)
+		t += 1
+	for e in s.capsule_events:
+		if String((e as Dictionary).get("kind", "")) == "breach":
+			breached = true
+	_dispose(s)
+	return breached
+
+
+func _w3b_min_count(level: int, prot: int, day_equiv: int, cap: int, window: int) -> int:
+	if not _w3b_breaks(level, prot, cap, day_equiv, window):
+		return -1
+	var lo: int = 1
+	var hi: int = cap
+	while lo < hi:
+		var mid: int = (lo + hi) / 2
+		if _w3b_breaks(level, prot, mid, day_equiv, window):
+			hi = mid
+		else:
+			lo = mid + 1
+	return lo
+
+
+func _t_w3b_defence_vs_attack() -> void:
+	var tbl: Dictionary = _raw_table()
+	var prot_rows: Array = (tbl.protection as Dictionary).levels
+	var day_eq: int = int(((tbl.raid as Dictionary).by_level as Dictionary)["1"].day_equiv)
+	var window: int = 1800   # 180 s of sim from contact: «the owner can react after that» is a balance parameter, not a decision — the ladder shape must not depend on it
+	var mins: Array = [0]
+	for p in range(1, 6):
+		mins.append(_w3b_min_count(p, p, day_eq, 160, window))
+	print("  note: REQ-0010-18 minimal breaking raid (raiders, day_equiv %d, %d s window) per protection 1..5: %s" % [day_eq, window / 10, str(mins.slice(1))])
+	var all_found: bool = true
+	for p in range(1, 6):
+		all_found = all_found and int(mins[p]) > 0
+	ok(all_found, "REQ-0010-18 setup: for every protection 1..5 some raid up to 160 raiders breaks the core inside the window %s" % str(mins.slice(1)))
+	if all_found:
+		var strictly: bool = true
+		var step_ok: bool = true
+		for p in range(2, 6):
+			strictly = strictly and int(mins[p]) > int(mins[p - 1])
+			var ratio: float = float(mins[p]) / float(mins[p - 1])
+			step_ok = step_ok and ratio >= 1.4 and ratio <= 3.0
+		ok(strictly, "REQ-0010-18/OD-65: the attack that breaks protection p grows strictly with p (%s)" % str(mins.slice(1)))
+		ok(step_ok, "REQ-0010-18/OD-65: ... by ~x2 per level (each step within [1.4; 3.0] of the previous)")
+		ok(float(mins[5]) / float(mins[1]) >= 8.0, "REQ-0010-18/OD-103: ... and by several times over the four steps 1 -> 5 (x%.1f; the decision says ~x16 for the DEFENCE ladder)" % (float(mins[5]) / float(mins[1])))
+		# holding must not get relatively dearer: defence units (the price of reaching p) vs the breaking attack
+		var cum: Array = [0.0]
+		for p in range(1, 6):
+			var units: float = 0.0
+			for res in ((prot_rows[p] as Dictionary).cost as Dictionary):
+				units += float(((prot_rows[p] as Dictionary).cost as Dictionary)[res])
+			cum.append(units)
+		var worse: Array = []
+		for p in range(2, 6):
+			var def_ratio: float = float(cum[p]) / float(cum[p - 1])
+			var att_ratio: float = float(mins[p]) / float(mins[p - 1])
+			if def_ratio > att_ratio * 1.5:
+				worse.append("p%d: defence x%.2f vs attack x%.2f" % [p, def_ratio, att_ratio])
+		ok(worse.is_empty(), "REQ-0010-18: the price of the next protection step never grows faster than the breaking attack by more than 1.5x (a defence that gets relatively dearer breaks «оборонятись легше») %s" % str(worse))
+		# the capsule LEVEL multiplies the raid: the same protection, a higher level -> a stronger reference raid
+		var rows: Dictionary = (tbl.raid as Dictionary).by_level
+		var pw: Array = []
+		for L in range(1, 6):
+			var rr: Dictionary = GameData.make_raider(0.0, 0.0, int((rows[str(L)] as Dictionary).day_equiv))
+			pw.append(float((rows[str(L)] as Dictionary).count) * float(rr.maxhp) * float(rr.dmg))
+		var mono: bool = true
+		for L in range(1, 5):
+			mono = mono and float(pw[L]) > float(pw[L - 1])
+		ok(mono, "REQ-0010-18/81: the reference raider of the catalog gets strictly stronger with the capsule level 1..5")
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-28 / 29 / 86: the 0011 stubs
+# ---------------------------------------------------------------------------------------------
+class W3bSafe extends RefCounted:
+	var room: int = 0
+	var held: Dictionary = {}
+
+	func _init(r: int) -> void:
+		room = r
+
+	func deposit(res: String, n: int) -> int:
+		var take: int = clampi(n, 0, room)
+		room -= take
+		held[res] = int(held.get(res, 0)) + take
+		return take
+
+
+func _t_w3b_stubs() -> void:
+	# REQ-0010-28: with no Orbit the reinforcement is refused, with a reason and with NO side effect — even inside an open window
+	var s: Variant = _raid_real(3, 0.12)
+	_arm_raid(s)
+	_to_warning(s)
+	_to_contact(s)
+	_hit(s, 1.0e9)
+	s.update(Scenarios.DT)
+	ok(MainCapsule.is_immune(s), "REQ-0010-28 setup: a breach opened the 24 h window")
+	_fund(s, "wood", 0, 5000)
+	var h0: String = Persistence.world_hash(s)
+	var funds0: String = _funds_sig(s)
+	var r0: Dictionary = OrbitStub.call_reinforcement(s, null)
+	ok(not bool(r0.get("ok", true)) and String(r0.get("reason", "")) == "no_orbit", "REQ-0010-28/OD-106: without safe_stock, call_reinforcement -> {ok:false, reason:no_orbit} (%s)" % str(r0))
+	var dbl: W3bSafe = W3bSafe.new(9999)
+	var r1: Dictionary = OrbitStub.call_reinforcement(s, dbl)
+	ok(not bool(r1.get("ok", true)) and Persistence.world_hash(s) == h0 and _funds_sig(s) == funds0 and int(s.main_capsule.reinforcement_used) == 0 and dbl.held.is_empty(),
+		"REQ-0010-28/113: ... also with a test-double Orbit the stub does not charge, does not set reinforcement_used, does not touch the double (reason %s)" % String(r1.get("reason", "")))
+	_dispose(s)
+	# REQ-0010-29: partial deposit — exactly what fits, the rest stays in the capsule storage; no_orbit without a container
+	var w: Variant = _raid_pad(2)
+	_wipe(w)
+	_fund(w, "wood", 0, 40)
+	_fund(w, "stone", 0, 7)
+	var before: Dictionary = {}
+	var offered: int = 0
+	for k in (w.stock as Dictionary):
+		before[String(k)] = int(w.stock[k])
+		offered += int(w.stock[k])
+	var h1: String = Persistence.world_hash(w)
+	var none: Dictionary = OrbitStub.send_to_safe_zone(w, null)
+	ok(not bool(none.get("ok", true)) and String(none.get("reason", "")) == "no_orbit" and Persistence.world_hash(w) == h1 and int(w.res_amount("wood")) == 40, "REQ-0010-29: no Orbit -> no_orbit, the storage keeps everything")
+	var cont: W3bSafe = W3bSafe.new(30)
+	var res: Dictionary = OrbitStub.send_to_safe_zone(w, cont)
+	var moved_n: int = 0
+	var left_n: int = 0
+	for k in (res.get("moved", {}) as Dictionary):
+		moved_n += int(res.moved[k])
+	for k in (res.get("left", {}) as Dictionary):
+		left_n += int(res.left[k])
+	ok(bool(res.get("ok", false)) and moved_n == 30 and left_n == offered - 30, "REQ-0010-29/OD-58: %d units offered, room for 30 -> exactly 30 moved, the rest stays (moved %d, left %d)" % [offered, moved_n, left_n])
+	var cont_n: int = 0
+	for k in cont.held:
+		cont_n += int(cont.held[k])
+	var kept: int = 0
+	for k in (w.stock as Dictionary):
+		kept += int(w.stock[k])
+	ok(cont_n == 30 and kept == offered - 30, "REQ-0010-29: the container holds 30, the capsule storage %d (conservation)" % kept)
+	for k in before:
+		ok(int(w.res_amount(String(k))) + int(cont.held.get(String(k), 0)) == int(before[k]), "REQ-0010-29: %s — storage + container == what was there (no loss, no duplication)" % String(k))
+	# unreachable for the raid and for the death bag
+	var stock_after: String = var_to_str(w.stock)
+	w.set_clock(RAID_T0 + GRACE_MS + 5)
+	_arm_raid(w)
+	_to_warning(w)
+	_to_contact(w)
+	_hit(w, 1.0e9)
+	w.update(Scenarios.DT)
+	var c_after: int = 0
+	for k in cont.held:
+		c_after += int(cont.held[k])
+	ok(c_after == 30 and var_to_str(w.stock) == stock_after, "REQ-0010-29: a breach touches neither the container (30) nor the storage that stayed behind")
+	_kill(w)
+	ok(w.dead and c_after == 30, "REQ-0010-29: a death after the transfer does not touch the container")
+	_dispose(w)
+	# the ONLY way in: no other module deposits into a safe stock
+	var offenders: Array = []
+	var dirs: Array = ["res://scripts"]
+	while not dirs.is_empty():
+		var d: String = String(dirs.pop_back())
+		for sub in DirAccess.get_directories_at(d):
+			dirs.append(d + "/" + String(sub))
+		for f in DirAccess.get_files_at(d):
+			if not String(f).ends_with(".gd") or String(f) == "orbit_stub.gd":
+				continue
+			for line in FileAccess.get_file_as_string(d + "/" + String(f)).split("\n"):
+				var code: String = String(line).get_slice("#", 0)
+				if code.contains("safe_stock") and code.contains("deposit"):
+					offenders.append(String(f))
+	ok(offenders.is_empty(), "REQ-0010-29: no module besides the seam deposits into safe_stock (%s)" % str(offenders))
+
+
+func _t_w3b_actions_by_state() -> void:
+	var s: Variant = _raid_pad(0)
+	var dbl: W3bSafe = W3bSafe.new(10)
+	var mx: int = int(MainCapsule.max_level(s))
+	var pm: int = int(MainCapsule.max_protection(s))
+	for lv in [0, 3, mx]:
+		for pr in [0, 2, pm]:
+			s.main_capsule["level"] = int(lv)
+			s.main_capsule["protection"] = int(pr)
+			for orbit in [false, true]:
+				var acts: Array = MainCapsule.actions(s, dbl if bool(orbit) else null)
+				var tag: String = "[level %d, protection %d, orbit %s]" % [int(lv), int(pr), str(orbit)]
+				ok(acts.has(MainCapsule.ACT_STORAGE), "REQ-0010-86 %s: «Склад» is always offered" % tag)
+				ok(acts.has(MainCapsule.ACT_UPGRADE) == (int(lv) < mx), "REQ-0010-86 %s: «Прокачати» is offered iff the level is below the maximum" % tag)
+				ok(acts.has(MainCapsule.ACT_PROTECTION) == (int(pr) < pm), "REQ-0010-86 %s: «Захист» is offered iff the protection is below the maximum" % tag)
+				ok(acts.has(MainCapsule.ACT_SAFE_ZONE) == bool(orbit), "REQ-0010-86 %s: «В сейв-зону» appears iff an Orbit/safe_stock exists" % tag)
+				if acts.has(MainCapsule.ACT_REINFORCEMENT):
+					ok(bool(OrbitStub.call_reinforcement(s, dbl if bool(orbit) else null).get("ok", false)), "REQ-0010-86 %s: «Підкріплення» is listed only if it can actually be performed" % tag)
+	# the reinforcement window open (immune) and unused: on the stub there is no Orbit -> never listed without it
+	s.main_capsule["immune_until"] = int(s.now_ms) + DAY_MS
+	s.main_capsule["reinforcement_used"] = 0
+	ok(not MainCapsule.actions(s, null).has(MainCapsule.ACT_REINFORCEMENT), "REQ-0010-86: an open window + no Orbit -> no «Підкріплення» (no unavailable action is shown)")
+	var off: Variant = _sim_with(_pad_map(PAD_N, Vector2i(8, 8)), true, true, false)
+	ok(MainCapsule.actions(off, dbl).is_empty(), "REQ-0010-01/86: OFF world offers no capsule action")
+	_dispose(s)
+	_dispose(off)
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-120: the dev hook of a forced raid — debug builds only, never skips the warning
+# ---------------------------------------------------------------------------------------------
+func _t_w3b_force_hook() -> void:
+	var s: Variant = _w3b_world(1, 0.2)   # inside the grace: the gate is closed
+	var h0: String = Persistence.world_hash(s)
+	var rel: Dictionary = MainCapsule.force_raid(s, false)
+	ok(not bool(rel.get("ok", true)) and _rstate(s) == "none" and Persistence.world_hash(s) == h0 and (s.capsule_events as Array).is_empty(), "REQ-0010-120: a RELEASE build refuses (reason %s) and leaves the world byte-identical" % String(rel.get("reason", "")))
+	var dev: Dictionary = MainCapsule.force_raid(s, true)
+	ok(bool(dev.get("ok", false)) and _rstate(s) == "planned", "REQ-0010-120: a debug build plans a raid through every closed gate (%s)" % str(dev))
+	var span: int = int(s.capsule_raid.contact_at) - int(s.capsule_raid.warn_at)
+	ok(span >= WARN_MIN_MS and span <= WARN_MAX_MS, "REQ-0010-120/19/108: ... but still with a warning of %d ms (within [10; 30] min)" % span)
+	var grace: int = int(s.main_capsule.grace_start)
+	var first: int = int(s.main_capsule.first_upgrade_at)
+	s.update(Scenarios.DT)
+	ok(_rstate(s) == "warning" and _raiders(s) == 0 and String(s.banner).begins_with("⚠"), "REQ-0010-120/19: the forced raid warns first (state %s, raiders %d)" % [_rstate(s), _raiders(s)])
+	var again: Dictionary = MainCapsule.force_raid(s, true)
+	ok(not bool(again.get("ok", true)), "REQ-0010-120/62: a second forced raid while one is active is refused")
+	ok(int(s.main_capsule.grace_start) == grace and int(s.main_capsule.first_upgrade_at) == first and int(s.main_capsule.level) == 1, "REQ-0010-120: the hook does not rewrite the grace mark / first upgrade / level")
+	_to_contact(s)
+	ok(_rstate(s) == "contact" and _raiders(s) > 0, "REQ-0010-120: the forced raid reaches contact after the warning and lands raiders (%d)" % _raiders(s))
+	_dispose(s)
+	var off: Variant = _sim_with(_pad_map(PAD_N, Vector2i(8, 8)), true, true, false)
+	var ho: String = Persistence.world_hash(off)
+	ok(not bool(MainCapsule.force_raid(off, true).get("ok", true)) and Persistence.world_hash(off) == ho, "REQ-0010-01/120: an OFF world refuses the hook, nothing changes")
+	_dispose(off)
+	# only the dev edge passes a debug flag: every caller outside the capsule module asks the ENGINE (has_feature), never a literal
+	var callers: Array = []
+	for root in ["res://scripts", "res://newhud_main.gd"]:
+		var files: Array = []
+		if String(root).ends_with(".gd"):
+			files.append(String(root))
+		else:
+			var stack: Array = [String(root)]
+			while not stack.is_empty():
+				var d: String = String(stack.pop_back())
+				for sub in DirAccess.get_directories_at(d):
+					stack.append(d + "/" + String(sub))
+				for f in DirAccess.get_files_at(d):
+					if String(f).ends_with(".gd"):
+						files.append(d + "/" + String(f))
+		for path in files:
+			if String(path).ends_with("sim/capsule.gd"):
+				continue
+			for line in FileAccess.get_file_as_string(String(path)).split("\n"):
+				var code: String = String(line).get_slice("#", 0)
+				if code.contains("force_raid("):
+					callers.append(code)
+	var bad_callers: Array = []
+	for c in callers:
+		if not String(c).contains("has_feature"):
+			bad_callers.append(String(c).strip_edges())
+	ok(not callers.is_empty() and bad_callers.is_empty(), "REQ-0010-120: every call of force_raid outside the module passes the engine's has_feature(\"debug\") — no literal true, no release path (%d callers, bad %s)" % [callers.size(), str(bad_callers)])
+
+
+# ---------------------------------------------------------------------------------------------
+# REQ-0010-01 / D4: OFF — the whole W3b surface is inert
+# ---------------------------------------------------------------------------------------------
+func _t_w3b_off_inert() -> void:
+	var a: Variant = _sim_with(_pad_map(PAD_N, Vector2i(8, 8)), true, true, false)
+	var b: Variant = _sim_with(_pad_map(PAD_N, Vector2i(8, 8)), true, true, false)
+	_quiet(a)
+	_quiet(b)
+	for i in 400:
+		a.set_clock(RAID_T0 + i * 7200000)   # a clock that runs for 33 days
+		a.update(Scenarios.DT)
+		b.update(Scenarios.DT)
+		_topup(a)
+		_topup(b)
+	ok(Persistence.world_hash(a) == Persistence.world_hash(b), "REQ-0010-01/92: OFF — an injected clock running 33 days changes nothing in the world (hash identical to a clockless twin)")
+	ok(not MainCapsule.cadence_tick(a) and MainCapsule.drain_events(a).is_empty() and (a.capsule_raid as Dictionary).is_empty() and not Persistence.serialize_region(a).has("main_capsule"), "REQ-0010-01: OFF — no cadence, no events, no automaton, no record key")
+	_dispose(a)
+	_dispose(b)

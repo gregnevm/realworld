@@ -4467,13 +4467,17 @@
         "take_percent",
         "grace_ms",
         "warn_min_ms",
-        "warn_max_ms"
+        "warn_max_ms",
+        "cadence_min_ms",
+        "cadence_max_ms"
       ],
       "immunity_ms": 86400000,
       "take_percent": 50,
       "grace_ms": 259200000,
       "warn_min_ms": 600000,
       "warn_max_ms": 1800000,
+      "cadence_min_ms": 259200000,
+      "cadence_max_ms": 345600000,
       "proposed": [
         "take_round",
         "queue_max",

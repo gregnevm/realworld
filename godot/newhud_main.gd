@@ -7,6 +7,7 @@
 extends Node2D
 
 const SessionScript = preload("res://scripts/session.gd")
+const MainCapsule = preload("res://scripts/sim/capsule.gd")
 const WorldViewScript = preload("res://scripts/world_view.gd")
 const OverlayHost = preload("res://scripts/ui/overlay_host.gd")
 const HudRootScript = preload("res://scripts/ui/hud_root.gd")
@@ -192,6 +193,8 @@ func _start_game(lat: float, lon: float, place_name: String) -> void:
 		session = null                    # не лишаємо порожню сесію: guard `session != null` заблокував би новий старт
 		return
 	_enter_session()
+	if "capsule" in OS.get_cmdline_user_args() and "forceraid" in OS.get_cmdline_user_args():   # dev-хук G5 (REQ-0010-120): рейд без 3 діб очікування; релізна збірка відмовить
+		MainCapsule.force_raid(session.sim, OS.has_feature("debug"))
 	_autosave()   # a new landing claims the save slot at once (the spawn screen warned about it)
 
 # The spawn screen's «▶ Продовжити»: rebuild the whole session from the save file.

@@ -36,6 +36,13 @@
 #      tick and gates on threat_active), over 5 presets x RAID_TICKS ticks — a waiting raid needs no more room than that; (e) take_round = the rounding mode that never
 #      lets the attacker take MORE than the defender keeps, checked over every ledger row the proposed prices can produce. DECIDED numbers (immunity 24 h, 50%, grace
 #      3 days, warning 10..30 min — OD-24/107/66/88) are printed verbatim, not derived.
+#   8. W3b (REQ-0010-18/19/70; OD-65/66/86/88): (a) HOLD vs BREAK — for L = 1..5 a LIVE raid (the Sim.update path, capsule level L, protection P = L, no defenders but the
+#      core) of the by_level row grows (count bisection, day_equiv fixed) until it breaches the core inside the ASSAULT window; k_L = that minimal count / the row's count,
+#      and the defence price (gather-minutes of protection level L) against the attack «price» (the breaching power in units of the level-1 reference raid, anchored to T_1
+#      gather-minutes — a PROPOSED anchor) gives a_L = defence : attack (REQ-0010-18 needs a_L < 1); (b) CADENCE — N days of the injected clock (set_clock advances
+#      CLOCK_STEP_MS per tick, independent of the tick count: REQ-0010-93) x 5 presets, the intervals between raid warnings (capsule_events drained like a push consumer):
+#      histogram + mean (OD-86: 3..4 days) + the minimal gap + «no raid before grace + first upgrade»; (c) WARNING — contact_at - warn_at of every raid, and the hero's walk
+#      from the farthest reachable cell to the capsule against warn_min (REQ-0010-19/71). Run only this part: `-- w3b`.
 # Finally it prints MATCH/DIFF of every proposed number against godot/content/catalog.json (capsule_levels), so the data cannot drift from the
 # method unnoticed. The pass/fail counter only says the probe ran — read the printed tables.
 extends "res://tests/harness.gd"
@@ -103,6 +110,11 @@ const RAID_TICKS := 100000             # Balance ticks per preset for the queue_
 
 func _init() -> void:
 	print("== RealWorld capsule ECONOMY BOT (spec 0010, informational) ==")
+	if "w3b" in OS.get_cmdline_user_args():
+		_w3b_report({})
+		ok(true, "W3b probe completed — read the tables above")
+		finish()
+		return
 	var income_hand: Dictionary = {}
 	var income_tool: Dictionary = {}
 	var supply: Dictionary = {}
@@ -132,6 +144,7 @@ func _init() -> void:
 	var raid: Dictionary = _raid_report(capsule)
 	_compare_with_catalog(capsule, hp, cells)
 	_compare_raid(raid)
+	_w3b_report(inc_hand)
 	ok(true, "probe completed — read the tables above (they are the PROPOSAL; the owner approves at merge)")
 	finish()
 
@@ -679,7 +692,8 @@ func _compare_raid(raid: Dictionary) -> void:
 	if rd.is_empty() or not rd.has("by_level"):
 		print("   catalog.json has no raid proposal yet")
 		return
-	var decided: Dictionary = {"immunity_ms": IMMUNITY_MS, "take_percent": TAKE_PERCENT, "grace_ms": GRACE_MS, "warn_min_ms": WARN_MIN_MS, "warn_max_ms": WARN_MAX_MS}
+	var decided: Dictionary = {"immunity_ms": IMMUNITY_MS, "take_percent": TAKE_PERCENT, "grace_ms": GRACE_MS, "warn_min_ms": WARN_MIN_MS, "warn_max_ms": WARN_MAX_MS,
+		"cadence_min_ms": CADENCE_MIN_MS, "cadence_max_ms": CADENCE_MAX_MS}
 	for k in decided:
 		print("   decided %-12s %s (data %s, owner %s)" % [String(k), "MATCH" if int(rd.get(k, -1)) == int(decided[k]) else "DIFF", str(rd.get(k)), str(decided[k])])
 	for k in ["wealth_ref_points", "roll_spread", "queue_max", "take_round", "count_max"]:
@@ -688,3 +702,232 @@ func _compare_raid(raid: Dictionary) -> void:
 		var want: Dictionary = raid.by_level[str(level)]
 		var got: Dictionary = (rd.by_level as Dictionary).get(str(level), {})
 		print("   proposed by_level[%d]        %s (data %s, bot %s)" % [level, "MATCH" if int(got.get("count", -1)) == int(want.count) and int(got.get("day_equiv", -1)) == int(want.day_equiv) else "DIFF", str(got), str(want)])
+
+
+# =============================================================================================================================================================
+# W3b: hold vs break (REQ-0010-18), cadence (REQ-0010-70/110), warning (REQ-0010-19/71/108)
+# =============================================================================================================================================================
+const CADENCE_MIN_MS := 259200000      # OD-86: ~1 raid per 3..4 days of REAL time
+const CADENCE_MAX_MS := 345600000
+const DAY_MS := 86400000
+const T0_MS := 1700000000000           # the injected clock origin (any instant: nothing reads the wall clock)
+const CLOCK_STEP_MS := 30000           # the injected clock advances this much per tick, independent of the tick count (REQ-0010-93)
+const CADENCE_DAYS := 80               # clock days per preset
+const ASSAULT_WINDOW_S := 180.0        # PROPOSED: a raid that cannot breach the core within this many sim-seconds after contact «does not break it» (the owner reacts)
+const COUNT_CAP := 400                 # upper bound of the bisection over the raider count
+const HOLD_TICK_CAP := 4000            # ticks of one hold run (0.1 s each) — above the window, so a held raid is observed to the end of the window only
+
+
+func _world_at(preset: Dictionary, now_ms: int) -> Variant:
+	var sim: Variant = Sim.new()
+	sim.use_inventory = true
+	sim.use_catalog = true
+	sim.use_main_capsule = true
+	sim.set_clock(now_ms)
+	sim.new_game(WorldGen.generate_map(float(preset.lat), float(preset.lon), MAP_N), false)
+	_quiet_world(sim)
+	return sim
+
+
+# the bot measures the raid machine, not the storyteller: no other incidents, no patrols, a comfortable hero
+func _quiet_world(sim: Variant) -> void:
+	sim.time.day = 195
+	sim.time.frac = 0.5
+	sim.weather = &"clear"
+	sim.patrol.next = 1.0e9
+	sim.balance = KernelBalance.Balance.new()
+	for cat in sim.balance.category_weight:
+		sim.balance.category_weight[cat] = 0.0
+
+
+# the defender is the core ONLY: the hero stands in the map corner farthest from every raider (raiders chase him inside 6 cells, threats.gd) and cannot die
+func _evade(sim: Variant) -> void:
+	sim.player.hp = 1.0e9
+	sim.player.hunger = 100.0
+	sim.player.rest = 100.0
+	if sim.enemies.is_empty():
+		return
+	var best_d: float = -1.0
+	var best: Vector2 = Vector2(0.5, 0.5)
+	for c in [Vector2(0.5, 0.5), Vector2(MAP_N - 0.5, 0.5), Vector2(0.5, MAP_N - 0.5), Vector2(MAP_N - 0.5, MAP_N - 0.5)]:
+		var nearest: float = INF
+		for e in sim.enemies:
+			nearest = minf(nearest, c.distance_to(Vector2(float(e.px), float(e.py))))
+		if nearest > best_d:
+			best_d = nearest
+			best = c
+	sim.player.px = best.x
+	sim.player.py = best.y
+
+
+# direct injection of the levels (the economy of reaching them is the other half of this bot); the first upgrade is stamped at `now`
+func _set_capsule(sim: Variant, level: int, prot: int, now_ms: int) -> void:
+	sim.main_capsule["level"] = level
+	sim.main_capsule["protection"] = prot
+	sim.main_capsule["first_upgrade_at"] = now_ms
+
+
+# One live raid of `count` raiders (day_equiv `day`) against capsule level `level` / protection `prot`; returns {breached, seconds-from-contact}. No defenders but the core.
+func _hold_run(preset: Dictionary, level: int, prot: int, count: int, day: int) -> Dictionary:
+	var sim: Variant = _world_at(preset, T0_MS)
+	_set_capsule(sim, level, prot, T0_MS)
+	sim.set_clock(T0_MS + GRACE_MS + 1)
+	MainCapsule.on_director_raid(sim, {"incident": "raid", "faction": "бот"}, 0.0)
+	sim.capsule_raid["count"] = count
+	sim.capsule_raid["day_equiv"] = day
+	sim.update(DT)   # planned -> warning
+	sim.set_clock(int(sim.capsule_raid.contact_at) + 1)
+	sim.update(DT)   # warning -> contact (the raiders appear on the edge)
+	var ticks: int = 0
+	while String(sim.capsule_raid.state) != "none" and ticks < HOLD_TICK_CAP:
+		_evade(sim)
+		sim.update(DT)
+		ticks += 1
+	var seconds: float = float(ticks) * DT
+	var breached: bool = false
+	for e in sim.capsule_events:
+		if StringName(e.get("kind", &"")) == &"breach":
+			breached = true
+	return {"breached": breached and seconds <= ASSAULT_WINDOW_S, "seconds": seconds, "resolved": String(sim.capsule_raid.state) == "none"}
+
+
+func _min_breaking_count(preset: Dictionary, level: int, prot: int, day: int) -> int:
+	if not bool(_hold_run(preset, level, prot, COUNT_CAP, day).breached):
+		return -1   # even COUNT_CAP raiders do not break it inside the window
+	var lo: int = 1
+	var hi: int = COUNT_CAP
+	while lo < hi:
+		var mid: int = (lo + hi) / 2
+		if bool(_hold_run(preset, level, prot, mid, day).breached):
+			hi = mid
+		else:
+			lo = mid + 1
+	return lo
+
+
+func _w3b_report(inc_hand: Dictionary) -> void:
+	print("\n== W3b: HOLD vs BREAK, CADENCE, WARNING (spec 0010 REQ-0010-18/19/70/71/108/110; informational) ==")
+	var tbl: Dictionary = Catalog.load_json().get("capsule_levels", {})
+	var by: Dictionary = (tbl.get("raid", {}) as Dictionary).get("by_level", {})
+	var levels: Array = tbl.get("levels", [])
+	var prot: Array = (tbl.get("protection", {}) as Dictionary).get("levels", [])
+	if by.is_empty() or levels.is_empty() or prot.is_empty():
+		print("   catalog.json has no capsule_levels/raid data — nothing to measure")
+		return
+	_hold_report(by, prot, inc_hand)
+	_cadence_report()
+	_warning_report()
+
+
+# (a) REQ-0010-18: for each L the minimal raider count that breaches P_L=L inside the assault window, on the first preset (the core is the same in all presets)
+func _hold_report(by: Dictionary, prot: Array, inc_hand: Dictionary) -> void:
+	var preset: Dictionary = GameData.SPAWN_PRESETS[0]
+	print("\n   (a) HOLD vs BREAK — live raid (Sim.update), protection P = capsule level L, defenders: the core only; assault window %.0f s from contact (PROPOSED)" % ASSAULT_WINDOW_S)
+	print("       L  row(count x day)  core_hp  row breaks in (s)  min breaking count  k=min/row   attack power (x ref)  defence price (gather-min)  a = defence : attack")
+	var ref_power: float = _power_of(int(by["1"].count), int(by["1"].day_equiv))
+	var worst_a: float = 0.0
+	for level in range(1, LEVELS + 1):
+		var row: Dictionary = by[str(level)]
+		var hp: float = float((prot[level] as Dictionary).get("core_hp", 0.0))
+		var row_run: Dictionary = _hold_run(preset, level, level, int(row.count), int(row.day_equiv))
+		var nmin: int = _min_breaking_count(preset, level, level, int(row.day_equiv))
+		var k: float = float(nmin) / float(row.count) if nmin > 0 else INF
+		var power: float = _power_of(nmin, int(row.day_equiv)) if nmin > 0 else INF
+		var attack_x: float = power / ref_power
+		var minutes: float = _minutes(_prot_cost(prot, level), inc_hand) if not inc_hand.is_empty() else -1.0
+		var a: float = minutes / (T1_MIN * attack_x) if minutes >= 0.0 and nmin > 0 else -1.0
+		worst_a = maxf(worst_a, a)
+		print("       %d  %2d x %-3d          %7.0f  %-17s  %-18s  %-9s   %-20s  %-26s  %s" % [level, int(row.count), int(row.day_equiv), hp, "%.1f s" % float(row_run.seconds) if bool(row_run.resolved) else "never",
+			str(nmin) if nmin > 0 else ">%d" % COUNT_CAP, "x%.2f" % k if nmin > 0 else "-", "%.2f" % attack_x if nmin > 0 else "-",
+			"%.1f" % minutes if minutes >= 0.0 else "(run the full bot)", "%.3f" % a if a >= 0.0 else "-"])
+	if worst_a > 0.0:
+		print("       worst a = %.3f  (REQ-0010-18 wants a < 1: holding is cheaper than breaking; the attack price anchor «the level-1 reference raid = T_1 = %.0f gather-minutes» is PROPOSED)" % [worst_a, T1_MIN])
+
+
+func _prot_cost(prot: Array, level: int) -> Dictionary:
+	var c: Dictionary = {}
+	for res in ((prot[level] as Dictionary).get("cost", {}) as Dictionary):
+		c[String(res)] = int(prot[level].cost[res])
+	return c
+
+
+# (b) REQ-0010-70/110: the cadence of the planner over CADENCE_DAYS of injected clock, 5 presets
+func _cadence_report() -> void:
+	print("\n   (b) CADENCE — %d clock days per preset, the clock advances %d ms per tick (independent of the tick count), capsule L1 upgraded at day 0, no defence" % [CADENCE_DAYS, CLOCK_STEP_MS])
+	var gaps: Array = []
+	var first_ok: bool = true
+	var firsts: Array = []
+	var per_preset: Array = []
+	for preset in GameData.SPAWN_PRESETS:
+		var sim: Variant = _world_at(preset, T0_MS)
+		_set_capsule(sim, 1, 2, T0_MS)   # protection 2: some raids are held, some break — the cadence must not care
+		var warns: Array = []
+		var now: int = T0_MS
+		var end: int = T0_MS + CADENCE_DAYS * DAY_MS
+		var guard_ms: int = 0
+		while now < end:
+			now += CLOCK_STEP_MS
+			sim.set_clock(now)
+			_evade(sim)
+			sim.update(DT)
+			for e in MainCapsule.drain_events(sim):
+				if StringName(e.get("kind", &"")) == &"warning":
+					warns.append(int(e.warn_at))
+		for i in warns.size():
+			if i == 0:
+				firsts.append(int(warns[0]) - T0_MS)
+				first_ok = first_ok and int(warns[0]) - T0_MS >= GRACE_MS
+			else:
+				gaps.append(int(warns[i]) - int(warns[i - 1]))
+		per_preset.append(warns.size())
+	gaps.sort()
+	var sum: float = 0.0
+	for g in gaps:
+		sum += float(g)
+	var mean_d: float = sum / float(maxi(1, gaps.size())) / float(DAY_MS)
+	print("       raids per preset over %d days: %s ; intervals measured: %d" % [CADENCE_DAYS, str(per_preset), gaps.size()])
+	print("       first raid after landing (days): %s  -> never before the %d-day grace: %s" % [str(firsts.map(func(x: int) -> String: return "%.2f" % (float(x) / float(DAY_MS)))), GRACE_MS / DAY_MS, "yes" if first_ok else "NO"])
+	if not gaps.is_empty():
+		print("       interval histogram (days, bin 0.25):")
+		var bins: Dictionary = {}
+		for g in gaps:
+			var b: float = floor(float(g) / float(DAY_MS) / 0.25) * 0.25
+			bins[b] = int(bins.get(b, 0)) + 1
+		var keys: Array = bins.keys()
+		keys.sort()
+		for b in keys:
+			print("         %4.2f..%4.2f  %s %d" % [float(b), float(b) + 0.25, "#".repeat(int(bins[b])), int(bins[b])])
+		print("       mean interval %.3f days (OD-86 wants 3..4) · min %.3f · max %.3f days · window [%.2f; %.2f] days -> %s" % [mean_d, float(gaps[0]) / float(DAY_MS),
+			float(gaps[gaps.size() - 1]) / float(DAY_MS), float(CADENCE_MIN_MS) / float(DAY_MS), float(CADENCE_MAX_MS) / float(DAY_MS),
+			"INSIDE the window" if float(gaps[0]) >= float(CADENCE_MIN_MS) - 1.0 and float(gaps[gaps.size() - 1]) <= float(CADENCE_MAX_MS) + 1.0 else "OUTSIDE"])
+
+
+# (c) REQ-0010-19/71/108: the warning lead of every raid and the hero's walk to shelter
+func _warning_report() -> void:
+	print("\n   (c) WARNING — contact_at - warn_at over 30 raids per preset on the injected clock, and the hero's walk to the capsule")
+	var leads: Array = []
+	for preset in GameData.SPAWN_PRESETS:
+		for i in 6:
+			var sim: Variant = _world_at(preset, T0_MS + i * 1000)
+			_set_capsule(sim, 1, 1, T0_MS)
+			sim.set_clock(T0_MS + GRACE_MS + 1 + i * 7919)
+			MainCapsule.on_director_raid(sim, {"incident": "raid", "faction": "бот"}, 0.0)
+			sim.update(DT)
+			leads.append(int(sim.capsule_raid.contact_at) - int(sim.capsule_raid.warn_at))
+	leads.sort()
+	print("       leads (min..max ms): %d .. %d   window [%d; %d]  -> %s" % [int(leads[0]), int(leads[leads.size() - 1]), WARN_MIN_MS, WARN_MAX_MS,
+		"INSIDE" if int(leads[0]) >= WARN_MIN_MS and int(leads[leads.size() - 1]) <= WARN_MAX_MS else "OUTSIDE"])
+	var worst_walk: float = 0.0
+	for preset in GameData.SPAWN_PRESETS:
+		var sim2: Variant = _world_at(preset, T0_MS)
+		var cap: Vector2i = MainCapsule.tile(sim2)
+		var far: Vector2i = cap
+		var best: int = -1
+		for c in [Vector2i(0, 0), Vector2i(MAP_N - 1, 0), Vector2i(0, MAP_N - 1), Vector2i(MAP_N - 1, MAP_N - 1)]:
+			var path: Array = sim2.compute_path(c.x, c.y, cap.x, cap.y)
+			if path.size() > best:
+				best = path.size()
+				far = c
+		worst_walk = maxf(worst_walk, float(best) / 3.4)
+		print("       %s: longest walk from a map corner %s to the capsule = %d cells ≈ %.0f s of hero walking (3.4 cells/s)" % [str(preset.get("name", "preset")), str(far), best, float(best) / 3.4])
+	print("       the walk (%.0f s at worst) is %.1f%% of the shortest warning (%d s): the shelter is reachable inside the warning with a wide margin" % [worst_walk, 100.0 * worst_walk / (float(WARN_MIN_MS) / 1000.0), WARN_MIN_MS / 1000])

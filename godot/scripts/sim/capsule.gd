@@ -27,6 +27,7 @@ const HeroHealth = preload("res://scripts/sim/hero_health.gd")
 const Clock = preload("res://scripts/clock.gd")   # лише to_wire/from_wire (int64 <-> рядок JSON); годинник сим не читає
 const Inventory = preload("res://scripts/sim/inventory.gd")
 const Catalog = preload("res://scripts/kernel/catalog.gd")
+const OrbitStub = preload("res://scripts/sim/orbit_stub.gd")   # шви 0011 (REQ-0010-86: чи пропонувати «В сейв-зону»/«Підкріплення»)
 
 const KIND := "main_capsule"
 const RECORD_VERSION := 2   # версія ЗАПИСУ капсули в сейві (SAVE_VERSION не чіпаємо: OD-C14); 2 = дві осі (+protection, +protection_invested; REQ-0010-60); старша/невідома — явна помилка
@@ -815,7 +816,7 @@ static func resolve_raid(cap: Dictionary, inp: Dictionary, tbl: Dictionary) -> D
 # як збережений (REQ-0010-02/35); прапор лише наказує першому тіку перепланувати рейд, що не дійшов до контакту.
 static func idle_raid() -> Dictionary:
 	return {"state": ST_NONE, "id": 0, "seq": 0, "warn_at": 0, "contact_at": 0, "warned_at": 0, "dir": 0, "count": 0, "day_equiv": 0,
-		"faction": "", "core_hp": 0.0, "spawned": false, "queue": [], "reentry": false}
+		"faction": "", "core_hp": 0.0, "spawned": false, "queue": [], "reentry": false, "defer_due": false}
 
 static func serialize_raid(s) -> Dictionary:
 	var r: Dictionary = s.capsule_raid
@@ -966,12 +967,14 @@ static func on_catch_up(s, now_ms: int) -> Dictionary:
 	if s.get("use_main_capsule") != true or (s.main_capsule as Dictionary).is_empty():
 		return {"raid_events": 0, "rescheduled": false}
 	s.capsule_raid["reentry"] = true
+	s.capsule_raid["defer_due"] = true
 	return {"raid_events": 0, "rescheduled": _reenter(s)}
 
 # Session.restore_game: «Продовжити» = власник був поза грою. Годинник ще не подано (0) -> перепланування відкладається до першого тіка з now > 0.
 static func mark_reentry(s) -> void:
 	if s.get("use_main_capsule") == true and not (s.main_capsule as Dictionary).is_empty():
 		s.capsule_raid["reentry"] = true
+		s.capsule_raid["defer_due"] = true
 
 static func _reenter(s) -> bool:
 	var r: Dictionary = s.capsule_raid
@@ -1018,7 +1021,7 @@ static func _announce(s, now: int) -> void:
 	s.raid.warned = true
 	s.banner = MSG_WARNING
 	s._log("⚠ Рейдери на підході (%s) — укріплюй базу!" % String(r.faction), "warn")
-	_event(s, {"kind": &"warning", "raid_id": int(r.id), "warn_at": now, "contact_at": int(r.contact_at), "dir": int(r.dir),
+	_event(s, {"kind": &"warning", "event": &"raid_warning", "raid_id": int(r.id), "warn_at": now, "contact_at": int(r.contact_at), "dir": int(r.dir),
 		"composition": {"count": int(r.count), "day_equiv": int(r.day_equiv)}})
 
 static func _contact(s) -> void:
@@ -1106,3 +1109,102 @@ static func _end_raid(s, res: Dictionary) -> void:
 	if not q.is_empty():   # чергу розбирає той самий автомат: наступний рейд чекає кінця імунітету (REQ-0010-27)
 		var nxt: Dictionary = q.pop_front()
 		_plan(s, nxt, float(nxt.get("points", 0.0)), maxi(int(s.now_ms), int(s.main_capsule.get("immune_until", 0))))
+
+
+# ---------------- каденс і режисерські ворота (W3b: REQ-0010-20/27/68/70/71/93/110/111/112/114/115) ----------------
+# NPC/машинний рейд планує РЕЙД-ПОТІК капсули (REQ-0010-34/110), а не MTB-кидок Balance у sim-днях: момент рейду — `next_raid_at` (UTC-мс запису капсули),
+# інтервал — рівномірно з [cadence_min_ms; cadence_max_ms] (OD-86: від 259 200 000 до 345 600 000 мс; РІВНОМІРНА форма розподілу — ПРОПОЗИЦІЯ бота,
+# середнє 3.5 доби). Інтервал — ЛІЧИЛЬНИКОВА похідна потоку: seed = (region_seed ^ STREAM_SALT) + (k+1)·CADENCE_STRIDE, k = номер рейду (capsule_raid.seq);
+# тож планувальник НЕ рухає курсор `raid_rng_cursor` між рейдами й нічого не пише в запис, доки рейд не заплановано (запис змінюється подією, а не тіком).
+# Усе лише в `now` (REQ-0010-114/115): не залежить від debug-швидкості, use_realtime, day_len (одиниці часу Q-2 — варіант A спеки, стаб).
+const CADENCE_STRIDE := 0x9E3779B1
+
+static func cadence_interval(s, k: int) -> int:
+	var rd: Dictionary = raid_data(s)
+	var lo: int = int(rd.get("cadence_min_ms", 0))
+	var hi: int = maxi(lo, int(rd.get("cadence_max_ms", lo)))
+	var g := RandomNumberGenerator.new()
+	g.seed = (s.region_seed() ^ STREAM_SALT) + (k + 1) * CADENCE_STRIDE
+	return lo + int(floor(g.randf() * float(hi - lo)))
+
+# Коли настає наступний рейд (UTC-мс): мітка `next_raid_at`, а поки її нема — «ворота відкрито + інтервал», де ворота відкрито = пізніше з (кінець грейсу,
+# перша прокачка) (OD-66/107). -1 — каденсу нема: капсулу не прокачано чи даних каденсу нема.
+static func due_at(s) -> int:
+	var cap: Dictionary = s.main_capsule
+	var nxt: int = int(cap.get("next_raid_at", 0))
+	if nxt > 0:
+		return nxt
+	var rd: Dictionary = raid_data(s)
+	var first: int = int(cap.get("first_upgrade_at", 0))
+	if first <= 0 or not rd.has("cadence_min_ms"):
+		return -1
+	var opened: int = maxi(int(cap.get("grace_start", 0)) + int(rd.get("grace_ms", 0)), first)
+	return opened + cadence_interval(s, int((s.capsule_raid as Dictionary).get("seq", 0)))
+
+# Рейд, що «настав» поза грою (catch-up/«Продовжити», транзитний `defer_due`): у самому catch-up НЕ створюється й нічого не пише (REQ-0010-94); перший тік
+# після входу відкладає його на повний інтервал від входу (OD-53: без атак на гравця; стаб до Q-1, REQ-0010-119) — жодного раптового рейду після повернення.
+# Тік планувальника (Director.update, ON): true == рейд ПОРА кидати зараз — усі ворота відкриті (gate == &"": грейс, прокачка, не імунітет, нема активного) і
+# час настав. Імунітет/активний рейд лише ВІДКЛАДАЮТЬ настання (REQ-0010-27). Годинник не подано (now_ms = 0) -> грейс не минув -> рейду нема ніколи.
+static func cadence_tick(s) -> bool:
+	if gate(s) != &"":
+		return false
+	var due: int = due_at(s)
+	if bool(s.capsule_raid.get("defer_due", false)) and int(s.now_ms) > 0:
+		s.capsule_raid["defer_due"] = false
+		if due >= 0 and due <= int(s.now_ms):
+			s.main_capsule["next_raid_at"] = int(s.now_ms) + cadence_interval(s, int(s.capsule_raid.get("seq", 0)))
+			return false
+	return due >= 0 and int(s.now_ms) >= due
+
+# Запланувати рейд за каденсом: автомат + мітка НАСТУПНОГО рейду від моменту плану (інтервал між двома планами = вибраний інтервал, не залежить від тривалості бою).
+static func plan_scheduled(s, payload: Dictionary, points: float) -> void:
+	var now: int = maxi(0, int(s.now_ms))
+	_plan(s, payload, points, now)
+	s.main_capsule["next_raid_at"] = now + cadence_interval(s, int(s.capsule_raid.seq))
+
+# Події рейду для споживача ПОЗА sim (push-сповіщення пристрою, REQ-0010-109: доставка — клієнт, sim лише емітить): забрати й очистити. Не хеш.
+static func drain_events(s) -> Array:
+	var out: Array = (s.capsule_events as Array).duplicate(true)
+	(s.capsule_events as Array).clear()
+	return out
+
+# REQ-0010-120: dev-хук форсованого рейду для G5 — лише у debug-збірці (у релізній відмова; за зразком REQ-0012-40). Sim збірки не питає (REQ-0010-92):
+# прапор `debug_build` дає КРАЙ пристрою (newhud_main: has_feature("debug") рушія, перемикач `-- capsule forceraid`). Обходить ворота (грейс/перша
+# прокачка/імунітет), але НЕ попередження: контакт = now + warn_min_ms (найкоротше легальне, REQ-0010-19); прискорення — фейк-Clock.
+# Каденс: next_raid_at НЕ перезаписується, але _plan збільшує capsule_raid.seq, а інтервал наступного рейду виводиться з seq (лічильникова похідна) — тож наступний
+# due_at зсувається (інший k -> інший інтервал із тих самих [3;4] діб). Для dev-хука це прийнятно; межі каденсу (OD-86) зберігаються.
+static func force_raid(s, debug_build: bool) -> Dictionary:
+	if not debug_build:
+		return {"ok": false, "reason": &"release_build"}
+	if s.get("use_main_capsule") != true or (s.main_capsule as Dictionary).is_empty():
+		return {"ok": false, "reason": &"no_capsule"}
+	if _active(s):
+		return {"ok": false, "reason": &"active"}
+	var now: int = maxi(0, int(s.now_ms))
+	_plan(s, {"faction": "тестові мародери"}, 0.0, now)
+	s.capsule_raid.contact_at = now + int(raid_data(s).get("warn_min_ms", 0))
+	return {"ok": true, "raid_id": int(s.capsule_raid.id), "contact_at": int(s.capsule_raid.contact_at)}
+
+# ---------------- дії панелі за станами (REQ-0010-86; модель для HUD, W4a) ----------------
+# «Прокачати» зникає на макс. рівні капсули, «Захист» — на макс. захисті; «Склад» — завжди; «В сейв-зону» — лише коли є сейв-сток (Орбіта; у К1 стаб — нема);
+# «Підкріплення» — лише коли шов 0011 його пропонує (вікно П5 невідоме -> стаб не пропонує). Недоступних дій не показуємо.
+const ACT_UPGRADE := &"upgrade"
+const ACT_PROTECTION := &"protection"
+const ACT_STORAGE := &"storage"
+const ACT_SAFE_ZONE := &"safe_zone"
+const ACT_REINFORCEMENT := &"reinforcement"
+
+static func actions(s, safe_stock: Variant = null) -> Array[StringName]:
+	var out: Array[StringName] = []
+	if s.get("use_main_capsule") != true or (s.main_capsule as Dictionary).is_empty():
+		return out
+	if int(s.main_capsule.get("level", 0)) < max_level(s):
+		out.append(ACT_UPGRADE)
+	if protection_of(s) < max_protection(s):
+		out.append(ACT_PROTECTION)
+	out.append(ACT_STORAGE)
+	if safe_stock != null:
+		out.append(ACT_SAFE_ZONE)
+	if OrbitStub.reinforcement_offered(s, safe_stock):
+		out.append(ACT_REINFORCEMENT)
+	return out

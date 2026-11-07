@@ -277,7 +277,7 @@ const CAPSULE_ZONE_KEYS := ["radius_m", "cell_m", "radius_cells"]
 const CAPSULE_LEVEL_KEYS := ["level", "cost", "buffs"]
 const CAPSULE_PROT_TOP_KEYS := ["factor", "levels"]
 const CAPSULE_PROT_KEYS := ["level", "cost", "core_hp"]
-const CAPSULE_RAID_DECIDED := {"immunity_ms": 86400000, "take_percent": 50, "grace_ms": 259200000, "warn_min_ms": 600000, "warn_max_ms": 1800000}   # OD-24/107/66/88 verbatim
+const CAPSULE_RAID_DECIDED := {"immunity_ms": 86400000, "take_percent": 50, "grace_ms": 259200000, "warn_min_ms": 600000, "warn_max_ms": 1800000, "cadence_min_ms": 259200000, "cadence_max_ms": 345600000}   # OD-24/107/66/88/86 verbatim
 const CAPSULE_RAID_PROPOSED := ["take_round", "queue_max", "roll_spread", "wealth_ref_points", "count_max", "by_level"]                          # the bot's proposals (W3a)
 const CAPSULE_BUFF_STEP := 0.1       # OD-98
 const CAPSULE_RARITY := {"wood": 0, "stone": 1, "planks": 2, "scrap": 3, "components": 4}   # rank by the finite supply order (planks = processed wood)
@@ -420,7 +420,7 @@ func _t_capsule_levels_data() -> void:
 	# --- the raid block: the owner's decided numbers verbatim + the bot's proposals, each named as such ---
 	var raid: Dictionary = t.get("raid", {})
 	var want_keys: Array = ["decided", "proposed"] + CAPSULE_RAID_DECIDED.keys() + CAPSULE_RAID_PROPOSED
-	ok(_sorted_keys(raid) == _sorted(want_keys), "raid block: no key outside the schema (no cadence/min-gap: OD-86 sets none): %s" % str(_sorted_keys(raid)))
+	ok(_sorted_keys(raid) == _sorted(want_keys), "raid block: no key outside the schema (cadence window = OD-86 verbatim; no min-gap): %s" % str(_sorted_keys(raid)))
 	var decided_ok: bool = true
 	for k in CAPSULE_RAID_DECIDED:
 		decided_ok = decided_ok and int(raid.get(k, -1)) == int(CAPSULE_RAID_DECIDED[k])

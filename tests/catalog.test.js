@@ -369,7 +369,7 @@ const CAPSULE_ZONE_KEYS = ["radius_m", "cell_m", "radius_cells"];
 const CAPSULE_LEVEL_KEYS = ["level", "cost", "buffs"];
 const CAPSULE_PROT_TOP_KEYS = ["factor", "levels"];
 const CAPSULE_PROT_KEYS = ["level", "cost", "core_hp"];
-const CAPSULE_RAID_DECIDED = { immunity_ms: 86400000, take_percent: 50, grace_ms: 259200000, warn_min_ms: 600000, warn_max_ms: 1800000 }; // OD-24 / OD-107 / OD-66 / OD-88: verbatim
+const CAPSULE_RAID_DECIDED = { immunity_ms: 86400000, take_percent: 50, grace_ms: 259200000, warn_min_ms: 600000, warn_max_ms: 1800000, cadence_min_ms: 259200000, cadence_max_ms: 345600000 }; // OD-24 / OD-107 / OD-66 / OD-88 / OD-86: verbatim
 const CAPSULE_RAID_PROPOSED = ["take_round", "queue_max", "roll_spread", "wealth_ref_points", "count_max", "by_level"];               // the bot's proposals (status: proposed, W3a)
 const CAPSULE_RAID_KEYS = ["decided", "proposed", ...Object.keys(CAPSULE_RAID_DECIDED), ...CAPSULE_RAID_PROPOSED];
 const RAIDER_POWER = (count, day) => count * (7 + 1.2 * day) * (28 * (1 + 0.18 * day));                                              // mirrors GameData.make_raider: dmg x hp per raider
@@ -505,7 +505,7 @@ test("capsule_levels: exactly TWO axes and no clone-roster entries anywhere in t
 
 test("capsule_levels: the raid block — the owner's decided numbers verbatim + the bot's PROPOSED ones, each named as such (OD-24/66/88/107, REQ-0010-62/81/112)", () => {
   const { raid } = capsuleTable();
-  assert.deepStrictEqual(Object.keys(raid).sort(), [...CAPSULE_RAID_KEYS].sort(), "no key outside the schema: cadence/min-gap are NOT here (OD-86 sets no lower bound between raids)");
+  assert.deepStrictEqual(Object.keys(raid).sort(), [...CAPSULE_RAID_KEYS].sort(), "no key outside the schema: the cadence window is OD-86 verbatim (3..4 days); a min-gap between raids is NOT here (no decision sets one)");
   for (const [k, v] of Object.entries(CAPSULE_RAID_DECIDED)) assert.strictEqual(raid[k], v, `${k} is the owner's number (${v})`);
   assert.deepStrictEqual([...raid.decided].sort(), Object.keys(CAPSULE_RAID_DECIDED).sort(), "raid.decided names exactly the owner-decided numbers");
   assert.deepStrictEqual([...raid.proposed].sort(), [...CAPSULE_RAID_PROPOSED].sort(), "raid.proposed names exactly the agent-proposed numbers (the owner approves them at merge)");
