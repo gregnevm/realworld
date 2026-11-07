@@ -37,30 +37,24 @@
 # 92 (time enters only through Sim.set_clock; monotone; not hashed), 98 (ONE landing seam). Fields of the record
 # that later waves add (invested W2a; immune_until / token / raid cursor W3a) are NOT attacked here — they do not exist yet.
 #
-# WAVE 0010-W2a (appended after the W1b block): the levels table + upgrade_capsule + the invested ledger.
-# REQ-0010-11/91 (ONE table in the catalog data, rows 0..5, the code holds none of its numbers — a grep AND an injected table that
-# changes behaviour; a 7th row needs no code), 12 (buffs(0) empty even when the data says otherwise), 13 (atomic debit: backpack
-# FIRST, then the stock only while the hero stands in the zone, edge inclusive; refusal = the first reason, nothing debited; level 5
-# is the top), 14 + 35 (ledger == the units that actually left, measured around the call; every level/ledger change moves
-# world_hash; JSON round trip keeps ints; records handed out are copies), 17 (one axis: a row is {level,cost,radius,core_hp,buffs},
-# one upgrade entry point), 76 (backpack-then-stock, the same cmd id in the same tick pays once, no id = no dedup), 79 (no
-# hunger/cold/sleep key anywhere in the table), 82 (invested key order), 88 (a level-5 save against a lower/higher/one-row table:
-# clamp, ledger as is, defence recomputed; corrupt ledgers refused), 96/97 (death leaves the ledger and stock; upgrading summons
-# no body), plus a seeded property run against an INDEPENDENT oracle (measured funds + the catalog FILE + the data's metric).
-# Not testable in this wave: «захист(L) впливає на resolve_raid» (REQ-0010-17, resolve_raid is W3a), drop of invested by a raid (W3a).
-# WAVE 0010-W2b (appended after the W2a block): the control zone and the buffs on the hero and on the processes.
-# REQ-0010-15 (the SAME act inside / ON the edge / one cell outside gives a different result on every hook — gather time, melee
-# damage, bench crafting, research; the edge is inclusive; the metric is Chebyshev so the CORNER (R,R) is in and (R+1,R) is out; the
-# hero's cell is floor(px),floor(py); each hook reads ITS OWN key and the CURRENT level's row, not a product of the rows below it; a
-# buff multiplies capacity that exists — no bench, no research table → nothing), 16 (radius(L+1) >= radius(L) on the real table and on
-# synthetic ones; every zone is a subset of the next level's zone on the 5 spawn presets; the ring itself is W4a — not testable here),
-# 12 (level 0: no buff, any key, any cell, inside the R0 zone; ON level 0 is BIT-EXACT the OFF world), 79 (a need-key in the data is
-# not a buff and moves no body need), 80 (no retroactivity: a level drop/rise in the middle of a craft or a research project moves
-# neither the accumulated timer nor the progress — the next step simply adds at the NEW rate; the benches outside the shrunk zone keep
-# working at 1.0 and nothing is lost or doubled), 88 (a level-5 save against a lower table: the buffs are the clamped row's), 01 (the
-# hooks are inert under flag OFF even with a stray record + table), D9 (the node tooltip's time is the time the sim then uses), D13
-# (twin worlds + a resume payload cut mid-craft stay in lock-step). Expectations come from the table the TEST builds (distinct, binary-
-# exact buff values per key and per level, radii 2,3,5,6,8,9) or from the catalog FILE, never from capsule.gd.
+# WAVE 0010-W2a/W2b/W2c (new edition of spec 0010 — OD-73/76/98/99/103; the first-wave expectations of REQ-0010-11/15/16/17/79/80 are REPLACED):
+# REQ-0010-11/91/99 (the table in the catalog DATA: capsule axis rows 0..5 {level,cost,buffs} + a defence axis of its own 0..5 {level,cost,core_hp}
+# + ONE static zone radius; the code holds none of its numbers — a grep AND injected tables that change behaviour; a 7th row needs no code),
+# 12 (buffs(0) empty even when the data says otherwise), 13/76/100 (atomic debit: backpack FIRST, then the stock only while the hero stands in the
+# zone, edge inclusive; refusal = the first reason, nothing debited; the top of each axis is refused), 14 + 35 (ledgers == the units that actually
+# left; every level/ledger change moves world_hash; JSON round trip keeps ints), 17 (exactly two raise entry points), 82 (ledger key order),
+# 88 (clamp of BOTH axes, ledgers as is), 96/97 (death leaves everything; upgrading summons no body), 105 (exactly FOUR buff axes — gather, craft,
+# need RECOVERY, research; no melee, no hunger), 106 (~+10% per level, exactly +50% at 5, 0 at 0), 15 (the SAME act inside / ON the edge / one
+# cell outside gives a different result on every hook; the metric is Chebyshev so the CORNER (R,R) is in and (R+1,R) is out), 16/80 (the radius is
+# ONE static number for every level and every protection; a level drop shrinks the buff, never the zone; no retroactivity of a buff on a running
+# craft/research), 107 (need RECOVERY through the real body — see the W2c block), 01 (every hook inert under flag OFF), D9 (the node tooltip's time
+# is the time the sim then uses), D13 (twin worlds + a resume payload cut mid-craft stay in lock-step). Expectations come from tables the TEST builds
+# (distinct, binary-exact values per key/level, one static radius) or from the catalog FILE, never from capsule.gd.
+# WAVE 0010-W2c (appended at the END of the file): REQ-0010-99/100 (two independent axes, atomic protection upgrade, sources, dedupe, real-catalog walk),
+# 102 (breach cost x2 per step / x16 over four, coefficient from the data, core maximum a function of PROTECTION only), 103/35/82 (protection and its
+# ledger in the hash/wire/round trip, OFF has no keys, broken records refused), 88 (clamp of BOTH axes), 105/106, 107 (sleep + warm-up x buff inside
+# the zone only; onset/decay unchanged; kernel recover_scale in all three climate branches), 16/80, a seeded model run over both axes. Not testable yet
+# (W3/W4a, reported): REQ-0010-17 resolve_raid uses protection, 100 verb via the R9 router, 104 raid leaves protection alone (no raid code yet).
 # CLOSEOUT of the integrity blockers on W1a/W1b (guards that survived deletion — F3): `_t_on_patrol_not_spawned`,
 # `_t_on_director_raid_dropped`, `_t_on_session_travel_refused` (after `_t_no_eternal_siege`) and the respawn_anchor WIRING
 # checks inside `_t_respawn_seams` (REQ-0010-09: what Session.respawn hands to sim.respawn_new_pawn). Each fails when its guard is removed.
@@ -82,6 +76,7 @@ const Inventory = preload("res://scripts/sim/inventory.gd")
 const Upkeep = preload("res://scripts/sim/upkeep.gd")
 const Director = preload("res://scripts/sim/director.gd")
 const HeroHealth = preload("res://scripts/sim/hero_health.gd")
+const Gear = preload("res://scripts/kernel/gear.gd")
 const MainCapsule = preload("res://scripts/sim/capsule.gd")
 const KernelBalance = preload("res://scripts/kernel/balance.gd")
 const InputCtl = preload("res://scripts/ui/input_controller.gd")
@@ -168,11 +163,11 @@ func _init() -> void:
 	_t_range_extension()
 	_t_upgrade_side_effects()
 	_t_upgrade_death_and_roster()
-	_t_one_axis_api()
+	_t_two_axes_api()
 	_t_upgrade_property()
 	# --- wave 0010-W2b ---
 	_t_zone_shape()
-	_t_zone_monotone()
+	_t_zone_static()
 	_t_buff_hero_hooks()
 	_t_buff_one_key_each()
 	_t_buff_stacks_with_gear()
@@ -198,6 +193,21 @@ func _init() -> void:
 	_t_zone_metric_safe_failure()
 	_t_zone_metric_missing_and_live()
 	_t_off_haul_resume_radius()
+	# --- wave 0010-W2c (rework under OD-73/76/98/99/103: the defence axis, four buff axes, static radius, x2 ladder) ---
+	_t_prot_axes_independent()
+	_t_prot_refusals()
+	_t_prot_sources_and_dedupe()
+	_t_prot_walk_real_catalog()
+	_t_breach_cost_ladder()
+	_t_prot_hash_and_wire()
+	_t_prot_tampered_record()
+	_t_prot_save_clamp()
+	_t_prot_death_keeps()
+	_t_axes_property()
+	_t_w2c_catalog_numbers()
+	_t_need_recovery_through_body()
+	_t_need_onset_unchanged()
+	_t_comfort_recover_scale_kernel()
 	chk.skip_banner()
 	finish()
 
@@ -2555,7 +2565,6 @@ func _t_no_wallclock_alias_proof() -> void:
 # =============================================================================================
 const CATALOG_FILE := "res://content/catalog.json"
 const PAY_IDS: Array = ["wood", "stone", "scrap", "planks", "components"]   # ids the backpack AND the stock both speak
-const NEED_WORDS: Array = ["hunger", "cold", "sleep", "rest", "thirst", "need", "warm", "heat", "fatigue", "stamina"]   # S2 (REQ-0010-79)
 const ROSTER_WORDS: Array = ["clone", "roster", "genome", "implant", "orbit", "pawn", "body", "dna"]   # the Orbit's business (REQ-0010-97)
 
 var _raw_cache: Dictionary = {}
@@ -2599,7 +2608,24 @@ func _same_numbers(a: Dictionary, b: Dictionary) -> bool:
 
 
 # a table whose numbers appear NOWHERE in the catalog or the code: a hard-coded constant shows up as a mismatch. Cost keys are
-# inserted in a NON-alphabetical order (wood, stone, planks) on purpose.
+# inserted in a NON-alphabetical order (wood, stone, planks) on purpose. NEW SCHEMA (OD-73/76/99/103, REQ-0010-11/99): `levels` = the capsule
+# axis {level, cost, buffs}, `protection` = the defence axis {factor, levels[{level, cost, core_hp}]} (other prices than the capsule axis, other
+# factor than the catalog's 2: a cross-axis mix-up cannot hide), `zone` = the ONE static radius (not a row of either axis).
+const SYN_R := 4    # the synthetic tables' one static zone radius (cells)
+const SYN_FACTOR := 3.0   # the synthetic tables' defence factor (the catalog says 2)
+
+
+func _synth_protection(n_levels: int) -> Dictionary:
+	var rows: Array = []
+	for P in n_levels:
+		var cost: Dictionary = {}
+		if P >= 1:
+			cost["scrap"] = P
+			cost["wood"] = 3 + 2 * P
+		rows.append({"level": P, "cost": cost, "core_hp": 50.0 * pow(SYN_FACTOR, float(P))})
+	return {"factor": SYN_FACTOR, "levels": rows}
+
+
 func _synth_table(n_levels: int) -> Dictionary:
 	var rows: Array = []
 	for L in n_levels:
@@ -2613,8 +2639,8 @@ func _synth_table(n_levels: int) -> Dictionary:
 		if L >= 1:
 			buffs["gather_mult"] = 1.0 + 0.07 * float(L)
 			buffs["craft_mult"] = 1.0 + 0.03 * float(L)
-		rows.append({"level": L, "cost": cost, "radius": 4 + L, "core_hp": 100.0 * float(L + 1) + 7.0, "buffs": buffs})
-	return {"version": 1, "status": "proposed", "metric": "chebyshev", "levels": rows}
+		rows.append({"level": L, "cost": cost, "buffs": buffs})
+	return {"version": 2, "status": "proposed", "metric": "chebyshev", "zone": {"radius_m": 40, "cell_m": 10.0, "radius_cells": SYN_R}, "levels": rows, "protection": _synth_protection(n_levels)}
 
 
 func _pack_set(s: Variant, res: String, n: int) -> void:
@@ -2656,12 +2682,19 @@ func _half(n: int) -> int:
 	return int(floor(float(n) * 0.5))
 
 
-# fund `cost` exactly, split between the backpack and the stock (the backpack gets `pack_part` of each)
+# fund `cost` exactly, split between the backpack and the stock (the backpack gets `pack_part` of each, but never more than 4 stacks — the
+# real prices are far bigger than a backpack, the rest goes to the stock; the stock is written directly, as every funding helper here does)
 func _fund_cost(s: Variant, cost: Dictionary, pack_part: float) -> void:
 	for res in cost:
 		var c: int = int(cost[res])
-		var p: int = mini(c, int(floor(float(c) * pack_part)))
+		var p: int = mini(mini(c, int(floor(float(c) * pack_part))), 4 * Inventory.stack_max(String(res)))
 		_fund(s, String(res), p, c - p)
+
+
+# one resource: `total` units, the backpack gets `pack_part` of them (never more than 4 stacks), the stock the rest
+func _fund_n(s: Variant, res: String, total: int, pack_part: float) -> void:
+	var p: int = mini(mini(total, int(floor(float(total) * pack_part))), 4 * Inventory.stack_max(res))
+	_fund(s, res, p, total - p)
 
 
 # an ON pad at level `n` of the REAL catalog table, reached through real upgrades; funds end at zero
@@ -2702,89 +2735,106 @@ func _first_word_in(keys: Array, words: Array) -> String:
 
 
 # =============================================================================================
-# REQ-0010-11 / 12 / 16 / 17 / 79 / 97 — the ONE table in the catalog DATA; no needs buff; no clone entry; no second axis;
-# the code holds none of its numbers (grep)
+# REQ-0010-11 / 12 / 16 / 17 / 97 / 99 / 105 (NEW EDITION, OD-73/76/99/103) — the table in the catalog DATA has TWO axes (capsule level 0..5 with
+# cost + four buffs; protection 0..5 with cost + core_hp), ONE static zone radius that is a row of neither axis, no clone entry; the code holds
+# none of its numbers (grep). The first-wave «ONE table / ONE axis / radius per level / core_hp per level» expectations are GONE (spec §6).
 # =============================================================================================
 func _t_levels_table_data() -> void:
 	var t: Dictionary = _raw_table()
 	var rows: Array = t.get("levels", [])
-	ok(not t.is_empty() and rows.size() == 6, "REQ-0010-11: catalog.json carries ONE capsule_levels table with exactly 6 rows (levels 0..5, OD-56) — %d rows" % rows.size())
+	var prot: Dictionary = t.get("protection", {})
+	var prot_rows: Array = prot.get("levels", [])
+	var zone: Dictionary = t.get("zone", {})
+	ok(not t.is_empty() and rows.size() == 6, "REQ-0010-11: catalog.json carries the capsule axis of capsule_levels with exactly 6 rows (levels 0..5, OD-56) — %d rows" % rows.size())
+	ok(prot_rows.size() == 6, "REQ-0010-11/99: ... and the protection axis with exactly 6 records of its own (0..5, OD-76) — %d records" % prot_rows.size())
 	var contiguous: bool = true
 	for i in rows.size():
 		contiguous = contiguous and int((rows[i] as Dictionary).get("level", -1)) == i
-	ok(contiguous, "REQ-0010-11: the rows are levels 0,1,..,5 in order (no gap, no duplicate)")
-	ok(["proposed", "approved"].has(String(t.get("status", ""))), "OD-108/60: the numbers carry an explicit status ('proposed' until the owner approves) — '%s'" % String(t.get("status", "")))
+	var p_contiguous: bool = true
+	for i in prot_rows.size():
+		p_contiguous = p_contiguous and int((prot_rows[i] as Dictionary).get("level", -1)) == i
+	ok(contiguous and p_contiguous, "REQ-0010-11/99: both axes are levels 0,1,..,5 in order (no gap, no duplicate)")
+	ok(["proposed", "approved"].has(String(t.get("status", ""))), "OD-60/M10: the numbers carry an explicit status ('proposed' until the owner approves) — '%s'" % String(t.get("status", "")))
 	ok(String(t.get("metric", "")) == "chebyshev", "REQ-0010-80: the zone metric is named in the data (this suite's zone oracle needs it) — '%s'" % String(t.get("metric", "")))
+	# REQ-0010-16 / 17: the structure — two axes, a radius that belongs to neither
+	var row_ok: bool = true
+	for r in rows:
+		row_ok = row_ok and (r as Dictionary).keys().size() == 3 and (r as Dictionary).has("level") and (r as Dictionary).has("cost") and (r as Dictionary).has("buffs")
+	var prow_ok: bool = true
+	for r in prot_rows:
+		prow_ok = prow_ok and (r as Dictionary).keys().size() == 3 and (r as Dictionary).has("level") and (r as Dictionary).has("cost") and (r as Dictionary).has("core_hp")
+	ok(row_ok, "REQ-0010-11/16: a capsule-axis row is exactly {level, cost, buffs} — the radius is NOT a row of the level axis (OD-99), core_hp is not either")
+	ok(prow_ok, "REQ-0010-17/99: a protection row is exactly {level, cost, core_hp} — no radius, no buffs on the defence axis")
+	ok(int(zone.get("radius_cells", 0)) > 0 and zone.has("radius_m"), "REQ-0010-16: the ONE static zone radius is a field of `zone` (radius_cells %s, radius_m %s)" % [str(zone.get("radius_cells")), str(zone.get("radius_m"))])
+	var axes: Array = []
+	for k in t.keys():
+		if ["levels", "protection"].has(String(k)) or String(k).contains("axis") or String(k).contains("branch") or String(k).contains("track") or String(k).contains("tree"):
+			axes.append(String(k))
+	axes.sort()
+	ok(axes == ["levels", "protection"], "REQ-0010-17: exactly TWO axes of progression in the data (capsule `levels` and `protection`) — %s" % str(axes))
 	# data -> code: every number the code reports is the file's number
 	var s: Variant = _on_pad()
-	ok(MainCapsule.max_level(s) == rows.size() - 1, "REQ-0010-11: max_level is the table size - 1 (code max %d, data rows %d)" % [MainCapsule.max_level(s), rows.size()])
+	ok(MainCapsule.max_level(s) == rows.size() - 1 and MainCapsule.max_protection(s) == prot_rows.size() - 1, "REQ-0010-11/91/99: max_level / max_protection are the table sizes - 1 (code %d / %d, data %d / %d)" % [MainCapsule.max_level(s), MainCapsule.max_protection(s), rows.size() - 1, prot_rows.size() - 1])
 	var bad: Array = []
 	for L in rows.size():
-		var raw: Dictionary = rows[L]
 		var row: Dictionary = MainCapsule.row(s, L)
 		if not _same_numbers(row.get("cost", {}), _cost_of(rows, L)):
 			bad.append("cost[%d]" % L)
-		if int(MainCapsule.radius(s, L)) != int(raw.radius) or int(row.get("radius", -1)) != int(raw.radius):
-			bad.append("radius[%d]" % L)
-		if absf(float(MainCapsule.core_hp(s, L)) - float(raw.core_hp)) > 1.0e-6 or absf(float(row.get("core_hp", -1.0)) - float(raw.core_hp)) > 1.0e-6:
-			bad.append("core_hp[%d]" % L)
-		if L >= 1 and not _same_numbers(MainCapsule.buffs(s, L), raw.get("buffs", {})):
+		if L >= 1 and not _same_numbers(MainCapsule.buffs(s, L), (rows[L] as Dictionary).get("buffs", {})):
 			bad.append("buffs[%d]" % L)
-	ok(bad.is_empty(), "REQ-0010-11: cost/radius/core_hp/buffs of every level are read from the data unchanged — %s" % ("ok" if bad.is_empty() else ", ".join(PackedStringArray(bad))))
+	for P in prot_rows.size():
+		var prow: Dictionary = MainCapsule.protection_row(s, P)
+		if not _same_numbers(prow.get("cost", {}), _cost_of(prot_rows, P)):
+			bad.append("protection.cost[%d]" % P)
+		if absf(float(MainCapsule.core_hp(s, P)) - float((prot_rows[P] as Dictionary).core_hp)) > 1.0e-6 or absf(float(prow.get("core_hp", -1.0)) - float((prot_rows[P] as Dictionary).core_hp)) > 1.0e-6:
+			bad.append("core_hp[%d]" % P)
+	if MainCapsule.zone_radius(s) != int(zone.get("radius_cells", -1)):
+		bad.append("zone.radius_cells")
+	ok(bad.is_empty(), "REQ-0010-11/16/99: cost/buffs of every level, cost/core_hp of every protection level and the zone radius are read from the data unchanged — %s" % ("ok" if bad.is_empty() else ", ".join(PackedStringArray(bad))))
 	# REQ-0010-12: level 0 is bare
-	ok(_cost_of(rows, 0).is_empty() and (rows[0] as Dictionary).get("buffs", {"x": 1}).is_empty() and MainCapsule.buffs(s, 0).is_empty(),
-		"REQ-0010-12: level 0 costs nothing and buffs(0) is empty (data AND code)")
+	ok(_cost_of(rows, 0).is_empty() and MainCapsule.buffs(s, 0).is_empty(), "REQ-0010-12: level 0 costs nothing and buffs(0) is empty (data AND code)")
 	# REQ-0010-12 is a RULE, not a property of today's numbers: a table that (wrongly) hangs a buff on level 0 still gives level 0 none
 	var tricky: Dictionary = _synth_table(3)
 	tricky.levels[0].buffs = {"gather_mult": 1.5, "craft_mult": 1.2}
 	s.capsule_table = tricky
 	ok(MainCapsule.buffs(s, 0).is_empty() and not MainCapsule.buffs(s, 1).is_empty(), "REQ-0010-12: level 0 gives NO buff even when the data lists one (level 1 still does) — buffs(0)=%s" % str(MainCapsule.buffs(s, 0)))
 	s.capsule_table = {}
-	# REQ-0010-16/17: the zone never shrinks, the ONE defence parameter changes with every level
-	var mono: bool = true
-	var strict: bool = true
+	# P1: prices grow with the level on both axes, in known resources, positive whole numbers
 	var grows: bool = true
 	var prev_total: int = 0
 	for L in range(1, rows.size()):
-		mono = mono and int(MainCapsule.radius(s, L)) >= int(MainCapsule.radius(s, L - 1))
-		strict = strict and float(MainCapsule.core_hp(s, L)) > float(MainCapsule.core_hp(s, L - 1))
 		var total: int = 0
 		for res in _cost_of(rows, L):
 			total += int(_cost_of(rows, L)[res])
 		grows = grows and total > prev_total
 		prev_total = total
-	ok(mono, "REQ-0010-16: radius(L+1) >= radius(L) for every level")
-	ok(strict, "REQ-0010-17: an upgrade CHANGES the defence parameter — core_hp(L+1) > core_hp(L) for every level")
-	ok(grows, "P1: the price of a level grows with the level (every level costs more units than the one before)")
-	# prices: only resources the game knows, positive whole numbers
+	ok(grows, "P1: the price of a capsule level grows with the level (every level costs more units than the one before)")
 	var priced: bool = true
-	for L in range(1, rows.size()):
-		var c: Dictionary = _cost_of(rows, L)
-		priced = priced and not c.is_empty()
-		for res in c:
-			priced = priced and GameData.RES.has(res) and int(c[res]) > 0 and Inventory.stack_max(String(res)) > 0 and s.res_key(res) != ""
-	ok(priced, "REQ-0010-11/13: every level 1..5 has a price in known resources, positive whole units")
-	# REQ-0010-79 / 97 / 17: no body-need multiplier, no clone/roster entry, no second axis — anywhere in the table
+	for ax in [rows, prot_rows]:
+		for L in range(1, (ax as Array).size()):
+			var c: Dictionary = _cost_of(ax, L)
+			priced = priced and not c.is_empty()
+			for res in c:
+				priced = priced and GameData.RES.has(res) and int(c[res]) > 0 and Inventory.stack_max(String(res)) > 0 and s.res_key(res) != ""
+	ok(priced, "REQ-0010-11/13/100: every level 1..5 of BOTH axes has a price in known resources, positive whole units")
+	# REQ-0010-97: no clone/roster entry anywhere in the table
 	var keys: Array = []
 	_all_keys(t, keys, "cost")
-	ok(_first_word_in(keys, NEED_WORDS) == "", "REQ-0010-79: no key of the table touches hunger/cold/sleep/thirst/needs — %s" % _first_word_in(keys, NEED_WORDS))
 	ok(_first_word_in(keys, ROSTER_WORDS) == "", "REQ-0010-97: no key of the table grants/levels clones, genome, implants or Orbit things — %s" % _first_word_in(keys, ROSTER_WORDS))
-	var axis: String = _first_word_in(t.keys(), ["axis", "axes", "branch", "track", "tree"])
-	var row_ok: bool = true
-	for r in rows:
-		for k in (r as Dictionary):
-			row_ok = row_ok and ["level", "cost", "radius", "core_hp", "buffs"].has(String(k))
-	ok(axis == "" and row_ok, "REQ-0010-17: ONE axis — a row is exactly {level,cost,radius,core_hp,buffs} and the table has no axes/branches (%s)" % axis)
 	# REQ-0010-11 «код не містить цих чисел»: no number of the table is a literal in the capsule module (comments stripped)
 	var nums: Dictionary = {}
-	for L in rows.size():
-		var rw: Dictionary = rows[L]
-		for k in (rw.get("cost", {}) as Dictionary):
-			nums[str(int(rw.cost[k]))] = "cost[%d].%s" % [L, String(k)]
-		nums[str(int(rw.radius))] = "radius[%d]" % L
-		nums[str(int(rw.core_hp))] = "core_hp[%d]" % L
-		for k in (rw.get("buffs", {}) as Dictionary):
-			nums["%s" % str(float(rw.buffs[k]))] = "buffs[%d].%s" % [L, String(k)]
+	for ax_name in ["levels", "protection"]:
+		var ax_rows: Array = rows if String(ax_name) == "levels" else prot_rows
+		for L in ax_rows.size():
+			var rw: Dictionary = ax_rows[L]
+			for k in (rw.get("cost", {}) as Dictionary):
+				nums[str(int(rw.cost[k]))] = "%s.cost[%d].%s" % [String(ax_name), L, String(k)]
+			if rw.has("core_hp"):
+				nums[str(int(rw.core_hp))] = "core_hp[%d]" % L
+			for k in (rw.get("buffs", {}) as Dictionary):
+				nums["%s" % str(float(rw.buffs[k]))] = "buffs[%d].%s" % [L, String(k)]
+	nums[str(int(zone.get("radius_m", 0)))] = "zone.radius_m"
+	nums[str(float(zone.get("cell_m", 0.0)))] = "zone.cell_m"
 	var code: PackedStringArray = PackedStringArray()
 	for line in FileAccess.get_file_as_string("res://scripts/sim/capsule.gd").split("\n"):
 		var stripped: String = String(line).strip_edges()
@@ -2794,14 +2844,14 @@ func _t_levels_table_data() -> void:
 	var hit: String = ""
 	for num in nums:
 		var n_str: String = String(num)
-		if n_str.length() < 2 and not n_str.contains("."):
-			continue   # 0..9 are everyday literals (levels, indexes); only the table's distinctive numbers are searched
+		if (n_str.length() < 2 and not n_str.contains(".")) or n_str == "1.0":
+			continue   # 0..9 and the neutral multiplier 1.0 are everyday literals (levels, indexes, `return 1.0`); only the table's distinctive numbers are searched
 		var re: RegEx = RegEx.new()
 		re.compile("(?<![\\w.])" + n_str.replace(".", "\\.") + "(?![\\w.])")
 		if re.search(body) != null:
 			hit = "%s (%s)" % [n_str, String(nums[num])]
 			break
-	ok(hit == "", "REQ-0010-11: capsule.gd holds no number of the table as a literal — %s" % ("clean" if hit == "" else hit))
+	ok(hit == "", "REQ-0010-11/99: capsule.gd holds no number of the table as a literal — %s" % ("clean" if hit == "" else hit))
 	_dispose(s)
 
 
@@ -2818,15 +2868,22 @@ func _t_table_drives_code() -> void:
 	ok(MainCapsule.max_level(s) == 3, "REQ-0010-11/91: a 4-row table in s.capsule_table makes max_level 3 (%d)" % MainCapsule.max_level(s))
 	var follows: bool = true
 	var rows: Array = syn.levels
+	var prot_rows: Array = (syn.protection as Dictionary).levels
+	ok(MainCapsule.max_protection(s) == 3, "REQ-0010-99/91: ... and its own protection axis of 4 records makes max_protection 3 (%d)" % MainCapsule.max_protection(s))
 	for L in 4:
 		var rw: Dictionary = rows[L]
-		follows = follows and _same_numbers(MainCapsule.row(s, L).cost, _cost_of(rows, L)) and MainCapsule.radius(s, L) == int(rw.radius) \
-			and absf(MainCapsule.core_hp(s, L) - float(rw.core_hp)) < 1.0e-6 and _same_numbers(MainCapsule.buffs(s, L), rw.buffs if L >= 1 else {})
-	ok(follows, "REQ-0010-11: row/radius/core_hp/buffs of every level follow the injected table (no number is baked into the code)")
+		follows = follows and _same_numbers(MainCapsule.row(s, L).cost, _cost_of(rows, L)) and _same_numbers(MainCapsule.buffs(s, L), rw.buffs if L >= 1 else {}) \
+			and _same_numbers(MainCapsule.protection_row(s, L).cost, _cost_of(prot_rows, L)) \
+			and absf(MainCapsule.core_hp(s, L) - float((prot_rows[L] as Dictionary).core_hp)) < 1.0e-6 and MainCapsule.radius(s, L) == SYN_R
+	ok(follows, "REQ-0010-11/99: cost/buffs of every level, cost/core_hp of every protection level and the static zone radius follow the injected table (no number is baked into the code)")
 	var other: Variant = _on_pad()
 	ok(MainCapsule.max_level(other) == catalog_max, "REQ-0010-11: the override of one sim does not leak into another (other max %d, catalog %d)" % [MainCapsule.max_level(other), catalog_max])
 	s.capsule_table = _synth_table(9)
-	ok(MainCapsule.max_level(s) == 8, "REQ-0010-91: a 9-row table -> max_level 8 (the range is the table's length, not a constant) — %d" % MainCapsule.max_level(s))
+	ok(MainCapsule.max_level(s) == 8 and MainCapsule.max_protection(s) == 8, "REQ-0010-91/99: a 9-row table -> max_level 8 AND max_protection 8 (each range is its table's length, not a constant) — %d / %d" % [MainCapsule.max_level(s), MainCapsule.max_protection(s)])
+	var uneven: Dictionary = _synth_table(6)
+	uneven["protection"] = _synth_protection(3)   # the defence axis is SHORTER than the capsule axis: ranges are independent (REQ-0010-99)
+	s.capsule_table = uneven
+	ok(MainCapsule.max_level(s) == 5 and MainCapsule.max_protection(s) == 2, "REQ-0010-99: a 6-row capsule axis with a 3-record defence axis -> max_level 5, max_protection 2 (independent ranges) — %d / %d" % [MainCapsule.max_level(s), MainCapsule.max_protection(s)])
 	s.capsule_table = {}
 	ok(MainCapsule.max_level(s) == catalog_max, "REQ-0010-11: clearing the override returns to the catalog table (%d)" % MainCapsule.max_level(s))
 	# an upgrade charges the INJECTED numbers and leaves the injected table untouched; the ledger does not alias a table dict
@@ -2902,7 +2959,7 @@ func _t_upgrade_refusals() -> void:
 		_wipe(s)
 		for res in cost1:
 			var total: int = int(cost1[res]) - (1 if res == short_res else 0)
-			_fund(s, String(res), _half(total), total - _half(total))
+			_fund_n(s, String(res), total, 0.5)
 		var sig: String = _funds_sig(s)
 		var led: String = _ledger_sig(s)
 		var h: String = Persistence.world_hash(s)
@@ -2928,15 +2985,19 @@ func _t_upgrade_refusals() -> void:
 	var rs: Dictionary = e.upgrade_capsule()
 	var keys2: Array = (rs.get("missing", {}) as Dictionary).keys()
 	ok(keys2 == ["planks", "stone", "wood"], "REQ-0010-13: ... even when the table lists the price as wood, stone, planks (got %s)" % str(keys2))
-	# (c) atomic over several resources: the covered line is NOT debited when another line fails
+	# (c) atomic over several resources: the covered lines are NOT debited when another line fails (a 3-line price: synthetic level 2)
 	var a: Variant = _on_pad()
+	var syn3: Dictionary = _synth_table(3)
+	a.capsule_table = syn3
+	a.main_capsule.level = 1
+	var cost2: Dictionary = _cost_of(syn3.levels, 2)   # wood 13, stone 4, planks 3
 	_wipe(a)
-	_fund(a, "wood", int(cost1.wood), 0)             # wood fully in the backpack
-	_fund(a, "stone", 0, int(cost1.stone) - 1)       # stone one short in the stock
-	_fund(a, "scrap", 0, int(cost1.scrap))           # scrap fully in the stock
+	_fund(a, "wood", int(cost2.wood), 0)             # wood fully in the backpack
+	_fund(a, "stone", 0, int(cost2.stone) - 1)       # stone one short in the stock
+	_fund(a, "planks", 0, int(cost2.planks))         # planks fully in the stock
 	var sig_a: String = _funds_sig(a)
 	var ra: Dictionary = a.upgrade_capsule()
-	ok(not bool(ra.get("ok", true)) and _funds_sig(a) == sig_a and a.capsule_level() == 0, "REQ-0010-13: atomic — wood and scrap were covered, stone was not: nothing was taken (%s)" % str(ra))
+	ok(not bool(ra.get("ok", true)) and _funds_sig(a) == sig_a and a.capsule_level() == 1, "REQ-0010-13: atomic — wood and planks were covered, stone was not: nothing was taken (%s)" % str(ra))
 	# (d) the top: level 5 refuses with plenty of funds, nothing moves
 	var m: Variant = _on_pad()
 	m.main_capsule.level = 5
@@ -2965,7 +3026,7 @@ func _t_upgrade_reach() -> void:
 	var syn: Dictionary = _synth_table(3)
 	var rows: Array = syn.levels
 	var cost1: Dictionary = _cost_of(rows, 1)
-	var radius: int = int(rows[0].radius)   # 4 — not the 2.5 stash reach, so the zone edge is a distinct line
+	var radius: int = SYN_R   # 4 — not the 2.5 stash reach, so the zone edge is a distinct line
 	var dirs: Array = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 	for d in dirs:
 		var dv: Vector2i = d
@@ -3411,8 +3472,9 @@ func _t_save_clamp() -> void:
 	for L in range(1, 6):
 		as_is = as_is and inv.has(str(L)) and _same_numbers(inv[str(L)], led[str(L)])
 	ok(as_is, "REQ-0010-88: ... `invested` is kept as saved (levels 4 and 5 included) — %s" % var_to_str(inv))
-	ok(absf(MainCapsule.core_hp(y, y.capsule_level()) - float(rows[3].core_hp)) < 1.0e-6 and absf(MainCapsule.core_hp(y, y.capsule_level()) - float(rows[5].core_hp)) > 1.0, "REQ-0010-88: ... the defence is the NEW level's (%s, not level 5's %s)" % [str(MainCapsule.core_hp(y, y.capsule_level())), str(rows[5].core_hp)])
-	ok(MainCapsule.radius(y, y.capsule_level()) == int(rows[3].radius), "REQ-0010-88: ... and so is the zone radius")
+	var prot_rows: Array = (_raw_table().protection as Dictionary).levels
+	ok(MainCapsule.protection_of(y) == int(src.main_capsule.protection) and absf(MainCapsule.core_hp_max(y) - float((prot_rows[MainCapsule.protection_of(y)] as Dictionary).core_hp)) < 1.0e-6, "REQ-0010-88/99: ... the defence is the table's record of the CURRENT protection level, recomputed, not stored")
+	ok(MainCapsule.radius(y, y.capsule_level()) == int(_raw_table().zone.radius_cells) and MainCapsule.radius(y, 5) == MainCapsule.radius(y, 3), "REQ-0010-16/88: ... and the zone radius is the same static number (the clamp of the level moves no zone)")
 	for res in PAY_IDS:
 		_fund(y, String(res), 30, 300)
 	var sig_y: String = _funds_sig(y)
@@ -3429,7 +3491,8 @@ func _t_save_clamp() -> void:
 	ok(back and z.capsule_level() == 3, "REQ-0010-88: a clamped save loaded against the full table stays at level 3 (%d)" % z.capsule_level())
 	# a table with a HIGHER max: the level 5 save stays 5 (never raised), and the new top row is reachable
 	var longer: Dictionary = _table_copy()
-	(longer.levels as Array).append({"level": 6, "cost": {"wood": 9}, "radius": 15, "core_hp": 9000, "buffs": {"gather_mult": 1.3}})
+	(longer.levels as Array).append({"level": 6, "cost": {"wood": 9}, "buffs": {"gather_mult": 1.3}})
+	((longer.protection as Dictionary).levels as Array).append({"level": 6, "cost": {"wood": 9}, "core_hp": 9000.0})
 	var hi: Variant = Sim.new()
 	hi.capsule_table = longer
 	var hi_ok: bool = Persistence.restore(hi, payload)
@@ -3443,7 +3506,7 @@ func _t_save_clamp() -> void:
 		"REQ-0010-88: a table with other prices does not rewrite what was invested (ledger[3] = %s)" % var_to_str(ch.main_capsule.invested.get("3", {})))
 	# a one-row table: the only level is 0
 	var one: Variant = Sim.new()
-	one.capsule_table = {"version": 1, "levels": [{"level": 0, "cost": {}, "radius": 3, "core_hp": 11.0, "buffs": {}}]}
+	one.capsule_table = {"version": 2, "zone": {"radius_cells": 3}, "levels": [{"level": 0, "cost": {}, "buffs": {}}], "protection": {"factor": 2, "levels": [{"level": 0, "cost": {}, "core_hp": 11.0}]}}
 	var one_ok: bool = Persistence.restore(one, payload)
 	ok(one_ok and one.capsule_level() == 0 and MainCapsule.max_level(one) == 0, "REQ-0010-88/91: against a table with only level 0 the level is clamped to 0 (%d)" % one.capsule_level())
 	# a corrupt save: a negative level is either refused out loud or clamped into [0, max] — never kept (REQ-0010-91 «ніколи не < 0»)
@@ -3513,8 +3576,9 @@ func _t_ledger_save_compat() -> void:
 func _t_range_extension() -> void:
 	var rows: Array = _raw_rows()
 	var longer: Dictionary = _table_copy()
-	var row6: Dictionary = {"level": 6, "cost": {"wood": 9, "stone": 5}, "radius": 15, "core_hp": 9999.0, "buffs": {"gather_mult": 1.3, "craft_mult": 1.3}}
+	var row6: Dictionary = {"level": 6, "cost": {"wood": 9, "stone": 5}, "buffs": {"gather_mult": 1.3, "craft_mult": 1.3}}
 	(longer.levels as Array).append(row6)
+	((longer.protection as Dictionary).levels as Array).append({"level": 6, "cost": {"wood": 7}, "core_hp": 9999.0})
 	var s: Variant = _on_pad()
 	s.main_capsule.level = 5
 	var led: Dictionary = {}
@@ -3527,8 +3591,8 @@ func _t_range_extension() -> void:
 	var refused: Dictionary = s.upgrade_capsule()
 	ok(not bool(refused.get("ok", true)) and s.capsule_level() == 5, "REQ-0010-91: on the 6-row table level 6 does not exist — refused, level 5 (%s)" % str(refused))
 	s.capsule_table = longer   # the ONLY change: one more row of data
-	ok(MainCapsule.max_level(s) == 6 and MainCapsule.radius(s, 6) == 15 and absf(MainCapsule.core_hp(s, 6) - 9999.0) < 1.0e-6 and absf(MainCapsule.buffs(s, 6).get("gather_mult", 0.0) - 1.3) < 1.0e-9,
-		"REQ-0010-91: the new row is read as data (max 6, radius 15, core_hp 9999, buff 1.3) — no code change")
+	ok(MainCapsule.max_level(s) == 6 and MainCapsule.max_protection(s) == 6 and absf(MainCapsule.core_hp(s, 6) - 9999.0) < 1.0e-6 and absf(MainCapsule.buffs(s, 6).get("gather_mult", 0.0) - 1.3) < 1.0e-9,
+		"REQ-0010-91/99: the new rows are read as data (max 6 on both axes, core_hp 9999, buff 1.3) — no code change")
 	var r: Dictionary = s.upgrade_capsule()
 	ok(bool(r.get("ok", false)) and s.capsule_level() == 6, "REQ-0010-91: with the 7th row level 5 -> 6 works — %s" % str(r))
 	ok(_have(s, "wood") == 0 and _have(s, "stone") == 0 and s.main_capsule.invested.has("6") and _same_numbers(s.main_capsule.invested["6"], {"wood": 9, "stone": 5}) and s.main_capsule.invested.keys() == ["1", "2", "3", "4", "5", "6"],
@@ -3622,22 +3686,26 @@ func _t_upgrade_death_and_roster() -> void:
 
 
 # =============================================================================================
-# REQ-0010-17: ONE axis — the code offers exactly one way to raise the capsule, with no axis argument
+# REQ-0010-17 / 99 (NEW EDITION): exactly TWO ways to raise the capsule — the capsule level and the protection level — and no radius/buff/boost
+# variant; the axes are independent entry points (an axis argument on one function would be a third door)
 # =============================================================================================
-func _t_one_axis_api() -> void:
+func _t_two_axes_api() -> void:
 	var names: Array = []
 	var cap_script: Script = MainCapsule
 	var sim_script: Script = Sim
 	for m in cap_script.get_script_method_list():
 		var nm: String = String((m as Dictionary).name)
-		if nm.contains("upgrade") or nm.contains("level_up") or nm.contains("boost") or nm.contains("buy_"):
-			names.append("capsule.%s/%d" % [nm, int((m as Dictionary).args.size())])
+		if nm.contains("upgrade") or nm.contains("level_up") or nm.contains("boost") or nm.contains("buy_") or nm.contains("raise"):
+			if not nm.begins_with("_"):   # the shared private worker is an implementation detail, not an entry point
+				names.append("capsule.%s/%d" % [nm, int((m as Dictionary).args.size())])
 	for m in sim_script.get_script_method_list():
 		var nm2: String = String((m as Dictionary).name)
-		if nm2.contains("upgrade") or nm2.contains("level_up") or nm2.contains("boost") or nm2.contains("buy_capsule"):
+		if nm2.contains("upgrade") or nm2.contains("level_up") or nm2.contains("boost") or nm2.contains("buy_capsule") or nm2.contains("raise"):
 			names.append("sim.%s/%d" % [nm2, int((m as Dictionary).args.size())])
 	names.sort()
-	ok(names == ["capsule.upgrade/2", "sim.upgrade_capsule/1"], "REQ-0010-17: exactly one raise entry point (upgrade_capsule(cmd_id)) and no radius/defence/buff variant — %s" % str(names))
+	var sim_extra: Array = names.filter(func(n: Variant) -> bool: return String(n).begins_with("sim.") and not ["sim.upgrade_capsule/1", "sim.upgrade_protection/1"].has(String(n)))
+	names = names.filter(func(n: Variant) -> bool: return String(n) != "sim.upgrade_protection/1")   # an optional Sim delegate is not a third door
+	ok(sim_extra.is_empty() and names == ["capsule.upgrade/2", "capsule.upgrade_protection/2", "sim.upgrade_capsule/1"], "REQ-0010-17/99/100: exactly two raise entry points (upgrade / upgrade_protection, each (state, cmd_id)) and no radius/buff variant — %s" % str(names))
 
 
 # =============================================================================================
@@ -3685,7 +3753,7 @@ func _t_upgrade_property() -> void:
 						var pk: int = rng.randi_range(0, mini(60, need))
 						_fund(s, String(res), pk, need - pk)
 				elif op == 3 or op == 2:
-					var rad: int = int((rows[lvl] as Dictionary).radius)
+					var rad: int = int(((table if synthetic else _raw_table()).zone as Dictionary).radius_cells)
 					var dx: int = rng.randi_range(-(rad + 2), rad + 2)
 					var dy: int = rng.randi_range(-(rad + 2), rad + 2)
 					if rng.randi_range(0, 2) == 0:
@@ -3704,7 +3772,7 @@ func _t_upgrade_property() -> void:
 						if bad_ids.has(cid):
 							cid = -1
 					var hero: Vector2i = _hero_cell(s)
-					var in_zone: bool = maxi(absi(hero.x - cap.x), absi(hero.y - cap.y)) <= int((rows[lvl] as Dictionary).radius)
+					var in_zone: bool = maxi(absi(hero.x - cap.x), absi(hero.y - cap.y)) <= int(((table if synthetic else _raw_table()).zone as Dictionary).radius_cells)
 					var dup: bool = cid >= 0 and done_ids.has(cid)
 					var cost: Dictionary = _cost_of(rows, lvl + 1)
 					var packs: Dictionary = {}
@@ -3797,25 +3865,27 @@ func _t_upgrade_property() -> void:
 const ZB_N := 30                                  # pad side: the capsule stands on ZB_CAP, room for R <= 13 with no clipping by the map edge
 const ZB_CAP := Vector2i(12, 17)                  # x != y on purpose: a swapped (x, y) cannot hide behind a symmetric centre
 const ZB_DT := 0.05
-const ZB_KEYS: Array = ["gather_mult", "melee_mult", "craft_mult", "research_mult"]
+const ZB_R := 5                                   # the ONE static zone radius of the zone tables (OD-99: not a function of the level — REQ-0010-16/80)
+# the FOUR buff axes of OD-73 (REQ-0010-105): gathering, crafting, need RECOVERY (heat + sleep; REQ-0010-107), research. `melee_mult` of the first wave is gone.
+const ZB_KEYS: Array = ["gather_mult", "craft_mult", "need_recovery_mult", "research_mult"]
 
 
-# rows 0..n-1: radius 2,3,5,6,8,9,11,... ; level L>=1 buffs gather 1+.5L, melee 1+.25L, craft 1+.75L, research 1+L — binary-exact, distinct per key
-# within a level and per level within a key (nothing like the catalog's proposed 3,5,7,9,11,13 / +5% steps)
+# rows 0..n-1; level L>=1 buffs gather 1+.5L, craft 1+.75L, need_recovery 1+.25L, research 1+L — binary-exact, distinct per key within a level and per
+# level within a key (nothing like the catalog's +10% steps); ONE static radius ZB_R for every level; a defence axis of its own
 func _zone_table(n_levels: int = 4) -> Dictionary:
 	var rows: Array = []
 	for L in n_levels:
 		var buffs: Dictionary = {}
 		if L >= 1:
 			buffs["gather_mult"] = 1.0 + 0.5 * float(L)
-			buffs["melee_mult"] = 1.0 + 0.25 * float(L)
 			buffs["craft_mult"] = 1.0 + 0.75 * float(L)
+			buffs["need_recovery_mult"] = 1.0 + 0.25 * float(L)
 			buffs["research_mult"] = 1.0 + float(L)
 		var cost: Dictionary = {}
 		if L >= 1:
 			cost["wood"] = 5 + 4 * L
-		rows.append({"level": L, "cost": cost, "radius": 2 + L + (L >> 1), "core_hp": 100.0 * float(L + 1), "buffs": buffs})
-	return {"version": 1, "status": "proposed", "metric": "chebyshev", "levels": rows}
+		rows.append({"level": L, "cost": cost, "buffs": buffs})
+	return {"version": 2, "status": "proposed", "metric": "chebyshev", "zone": {"radius_m": 50, "cell_m": 10.0, "radius_cells": ZB_R}, "levels": rows, "protection": _synth_protection(n_levels)}
 
 
 # an ON world on a flat 30x30 pad, the capsule on ZB_CAP at `level` of `table` (default: _zone_table(4)); funds are NOT touched
@@ -3831,8 +3901,10 @@ func _zb_row(table: Dictionary, L: int) -> Dictionary:
 	return (table.levels as Array)[L]
 
 
-func _zb_radius(table: Dictionary, L: int) -> int:
-	return int(_zb_row(table, L).radius)
+# the zone radius of a table: ONE static number of the data (REQ-0010-16) — the level argument exists only so that the callers of the first wave
+# keep reading naturally; it is deliberately IGNORED (a row has no radius)
+func _zb_radius(table: Dictionary, _L: int = 0) -> int:
+	return int((table.get("zone", {}) as Dictionary).get("radius_cells", 0))
 
 
 func _zb_buff(table: Dictionary, L: int, key: String) -> float:
@@ -3909,8 +3981,8 @@ func _clear_buildings_but_capsule(s: Variant) -> void:
 
 
 # =============================================================================================
-# REQ-0010-15 / 16 / 80 — the zone is Chebyshev around the capsule cell, edge included, radius of the CURRENT level; the metric is the
-# data's; no capsule -> no zone
+# REQ-0010-15 / 16 / 80 — the zone is Chebyshev around the capsule cell, edge included, ONE static radius of the data (not a function of the
+# level — OD-74/99); the metric is the data's; no capsule -> no zone
 # =============================================================================================
 func _t_zone_shape() -> void:
 	var syn: Dictionary = _zone_table(6)
@@ -3936,7 +4008,7 @@ func _t_zone_shape() -> void:
 					if got != _zb_in(cap, c, R):
 						wrong.append("L%d %s" % [L, str(Vector2i(dx, dy))])
 			exact_count = exact_count and hits == (2 * R + 1) * (2 * R + 1)
-		ok(wrong.is_empty(), "REQ-0010-15/80 [%s]: in_zone == (max(|dx|,|dy|) <= R of the CURRENT level) for every cell in a window around the capsule, on every level — %d wrong, first %s" % [String(variant), wrong.size(), str(wrong.slice(0, 3))])
+		ok(wrong.is_empty(), "REQ-0010-15/16/80 [%s]: in_zone == (max(|dx|,|dy|) <= the data's ONE static R) for every cell in a window around the capsule, on every level — %d wrong, first %s" % [String(variant), wrong.size(), str(wrong.slice(0, 3))])
 		ok(exact_count, "REQ-0010-80 [%s]: the zone holds exactly (2R+1)^2 cells on every level (a Euclidean or Manhattan zone holds fewer; an exclusive edge too)" % String(variant))
 	# named edge cases at level 2 of the synthetic table (R = 5): all four edge midpoints and corners are IN, one step past each is OUT
 	s.capsule_table = syn
@@ -3955,15 +4027,14 @@ func _t_zone_shape() -> void:
 	ok(out_bad.is_empty(), "REQ-0010-15: one step past the edge / the corner is OUTSIDE at R=5 — inside by mistake: %s" % str(out_bad))
 	ok(not MainCapsule.in_zone(s, Vector2i(-40, -40)) and not MainCapsule.in_zone(s, Vector2i(500, 7)), "REQ-0010-15: cells far outside the map are simply outside (no error, no clamp)")
 	ok(MainCapsule.buff_at(s, "gather_mult", Vector2i(-40, -40)) == 1.0, "REQ-0010-15: ... and neutral (1.0)")
-	# the zone follows the level the capsule has NOW (the drop shrinks it, the rise grows it, on the very next call)
-	var mover: Vector2i = cap + Vector2i(6, 0)
-	s.main_capsule["level"] = 2
-	var out_at_2: bool = not MainCapsule.in_zone(s, mover)
-	s.main_capsule["level"] = 3
-	var in_at_3: bool = MainCapsule.in_zone(s, mover)
-	s.main_capsule["level"] = 1
-	var out_at_1: bool = not MainCapsule.in_zone(s, mover)
-	ok(out_at_2 and in_at_3 and out_at_1, "REQ-0010-80: the zone is recomputed from the current level on every call (cap+(6,0): out at R=5, in at R=6, out again at R=3)")
+	# REQ-0010-16/80 (NEW EDITION): the zone does NOT follow the level — a rise or a DROP of the level moves no cell in or out of it, on the very next call
+	var edge_in: Vector2i = cap + Vector2i(ZB_R, 0)
+	var edge_out: Vector2i = cap + Vector2i(ZB_R + 1, 0)
+	var stays: Array = []
+	for L in [2, 3, 1, 0, 3, 0]:
+		s.main_capsule["level"] = L
+		stays.append(MainCapsule.in_zone(s, edge_in) and not MainCapsule.in_zone(s, edge_out))
+	ok(not stays.has(false), "REQ-0010-16/80: the zone is static — cap+(5,0) stays IN and cap+(6,0) stays OUT while the level goes 2,3,1,0,3,0 (a drop shrinks the buff, never the zone) — %s" % str(stays))
 	# no capsule at all (flag OFF): there is no zone and no buff anywhere
 	var off: Variant = _sim_with(_pad_map(PAD_N, Vector2i(8, 8)), false, false, false)
 	ok(not MainCapsule.in_zone(off, Vector2i(8, 8)) and not MainCapsule.in_zone(off, Vector2i(9, 8)), "REQ-0010-01/15: with the flag OFF (no capsule record) nothing is inside any zone")
@@ -3975,60 +4046,80 @@ func _t_zone_shape() -> void:
 
 
 # =============================================================================================
-# REQ-0010-16 — radius(L+1) >= radius(L); every zone is contained in the next one (same capsule, any cell of the map, 5 presets)
+# REQ-0010-16 / 80 (NEW EDITION, OD-74/99) — the solo zone radius is ONE static number of the data: the same for level 0..5 AND protection 0..5 (the
+# first wave's «radius(L+1) >= radius(L), zone L inside zone L+1» is GONE). A level drop shrinks only the buff.
 # =============================================================================================
-func _t_zone_monotone() -> void:
+func _t_zone_static() -> void:
 	var tables: Dictionary = {"catalog": _table_copy(), "synthetic 3": _zone_table(3), "synthetic 7": _zone_table(7), "synthetic 10": _zone_table(10)}
 	for name in tables:
 		var table: Dictionary = tables[name]
 		var s: Variant = _zone_sim(0, table)
-		var n_rows: int = (table.levels as Array).size()
-		var mono: bool = true
-		var same_as_data: bool = true
-		for L in n_rows:
-			same_as_data = same_as_data and MainCapsule.radius(s, L) == _zb_radius(table, L)
-			if L + 1 < n_rows:
-				mono = mono and MainCapsule.radius(s, L + 1) >= MainCapsule.radius(s, L)
-		ok(mono, "REQ-0010-16 [%s]: radius(L+1) >= radius(L) for every consecutive pair of the %d rows" % [String(name), n_rows])
-		ok(same_as_data, "REQ-0010-11/16 [%s]: radius(L) is the table row's radius (no clamp, no offset)" % String(name))
+		var want: int = int((table.zone as Dictionary).radius_cells)
+		var all_same: bool = true
+		for L in (table.levels as Array).size():
+			for P in (((table.protection as Dictionary).levels) as Array).size():
+				s.main_capsule["level"] = L
+				s.main_capsule["protection"] = P
+				all_same = all_same and MainCapsule.zone_radius(s) == want and MainCapsule.radius(s, L) == want and MainCapsule.radius(s, P) == want
+		ok(all_same and want > 0, "REQ-0010-16 [%s]: the radius is the data's one number (%d) for EVERY pair (level, protection) — never a function of either axis" % [String(name), want])
 		_dispose(s)
-	# the same, as geometry on real maps: zone(L) is a subset of zone(L+1), and it never shrinks in size
-	var contained: bool = true
-	var grew: bool = true
+	# a row that carries a radius of its own (data written in the first-wave shape) is NOT read: the zone stays the zone block's
+	var odd: Dictionary = _zone_table(4)
+	for L in (odd.levels as Array).size():
+		((odd.levels as Array)[L] as Dictionary)["radius"] = 20 + L
+	for r in ((odd.protection as Dictionary).levels as Array):
+		(r as Dictionary)["radius"] = 30
+	var o: Variant = _zone_sim(3, odd)
+	o.main_capsule["protection"] = 2
+	ok(MainCapsule.zone_radius(o) == ZB_R and MainCapsule.radius(o, 3) == ZB_R and not MainCapsule.in_zone(o, _cap_tile(o) + Vector2i(ZB_R + 1, 0)), "REQ-0010-16: a per-row `radius` in the data is ignored — the zone is the `zone` block's %d, one cell past it is out" % ZB_R)
+	# the table's number really is the zone: change ONLY zone.radius_cells and the zone moves with it, on both axes' extremes
+	var wide: Dictionary = _zone_table(4)
+	(wide.zone as Dictionary)["radius_cells"] = 8
+	var w: Variant = _zone_sim(0, wide)
+	var cap: Vector2i = _cap_tile(w)
+	var moved: bool = MainCapsule.in_zone(w, cap + Vector2i(8, 8)) and not MainCapsule.in_zone(w, cap + Vector2i(9, 0)) and not MainCapsule.in_zone(w, cap + Vector2i(0, -9))
+	w.main_capsule["level"] = 3
+	w.main_capsule["protection"] = 3
+	moved = moved and MainCapsule.in_zone(w, cap + Vector2i(-8, 8)) and not MainCapsule.in_zone(w, cap + Vector2i(-9, 0))
+	ok(moved, "REQ-0010-16/11: changing only zone.radius_cells (5 -> 8) moves the zone at level 0 and at level 3 / protection 3 alike — the radius lives in the data")
+	# no `zone` block at all: the zone is just the capsule cell (the safe failure), not the whole map
+	var none: Dictionary = _zone_table(3)
+	none.erase("zone")
+	var n: Variant = _zone_sim(2, none)
+	var ncap: Vector2i = _cap_tile(n)
+	ok(MainCapsule.in_zone(n, ncap) and not MainCapsule.in_zone(n, ncap + Vector2i(1, 0)) and MainCapsule.zone_radius(n) == 0, "REQ-0010-16: a table without a `zone` block gives a zone of the capsule's own cell only (no invented radius)")
+	# the geometry on the 5 real spawn presets: the zone is the same cell set at every level and every protection (and the capsule cell is in it)
 	var detail: String = ""
+	var identical: bool = true
 	for pr in GameData.SPAWN_PRESETS:
 		var s2: Variant = _sim_with(_gen(float(pr.lat), float(pr.lon)), true, true, true)
-		var cap: Vector2i = _cap_tile(s2)
-		var n: int = int(s2.n)
-		var prev: Dictionary = {}
-		var prev_n: int = -1
-		var rows: int = (_raw_rows() as Array).size()
-		for L in rows:
+		var cap2: Vector2i = _cap_tile(s2)
+		var nn: int = int(s2.n)
+		var first: Dictionary = {}
+		for L in (_raw_rows() as Array).size():
 			s2.main_capsule["level"] = L
+			s2.main_capsule["protection"] = (L * 2) % 6
 			var cur: Dictionary = {}
-			for y in n:
-				for x in n:
+			for y in nn:
+				for x in nn:
 					if MainCapsule.in_zone(s2, Vector2i(x, y)):
-						cur[y * n + x] = true
-			if L > 0:
-				for k in prev:
-					if not cur.has(k):
-						contained = false
-						detail = "%s L%d lost cell %d" % [String(pr.name), L, int(k)]
-				grew = grew and cur.size() >= prev_n
-			prev = cur
-			prev_n = cur.size()
+						cur[y * nn + x] = true
 			if L == 0:
-				var holds_cap: bool = prev.has(cap.y * n + cap.x)
-				ok(holds_cap, "REQ-0010-15/16 [%s]: level 0 has a zone and the capsule cell is in it" % String(pr.name))
+				first = cur
+				ok(first.has(cap2.y * nn + cap2.x), "REQ-0010-15/16 [%s]: level 0 has a zone and the capsule cell is in it" % String(pr.name))
+			elif var_to_str(cur.keys()) != var_to_str(first.keys()):
+				identical = false
+				detail = "%s level %d differs (%d vs %d cells)" % [String(pr.name), L, cur.size(), first.size()]
 		_dispose(s2)
-	ok(contained, "REQ-0010-16: on every spawn preset the zone of level L lies inside the zone of level L+1 — %s" % detail)
-	ok(grew, "REQ-0010-16: ... and the number of cells inside never drops with the level")
+	ok(identical, "REQ-0010-16/80: on every spawn preset the set of zone cells is IDENTICAL at level 0..5 (any protection) — %s" % detail)
+	for x in [o, w, n]:
+		_dispose(x)
 
 
 # =============================================================================================
-# REQ-0010-15 / 80 — the HERO's buffs (gather time, melee damage): same act inside / on the edge / outside -> different result; the
-# hero's cell is floor(px), floor(py); each hook reads the current level's row
+# REQ-0010-15 / 80 / 105 — the HERO's buff (gather time): same act inside / on the edge / outside -> different result; the hero's cell is
+# floor(px), floor(py); the hook reads the current level's row. Melee damage is NOT an axis of OD-73 (the first wave's melee_mult is gone):
+# it must be the same everywhere, at every level
 # =============================================================================================
 func _t_buff_hero_hooks() -> void:
 	var syn: Dictionary = _zone_table(4)
@@ -4060,23 +4151,23 @@ func _t_buff_hero_hooks() -> void:
 			else:
 				seen_out += 1
 			var want_g: float = base_g / _zb_buff(syn, L, "gather_mult") if inside else base_g
-			var want_m: float = base_m * _zb_buff(syn, L, "melee_mult") if inside else base_m
+			var want_m: float = base_m   # REQ-0010-105: melee is not a buff axis — the same number inside, on the edge and outside, at every level
 			if not _near(s.gather_time(node), want_g):
 				bad_g.append("L%d hero (%.2f,%.2f) cell %s inside=%s: gather %.6f want %.6f" % [L, p.x, p.y, str(c - cap), str(inside), s.gather_time(node), want_g])
 			if not _near(s.melee_damage(), want_m):
 				bad_m.append("L%d hero (%.2f,%.2f) cell %s inside=%s: melee %.6f want %.6f" % [L, p.x, p.y, str(c - cap), str(inside), s.melee_damage(), want_m])
 		_dispose(s)
 	ok(bad_g.is_empty(), "REQ-0010-15/80: gather_time = base / gather_mult(current level) in the zone (edge inclusive, Chebyshev corners, fractional cells) and = base outside — %d wrong, first %s" % [bad_g.size(), str(bad_g.slice(0, 2))])
-	ok(bad_m.is_empty(), "REQ-0010-15/80: melee_damage = base * melee_mult(current level) in the zone and = base outside — %d wrong, first %s" % [bad_m.size(), str(bad_m.slice(0, 2))])
+	ok(bad_m.is_empty(), "REQ-0010-105: melee_damage is the plain number everywhere (inside/edge/outside, levels 0..3): the capsule has NO melee buff — %d wrong, first %s" % [bad_m.size(), str(bad_m.slice(0, 2))])
 	ok(seen_in >= 24 and seen_edge_in >= 20 and seen_out >= 30, "REQ-0010-15 setup: the probes really covered the inside (%d), the inclusive edge (%d) and the outside (%d)" % [seen_in, seen_edge_in, seen_out])
 	# the SAME hero, the SAME act, only the cell differs: strictly better inside than outside at every level >= 1
 	var s2: Variant = _zone_sim(3, syn)
 	var cap2: Vector2i = _cap_tile(s2)
-	_hero_px(s2, float(cap2.x) + 6.5, float(cap2.y) + 0.5)   # on the edge (R=6)
+	_hero_px(s2, float(cap2.x) + float(ZB_R) + 0.5, float(cap2.y) + 0.5)   # on the edge (R = 5)
 	var g_edge: float = s2.gather_time(node)
 	var m_edge: float = s2.melee_damage()
-	_hero_px(s2, float(cap2.x) + 7.5, float(cap2.y) + 0.5)   # one cell past
-	ok(g_edge < s2.gather_time(node) and m_edge > s2.melee_damage(), "REQ-0010-15: on the edge the hero gathers faster and hits harder than one cell further out (%.4f < %.4f; %.2f > %.2f)" % [g_edge, s2.gather_time(node), m_edge, s2.melee_damage()])
+	_hero_px(s2, float(cap2.x) + float(ZB_R) + 1.5, float(cap2.y) + 0.5)   # one cell past
+	ok(g_edge < s2.gather_time(node) and m_edge == s2.melee_damage(), "REQ-0010-15/105: on the edge the hero gathers faster than one cell further out (%.4f < %.4f) and hits exactly as hard (%.2f == %.2f)" % [g_edge, s2.gather_time(node), m_edge, s2.melee_damage()])
 	# a level change moves the result on the VERY NEXT call (nothing cached): the hero stays on cap+(4,0)
 	_hero_px(s2, float(cap2.x) + 4.5, float(cap2.y) + 0.5)
 	var plain: float = 1.3 / (1.0 + float(s2.player.skills.gather) * 0.04)   # data.gd NODEINFO tree.time and the skill formula
@@ -4086,25 +4177,29 @@ func _t_buff_hero_hooks() -> void:
 		var inside_now: bool = L >= 1 and _zb_in(cap2, cap2 + Vector2i(4, 0), _zb_radius(syn, L))
 		var want: float = plain / _zb_buff(syn, L, "gather_mult") if inside_now else plain
 		seen.append(_near(s2.gather_time(node), want))
-	ok(not seen.has(false), "REQ-0010-80: raising and dropping the level between two calls changes gather_time at once (levels 3,0,2,1,3 at cap+(4,0): inside at levels 3 and 2 (R=6,5), outside at levels 0 and 1 (R=2,3)) — %s" % str(seen))
+	ok(not seen.has(false), "REQ-0010-80: raising and dropping the level between two calls changes gather_time at once — and ONLY the buff: the hero on cap+(4,0) is inside the static zone at every level, so the time is plain at level 0 and /gather_mult(level) at 1..3 (levels 3,0,2,1,3) — %s" % str(seen))
 	_dispose(s2)
 
 
+# a minimal two-row table whose level-1 row names ONE buff key (value 2.0); the capsule axis has no other number, the defence axis one record
+func _one_key_table(key: String) -> Dictionary:
+	var bf: Dictionary = {}
+	bf[key] = 2.0
+	return {"version": 2, "status": "proposed", "metric": "chebyshev", "zone": {"radius_m": 40, "cell_m": 10.0, "radius_cells": 4},
+		"levels": [{"level": 0, "cost": {}, "buffs": {}}, {"level": 1, "cost": {"wood": 5}, "buffs": bf}],
+		"protection": {"factor": 2, "levels": [{"level": 0, "cost": {}, "core_hp": 100.0}]}}
+
+
 # =============================================================================================
-# REQ-0010-15 — each hook reads ITS OWN key, and an ABSENT key is neutral (1.0), not 0 and not an error
+# REQ-0010-15 / 105 — each of the FOUR hooks reads ITS OWN key, an ABSENT key is neutral (1.0), not 0 and not an error; a FIFTH key in the data
+# (the first wave's melee_mult) moves nothing
 # =============================================================================================
 func _t_buff_one_key_each() -> void:
 	var node: Dictionary = {"kind": "tree"}
 	var base_research: float = float(GameData.BUILDINGS.research_bench.research_rate)
 	var report: Array = []
-	for key in ZB_KEYS:
-		var bf: Dictionary = {}
-		bf[String(key)] = 2.0
-		var rows: Array = [
-			{"level": 0, "cost": {}, "radius": 2, "core_hp": 100.0, "buffs": {}},
-			{"level": 1, "cost": {"wood": 5}, "radius": 4, "core_hp": 200.0, "buffs": bf},
-		]
-		var tab: Dictionary = {"version": 1, "status": "proposed", "metric": "chebyshev", "levels": rows}
+	for key in ZB_KEYS + ["melee_mult"]:   # melee_mult is NOT a vocabulary key (OD-73): as the only key of a row it must change nothing at all
+		var tab: Dictionary = _one_key_table(String(key))
 		var s: Variant = _zone_sim(1, tab)
 		var cap: Vector2i = _cap_tile(s)
 		_wipe(s)
@@ -4115,17 +4210,17 @@ func _t_buff_one_key_each() -> void:
 		var m0: float = s.melee_damage()
 		_hero_px(s, float(cap.x) + 1.5, float(cap.y) + 0.5)
 		var want_g: float = g0 / 2.0 if String(key) == "gather_mult" else g0
-		var want_m: float = m0 * 2.0 if String(key) == "melee_mult" else m0
 		var want_c: float = 2.0 if String(key) == "craft_mult" else 1.0
 		var want_r: float = base_research * (2.0 if String(key) == "research_mult" else 1.0)
-		report.append([String(key), _near(s.gather_time(node), want_g), _near(s.melee_damage(), want_m), _near(_craft_rate_of(s), want_c), _near(_research_rate_of(s), want_r)])
+		var want_n: float = 2.0 if String(key) == "need_recovery_mult" else 1.0
+		report.append([String(key), _near(s.gather_time(node), want_g), _near(s.melee_damage(), m0), _near(_craft_rate_of(s), want_c), _near(_research_rate_of(s), want_r), _near(MainCapsule.recovery_mult(s), want_n)])
 		_dispose(s)
 	var wrong: Array = []
 	for r in report:
 		var row: Array = r
-		if not (bool(row[1]) and bool(row[2]) and bool(row[3]) and bool(row[4])):
+		if not (bool(row[1]) and bool(row[2]) and bool(row[3]) and bool(row[4]) and bool(row[5])):
 			wrong.append(row)
-	ok(wrong.is_empty(), "REQ-0010-15: with ONLY one key in the row (value 2.0) exactly the matching hook reacts (gather/melee/craft/research) and the other three stay neutral — [key, gather, melee, craft, research] ok-flags of the wrong ones: %s" % str(wrong))
+	ok(wrong.is_empty(), "REQ-0010-15/105: with ONLY one key in the row (value 2.0) exactly the matching hook reacts (gather/craft/research/need recovery), the others — and melee, which has no hook — stay neutral — [key, gather, melee, craft, research, recovery] ok-flags of the wrong ones: %s" % str(wrong))
 
 
 # =============================================================================================
@@ -4133,7 +4228,7 @@ func _t_buff_one_key_each() -> void:
 # the same gear and skills, works/hits exactly b times as well as outside — whatever the gear is
 # =============================================================================================
 func _t_buff_stacks_with_gear() -> void:
-	var syn: Dictionary = _zone_table(4)   # level 3: R = 6, gather 2.5, melee 1.75
+	var syn: Dictionary = _zone_table(4)   # level 3: gather 2.5 (the zone is ZB_R everywhere)
 	var node: Dictionary = {"kind": "tree"}
 	var bad: Array = []
 	var loadouts: Array = [
@@ -4157,34 +4252,57 @@ func _t_buff_stacks_with_gear() -> void:
 		var m_in: float = s.melee_damage()
 		if not _near(g_in * 2.5, g_out):
 			bad.append("%s: gather in %.6f out %.6f (ratio %.6f, want 2.5)" % [String(row[0]), g_in, g_out, g_out / g_in])
-		if not _near(m_in, m_out * 1.75):
-			bad.append("%s: melee in %.6f out %.6f (ratio %.6f, want 1.75)" % [String(row[0]), m_in, m_out, m_in / m_out])
+		if not _near(m_in, m_out):
+			bad.append("%s: melee in %.6f out %.6f (the capsule has no melee buff)" % [String(row[0]), m_in, m_out])
 		_dispose(s)
-	ok(bad.is_empty(), "REQ-0010-15: for every loadout (skills, tool, weapon) the in-zone/out-of-zone ratio is exactly the row's multiplier (gather 2.5 on the time, melee 1.75 on the damage) — %s" % str(bad))
+	ok(bad.is_empty(), "REQ-0010-15/105: for every loadout (skills, tool, weapon) the in-zone/out-of-zone gather ratio is exactly the row's multiplier (2.5 on the time) and melee is untouched — %s" % str(bad))
 
 
 # =============================================================================================
-# REQ-0010-79 / wave step 3 — the vocabulary is closed: a need-key in the data is NOT a buff and moves no body need
+# REQ-0010-105 (replaces the withdrawn REQ-0010-79) — the vocabulary is CLOSED at exactly four axes (gather, craft, need RECOVERY, research):
+# every record of the real table carries exactly those four keys; a fifth key (melee_mult of the first wave) or a key of ANOTHER need (hunger,
+# onset of cold/sleep) in the data is not a buff and moves no body need
 # =============================================================================================
 func _t_buff_keys_closed() -> void:
-	ok(_first_word_in(MainCapsule.BUFF_KEYS, NEED_WORDS) == "", "REQ-0010-79: no key of the buff vocabulary names a body need — %s" % _first_word_in(MainCapsule.BUFF_KEYS, NEED_WORDS))
-	var bf: Dictionary = {"gather_mult": 2.0, "hunger_mult": 0.5, "cold_mult": 0.5, "sleep_mult": 0.5, "rest_mult": 0.5, "bogus_mult": 3.0}
-	var rows: Array = [
-		{"level": 0, "cost": {}, "radius": 3, "core_hp": 100.0, "buffs": {}},
-		{"level": 1, "cost": {"wood": 5}, "radius": 4, "core_hp": 200.0, "buffs": bf},
-	]
-	var tab: Dictionary = {"version": 1, "status": "proposed", "metric": "chebyshev", "levels": rows}
+	var want: Array = ["craft_mult", "gather_mult", "need_recovery_mult", "research_mult"]
+	var vocab: Array = (MainCapsule.BUFF_KEYS as Array).duplicate()
+	vocab.sort()
+	ok(vocab == want, "REQ-0010-105: the code's buff vocabulary is exactly the four OD-73 axes (no melee, no hunger, no fifth) — %s" % str(vocab))
+	var rows: Array = _raw_rows()
+	var bad_rows: Array = []
+	for L in rows.size():
+		var k: Array = ((rows[L] as Dictionary).get("buffs", {}) as Dictionary).keys()
+		k.sort()
+		if k != want:
+			bad_rows.append("L%d %s" % [L, str(k)])
+	ok(bad_rows.is_empty(), "REQ-0010-105: EVERY record of the real table (levels 0..5, level 0 included) holds exactly the four buff keys — %s" % str(bad_rows))
+	var need_keys: Array = []
+	for k in want:
+		if _first_word_in([k], ["need", "hunger", "food", "satiety", "thirst", "cold", "sleep", "rest", "warm", "heat"]) != "":
+			need_keys.append(k)
+	ok(need_keys == ["need_recovery_mult"], "REQ-0010-105/107: the only need-related axis is the RECOVERY/comfort one (heat + sleep) — no hunger/thirst/onset axis (%s)" % str(need_keys))
+	var fed: Array = []
+	for k in want:
+		if String(k).contains("hunger") or String(k).contains("food") or String(k).contains("satiety") or String(k).contains("thirst"):
+			fed.append(k)
+	ok(fed.is_empty(), "REQ-0010-105: no buff on hunger/food/thirst (S2: a hunger buff is the owner's call) — %s" % str(fed))
+	# stray keys in the DATA never become a buff
+	var bf: Dictionary = {"gather_mult": 2.0, "melee_mult": 3.0, "hunger_mult": 0.5, "cold_mult": 0.5, "sleep_mult": 0.5, "rest_mult": 0.5, "need_mult": 0.5, "bogus_mult": 3.0}
+	var tab: Dictionary = _zone_table(2)
+	((tab.levels as Array)[1] as Dictionary)["buffs"] = bf
 	var s: Variant = _zone_sim(1, tab)
 	var cap: Vector2i = _cap_tile(s)
 	var got: Dictionary = MainCapsule.buffs(s, 1)
-	ok(_first_word_in(got.keys(), NEED_WORDS) == "" and not got.has("bogus_mult"), "REQ-0010-79: buffs(level) hands out only vocabulary keys — a need-key / an unknown key in the data never becomes a buff (%s)" % str(got.keys()))
+	var got_keys: Array = got.keys()
+	got_keys.sort()
+	ok(got_keys == ["gather_mult"], "REQ-0010-105: buffs(level) hands out only vocabulary keys — melee/need/unknown keys in the data never become a buff (%s)" % str(got_keys))
 	var cell: Vector2i = cap + Vector2i(1, 0)
 	var flat: bool = true
-	for k in ["hunger_mult", "cold_mult", "sleep_mult", "rest_mult", "bogus_mult", "", "gather"]:
+	for k in ["melee_mult", "hunger_mult", "cold_mult", "sleep_mult", "rest_mult", "need_mult", "bogus_mult", "", "gather", "need_recovery"]:
 		flat = flat and MainCapsule.buff_at(s, String(k), cell) == 1.0
-	ok(flat, "REQ-0010-79: buff_at of a need-key / unknown key inside the zone is the neutral 1.0")
+	ok(flat, "REQ-0010-105: buff_at of a non-vocabulary key inside the zone is the neutral 1.0")
 	ok(MainCapsule.buff_at(s, "gather_mult", cell) == 2.0, "REQ-0010-15 control: the legitimate key of the same row is 2.0 there")
-	# the bodies: the same hero stands inside the zone for 300 ticks at level 1 (need keys in the data) and at level 0 (none): the same needs
+	# the bodies: the same hero stands inside the zone for 300 ticks at level 1 (stray need keys in its row) and at level 0 (none): the same ONSET of needs
 	var a: Variant = _zone_sim(1, tab)
 	var b: Variant = _zone_sim(0, tab)
 	for w in [a, b]:
@@ -4194,14 +4312,14 @@ func _t_buff_keys_closed() -> void:
 	for t in 300:
 		a.update(Scenarios.DT)
 		b.update(Scenarios.DT)
-	ok(_near(float(a.player.hunger), float(b.player.hunger)) and _near(float(a.player.rest), float(b.player.rest)) and _near(float(a.player.hp), float(b.player.hp)), "REQ-0010-79: 300 ticks inside the zone — hunger/rest/hp at level 1 (need-keys in its row) equal level 0's (%.4f/%.4f vs %.4f/%.4f)" % [float(a.player.hunger), float(a.player.rest), float(b.player.hunger), float(b.player.rest)])
+	ok(_near(float(a.player.hunger), float(b.player.hunger)) and _near(float(a.player.rest), float(b.player.rest)) and _near(float(a.player.hp), float(b.player.hp)), "REQ-0010-105/107: 300 ticks inside the zone — hunger/rest/hp at level 1 (stray need keys in its row) equal level 0's (%.4f/%.4f vs %.4f/%.4f)" % [float(a.player.hunger), float(a.player.rest), float(b.player.hunger), float(b.player.rest)])
 	for w in [s, a, b]:
 		_dispose(w)
 
 
 # =============================================================================================
-# REQ-0010-12 — level 0 gives no buff anywhere (inside its R0 zone too) and is BIT-EXACT the OFF world; with the REAL catalog every
-# key's value shows up in its hook at every level >= 1 (the table is not vacuous)
+# REQ-0010-12 / 106 — level 0 gives no buff anywhere (inside its zone too) and is BIT-EXACT the OFF world; with the REAL catalog every key's value
+# shows up in its hook at every level >= 1 (the table is not vacuous), and the values are the OD-98 ladder: +10% per level, +50% at level 5
 # =============================================================================================
 func _t_buff_level0_and_catalog() -> void:
 	var node: Dictionary = {"kind": "tree"}
@@ -4216,8 +4334,8 @@ func _t_buff_level0_and_catalog() -> void:
 		for dy in range(-(R0 + 2), R0 + 3):
 			for dx in range(-(R0 + 2), R0 + 3):
 				flat = flat and MainCapsule.buff_at(s, String(k), cap + Vector2i(dx, dy)) == 1.0
-	ok(flat, "REQ-0010-12: at level 0 every key is exactly 1.0 on every cell, the R0 zone included")
-	# bit-exact vs a flag-OFF twin on the same pad: the same hero cell, the same benches
+	ok(flat, "REQ-0010-12/106: at level 0 every key is exactly 1.0 (+0%%) on every cell, the zone included")
+	# bit-exact vs a flag-OFF twin on the same pad: the same hero cell, the same benches, the same sleep
 	var off: Variant = _sim_with(_pad_map(ZB_N, ZB_CAP), false, false, false)
 	_quiet(off)
 	for w in [s, off]:
@@ -4230,8 +4348,16 @@ func _t_buff_level0_and_catalog() -> void:
 		off._update_crafting(ZB_DT)
 	ok(float(s.craft_timer) == float(off.craft_timer) and float(s.craft_timer) > 0.0, "REQ-0010-12/01: ... and 5 crafting steps leave craft_timer identical to the OFF world's (%s vs %s)" % [str(s.craft_timer), str(off.craft_timer)])
 	ok(_research_rate_of(s) == _research_rate_of(off) and _research_rate_of(s) > 0.0, "REQ-0010-12/01: ... and the research rate (%s vs %s)" % [str(_research_rate_of(s)), str(_research_rate_of(off))])
+	ok(MainCapsule.recovery_mult(s) == 1.0 and s._capsule_recovery() == 1.0, "REQ-0010-12/107: ... and the need-recovery multiplier is exactly 1.0 at level 0 inside the zone")
+	for w in [s, off]:
+		w.player.sleeping = true
+		w.player.rest = 40.0
+	for t in 20:
+		s.update(Scenarios.DT)
+		off.update(Scenarios.DT)
+	ok(float(s.player.rest) == float(off.player.rest) and float(s.player.rest) > 40.0, "REQ-0010-12/107: ... and 20 ticks of sleep inside the level-0 zone restore rest exactly as in the OFF world (%s vs %s)" % [str(s.player.rest), str(off.player.rest)])
 	# a table that WRONGLY lists buffs on row 0: level 0 still gives none, at the hooks too (REQ-0010-12 is not a data convention)
-	var bf0: Dictionary = {"gather_mult": 1.5, "melee_mult": 1.25, "craft_mult": 1.75, "research_mult": 2.0}
+	var bf0: Dictionary = {"gather_mult": 1.5, "craft_mult": 1.75, "need_recovery_mult": 1.25, "research_mult": 2.0}
 	var tab0: Dictionary = _zone_table(3)
 	((tab0.levels as Array)[0] as Dictionary)["buffs"] = bf0
 	var w0: Variant = _zone_sim(0, tab0)
@@ -4240,36 +4366,45 @@ func _t_buff_level0_and_catalog() -> void:
 	w0._place_building("research_bench", cap_w.x, cap_w.y - 2, -1)
 	_hero_px(w0, float(cap_w.x) + 14.5, float(cap_w.y) + 0.5)
 	var plain_g: float = w0.gather_time(node)
-	var plain_m: float = w0.melee_damage()
 	_hero_px(w0, float(cap_w.x) + 1.5, float(cap_w.y) + 0.5)
-	ok(w0.gather_time(node) == plain_g and w0.melee_damage() == plain_m and _craft_rate_of(w0) == 1.0 and _research_rate_of(w0) == float(GameData.BUILDINGS.research_bench.research_rate), "REQ-0010-12: row 0 listing buffs in the data still gives NO buff at level 0 — gather/melee/craft/research are plain inside the zone")
+	ok(w0.gather_time(node) == plain_g and _craft_rate_of(w0) == 1.0 and MainCapsule.recovery_mult(w0) == 1.0 and _research_rate_of(w0) == float(GameData.BUILDINGS.research_bench.research_rate), "REQ-0010-12: row 0 listing buffs in the data still gives NO buff at level 0 — gather/craft/recovery/research are plain inside the zone")
 	_dispose(w0)
-	# the real table, every level >= 1: the hook shows the data's number for every key the row names (data-driven, no number pinned here)
+	# the real table, every level >= 1: the hook shows the data's number for every key (data-driven) AND the number is the OD-98 ladder
 	var problems: Array = []
-	var any_effect: bool = false
+	var ladder: Array = []
 	var base_research: float = float(GameData.BUILDINGS.research_bench.research_rate)
 	for L in range(1, rows.size()):
 		s.main_capsule["level"] = L
+		s.player.sleeping = false
 		var buffs: Dictionary = (rows[L] as Dictionary).get("buffs", {})
 		_hero_px(s, float(cap.x) + 14.5, float(cap.y) + 0.5)
 		var g0: float = s.gather_time(node)
 		var m0: float = s.melee_damage()
 		_hero_px(s, float(cap.x) + 1.5, float(cap.y) + 0.5)
 		var vg: float = float(buffs.get("gather_mult", 1.0))
-		var vm: float = float(buffs.get("melee_mult", 1.0))
 		var vc: float = float(buffs.get("craft_mult", 1.0))
+		var vn: float = float(buffs.get("need_recovery_mult", 1.0))
 		var vr: float = float(buffs.get("research_mult", 1.0))
-		any_effect = any_effect or vg != 1.0 or vm != 1.0 or vc != 1.0 or vr != 1.0
 		if not _near(s.gather_time(node), g0 / vg):
 			problems.append("L%d gather" % L)
-		if not _near(s.melee_damage(), m0 * vm):
-			problems.append("L%d melee" % L)
+		if s.melee_damage() != m0:
+			problems.append("L%d melee moved" % L)
 		if not _near(_craft_rate_of(s), vc):
 			problems.append("L%d craft (%s vs %s)" % [L, str(_craft_rate_of(s)), str(vc)])
 		if not _near(_research_rate_of(s), base_research * vr):
 			problems.append("L%d research" % L)
-	ok(problems.is_empty(), "REQ-0010-15 [catalog]: for every level 1..5 each hook applies exactly the row's value for its key inside the zone — %s" % str(problems))
-	ok(any_effect, "REQ-0010-15 [catalog]: the REAL table gives at least one non-neutral buff (a table of all 1.0 would satisfy every other test and mean nothing)")
+		if not _near(MainCapsule.recovery_mult(s), vn):
+			problems.append("L%d recovery (%s vs %s)" % [L, str(MainCapsule.recovery_mult(s)), str(vn)])
+		for k in ZB_KEYS:   # REQ-0010-106: +10% per level (OD-98), the same on every axis
+			if absf((MainCapsule.buff_at(s, String(k), cap + Vector2i(1, 0)) - 1.0) - 0.10 * float(L)) > 0.01:
+				ladder.append("L%d %s" % [L, String(k)])
+	ok(problems.is_empty(), "REQ-0010-15/105 [catalog]: for every level 1..5 each hook applies exactly the row's value for its key inside the zone — %s" % str(problems))
+	ok(ladder.is_empty(), "REQ-0010-106 [catalog]: through the hooks buff(L) = +10%% x L on every axis (tolerance 0.01 for the '~') — %s" % str(ladder))
+	s.main_capsule["level"] = 5
+	var top_ok: bool = true
+	for k in ZB_KEYS:
+		top_ok = top_ok and _near(MainCapsule.buff_at(s, String(k), cap + Vector2i(1, 0)), 1.5)
+	ok(top_ok, "REQ-0010-106: at level 5 every axis is EXACTLY +50% (1.5, OD-98)")
 	_dispose(s)
 	_dispose(off)
 
@@ -4292,7 +4427,7 @@ func _t_buff_after_real_upgrades() -> void:
 		if not bool(r.get("ok", false)):
 			bad.append("upgrade to %d refused: %s" % [L, str(r)])
 			continue
-		var R: int = int((rows[L] as Dictionary).radius)
+		var R: int = int(_raw_table().zone.radius_cells)   # the ONE static radius: the same at level 1 and at level 2
 		var v: float = float(((rows[L] as Dictionary).buffs as Dictionary).get("gather_mult", 1.0))
 		_hero_px(s, float(cap.x) + float(R) + 0.5, float(cap.y) + 0.5)   # on the edge of the level just reached (x = 8 + R <= 15 on this pad)
 		if not _near(s.gather_time(node), base_dur / v):
@@ -4303,9 +4438,9 @@ func _t_buff_after_real_upgrades() -> void:
 	ok(bad.is_empty(), "REQ-0010-15/80: after each REAL upgrade (level 1, then 2) gather_time inside the zone — edge included — is base / the row's gather_mult, at once — %s" % str(bad))
 	# one cell beyond the level-1 edge it is plain again (level 1 reached by a fresh real upgrade)
 	var s1: Variant = _leveled(1)
-	var R1: int = int((rows[1] as Dictionary).radius)
+	var R1: int = int(_raw_table().zone.radius_cells)
 	_hero_px(s1, float(cap.x) + float(R1) + 1.5, float(cap.y) + 0.5)
-	ok(_near(s1.gather_time(node), base_dur), "REQ-0010-15: one cell past the level-1 edge the same hero gathers at the plain time (%.4f vs %.4f)" % [s1.gather_time(node), base_dur])
+	ok(_near(s1.gather_time(node), base_dur), "REQ-0010-15/16: one cell past the (static) zone edge the same hero gathers at the plain time (%.4f vs %.4f)" % [s1.gather_time(node), base_dur])
 	for w in [s, s1]:
 		_dispose(w)
 
@@ -4342,7 +4477,7 @@ func _t_buff_craft_process() -> void:
 	ok(wrong.is_empty(), "REQ-0010-15/80: one bench at every edge point/corner/step-past of levels 1..3 — rate = craft_mult(level) inside (edge inclusive), exactly 1.0 outside — %d wrong, first %s" % [wrong.size(), str(wrong.slice(0, 3))])
 	ok(covered_in >= 30 and covered_out >= 30, "REQ-0010-15 setup: the bench probes covered both sides (%d in, %d out)" % [covered_in, covered_out])
 	# several benches: the rate is the SUM of each bench's own multiplier
-	var s2: Variant = _zone_sim(3, syn)   # R = 6, craft 3.25
+	var s2: Variant = _zone_sim(3, syn)   # R = ZB_R (5) at every level, craft 3.25 at level 3
 	var cap2: Vector2i = _cap_tile(s2)
 	_wipe(s2)
 	ok(_craft_rate_of(s2) == 0.0 and float(s2.craft_timer) == 0.0, "REQ-0010-15 (D8): with NO bench the craft rate is 0 at level 3 — a buff multiplies capacity, it does not create it")
@@ -4353,12 +4488,12 @@ func _t_buff_craft_process() -> void:
 	var timer_probe: float = float(s2.craft_timer)
 	s2._update_crafting(ZB_DT)
 	ok(float(s2.craft_timer) == timer_probe, "REQ-0010-15 (D8): ... and a crafting step with no bench leaves the timer untouched")
-	s2._place_building("workbench", cap2.x + 6, cap2.y, -1)   # edge: in
+	s2._place_building("workbench", cap2.x + ZB_R, cap2.y, -1)   # edge: in
 	ok(_near(_craft_rate_of(s2), 3.25), "REQ-0010-15: one bench on the edge -> 3.25 (%s)" % str(_craft_rate_of(s2)))
-	s2._place_building("workbench", cap2.x + 7, cap2.y, -1)   # one past: out
+	s2._place_building("workbench", cap2.x + ZB_R + 1, cap2.y, -1)   # one past: out
 	ok(_near(_craft_rate_of(s2), 3.25 + 1.0), "REQ-0010-15/80: + one bench just outside -> 3.25 + 1.0 (the outside bench still works, without the buff) — %s" % str(_craft_rate_of(s2)))
-	s2._place_building("workbench", cap2.x - 6, cap2.y - 6, -1)   # corner: in
-	s2._place_building("workbench", cap2.x, cap2.y + 6, -1)       # edge: in
+	s2._place_building("workbench", cap2.x - ZB_R, cap2.y - ZB_R, -1)   # corner: in
+	s2._place_building("workbench", cap2.x, cap2.y + ZB_R, -1)          # edge: in
 	ok(_near(_craft_rate_of(s2), 3.25 * 3.0 + 1.0), "REQ-0010-15: + a corner bench and an edge bench -> 3 * 3.25 + 1.0 (%s)" % str(_craft_rate_of(s2)))
 	# the real step really uses that rate: one update() of the whole sim adds dt * rate to the timer (no wrap: stock is empty, timer small)
 	var before: float = float(s2.craft_timer)
@@ -4382,18 +4517,22 @@ func _t_buff_craft_process() -> void:
 
 
 # =============================================================================================
-# REQ-0010-80 — NO RETROACTIVITY: a level drop (or rise) in the middle of a craft moves nothing that was accumulated; the next step adds
-# at the new rate; the bench outside the shrunk zone keeps working and nothing is lost or doubled
+# REQ-0010-80 — NO RETROACTIVITY: a level drop (or rise) in the middle of a craft moves nothing that was accumulated; the next step adds at the
+# NEW buff; the zone does NOT move with the level (OD-99), so the bench inside it keeps working at the lower buff and the bench outside it keeps
+# working at 1.0 — nothing is lost, nothing doubled
 # =============================================================================================
 func _t_buff_craft_no_retroactivity() -> void:
 	var syn: Dictionary = _zone_table(4)
 	var s: Variant = _zone_sim(3, syn)
 	var cap: Vector2i = _cap_tile(s)
 	_wipe(s)
-	var bench_cell: Vector2i = cap + Vector2i(5, 0)   # in at R=6 and R=5 (edge), out at R=3 and R=2
-	var bench: Variant = s._place_building("workbench", bench_cell.x, bench_cell.y, -1)
-	var bench_hp: float = float(bench.hp)
-	var plan: Array = [[3, 4], [1, 4], [2, 4], [0, 4], [3, 4]]   # (level, steps): 4*0.05*(3.25 + 1 + 2.5 + 1 + 3.25) = 2.2 < 3.5, no wrap
+	var in_cell: Vector2i = cap + Vector2i(ZB_R, 0)        # on the (static) edge: inside at EVERY level
+	var out_cell: Vector2i = cap + Vector2i(ZB_R + 1, 0)   # one past it: outside at every level
+	var bench_in: Variant = s._place_building("workbench", in_cell.x, in_cell.y, -1)
+	var bench_out: Variant = s._place_building("workbench", out_cell.x, out_cell.y, -1)
+	var hp_in: float = float(bench_in.hp)
+	var hp_out: float = float(bench_out.hp)
+	var plan: Array = [[3, 3], [1, 3], [2, 3], [0, 3], [3, 3]]   # 3*0.05*(3.25+1.75+2.5+1+3.25 + 5*1) = 2.51 < 3.5, no wrap
 	var expect_timer: float = 0.0
 	var no_jump: bool = true
 	var per_step: bool = true
@@ -4403,7 +4542,8 @@ func _t_buff_craft_no_retroactivity() -> void:
 		var before: float = float(s.craft_timer)
 		s.main_capsule["level"] = L
 		no_jump = no_jump and float(s.craft_timer) == before
-		var rate: float = _zb_buff(syn, L, "craft_mult") if _zb_in(cap, bench_cell, _zb_radius(syn, L)) else 1.0
+		var rate_in: float = _zb_buff(syn, L, "craft_mult") if (L >= 1 and _zb_in(cap, in_cell, _zb_radius(syn, L))) else 1.0
+		var rate: float = rate_in + 1.0   # + the outside bench, always plain
 		for i in int(seg[1]):
 			var b4: float = float(s.craft_timer)
 			s._update_crafting(ZB_DT)
@@ -4412,16 +4552,17 @@ func _t_buff_craft_no_retroactivity() -> void:
 			expect_timer += ZB_DT * rate
 		log_rows.append("L%d rate %.2f" % [L, rate])
 	ok(no_jump, "REQ-0010-80: changing the level (3->1->2->0->3) leaves craft_timer EXACTLY as it was at that instant — nothing is rolled back or forward")
-	ok(per_step, "REQ-0010-80: every step after a change adds dt * (the NEW level's multiplier at the bench's own cell) — %s" % str(log_rows))
+	ok(per_step, "REQ-0010-80: every step after a change adds dt * (the NEW level's multiplier at the inside bench + 1.0 for the outside one) — %s" % str(log_rows))
 	ok(_near(float(s.craft_timer), expect_timer), "REQ-0010-80: the final timer is the sum of the per-step increments, each at the rate of ITS step (%s vs %s)" % [str(s.craft_timer), str(expect_timer)])
-	ok(s.buildings.has(bench) and float(bench.hp) == bench_hp and s.has_workbench(), "REQ-0010-80: the bench that fell outside the shrunk zone is intact (still built, same hp) — it merely works without the buff")
+	ok(s.buildings.has(bench_in) and s.buildings.has(bench_out) and float(bench_in.hp) == hp_in and float(bench_out.hp) == hp_out and s.has_workbench(), "REQ-0010-80: both benches are intact after the level drops (still built, same hp) — a drop lowers the buff only")
+	ok(MainCapsule.in_zone(s, in_cell) and not MainCapsule.in_zone(s, out_cell), "REQ-0010-16/80: ... and the zone did not move with the level (the inside bench is still inside, the outside one still outside)")
 	_dispose(s)
 	# the whole thing through sim.update: planks come out at the rates in force, no wood lost or created
 	var e: Variant = _zone_sim(3, syn)
 	var cap_e: Vector2i = _cap_tile(e)
 	_wipe(e)
-	e.stock[e.res_key("wood")] = 60
-	var cells: Array = [cap_e + Vector2i(3, 0), cap_e + Vector2i(5, 0)]
+	e.stock[e.res_key("wood")] = 90
+	var cells: Array = [cap_e + Vector2i(3, 0), cap_e + Vector2i(ZB_R, 0), cap_e + Vector2i(ZB_R + 2, 0)]   # two inside, one outside
 	for c in cells:
 		var cv: Vector2i = c
 		e._place_building("workbench", cv.x, cv.y, -1)
@@ -4434,7 +4575,7 @@ func _t_buff_craft_no_retroactivity() -> void:
 		e.main_capsule["level"] = L2
 		var rate2: float = 0.0
 		for c in cells:
-			rate2 += _zb_buff(syn, L2, "craft_mult") if _zb_in(cap_e, c, _zb_radius(syn, L2)) else 1.0
+			rate2 += _zb_buff(syn, L2, "craft_mult") if (L2 >= 1 and _zb_in(cap_e, c, _zb_radius(syn, L2))) else 1.0
 		for i in int(seg[1]):
 			e.update(Scenarios.DT)
 			_topup(e)
@@ -4442,7 +4583,7 @@ func _t_buff_craft_no_retroactivity() -> void:
 			while timer >= 3.5:
 				timer -= 3.5
 				planks += 1
-	ok(planks >= 15, "REQ-0010-80 setup: the run made planks (%d)" % planks)
+	ok(planks >= 15 and planks * 2 <= wood0, "REQ-0010-80 setup: the run made planks (%d) and the wood did not run out (%d wood for %d planks)" % [planks, wood0, planks])
 	ok(int(e.res_amount("planks")) - planks0 == planks and wood0 - int(e.res_amount("wood")) == 2 * planks, "REQ-0010-80: planks made == the oracle's %d, and each cost exactly 2 wood (planks +%d, wood -%d) — nothing lost, nothing doubled across the level drop" % [planks, int(e.res_amount("planks")) - planks0, wood0 - int(e.res_amount("wood"))])
 	ok(_near(float(e.craft_timer), timer), "REQ-0010-80: the real craft_timer after 150 ticks with the level 3 -> 0 -> 3 equals the per-step oracle (%s vs %s)" % [str(e.craft_timer), str(timer)])
 	_dispose(e)
@@ -4470,15 +4611,15 @@ func _t_buff_research_process() -> void:
 			s._remove_building(tbl)
 		_dispose(s)
 	ok(wrong.is_empty(), "REQ-0010-15/80: one research table at every edge point/corner/step-past of levels 1..3 — rate = base * research_mult inside (edge inclusive), base outside — %d wrong, first %s" % [wrong.size(), str(wrong.slice(0, 3))])
-	var s2: Variant = _zone_sim(3, syn)   # R = 6, research 4.0
+	var s2: Variant = _zone_sim(3, syn)   # R = ZB_R (5), research 4.0 at level 3
 	var cap2: Vector2i = _cap_tile(s2)
 	_wipe(s2)
 	s2._place_building("workbench", cap2.x + 1, cap2.y + 1, -1)
 	s2._place_building("storage", cap2.x - 2, cap2.y, -1)
 	ok(_research_rate_of(s2) == 0.0, "REQ-0010-15 (D8): at level 3 with a workbench and a storage but NO research table the research rate is exactly 0 (%s)" % str(_research_rate_of(s2)))
-	s2._place_building("research_bench", cap2.x + 6, cap2.y, -1)   # edge: in
-	s2._place_building("research_bench", cap2.x + 7, cap2.y, -1)   # out
-	s2._place_building("research_bench", cap2.x, cap2.y - 6, -1)   # edge: in
+	s2._place_building("research_bench", cap2.x + ZB_R, cap2.y, -1)       # edge: in
+	s2._place_building("research_bench", cap2.x + ZB_R + 1, cap2.y, -1)   # out
+	s2._place_building("research_bench", cap2.x, cap2.y - ZB_R, -1)       # edge: in
 	ok(_near(_research_rate_of(s2), base * 4.0 * 2.0 + base), "REQ-0010-15: two tables inside + one just outside -> 2 * base * 4.0 + base (%s)" % str(_research_rate_of(s2)))
 	var s0: Variant = _zone_sim(0, syn)
 	var cap0: Vector2i = _cap_tile(s0)
@@ -4499,7 +4640,7 @@ func _t_buff_research_no_retroactivity() -> void:
 	var s: Variant = sess.sim
 	s.capsule_table = syn
 	var cap: Vector2i = _cap_tile(s)
-	var bench_cell: Vector2i = cap + Vector2i(5, 0)   # in at R=6 / R=5 (edge), out at R=3 / R=2
+	var bench_cell: Vector2i = cap + Vector2i(ZB_R, 0)   # on the static edge: inside at EVERY level (the zone does not move with it, OD-99)
 	s._place_building("research_bench", bench_cell.x, bench_cell.y, -1)
 	var best: Variant = null
 	for r in sess.progression.available():
@@ -4510,9 +4651,9 @@ func _t_buff_research_no_retroactivity() -> void:
 		_dispose_session(sess)
 		return
 	ok(sess.start_research(String(best.id)), "REQ-0010-80 setup: the project starts")
-	var plan: Array = [[3, 3], [1, 3], [2, 3], [0, 3], [3, 3]]   # Σ rate·steps = 3·(4 + 1 + 3 + 1 + 4) = 39
+	var plan: Array = [[3, 3], [1, 3], [2, 3], [0, 3], [3, 3]]   # Σ rate·steps = 3·(4 + 2 + 3 + 1 + 4) = 42 (level 0: no buff -> 1)
 	var day_len: float = maxf(1.0, float(s.time.day_len))
-	var dday: float = 0.25 * float(best.cost()) / 39.0   # the whole run burns 25% of the project: it can never complete
+	var dday: float = 0.25 * float(best.cost()) / 42.0   # the whole run burns ~25% of the project: it can never complete
 	var dt: float = dday * day_len
 	var base: float = float(GameData.BUILDINGS.research_bench.research_rate)
 	var expect: float = float(sess.progression.active_progress())
@@ -4523,7 +4664,7 @@ func _t_buff_research_no_retroactivity() -> void:
 		var before: float = float(sess.progression.active_progress())
 		s.main_capsule["level"] = L
 		no_jump = no_jump and float(sess.progression.active_progress()) == before
-		var rate: float = base * (_zb_buff(syn, L, "research_mult") if _zb_in(cap, bench_cell, _zb_radius(syn, L)) else 1.0)
+		var rate: float = base * (_zb_buff(syn, L, "research_mult") if (L >= 1 and _zb_in(cap, bench_cell, _zb_radius(syn, L))) else 1.0)
 		for i in int(seg[1]):
 			var b4: float = float(sess.progression.active_progress())
 			sess.tick_research(dt)
@@ -4540,8 +4681,8 @@ func _t_buff_research_no_retroactivity() -> void:
 
 
 # =============================================================================================
-# REQ-0010-15 — end to end through the real processes: a gather job and a melee hit inside the zone are quicker/harder than the same act
-# outside; the baseline is the OFF-world number
+# REQ-0010-15 / 105 — end to end through the real processes: a gather job inside the zone is quicker than the same act outside (a melee hit is NOT
+# buffed: it is no OD-73 axis); the baseline is the OFF-world number
 # =============================================================================================
 func _gather_ticks(s: Variant, hero: Vector2i, tree: Vector2i) -> int:
 	var cell: int = tree.y * int(s.n) + tree.x
@@ -4567,7 +4708,7 @@ func _first_hit(s: Variant, hero: Vector2i) -> float:
 
 
 func _t_buff_gather_melee_e2e() -> void:
-	var syn: Dictionary = _zone_table(4)   # level 2: R = 5, gather 2.0, melee 1.5
+	var syn: Dictionary = _zone_table(4)   # level 2: R = 5, gather 2.0 (no melee axis)
 	var in_cell: Vector2i = ZB_CAP + Vector2i(3, 0)
 	var out_cell: Vector2i = ZB_CAP + Vector2i(9, 0)
 	var s_in: Variant = _zone_sim(2, syn)
@@ -4584,13 +4725,13 @@ func _t_buff_gather_melee_e2e() -> void:
 	ok(absi(t_out - want_out) <= 1, "REQ-0010-15 (e2e): a gather job OUTSIDE the zone takes the plain time: %d ticks (plain %.2f s -> %d)" % [t_out, base_dur, want_out])
 	ok(absi(t_in - want_in) <= 1, "REQ-0010-15 (e2e): the same job INSIDE the zone takes 1/2.0 of it: %d ticks (want %d)" % [t_in, want_in])
 	ok(t_in < t_out, "REQ-0010-15 (e2e): inside is strictly quicker than outside (%d < %d ticks)" % [t_in, t_out])
-	# melee: the first real hit of the real _do_attack
+	# melee: the first real hit of the real _do_attack — must be the plain number on BOTH sides
 	var m_out: float = s_out.melee_damage()
 	var hit_in: float = _first_hit(s_in, in_cell)
 	var hit_out: float = _first_hit(s_out, out_cell)
 	var plain: float = float(s_ref.melee_damage())
 	ok(_near(hit_out, plain), "REQ-0010-15 (e2e): a melee hit OUTSIDE the zone deals the plain damage (%.3f vs %.3f)" % [hit_out, plain])
-	ok(_near(hit_in, plain * 1.5), "REQ-0010-15 (e2e): the same hit INSIDE the zone deals melee_mult(2) = 1.5x (%.3f vs %.3f)" % [hit_in, plain * 1.5])
+	ok(_near(hit_in, plain), "REQ-0010-105 (e2e): the same hit INSIDE the zone deals the SAME plain damage — melee is not one of the four OD-73 axes (%.3f vs %.3f)" % [hit_in, plain])
 	ok(m_out > 0.0, "REQ-0010-15 setup: the reference damage is positive")
 	for w in [s_in, s_out, s_ref]:
 		_dispose(w)
@@ -4767,7 +4908,7 @@ func _t_buff_table_clamp() -> void:
 	var big: Dictionary = _zone_table(6)
 	var src: Variant = _zone_sim(5, big)
 	var payload: Dictionary = _json_rt(Persistence.resume_payload(src))
-	var low: Dictionary = _zone_table(3)   # rows 0..2: R = 2,3,5; level 2: gather 2.0, melee 1.5, craft 2.5, research 3.0
+	var low: Dictionary = _zone_table(3)   # rows 0..2, the ONE static R = 5; level 2: gather 2.0, craft 2.5, need recovery 1.5, research 3.0
 	var y: Variant = Sim.new()
 	y.capsule_table = low
 	var accepted: bool = Persistence.restore(y, payload)
@@ -4781,9 +4922,9 @@ func _t_buff_table_clamp() -> void:
 		var p: Vector2 = pr
 		_hero_px(y, p.x, p.y)
 		var inside: bool = _zb_in(cap, Vector2i(floori(p.x), floori(p.y)), 5)
-		if not _near(y.gather_time(node), g0 / 2.0 if inside else g0) or not _near(y.melee_damage(), m0 * 1.5 if inside else m0):
+		if not _near(y.gather_time(node), g0 / 2.0 if inside else g0) or not _near(y.melee_damage(), m0):
 			bad.append("(%.2f,%.2f) inside=%s" % [p.x, p.y, str(inside)])
-	ok(bad.is_empty(), "REQ-0010-88/15: after the clamp the zone is level 2's (R=5, NOT level 5's R=9) and the buffs are its row's (gather 2.0, melee 1.5) — wrong probes: %s" % str(bad.slice(0, 3)))
+	ok(bad.is_empty(), "REQ-0010-88/15: after the clamp the zone is the ONE static R=5 and the gather buff is level 2's row (2.0, NOT level 5's), melee stays plain — wrong probes: %s" % str(bad.slice(0, 3)))
 	y._place_building("workbench", cap.x + 5, cap.y, -1)
 	y._place_building("workbench", cap.x + 6, cap.y, -1)
 	ok(_near(_craft_rate_of(y), 2.5 + 1.0), "REQ-0010-88/15: the craft rate after the clamp is level 2's row too (edge bench 2.5, bench past it 1.0) — %s" % str(_craft_rate_of(y)))
@@ -5357,3 +5498,812 @@ func _t_off_haul_resume_radius() -> void:
 		if got != (cs[2] as Vector2i):
 			wrong.append("%s: got %s, want %s" % [String(cs[0]), str(got), str(cs[2])])
 	ok(wrong.is_empty(), "REQ-0010-01/D4 (characterization): an exhausted tree hands the OFF-world hero to the nearest same-kind node within 7 tiles (Euclidean, edge included), a tie to the lower cell index, nothing farther, nothing of another kind — %d of %d cases wrong, first %s" % [wrong.size(), cases.size(), str(wrong.slice(0, 2))])
+
+
+# =============================================================================================
+# WAVE 0010-W2c (REWORK under OD-73/76/98/99/103; new edition of spec 0010): the DEFENCE axis `protection` 0..5 next to the capsule level 0..5.
+# Written from REQ-0010-17/88/99/100/102/103/104/105/106/107 and the data the TEST builds (synthetic tables whose prices and factor differ from the
+# catalog and between the two axes — a cross-axis mix-up cannot hide), or from the catalog FILE; never from capsule.gd's internals.
+# =============================================================================================
+func _pcost(table: Dictionary, p: int) -> Dictionary:
+	return _cost_of((table.protection as Dictionary).levels as Array, p)
+
+
+# an ON pad (capsule next to the hero, zone radius SYN_R of the synthetic table), funds wiped
+func _prot_sim(table: Dictionary) -> Variant:
+	var s: Variant = _on_pad()
+	s.capsule_table = table
+	_wipe(s)
+	return s
+
+
+func _prot_of(s: Variant) -> int:
+	return int((s.main_capsule as Dictionary).get("protection", -1))
+
+
+func _pled_sig(s: Variant) -> String:
+	return var_to_str((s.main_capsule as Dictionary).get("protection_invested", {}))
+
+
+func _funds_zero(s: Variant) -> bool:
+	for res in PAY_IDS:
+		if _have(s, String(res)) != 0:
+			return false
+	return true
+
+
+# =============================================================================================
+# REQ-0010-99 / 100 / 17 — two INDEPENDENT axes: upgrade_protection touches `protection` + `protection_invested` and nothing of the capsule axis,
+# upgrade_capsule the reverse; each axis pays ITS OWN table's price (the two synthetic price lists differ)
+# =============================================================================================
+func _t_prot_axes_independent() -> void:
+	var syn: Dictionary = _synth_table(6)
+	var s: Variant = _prot_sim(syn)
+	var p1: Dictionary = _pcost(syn, 1)
+	var c1: Dictionary = _cost_of(syn.levels, 1)
+	ok(not _same_numbers(p1, c1) and not p1.is_empty() and not c1.is_empty(), "REQ-0010-99 setup: the two axes have DIFFERENT prices for their first step (%s vs %s)" % [str(p1), str(c1)])
+	ok(_prot_of(s) == 0 and (s.main_capsule.get("protection_invested", null) as Dictionary).is_empty(), "REQ-0010-99: a fresh capsule has protection 0 and an empty protection_invested")
+	_fund_cost(s, p1, 0.5)
+	var h0: String = Persistence.world_hash(s)
+	var r: Dictionary = MainCapsule.upgrade_protection(s)
+	ok(bool(r.get("ok", false)) and int(r.get("protection", -1)) == 1 and _same_numbers(r.get("paid", {}), p1), "REQ-0010-100: upgrade_protection pays the protection table's price for level 1 (%s)" % str(r))
+	ok(_prot_of(s) == 1 and s.capsule_level() == 0 and (s.main_capsule.invested as Dictionary).is_empty(), "REQ-0010-99: upgrade_protection moved protection 0 -> 1 and did NOT move `level` or `invested`")
+	ok((s.main_capsule.protection_invested as Dictionary).keys() == ["1"] and _same_numbers(s.main_capsule.protection_invested["1"], p1), "REQ-0010-100/103: protection_invested[1] is exactly the price paid — %s" % _pled_sig(s))
+	ok(_funds_zero(s), "REQ-0010-100: the price left the funds and nothing else did")
+	ok(Persistence.world_hash(s) != h0, "REQ-0010-103/35: the protection step changed world_hash")
+	# the other axis: protection and its ledger stay put
+	var pled: String = _pled_sig(s)
+	_fund_cost(s, c1, 0.5)
+	var r2: Dictionary = s.upgrade_capsule()
+	ok(bool(r2.get("ok", false)) and s.capsule_level() == 1 and _prot_of(s) == 1 and _pled_sig(s) == pled, "REQ-0010-99: upgrade_capsule moved level 0 -> 1 and did NOT move protection or protection_invested — %s" % str(r2))
+	ok(_same_numbers(s.main_capsule.invested["1"], c1) and (s.main_capsule.invested as Dictionary).keys() == ["1"], "REQ-0010-14: invested[1] is the CAPSULE price (not the protection one)")
+	# funds for the capsule's next step do not buy a protection step (prices are the axis' own): wood is covered, scrap is not
+	_wipe(s)
+	_fund_cost(s, _cost_of(syn.levels, 2), 0.5)
+	var sig: String = _funds_sig(s)
+	var h1: String = Persistence.world_hash(s)
+	var r3: Dictionary = MainCapsule.upgrade_protection(s)
+	var miss: Dictionary = r3.get("missing", {})
+	ok(not bool(r3.get("ok", true)) and r3.get("reason") == &"cost" and miss.keys() == ["scrap"] and int(miss.get("scrap", 0)) == 2 and _prot_of(s) == 1, "REQ-0010-100: the protection step 2 wants scrap 2 + wood 7: the capsule step's wood/stone/planks leave scrap missing — %s" % str(r3))
+	ok(_funds_sig(s) == sig and Persistence.world_hash(s) == h1, "REQ-0010-100: ... and the refusal debited nothing, changed no hash")
+	_dispose(s)
+
+
+# =============================================================================================
+# REQ-0010-100 — refusals: the FIRST reason, nothing debited (funds, ledger, hash, protection); atomic over several resources; the zone edge
+# inclusive for the stock; max 5 (table max) refused; no capsule / dead refused
+# =============================================================================================
+func _t_prot_refusals() -> void:
+	var syn: Dictionary = _synth_table(6)
+	var s: Variant = _prot_sim(syn)
+	var cap: Vector2i = _cap_tile(s)
+	s.main_capsule["protection"] = 2
+	var cost3: Dictionary = _pcost(syn, 3)   # scrap 3, wood 9
+	# (a) both lines short -> both named, alphabetical, the exact shortfall
+	_fund(s, "wood", 0, int(cost3.wood) - 5)
+	_fund(s, "scrap", 1, 0)
+	var sig: String = _funds_sig(s)
+	var led: String = _pled_sig(s)
+	var h: String = Persistence.world_hash(s)
+	var r: Dictionary = MainCapsule.upgrade_protection(s)
+	var miss: Dictionary = r.get("missing", {})
+	var keys: Array = miss.keys()
+	ok(not bool(r.get("ok", true)) and r.get("reason") == &"cost" and keys == ["scrap", "wood"] and int(miss.scrap) == int(cost3.scrap) - 1 and int(miss.wood) == 5, "REQ-0010-100: a short price -> reason cost, missing in alphabetical order (the first reason first) with the exact shortfall — %s" % str(r))
+	ok(_funds_sig(s) == sig and _pled_sig(s) == led and _prot_of(s) == 2 and Persistence.world_hash(s) == h, "REQ-0010-100: ... nothing debited, ledger/protection/hash unchanged")
+	# (b) atomic: wood fully covered (backpack), scrap short by one (stock) -> the covered wood is NOT taken
+	_wipe(s)
+	_fund(s, "wood", int(cost3.wood), 0)
+	_fund(s, "scrap", 0, int(cost3.scrap) - 1)
+	sig = _funds_sig(s)
+	h = Persistence.world_hash(s)
+	var rb: Dictionary = MainCapsule.upgrade_protection(s)
+	ok(not bool(rb.get("ok", true)) and _funds_sig(s) == sig and _prot_of(s) == 2 and Persistence.world_hash(s) == h and _pled_sig(s) == led, "REQ-0010-100: atomic — wood covered, scrap one short: nothing taken, nothing recorded (%s)" % str(rb))
+	# (c) the stock pays only inside the zone; the edge (Chebyshev R) is inside, one cell further is not
+	_wipe(s)
+	_fund(s, "wood", 0, int(cost3.wood))
+	_fund(s, "scrap", 0, int(cost3.scrap))
+	sig = _funds_sig(s)
+	_put_hero(s, cap + Vector2i(SYN_R + 1, 0))
+	var rc: Dictionary = MainCapsule.upgrade_protection(s)
+	ok(not bool(rc.get("ok", true)) and rc.get("reason") == &"cost" and bool(rc.get("far", false)) and _funds_sig(s) == sig and _prot_of(s) == 2, "REQ-0010-100/13: one cell past the zone edge the stock is out of reach (far=true), nothing debited — %s" % str(rc))
+	_put_hero(s, cap + Vector2i(SYN_R, SYN_R))
+	var re: Dictionary = MainCapsule.upgrade_protection(s)
+	ok(bool(re.get("ok", false)) and _prot_of(s) == 3 and _funds_zero(s), "REQ-0010-100/13: on the zone edge (the corner (R,R) of the Chebyshev square) the stock pays — %s" % str(re))
+	# (d) the top of the protection table
+	var m: Variant = _prot_sim(syn)
+	m.main_capsule["protection"] = 5
+	for res in PAY_IDS:
+		_fund(m, String(res), 40, 4000)
+	var msig: String = _funds_sig(m)
+	var mh: String = Persistence.world_hash(m)
+	var rm: Dictionary = MainCapsule.upgrade_protection(m)
+	ok(not bool(rm.get("ok", true)) and rm.get("reason") == &"max" and _prot_of(m) == 5 and _funds_sig(m) == msig and Persistence.world_hash(m) == mh, "REQ-0010-100: protection 5 is the top — refused (reason max) with plenty of funds, nothing moves (%s)" % str(rm))
+	# (e) the protection range is ITS table's size, not the capsule axis'
+	var short: Dictionary = _synth_table(6)
+	short["protection"] = _synth_protection(3)
+	m.capsule_table = short
+	m.main_capsule["protection"] = 2
+	var rs: Dictionary = MainCapsule.upgrade_protection(m)
+	ok(not bool(rs.get("ok", true)) and rs.get("reason") == &"max" and _prot_of(m) == 2, "REQ-0010-99/100: with a 3-record defence axis protection 2 is already the top, whatever the capsule axis says — %s" % str(rs))
+	# (f) no capsule (flag OFF): refused, nothing changes; dead hero: refused
+	var off: Variant = _sim_with(_pad_map(PAD_N, Vector2i(8, 8)), false, false, false)
+	var offh: String = Persistence.world_hash(off)
+	var ro: Dictionary = MainCapsule.upgrade_protection(off)
+	ok(not bool(ro.get("ok", true)) and ro.get("reason") == &"no_capsule" and Persistence.world_hash(off) == offh and not (off.main_capsule as Dictionary).has("protection"), "REQ-0010-100/01: with the flag OFF upgrade_protection is refused (no_capsule) and the world is the OFF world (%s)" % str(ro))
+	var d: Variant = _prot_sim(syn)
+	_fund_cost(d, _pcost(syn, 1), 1.0)
+	d.dead = true
+	var dsig: String = _funds_sig(d)
+	var rd: Dictionary = MainCapsule.upgrade_protection(d)
+	d.dead = false
+	ok(not bool(rd.get("ok", true)) and rd.get("reason") == &"dead" and _funds_sig(d) == dsig and _prot_of(d) == 0, "REQ-0010-100: a dead hero upgrades nothing (reason dead), nothing debited — %s" % str(rd))
+	for w in [s, m, off, d]:
+		_dispose(w)
+
+
+# =============================================================================================
+# REQ-0010-100 — sources: backpack FIRST, then the stock; a command id is idempotent within ONE tick
+# =============================================================================================
+func _t_prot_sources_and_dedupe() -> void:
+	var syn: Dictionary = _synth_table(6)
+	var s: Variant = _prot_sim(syn)
+	_fund(s, "wood", 3, 10)   # level 1 costs scrap 1, wood 5
+	_fund(s, "scrap", 0, 1)
+	var r: Dictionary = MainCapsule.upgrade_protection(s)
+	ok(bool(r.get("ok", false)) and Inventory.count(s, "wood") == 0 and s.res_amount("wood") == 8 and s.res_amount("scrap") == 0, "REQ-0010-100/76: the backpack is drained FIRST (3 wood), the stock pays the rest (2 of 10) — pack %d, stock %d" % [Inventory.count(s, "wood"), s.res_amount("wood")])
+	_fund(s, "wood", 7, 10)   # level 2 costs scrap 2, wood 7
+	_fund(s, "scrap", 2, 0)
+	var r2: Dictionary = MainCapsule.upgrade_protection(s)
+	ok(bool(r2.get("ok", false)) and Inventory.count(s, "wood") == 0 and s.res_amount("wood") == 10 and Inventory.count(s, "scrap") == 0, "REQ-0010-100/76: a price the backpack covers fully leaves the stock untouched (stock wood %d)" % s.res_amount("wood"))
+	# dedupe: two prices funded; the same id in the same tick pays once
+	var d: Variant = _prot_sim(syn)
+	var two: Dictionary = {}
+	for P in [1, 2]:
+		for res in _pcost(syn, P):
+			two[res] = int(two.get(res, 0)) + int(_pcost(syn, P)[res])
+	_fund_cost(d, two, 0.5)
+	var a: Dictionary = MainCapsule.upgrade_protection(d, 5)
+	var after: String = _funds_sig(d)
+	var led: String = _pled_sig(d)
+	var b: Dictionary = MainCapsule.upgrade_protection(d, 5)
+	ok(bool(a.get("ok", false)) and _prot_of(d) == 1, "REQ-0010-100 setup: the first command id=5 upgrades protection to 1")
+	ok(not bool(b.get("ok", true)) and _prot_of(d) == 1 and _funds_sig(d) == after and _pled_sig(d) == led, "REQ-0010-100: the same id in the same tick is idempotent — protection still 1, funds and ledger as after the first (%s)" % str(b))
+	var c: Dictionary = MainCapsule.upgrade_protection(d, 6)
+	ok(bool(c.get("ok", false)) and _prot_of(d) == 2, "REQ-0010-100: a DIFFERENT id in the same tick is a new command — protection 2 (%s)" % str(c))
+	d.capsule_table = syn
+	_fund_cost(d, _pcost(syn, 3), 0.5)
+	d.update(Scenarios.DT)
+	var later: Dictionary = MainCapsule.upgrade_protection(d, 5)
+	ok(bool(later.get("ok", false)) and _prot_of(d) == 3, "REQ-0010-100: the same id in a LATER tick is a new command (the window is one tick) — %s" % str(later))
+	# no id: never deduplicated
+	var n: Variant = _prot_sim(syn)
+	_fund_cost(n, two, 0.5)
+	MainCapsule.upgrade_protection(n)
+	MainCapsule.upgrade_protection(n)
+	ok(_prot_of(n) == 2 and _funds_zero(n), "REQ-0010-100: without an id two calls are two steps (protection 2, the two prices spent)")
+	for w in [s, d, n]:
+		_dispose(w)
+
+
+# =============================================================================================
+# REQ-0010-100 / 99 / 102 — the REAL catalog end to end: five protection steps from the FILE's prices, the ledger is the FILE's prices, level and
+# invested untouched; the 6th step refused; core_hp follows the file
+# =============================================================================================
+func _t_prot_walk_real_catalog() -> void:
+	var prot_rows: Array = (_raw_table().protection as Dictionary).levels
+	var s: Variant = _on_pad()
+	_wipe(s)
+	var bad: Array = []
+	for P in range(1, 6):
+		var price: Dictionary = _cost_of(prot_rows, P)
+		_fund_cost(s, price, 0.4)
+		var r: Dictionary = MainCapsule.upgrade_protection(s)
+		if not bool(r.get("ok", false)) or _prot_of(s) != P:
+			bad.append("step %d: %s" % [P, str(r)])
+			continue
+		var led: Dictionary = s.main_capsule.protection_invested
+		if not (led.has(str(P)) and _same_numbers(led[str(P)], price)) or led.size() != P:
+			bad.append("ledger after %d: %s" % [P, var_to_str(led)])
+		if not _funds_zero(s):
+			bad.append("funds left after %d" % P)
+	ok(bad.is_empty(), "REQ-0010-100/99: five real protection steps from the catalog prices succeed, each writes protection_invested[P] == the FILE's price, funds end at zero — %s" % str(bad))
+	ok(s.capsule_level() == 0 and (s.main_capsule.invested as Dictionary).is_empty(), "REQ-0010-99: ... and the capsule axis never moved (level 0, invested empty)")
+	ok(absf(MainCapsule.core_hp_max(s) - float((prot_rows[5] as Dictionary).core_hp)) < 1.0e-6, "REQ-0010-102: at protection 5 the core's maximum is the FILE's record for level 5 (%s)" % str(MainCapsule.core_hp_max(s)))
+	var top: Dictionary = MainCapsule.upgrade_protection(s)
+	ok(not bool(top.get("ok", true)) and top.get("reason") == &"max" and _prot_of(s) == 5, "REQ-0010-100: the 6th step is refused (max) — %s" % str(top))
+	var cap: Vector2i = _cap_tile(s)
+	var neutral: bool = true
+	for k in ZB_KEYS:
+		neutral = neutral and MainCapsule.buff_at(s, String(k), cap + Vector2i(1, 0)) == 1.0
+	ok(neutral, "REQ-0010-17/105: protection 5 at capsule level 0 gives NO buff on any axis (the defence axis is not a buff axis)")
+	_dispose(s)
+
+
+# =============================================================================================
+# REQ-0010-102 / 17 — breach cost: ~x2 per protection level, ~x16 from level 1 to 5, the coefficient comes from the DATA; the core's maximum is
+# a function of PROTECTION only (the capsule level does not move it)
+# =============================================================================================
+func _t_breach_cost_ladder() -> void:
+	var s: Variant = _on_pad()
+	var prot: Dictionary = _raw_table().protection
+	var bad: Array = []
+	for p in range(1, 5):
+		var ratio: float = MainCapsule.breach_cost(s, p + 1) / MainCapsule.breach_cost(s, p)
+		if absf(ratio - 2.0) > 0.1:
+			bad.append("p%d->p%d x%.3f" % [p, p + 1, ratio])
+	ok(bad.is_empty(), "REQ-0010-102: breach_cost(p+1)/breach_cost(p) ~ 2 for p = 1..4 (tolerance 0.1 for the '~') — %s" % str(bad))
+	var span: float = MainCapsule.breach_cost(s, 5) / MainCapsule.breach_cost(s, 1)
+	ok(absf(span - 16.0) <= 0.5, "REQ-0010-102/OD-103: breach_cost(5)/breach_cost(1) ~ 16 (%.3f)" % span)
+	ok(absf(float(prot.get("factor", 0.0)) - 2.0) < 1.0e-9, "REQ-0010-102/OD-65/103: the data's coefficient is the owner's x2 (%s)" % str(prot.get("factor")))
+	# the coefficient is DATA: a table with factor 3 gives x3 per step and x81 over four steps
+	s.capsule_table = _synth_table(6)
+	var r3: Array = []
+	for p in range(1, 5):
+		r3.append(snappedf(MainCapsule.breach_cost(s, p + 1) / MainCapsule.breach_cost(s, p), 0.0001))
+	ok(r3 == [3.0, 3.0, 3.0, 3.0] and absf(MainCapsule.breach_cost(s, 5) / MainCapsule.breach_cost(s, 1) - 81.0) < 0.01, "REQ-0010-102: the ratio follows the injected table's factor (3) — no x2 / x16 baked into the code (%s)" % str(r3))
+	s.capsule_table = {}
+	# core_hp_max: a function of protection, constant over the capsule level
+	var prot_rows: Array = prot.levels
+	var bad_hp: Array = []
+	var prev: float = -1.0
+	for P in 6:
+		var at_p: float = -1.0
+		for L in 6:
+			s.main_capsule["level"] = L
+			s.main_capsule["protection"] = P
+			var hp: float = MainCapsule.core_hp_max(s)
+			if absf(hp - float((prot_rows[P] as Dictionary).core_hp)) > 1.0e-6:
+				bad_hp.append("L%d P%d: %s" % [L, P, str(hp)])
+			at_p = hp
+		if at_p <= prev:
+			bad_hp.append("P%d not above P%d" % [P, P - 1])
+		prev = at_p
+	ok(bad_hp.is_empty(), "REQ-0010-17/102: the core's maximum HP changes with every PROTECTION step and with NO capsule-level step (36 pairs) — %s" % str(bad_hp.slice(0, 3)))
+	_dispose(s)
+
+
+# =============================================================================================
+# REQ-0010-103 / 35 / 82 — protection and protection_invested are state: every change moves world_hash, the two axes cannot be swapped without
+# a change, key order does not matter, the wire form is ints/strings, JSON round trip restores the same hash, OFF has no such keys
+# =============================================================================================
+func _t_prot_hash_and_wire() -> void:
+	var base: Variant = _on_real(CLOCK_T)
+	var h0: String = Persistence.world_hash(base)
+	var seen: Dictionary = {h0: "base"}
+	var variants: Array = [
+		["protection 1", {"protection": 1}],
+		["protection 5", {"protection": 5}],
+		["protection_invested {1:{wood:3}}", {"protection_invested": {"1": {"wood": 3}}}],
+		["protection_invested {1:{wood:4}}", {"protection_invested": {"1": {"wood": 4}}}],
+		["protection_invested {1:{wood:3, stone:1}}", {"protection_invested": {"1": {"wood": 3, "stone": 1}}}],
+		["protection_invested {2:{wood:3}}", {"protection_invested": {"2": {"wood": 3}}}],
+		["invested {1:{wood:3}} (the OTHER ledger, same numbers)", {"invested": {"1": {"wood": 3}}}],
+		["level 2 / protection 3", {"level": 2, "protection": 3}],
+		["level 3 / protection 2 (the axes swapped)", {"level": 3, "protection": 2}],
+		["invested {2:{wood:5}}", {"invested": {"2": {"wood": 5}}}],
+		["protection_invested {2:{wood:5}} (same numbers, other ledger)", {"protection_invested": {"2": {"wood": 5}}}],
+	]
+	var clashes: Array = []
+	for v in variants:
+		var m: Variant = _on_real(CLOCK_T)
+		var edits: Dictionary = (v as Array)[1]
+		for k in edits:
+			var val: Variant = edits[k]
+			m.main_capsule[k] = (val as Dictionary).duplicate(true) if val is Dictionary else val
+		var hv: String = Persistence.world_hash(m)
+		if seen.has(hv):
+			clashes.append("%s == %s" % [String((v as Array)[0]), String(seen[hv])])
+		seen[hv] = String((v as Array)[0])
+		_dispose(m)
+	ok(clashes.is_empty(), "REQ-0010-35/82/103: every mutation of level / protection / invested / protection_invested gives a world_hash of its own — %d variants, clashes %s" % [variants.size(), str(clashes)])
+	# ledger key / resource insertion order is not state
+	var o1: Variant = _on_real(CLOCK_T)
+	var o2: Variant = _on_real(CLOCK_T)
+	o1.main_capsule["protection_invested"] = {"1": {"wood": 1, "stone": 2}, "2": {"scrap": 3}, "3": {"planks": 4}}
+	o2.main_capsule["protection_invested"] = {"3": {"planks": 4}, "2": {"scrap": 3}, "1": {"stone": 2, "wood": 1}}
+	ok(Persistence.world_hash(o1) == Persistence.world_hash(o2), "REQ-0010-82: the same ledger built in another insertion order hashes the same")
+	var keys: Array = (Persistence.serialize_region(o2).main_capsule.protection_invested as Dictionary).keys()
+	ok(keys == ["1", "2", "3"], "REQ-0010-82/103: protection_invested keys come out in numeric order 1,2,3 (inserted 3,2,1) — %s" % str(keys))
+	# the wire: ints, string keys; round trip -> same hash and same values; exact ints
+	var x: Variant = _on_real(CLOCK_T)
+	x.main_capsule["level"] = 2
+	x.main_capsule["protection"] = 4
+	x.main_capsule["invested"] = {"1": {"wood": 11}, "2": {"stone": 7}}
+	x.main_capsule["protection_invested"] = {"1": {"wood": 21}, "2": {"stone": 17, "planks": 3}, "3": {"scrap": 5}, "4": {"scrap": 6}}
+	var rec: Dictionary = Persistence.serialize_region(x).main_capsule
+	ok(rec.get("protection") is int and int(rec.protection) == 4 and rec.get("protection_invested") is Dictionary and rec.has("invested"), "REQ-0010-103: the wire record carries protection (an int) and protection_invested next to level/invested")
+	var wire_ok: bool = true
+	for lk in (rec.protection_invested as Dictionary):
+		wire_ok = wire_ok and lk is String
+		for res in (rec.protection_invested[lk] as Dictionary):
+			wire_ok = wire_ok and (rec.protection_invested[lk] as Dictionary)[res] is int
+	ok(wire_ok, "REQ-0010-103: ledger keys are strings and every amount an int")
+	var hx: String = Persistence.world_hash(x)
+	var y: Variant = Sim.new()
+	var accepted: bool = Persistence.restore(y, _json_rt(Persistence.resume_payload(x)))
+	ok(accepted and y.load_error == &"" and _prot_of(y) == 4 and typeof(y.main_capsule.protection) == TYPE_INT and _pled_sig(y) == _pled_sig(x), "REQ-0010-103: a JSON round trip brings protection (int 4) and protection_invested back exactly")
+	ok(Persistence.world_hash(y) == hx, "REQ-0010-103/35: ... and the restored world has the same world_hash")
+	# OFF: no such keys, anywhere
+	var off: Variant = _sim_with(_pad_map(PAD_N, Vector2i(8, 8)), false, false, false)
+	var off_text: String = JSON.stringify(Persistence.resume_payload(off), "", true, true)
+	ok(not Persistence.serialize_region(off).has("main_capsule") and not off_text.contains("protection"), "REQ-0010-103/01: with the flag OFF the region record has no main_capsule and the save text no `protection` at all")
+	# twin determinism with the same two-axis history
+	var t1: Variant = _on_real(CLOCK_T)
+	var t2: Variant = _on_real(CLOCK_T)
+	for w in [t1, t2]:
+		w.capsule_table = _synth_table(6)
+		_wipe(w)
+		_fund_cost(w, _pcost(w.capsule_table, 1), 0.5)
+		MainCapsule.upgrade_protection(w)
+	ok(Persistence.world_hash(t1) == Persistence.world_hash(t2) and Persistence.world_hash(t1) != h0, "REQ-0010-82/04: twin worlds with the same protection step share the hash, which differs from the unchanged world")
+	for w in [base, o1, o2, x, y, off, t1, t2]:
+		_dispose(w)
+
+
+# =============================================================================================
+# REQ-0010-60 / 83 — a record that breaks the new fields is refused out loud (capsule_invalid) and builds nothing; a first-wave (v1) record too
+# =============================================================================================
+func _t_prot_tampered_record() -> void:
+	var src: Variant = _on_real(CLOCK_T)
+	src.main_capsule["protection"] = 2
+	src.main_capsule["protection_invested"] = {"1": {"wood": 4}, "2": {"wood": 8}}
+	var good: Dictionary = _json_rt(Persistence.resume_payload(src))
+	var cases: Array = [
+		["protection -1", "protection", -1],
+		["protection 1.5", "protection", 1.5],
+		["protection null", "protection", null],
+		["protection missing", "protection", "<erase>"],
+		["protection_invested level 0", "protection_invested", {"0": {"wood": 1}}],
+		["protection_invested level -1", "protection_invested", {"-1": {"wood": 1}}],
+		["protection_invested negative amount", "protection_invested", {"1": {"wood": -1}}],
+		["protection_invested fractional amount", "protection_invested", {"1": {"wood": 1.5}}],
+		["protection_invested a list", "protection_invested", [1, 2]],
+	]
+	var bad: Array = []
+	for cs in cases:
+		var p: Dictionary = good.duplicate(true)
+		var rec: Dictionary = p.region.main_capsule
+		var field: String = String((cs as Array)[1])
+		var val: Variant = (cs as Array)[2]
+		if val is String and String(val) == "<erase>":
+			rec.erase(field)
+		else:
+			rec[field] = val
+		var y: Variant = Sim.new()
+		var sig0: String = _world_sig(y)
+		var accepted: bool = Persistence.restore(y, p)
+		if accepted or y.load_error != &"capsule_invalid" or _world_sig(y) != sig0:
+			bad.append("%s -> accepted=%s error=%s" % [String((cs as Array)[0]), str(accepted), str(y.load_error)])
+		_dispose(y)
+	ok(bad.is_empty(), "REQ-0010-60/83/103: %d broken protection / protection_invested records are refused as capsule_invalid with the world untouched — %s" % [cases.size(), str(bad)])
+	# a first-wave record (version 1: one axis, no protection) is refused explicitly, never loaded silently as protection 0
+	var old: Dictionary = good.duplicate(true)
+	old.region.main_capsule["version"] = 1
+	old.region.main_capsule.erase("protection")
+	old.region.main_capsule.erase("protection_invested")
+	var z: Variant = Sim.new()
+	var z_ok: bool = Persistence.restore(z, old)
+	ok(not z_ok and z.load_error == &"capsule_version", "REQ-0010-60: a version-1 (one-axis) record is refused as capsule_version, not migrated silently (%s)" % str(z.load_error))
+	# a whole-number float protection is what a JSON round trip hands back: accepted as the int
+	var w: Dictionary = good.duplicate(true)
+	w.region.main_capsule["protection"] = 3.0
+	var v: Variant = Sim.new()
+	ok(Persistence.restore(v, w) and _prot_of(v) == 3 and typeof(v.main_capsule.protection) == TYPE_INT, "REQ-0010-103: protection 3.0 (a JSON number) loads as the int 3")
+	for q in [src, z, v]:
+		_dispose(q)
+
+
+# =============================================================================================
+# REQ-0010-88 — the clamp of BOTH axes: each to ITS table's maximum, ledgers kept as saved, nothing raised; the core's maximum is recomputed
+# =============================================================================================
+func _t_prot_save_clamp() -> void:
+	var rows: Array = _raw_rows()
+	var prot_rows: Array = (_raw_table().protection as Dictionary).levels
+	var src: Variant = _on_pad()
+	src.main_capsule["level"] = 5
+	src.main_capsule["protection"] = 5
+	var led: Dictionary = {}
+	var pled: Dictionary = {}
+	for L in range(1, 6):
+		led[str(L)] = _cost_of(rows, L)
+		pled[str(L)] = {"wood": 100 + L, "scrap": L}
+	src.main_capsule["invested"] = led.duplicate(true)
+	src.main_capsule["protection_invested"] = pled.duplicate(true)
+	var payload: Dictionary = _json_rt(Persistence.resume_payload(src))
+	# (a) the capsule axis keeps 6 rows, the defence axis shrinks to 3 (0..2): level stays 5, protection -> 2
+	var ta: Dictionary = _table_copy()
+	(ta["protection"] as Dictionary)["levels"] = ((ta["protection"] as Dictionary)["levels"] as Array).slice(0, 3)
+	var a: Variant = Sim.new()
+	a.capsule_table = ta
+	var a_ok: bool = Persistence.restore(a, payload.duplicate(true))
+	ok(a_ok and a.capsule_level() == 5 and _prot_of(a) == 2, "REQ-0010-88: a (5, 5) save against a 6-row capsule axis and a 3-record defence axis -> level 5, protection 2 (%d, %d)" % [a.capsule_level(), _prot_of(a)])
+	ok(absf(MainCapsule.core_hp_max(a) - float((prot_rows[2] as Dictionary).core_hp)) < 1.0e-6, "REQ-0010-88: ... the core's maximum is recomputed from the clamped protection (record 2)")
+	var kept: bool = (a.main_capsule.protection_invested as Dictionary).keys() == ["1", "2", "3", "4", "5"]
+	for L in range(1, 6):
+		kept = kept and _same_numbers(a.main_capsule.protection_invested[str(L)], pled[str(L)]) and _same_numbers(a.main_capsule.invested[str(L)], led[str(L)])
+	ok(kept, "REQ-0010-88: ... protection_invested and invested are kept AS SAVED (levels 3..5 included)")
+	# (b) the other way round
+	var tb: Dictionary = _table_copy()
+	tb["levels"] = (tb["levels"] as Array).slice(0, 3)
+	var b: Variant = Sim.new()
+	b.capsule_table = tb
+	var b_ok: bool = Persistence.restore(b, payload.duplicate(true))
+	ok(b_ok and b.capsule_level() == 2 and _prot_of(b) == 5, "REQ-0010-88: a 3-row capsule axis with a 6-record defence axis -> level 2, protection 5 (%d, %d)" % [b.capsule_level(), _prot_of(b)])
+	# (c) both longer: nothing is raised, the new top is reachable on each axis
+	var tc: Dictionary = _table_copy()
+	(tc["levels"] as Array).append({"level": 6, "cost": {"wood": 9}, "buffs": {"gather_mult": 1.6, "craft_mult": 1.6, "need_recovery_mult": 1.6, "research_mult": 1.6}})
+	((tc["protection"] as Dictionary)["levels"] as Array).append({"level": 6, "cost": {"wood": 7}, "core_hp": 37760.0})
+	var c: Variant = Sim.new()
+	c.capsule_table = tc
+	var c_ok: bool = Persistence.restore(c, payload.duplicate(true))
+	ok(c_ok and c.capsule_level() == 5 and _prot_of(c) == 5, "REQ-0010-88: against longer tables the (5, 5) save stays (5, 5) — never raised (%d, %d)" % [c.capsule_level(), _prot_of(c)])
+	_wipe(c)
+	_fund(c, "wood", 20, 20)
+	var up: Dictionary = MainCapsule.upgrade_protection(c)
+	ok(bool(up.get("ok", false)) and _prot_of(c) == 6 and c.capsule_level() == 5 and (c.main_capsule.protection_invested as Dictionary).has("6"), "REQ-0010-88/91/99: ... and the new 7th defence record is reachable by data alone (protection 6, level untouched) — %s" % str(up))
+	# (d) a one-record defence axis: protection 0, and upgrade_protection is refused as max
+	var td: Dictionary = _table_copy()
+	(td["protection"] as Dictionary)["levels"] = ((td["protection"] as Dictionary)["levels"] as Array).slice(0, 1)
+	var d: Variant = Sim.new()
+	d.capsule_table = td
+	var d_ok: bool = Persistence.restore(d, payload.duplicate(true))
+	var rd: Dictionary = MainCapsule.upgrade_protection(d)
+	ok(d_ok and _prot_of(d) == 0 and not bool(rd.get("ok", true)) and rd.get("reason") == &"max", "REQ-0010-88/100: a defence axis with only record 0 clamps protection to 0 and refuses upgrades as max (%d, %s)" % [_prot_of(d), str(rd.get("reason"))])
+	# (e) the clamped world saved and loaded against the full table stays clamped
+	var back: Variant = Sim.new()
+	ok(Persistence.restore(back, _json_rt(Persistence.resume_payload(a))) and _prot_of(back) == 2 and back.capsule_level() == 5, "REQ-0010-88: a clamped world saved and loaded against the full table stays clamped (%d)" % _prot_of(back))
+	for w in [src, a, b, c, d, back]:
+		_dispose(w)
+
+
+# =============================================================================================
+# REQ-0010-96 / 99 / 104 — death and respawn leave BOTH axes and both ledgers; the new body upgrades protection from the stock at once
+# =============================================================================================
+func _t_prot_death_keeps() -> void:
+	var syn: Dictionary = _synth_table(6)
+	var s: Variant = _stub_on(_pad_map(PAD_N, Vector2i(8, 8)))
+	_quiet(s)
+	s.capsule_table = syn
+	_wipe(s)
+	for P in [1, 2]:
+		_fund_cost(s, _pcost(syn, P), 0.5)
+		MainCapsule.upgrade_protection(s)
+	_fund_cost(s, _cost_of(syn.levels, 1), 0.5)
+	s.upgrade_capsule()
+	_fund(s, "wood", 0, 61)
+	var pled: String = _pled_sig(s)
+	var led: String = _ledger_sig(s)
+	_kill(s)
+	s.respawn_new_pawn()
+	ok(_prot_of(s) == 2 and s.capsule_level() == 1 and _pled_sig(s) == pled and _ledger_sig(s) == led and s.res_amount("wood") == 61, "REQ-0010-96/99/104: death + respawn left protection (2), level (1), BOTH ledgers and the stock as they were")
+	var price: Dictionary = _pcost(syn, 3)
+	for res in price:
+		_fund(s, String(res), 0, int(price[res]))
+	var r: Dictionary = MainCapsule.upgrade_protection(s)
+	ok(bool(r.get("ok", false)) and _prot_of(s) == 3, "REQ-0010-100/96: the new body (empty hands, beside the capsule) pays the next protection step from the stock — %s" % str(r))
+	_dispose(s)
+
+
+# =============================================================================================
+# REQ-0010-13 / 14 / 99 / 100 / 75 — a seeded run of BOTH axes against an INDEPENDENT model: funds measured around every call, hash moves iff the
+# state moved, the ledgers are the sum of the prices of the levels reached, refusals leave no trace
+# =============================================================================================
+func _t_axes_property() -> void:
+	var syn: Dictionary = _synth_table(6)
+	var stats: Dictionary = {"ok_c": 0, "ok_p": 0, "cost": 0, "far": 0, "max": 0, "dup": 0}
+	var problems: Array = []
+	for seed_val in [4201, 4202, 4203, 4204]:
+		var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+		rng.seed = seed_val
+		var s: Variant = _prot_sim(syn)
+		var cap: Vector2i = _cap_tile(s)
+		var lvl: int = 0
+		var prot: int = 0
+		var last_ok_id: int = -1
+		var last_prot: bool = false
+		for step in 90:
+			var repeat: bool = last_ok_id >= 0 and rng.randi_range(0, 2) == 0
+			var is_prot: bool = last_prot if repeat else rng.randi_range(0, 1) == 1
+			var cur: int = prot if is_prot else lvl
+			var price: Dictionary = {}
+			if cur < 5:
+				price = _pcost(syn, cur + 1) if is_prot else _cost_of(syn.levels, cur + 1)
+			# fund: each line exact / one short / generous, split between the backpack and the stock at random
+			_wipe(s)
+			var pack: Dictionary = {}
+			var stock: Dictionary = {}
+			for res in price:
+				var need: int = int(price[res])
+				var mode: int = rng.randi_range(0, 3)
+				var have: int = need - 1 if mode == 0 else (need if mode == 1 else need + rng.randi_range(0, 6))
+				have = maxi(0, have)
+				var pk: int = rng.randi_range(0, have)
+				pack[res] = pk
+				stock[res] = have - pk
+				_fund(s, String(res), pk, have - pk)
+			var inside: bool = rng.randi_range(0, 2) != 0
+			var off: Vector2i = Vector2i(rng.randi_range(-SYN_R, SYN_R), rng.randi_range(-SYN_R, SYN_R)) if inside else Vector2i(SYN_R + rng.randi_range(1, 3), rng.randi_range(-2, 2))
+			_put_hero(s, Vector2i(clampi(cap.x + off.x, 0, PAD_N - 1), clampi(cap.y + off.y, 0, PAD_N - 1)))
+			var really_in: bool = _zb_in(cap, _hero_cell(s), SYN_R)
+			# an id: fresh (never one that already failed), or a repeat of the last SUCCESSFUL id of the same axis in this tick
+			var cid: int = -1
+			if repeat:
+				cid = last_ok_id
+			elif rng.randi_range(0, 1) == 1:
+				cid = 100 + step
+			var funds_before: String = _funds_sig(s)
+			var hash_before: String = Persistence.world_hash(s)
+			var covered: bool = true
+			for res in price:
+				var from_stock: int = int(stock[res]) if really_in else 0
+				covered = covered and int(pack[res]) + from_stock >= int(price[res])
+			var r: Dictionary = MainCapsule.upgrade_protection(s, cid) if is_prot else MainCapsule.upgrade(s, cid)
+			var tag: String = "seed %d step %d (%s, cur %d, in %s, id %d)" % [seed_val, step, "prot" if is_prot else "level", cur, str(really_in), cid]
+			var should_ok: bool = cur < 5 and covered and not repeat
+			if bool(r.get("ok", false)) != should_ok:
+				problems.append("%s: ok=%s want %s (%s)" % [tag, str(r.get("ok")), str(should_ok), str(r)])
+			if bool(r.get("ok", false)):
+				if is_prot:
+					prot += 1
+					stats.ok_p = int(stats.ok_p) + 1
+				else:
+					lvl += 1
+					stats.ok_c = int(stats.ok_c) + 1
+				if cid >= 0:
+					last_ok_id = cid
+					last_prot = is_prot
+				for res in price:   # measured: exactly the price left, backpack first
+					var want_pack: int = int(pack[res]) - mini(int(price[res]), int(pack[res]))
+					var want_total: int = int(pack[res]) + int(stock[res]) - int(price[res])
+					if Inventory.count(s, String(res)) != want_pack or _have(s, String(res)) != want_total:
+						problems.append("%s: %s pack %d / total %d, want %d / %d" % [tag, String(res), Inventory.count(s, String(res)), _have(s, String(res)), want_pack, want_total])
+				if Persistence.world_hash(s) == hash_before:
+					problems.append("%s: a step left world_hash unchanged" % tag)
+			else:
+				if repeat:
+					stats.dup = int(stats.dup) + 1
+				elif cur >= 5:
+					stats.max = int(stats.max) + 1
+				elif not covered:
+					stats.cost = int(stats.cost) + 1
+					if not really_in:
+						stats.far = int(stats.far) + 1
+				if _funds_sig(s) != funds_before or Persistence.world_hash(s) != hash_before:
+					problems.append("%s: a refusal left a trace (%s)" % [tag, str(r)])
+			# the model vs the sim, every step
+			var invested: Dictionary = s.main_capsule.invested
+			var pinv: Dictionary = s.main_capsule.protection_invested
+			var led_ok: bool = int(s.capsule_level()) == lvl and _prot_of(s) == prot and invested.size() == lvl and pinv.size() == prot
+			for L in range(1, lvl + 1):
+				led_ok = led_ok and invested.has(str(L)) and _same_numbers(invested[str(L)], _cost_of(syn.levels, L))
+			for P in range(1, prot + 1):
+				led_ok = led_ok and pinv.has(str(P)) and _same_numbers(pinv[str(P)], _pcost(syn, P))
+			if not led_ok:
+				problems.append("%s: model (%d, %d) vs sim (%d, %d), ledgers %s / %s" % [tag, lvl, prot, s.capsule_level(), _prot_of(s), var_to_str(invested), var_to_str(pinv)])
+				break
+			if rng.randi_range(0, 5) == 0:   # a new tick: the ids of the old one are free again
+				s.update(Scenarios.DT)
+				_topup(s)
+				s.capsule_table = syn
+				last_ok_id = -1
+		_dispose(s)
+	ok(problems.is_empty(), "REQ-0010-13/14/99/100: 4 seeds x 90 steps over both axes match the model (funds measured, backpack first, hash moves iff the state moves, ledger = sum of prices, no trace on refusal) — %d problems, first %s" % [problems.size(), str(problems.slice(0, 2))])
+	ok(int(stats.ok_c) >= 6 and int(stats.ok_p) >= 6 and int(stats.cost) >= 20 and int(stats.far) >= 5 and int(stats.dup) >= 3, "REQ-0010-13/100 setup: the run visits successes on both axes and refusals (cost, far, duplicate) — %s" % str(stats))
+
+
+# =============================================================================================
+# REQ-0010-101 / 105 / 106 / 16 — the numbers of the REAL catalog that the owner DECIDED (OD-98/99/65/93): +10% per level and +50% at 5 on all four
+# axes, the price grows ~x2 per level and gets more varied, the zone ~50 m is one static radius; through the API
+# =============================================================================================
+func _t_w2c_catalog_numbers() -> void:
+	var s: Variant = _on_pad()
+	var rows: Array = _raw_rows()
+	var bad: Array = []
+	var bad_lin: Array = []
+	for k in ZB_KEYS:
+		var prev: float = 0.0
+		for L in range(0, 6):
+			var b: float = MainCapsule.buff_bonus(s, String(k), L)
+			if absf(b - 0.10 * float(L)) > 0.02:
+				bad.append("%s L%d %.4f" % [String(k), L, b])
+			if L >= 1 and absf((b - prev) - 0.10) > 0.02:
+				bad_lin.append("%s L%d step %.4f" % [String(k), L, b - prev])
+			prev = b
+		if absf(MainCapsule.buff_bonus(s, String(k), 5) - 0.50) > 1.0e-9 or MainCapsule.buff_bonus(s, String(k), 0) != 0.0:
+			bad.append("%s ends: L0 %s, L5 %s" % [String(k), str(MainCapsule.buff_bonus(s, String(k), 0)), str(MainCapsule.buff_bonus(s, String(k), 5))])
+	ok(bad.is_empty(), "REQ-0010-106/OD-98: buff(L) ~ +10%% x L on every axis (tolerance 0.02), EXACTLY +50%% at L5 and 0 at L0 — %s" % str(bad))
+	ok(bad_lin.is_empty(), "REQ-0010-106: the ladder is ~linear — each step ~ +10 points (tolerance 0.02) — %s" % str(bad_lin))
+	ok(MainCapsule.buff_bonus(s, "melee_mult", 5) == 0.0 and MainCapsule.buff_bonus(s, "hunger_mult", 5) == 0.0 and MainCapsule.buff_bonus(s, "", 3) == 0.0, "REQ-0010-105/106: no melee, no hunger, no empty-key axis — nothing to scale")
+	# prices: ~x2 per level by total units (tolerance 0.4 for the '~'); the kinds of resource never shrink and the top asks for a new one
+	var tot: Array = []
+	for L in range(1, 6):
+		var n: int = 0
+		for res in _cost_of(rows, L):
+			n += int(_cost_of(rows, L)[res])
+		tot.append(n)
+	var bad_x2: Array = []
+	for i in range(1, 5):
+		var ratio: float = float(tot[i]) / float(tot[i - 1])
+		if absf(ratio - 2.0) > 0.4:
+			bad_x2.append("L%d/L%d x%.3f" % [i + 1, i, ratio])
+	ok(bad_x2.is_empty(), "REQ-0010-101/OD-65/93: the total price of a level is ~x2 the previous one (tolerance 0.4) — totals %s, off: %s" % [str(tot), str(bad_x2)])
+	var widths: Array = []
+	for L in range(1, 6):
+		widths.append(_cost_of(rows, L).size())
+	var grows: bool = true
+	for i in range(1, widths.size()):
+		grows = grows and int(widths[i]) >= int(widths[i - 1])
+	var l1_keys: Array = _cost_of(rows, 1).keys()
+	var new_at_top: bool = false
+	for k in _cost_of(rows, 5).keys():
+		new_at_top = new_at_top or not l1_keys.has(k)
+	ok(grows and new_at_top, "REQ-0010-101/OD-75: the price gets more varied with the level (kinds per level %s) and level 5 asks for something level 1 does not" % str(widths))
+	# zone: one static ~50 m radius whose cell count is the one conversion of the data's scale
+	var zone: Dictionary = _raw_table().zone
+	var rm: float = float(zone.get("radius_m", 0.0))
+	var cm: float = float(zone.get("cell_m", 0.0))
+	ok(rm >= 45.0 and rm <= 55.0 and cm > 0.0 and int(zone.get("radius_cells", 0)) == int(ceil(rm / cm)), "REQ-0010-16/OD-99: the radius is ~50 m (%s) and radius_cells == ceil(radius_m / cell_m) (%s cells at %s m)" % [str(rm), str(zone.get("radius_cells")), str(cm)])
+	var same: bool = true
+	for L in 6:
+		for P in 6:
+			s.main_capsule["level"] = L
+			s.main_capsule["protection"] = P
+			same = same and MainCapsule.zone_radius(s) == int(zone.radius_cells)
+	ok(same, "REQ-0010-16: the real zone radius is the one number at every (level, protection) pair")
+	var raid: Dictionary = _raw_table().get("raid", {})
+	ok(int(raid.get("immunity_ms", 0)) == 86400000 and int(raid.get("take_percent", 0)) == 50, "OD-24/107: the data's decided raid numbers are 24 h = 86 400 000 ms and 50%% — %s" % str(raid))
+	_dispose(s)
+
+
+# =============================================================================================
+# REQ-0010-107 — need RECOVERY, through the real body: sleep and warm-up are faster by buff(L) INSIDE the zone only; the ONSET of cold, the decay
+# of hunger and rest while awake are the same at level 0 and level 5, inside and outside
+# =============================================================================================
+func _recovery_world(level: int, table: Dictionary = {}) -> Variant:
+	var s: Variant = _zone_sim(level, table)
+	_hero_px(s, float(_cap_tile(s).x) + 1.5, float(_cap_tile(s).y) + 0.5)
+	return s
+
+
+# one sleeping step of the real _update_player at `at`: how much rest it gave
+func _rest_gain(s: Variant, at: Vector2) -> float:
+	_hero_px(s, at.x, at.y)
+	s.player.sleeping = true
+	s.player.rest = 20.0
+	s._update_player(ZB_DT)
+	return float(s.player.rest) - 20.0
+
+
+# one body step of the real HeroHealth.update at `at` with a hypothermia of 0.8 in a comfortable climate: how much it receded
+func _warmup_drop(s: Variant, at: Vector2) -> float:
+	_hero_px(s, at.x, at.y)
+	HeroHealth.ensure(s)
+	var hypo: Variant = Gear.Hediff_Hypothermia.new()
+	hypo.severity = 0.8
+	s.health.hediffs = [hypo]
+	HeroHealth.update(s, ZB_DT)
+	var left: float = 0.0
+	for h in s.health.hediffs:
+		if h is Gear.Hediff_Hypothermia:
+			left = float(h.severity)
+	return 0.8 - left
+
+
+func _t_need_recovery_through_body() -> void:
+	var syn: Dictionary = _zone_table(4)   # need_recovery 1 + 0.25 L
+	var cap: Vector2i = ZB_CAP
+	var inside: Vector2 = Vector2(float(cap.x) + 1.5, float(cap.y) + 0.5)
+	var edge: Vector2 = Vector2(float(cap.x + ZB_R) + 0.99, float(cap.y) + 0.5)
+	var past: Vector2 = Vector2(float(cap.x + ZB_R) + 1.0, float(cap.y) + 0.5)
+	var off: Variant = _sim_with(_pad_map(ZB_N, ZB_CAP), false, false, false)
+	_quiet(off)
+	var plain_sleep: float = _rest_gain(off, inside)
+	var plain_warm: float = _warmup_drop(off, inside)
+	ok(plain_sleep > 0.5 and plain_warm > 0.0, "REQ-0010-107 setup: the OFF world's sleep gain (%.4f) and warm-up drop (%.5f) are positive — the baseline" % [plain_sleep, plain_warm])
+	for L in [0, 1, 2, 3]:
+		var want: float = (1.0 + 0.25 * float(L)) if L >= 1 else 1.0
+		var s: Variant = _recovery_world(L, syn)
+		var g_in: float = _rest_gain(s, inside)
+		var g_edge: float = _rest_gain(s, edge)
+		var g_past: float = _rest_gain(s, past)
+		ok(absf(g_in - plain_sleep * want) < 1.0e-9 and absf(g_edge - plain_sleep * want) < 1.0e-9, "REQ-0010-107 [L%d]: sleep restores rest x%.2f inside and ON the zone edge (%.5f vs plain %.5f)" % [L, want, g_in, plain_sleep])
+		ok(g_past == plain_sleep, "REQ-0010-107 [L%d]: one cell past the zone sleep is the plain speed (%.5f)" % [L, g_past])
+		var w_in: float = _warmup_drop(s, inside)
+		var w_edge: float = _warmup_drop(s, edge)
+		var w_past: float = _warmup_drop(s, past)
+		ok(absf(w_in - plain_warm * want) < 1.0e-9 and absf(w_edge - plain_warm * want) < 1.0e-9 and absf(w_past - plain_warm) < 1.0e-12, "REQ-0010-107 [L%d]: warm-up (hypothermia recedes in the comfort band) is x%.2f inside/on the edge and plain past it (%.6f / %.6f / %.6f vs plain %.6f)" % [L, want, w_in, w_edge, w_past, plain_warm])
+		_dispose(s)
+	# the REAL catalog: level 5 is exactly +50% on the recovery, for sleep and warm-up
+	var real: Variant = _on_pad()
+	real.main_capsule["level"] = 5
+	var rc: Vector2i = _cap_tile(real)
+	var rin: Vector2 = Vector2(float(rc.x) + 1.5, float(rc.y) + 0.5)
+	var ref: Variant = _sim_with(_pad_map(PAD_N, Vector2i(8, 8)), false, false, false)
+	_quiet(ref)
+	ok(absf(_rest_gain(real, rin) - 1.5 * _rest_gain(ref, rin)) < 1.0e-9 and absf(_warmup_drop(real, rin) - 1.5 * _warmup_drop(ref, rin)) < 1.0e-9, "REQ-0010-106/107 [catalog]: at level 5 sleep and warm-up recover exactly +50%% faster than the OFF world")
+	# never above the scale: a buffed sleep at 99.9 stops at 100
+	real.player.rest = 99.9
+	real.player.sleeping = true
+	_hero_px(real, rin.x, rin.y)
+	real._update_player(1.0)
+	ok(float(real.player.rest) <= 100.0 and float(real.player.rest) >= 99.9, "REQ-0010-107: a buffed sleep never pushes rest past 100 (%s)" % str(real.player.rest))
+	# awake: the buff restores nothing (rest decays at its own speed)
+	real.player.sleeping = false
+	real.player.rest = 50.0
+	real._update_player(ZB_DT)
+	ok(float(real.player.rest) < 50.0, "REQ-0010-107: awake inside the level-5 zone rest still DECAYS (%s)" % str(real.player.rest))
+	_dispose(real)
+	_dispose(ref)
+	_dispose(off)
+
+
+func _t_need_onset_unchanged() -> void:
+	# a freezing winter morning: the ONSET of hypothermia and the decay of hunger/rest are the same at level 0 and level 5, inside and outside the
+	# zone (REQ-0010-107: the buff multiplies recovery, never the build-up; hunger is not on the axis at all)
+	var syn: Dictionary = _zone_table(6)
+	var tab: Array = [["L0 inside", 0, true], ["L5 inside", 5, true], ["L5 outside", 5, false], ["L0 outside", 0, false]]
+	var out: Array = []
+	for t in tab:
+		var s: Variant = _zone_sim(int((t as Array)[1]), syn)
+		s.time.day = 0
+		s.time.frac = 0.2   # about -17 C: far below the comfort band
+		var cap: Vector2i = _cap_tile(s)
+		var at: Vector2 = Vector2(float(cap.x) + 1.5, float(cap.y) + 0.5) if bool((t as Array)[2]) else Vector2(float(cap.x + ZB_R) + 3.5, float(cap.y) + 0.5)
+		_hero_px(s, at.x, at.y)
+		s.player.hunger = 80.0
+		s.player.rest = 80.0
+		s.player.sleeping = false
+		for i in 200:
+			s._update_player(ZB_DT)
+			_hero_px(s, at.x, at.y)
+		var sev: float = 0.0
+		for h in s.health.hediffs:
+			if h is Gear.Hediff_Hypothermia:
+				sev = float(h.severity)
+		out.append([String((t as Array)[0]), sev, float(s.player.hunger), float(s.player.rest)])
+		_dispose(s)
+	var ref: Array = out[0]
+	var same: bool = float(ref[1]) > 0.0
+	for o in out:
+		same = same and float((o as Array)[1]) == float(ref[1]) and float((o as Array)[2]) == float(ref[2]) and float((o as Array)[3]) == float(ref[3])
+	ok(same, "REQ-0010-107: after 200 ticks in -17 C the hypothermia severity, hunger and rest are IDENTICAL at level 0/5, inside/outside the zone (a recovery buff does not speed the onset or any decay) — %s" % str(out))
+
+
+# =============================================================================================
+# REQ-0010-107 x D4 — the kernel hook `recover_scale` of Gear.update_comfort: in EVERY climate branch (cold, band, hot) it multiplies only the
+# condition that RECEDES and never the one that grows; scale 1.0 is bit-identical to the old signature (the OFF world is untouched)
+# =============================================================================================
+func _comfort_run(temp_c: float, args: Array) -> Array:
+	var tr: Variant = Gear.Health.HealthTracker.new()
+	var hypo: Variant = Gear.Hediff_Hypothermia.new()
+	var heat: Variant = Gear.Hediff_Heatstroke.new()
+	hypo.severity = 0.6
+	heat.severity = 0.6
+	tr.hediffs = [hypo, heat]
+	if args.is_empty():
+		Gear.update_comfort(tr, temp_c, 0.0, 0.01, 0.4)
+	else:
+		Gear.update_comfort(tr, temp_c, 0.0, 0.01, 0.4, float(args[0]))
+	return [float(hypo.severity), float(heat.severity)]
+
+
+func _t_comfort_recover_scale_kernel() -> void:
+	var branches: Array = [["cold (-10 C): hypothermia GROWS, heatstroke recedes", -10.0, 1], ["band (20 C): both recede", 20.0, 2], ["hot (40 C): heatstroke GROWS, hypothermia recedes", 40.0, 0]]
+	for b in branches:
+		var temp: float = float((b as Array)[1])
+		var one: Array = _comfort_run(temp, [1.0])
+		var two: Array = _comfort_run(temp, [2.0])
+		var dflt: Array = _comfort_run(temp, [])
+		ok(one[0] == dflt[0] and one[1] == dflt[1], "REQ-0010-107/D4 [%s]: recover_scale 1.0 is bit-identical to the old 5-argument call" % String((b as Array)[0]))
+		var bad: Array = []
+		for i in 2:   # 0 = hypothermia, 1 = heatstroke
+			var d1: float = 0.6 - float(one[i])
+			var d2: float = 0.6 - float(two[i])
+			var grows: bool = float(one[i]) > 0.6
+			if grows and float(two[i]) != float(one[i]):
+				bad.append("condition %d grows %.9f vs %.9f: the buff touched the ONSET" % [i, float(one[i]), float(two[i])])
+			if not grows and absf(d2 - 2.0 * d1) > 1.0e-12:
+				bad.append("condition %d recedes by %.9f vs %.9f: not x2" % [i, d1, d2])
+			if not grows and d1 <= 0.0:
+				bad.append("condition %d did not recede at all" % i)
+		ok(bad.is_empty(), "REQ-0010-107 [%s]: scale 2 doubles what recedes and leaves what grows exactly alone — %s" % [String((b as Array)[0]), str(bad)])

@@ -735,8 +735,6 @@ func melee_damage() -> float:
 	var wpn: String = player.equipped.get("weapon", "")
 	if wpn != "" and GameData.ITEMS.has(wpn):
 		dmg += float(GameData.ITEMS[wpn].get("dmg_bonus", 0.0))
-	if use_main_capsule:   # spec 0010: баф зони капсули на героя
-		dmg *= MainCapsule.hero_buff(self, "melee_mult")
 	return dmg * HeroHealth.melee_mult(self)   # a mangled arm swings weaker; 1.0 at full health
 
 func has_workbench() -> bool:
@@ -946,7 +944,10 @@ func _update_player(dt: float) -> void:
 	p.eat_cd = max(0.0, p.eat_cd - dt)
 	p.dep_cd = max(0.0, p.dep_cd - dt)
 	p.hunger = clampf(p.hunger - 0.42 * dt, 0, 100)
+	var rest0: float = p.rest   # spec 0010 (REQ-0010-107): множник відновлення сну застосовується до приросту OFF-рядка нижче
 	p.rest = clampf(p.rest - (-14.0 if p.sleeping else 0.30) * dt, 0, 100)
+	if use_main_capsule and p.sleeping:   # сон у зоні капсули відновлює швидше (need_recovery_mult); наростання втоми (0.30) і межі не чіпаємо
+		p.rest = clampf(rest0 + (p.rest - rest0) * _capsule_recovery(), 0, 100)
 	# located health (sim/hero_health.gd): empty needs and the real climate grow condition hediffs,
 	# wounds heal/bleed, the death verdict falls, and p.hp becomes the derived readout of it all.
 	HeroHealth.update(self, dt)
@@ -1171,6 +1172,10 @@ func upgrade_capsule(cmd_id: int = -1) -> Dictionary:
 
 func capsule_level() -> int:
 	return int(main_capsule.get("level", 0))
+
+# Множник ВІДНОВЛЕННЯ потреб героя в зоні капсули (REQ-0010-107; 1.0 — нейтральний): читають sim._update_player (сон) і HeroHealth.update (комфорт).
+func _capsule_recovery() -> float:
+	return MainCapsule.recovery_mult(self)
 
 # Годинник пристрою -> sim: єдиний вхід абсолютного часу (власник Clock — spec 0012). Монотонний: відкат не скорочує таймери.
 func set_clock(ms: int) -> void:
