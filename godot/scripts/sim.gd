@@ -609,6 +609,17 @@ func build_valid(x: int, y: int) -> bool:
 		return false
 	return true
 
+# Чому цей def не можна поставити в (x, y) — "" якщо можна. Окремо від try_build (gdlint max-returns).
+func _kind_refusal(def: Dictionary, x: int, y: int) -> String:
+	if def.is_empty():
+		return "Тут не можна будувати."
+	if bool(def.get("landmark", false)):   # landmark (капсула) не будується: вона одна (REQ-0010-06)
+		return "Основна капсула одна."
+	# плейтест 2026-11-08 #1: непрохідна будівля на клітинці героя замуровує його всередині (A* стартує з solid-клітинки)
+	if bool(def.get("blocks", false)) and int(player.px) == x and int(player.py) == y:
+		return "Тут стоїть герой — відійди."
+	return ""
+
 func try_build(kind: String, x: int, y: int) -> void:
 	if not build_valid(x, y):
 		_flash("Тут не можна будувати.")
@@ -616,12 +627,9 @@ func try_build(kind: String, x: int, y: int) -> void:
 	# ONE def seam serves both vocabularies: data.gd ids always; catalogue-only ids when the flag is
 	# on ({} refusal covers unknown ids AND catalogue ids while the flag is off).
 	var def: Dictionary = building_def(kind)
-	if def.is_empty() or bool(def.get("landmark", false)):   # landmark (капсула) не будується: вона одна (REQ-0010-06)
-		_flash("Тут не можна будувати." if def.is_empty() else "Основна капсула одна.")
-		return
-	# плейтест 2026-11-08 #1: непрохідна будівля на клітинці героя замуровує його всередині (A* стартує з solid-клітинки)
-	if bool(def.get("blocks", false)) and int(player.px) == x and int(player.py) == y:
-		_flash("Тут стоїть герой — відійди.")
+	var refusal := _kind_refusal(def, x, y)
+	if refusal != "":
+		_flash(refusal)
 		return
 	if not research_ok(def):
 		_flash("🔒 Потребує дослідження: %s." % _research_label(def))
