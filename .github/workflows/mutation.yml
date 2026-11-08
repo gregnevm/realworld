@@ -37,7 +37,7 @@ jobs:
         run: pip install 'gdmutant==0.1.4'
       - name: Download Godot 4.7
         run: |
-          wget -q --tries=5 --waitretry=10 --retry-connrefused --timeout=60 https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 10 --connect-timeout 30 -O https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
           unzip -q Godot_v4.7-stable_linux.x86_64.zip
           mv Godot_v4.7-stable_linux.x86_64 godot-bin
           chmod +x godot-bin
