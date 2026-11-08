@@ -12,12 +12,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # бінарник Godot кешується між запусками й завантажується з ретраями: одинарний `wget` до GitHub releases
+      # періодично зависав ~2,5 хв і падав з кодом 4, червонячи PR без причини в коді
+      - name: Cache Godot 4.7 binary
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: godot-bin
+          key: godot-bin-4.7-stable-linux
       - name: Download Godot 4.7
+        if: steps.godot-cache.outputs.cache-hit != 'true'
         run: |
-          wget -q https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
+          # до 8 спроб із наростаючою паузою (15 с · n), помилку wget видно в логу (-nv, не -q)
+          URL=https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
+          for n in 1 2 3 4 5 6 7 8; do
+            if wget -nv --timeout=60 --tries=1 -O Godot_v4.7-stable_linux.x86_64.zip "$URL"; then break; fi
+            if [ "$n" = 8 ]; then echo "::error::Godot не завантажено після 8 спроб"; exit 4; fi
+            echo "спроба $n невдала, чекаю $((15 * n)) с"; sleep $((15 * n))
+          done
           unzip -q Godot_v4.7-stable_linux.x86_64.zip
           mv Godot_v4.7-stable_linux.x86_64 godot-bin
-          chmod +x godot-bin
+      - name: Godot executable bit
+        run: chmod +x godot-bin
       # every suite is leak-gated: RefCounted cycles (Thing<->Comp etc.) print an ObjectDB warning at
       # exit instead of failing the run, so the gate greps for it — leaks must not return silently.
       # ONE loop, one gate: adding a suite = adding a name to the list (no copy-pasted gate to forget)
@@ -66,12 +82,28 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install xvfb
         run: sudo apt-get update && sudo apt-get install -y xvfb
+      # бінарник Godot кешується між запусками й завантажується з ретраями: одинарний `wget` до GitHub releases
+      # періодично зависав ~2,5 хв і падав з кодом 4, червонячи PR без причини в коді
+      - name: Cache Godot 4.7 binary
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: godot-bin
+          key: godot-bin-4.7-stable-linux
       - name: Download Godot 4.7
+        if: steps.godot-cache.outputs.cache-hit != 'true'
         run: |
-          wget -q https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
+          # до 8 спроб із наростаючою паузою (15 с · n), помилку wget видно в логу (-nv, не -q)
+          URL=https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
+          for n in 1 2 3 4 5 6 7 8; do
+            if wget -nv --timeout=60 --tries=1 -O Godot_v4.7-stable_linux.x86_64.zip "$URL"; then break; fi
+            if [ "$n" = 8 ]; then echo "::error::Godot не завантажено після 8 спроб"; exit 4; fi
+            echo "спроба $n невдала, чекаю $((15 * n)) с"; sleep $((15 * n))
+          done
           unzip -q Godot_v4.7-stable_linux.x86_64.zip
           mv Godot_v4.7-stable_linux.x86_64 godot-bin
-          chmod +x godot-bin
+      - name: Godot executable bit
+        run: chmod +x godot-bin
       - name: Render newhud + capture screenshot
         run: |
           # import assets headlessly first so the scene loads cleanly, then run windowed under xvfb
@@ -103,12 +135,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # бінарник Godot кешується між запусками й завантажується з ретраями: одинарний `wget` до GitHub releases
+      # періодично зависав ~2,5 хв і падав з кодом 4, червонячи PR без причини в коді
+      - name: Cache Godot 4.7 binary
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: godot-bin
+          key: godot-bin-4.7-stable-linux
       - name: Download Godot 4.7
+        if: steps.godot-cache.outputs.cache-hit != 'true'
         run: |
-          wget -q https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
+          # до 8 спроб із наростаючою паузою (15 с · n), помилку wget видно в логу (-nv, не -q)
+          URL=https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
+          for n in 1 2 3 4 5 6 7 8; do
+            if wget -nv --timeout=60 --tries=1 -O Godot_v4.7-stable_linux.x86_64.zip "$URL"; then break; fi
+            if [ "$n" = 8 ]; then echo "::error::Godot не завантажено після 8 спроб"; exit 4; fi
+            echo "спроба $n невдала, чекаю $((15 * n)) с"; sleep $((15 * n))
+          done
           unzip -q Godot_v4.7-stable_linux.x86_64.zip
           mv Godot_v4.7-stable_linux.x86_64 godot-bin
-          chmod +x godot-bin
+      - name: Godot executable bit
+        run: chmod +x godot-bin
       - name: Cache web export templates
         id: templates-cache
         uses: actions/cache@v4
@@ -123,6 +171,18 @@ jobs:
           unzip -j -q Godot_v4.7-stable_export_templates.tpz "templates/web_*" "templates/version.txt" \
             -d ~/.local/share/godot/export_templates/4.7.stable
           rm Godot_v4.7-stable_export_templates.tpz
+      # штамп збірки: build_info.gd читає ☰-меню й консоль; у репозиторії там «dev» (див. scripts/build_info.gd)
+      - name: Stamp build
+        run: |
+          SHA="$(echo "${{ github.event.pull_request.head.sha || github.sha }}" | cut -c1-7)"
+          printf '%s\n' 'extends RefCounted' '' \
+            "const SHA := \"$SHA\"" \
+            "const RUN := \"$GITHUB_RUN_NUMBER\"" \
+            "const BUILT := \"$(date -u +%Y-%m-%d)\"" '' \
+            'static func label() -> String:' \
+            '	if SHA == "dev":' '		return "dev (локальна збірка)"' \
+            '	return "#%s · %s · %s" % [RUN, SHA, BUILT]' > godot/scripts/build_info.gd
+          cat godot/scripts/build_info.gd
       - name: Export Web build
         run: |
           # import first: exporting from a fresh checkout without the .godot cache misses resources;
@@ -161,12 +221,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # бінарник Godot кешується між запусками й завантажується з ретраями: одинарний `wget` до GitHub releases
+      # періодично зависав ~2,5 хв і падав з кодом 4, червонячи PR без причини в коді
+      - name: Cache Godot 4.7 binary
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: godot-bin
+          key: godot-bin-4.7-stable-linux
       - name: Download Godot 4.7
+        if: steps.godot-cache.outputs.cache-hit != 'true'
         run: |
-          wget -q https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
+          # до 8 спроб із наростаючою паузою (15 с · n), помилку wget видно в логу (-nv, не -q)
+          URL=https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
+          for n in 1 2 3 4 5 6 7 8; do
+            if wget -nv --timeout=60 --tries=1 -O Godot_v4.7-stable_linux.x86_64.zip "$URL"; then break; fi
+            if [ "$n" = 8 ]; then echo "::error::Godot не завантажено після 8 спроб"; exit 4; fi
+            echo "спроба $n невдала, чекаю $((15 * n)) с"; sleep $((15 * n))
+          done
           unzip -q Godot_v4.7-stable_linux.x86_64.zip
           mv Godot_v4.7-stable_linux.x86_64 godot-bin
-          chmod +x godot-bin
+      - name: Godot executable bit
+        run: chmod +x godot-bin
       - name: Cache Android export templates
         id: android-templates
         uses: actions/cache@v4
@@ -204,6 +280,7 @@ jobs:
             echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=$RELEASE_KS_USER" >> "$GITHUB_ENV"
             echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=$RELEASE_KS_PASS" >> "$GITHUB_ENV"
           else
+            echo "::warning::ANDROID_RELEASE_KEYSTORE_* secrets не задано — APK підписано ефемерним CI-ключем з кешу. Якщо кеш зникне, ключ зміниться і оновлення поверх встановленого не пройде. Задай секрети (docs/agents/godot-ui-tests-build.md)."
             if [ ! -f ~/.android-ci/release.keystore ]; then
               "$KT" -genkeypair -keystore ~/.android-ci/release.keystore -storetype PKCS12 -storepass realworld-ci \
                 -alias realworld -keypass realworld-ci -keyalg RSA -keysize 3072 -validity 18250 -dname "CN=RealWorld CI,O=SSD,C=UA"
@@ -218,6 +295,23 @@ jobs:
             "export/android/debug_keystore = \"$HOME/.android-ci/debug.keystore\"" \
             'export/android/debug_keystore_user = "androiddebugkey"' \
             'export/android/debug_keystore_pass = "android"' > ~/.config/godot/editor_settings-4.7.tres
+      # штамп збірки: build_info.gd читає ☰-меню й консоль; у репозиторії там «dev» (див. scripts/build_info.gd)
+      - name: Stamp build
+        run: |
+          SHA="$(echo "${{ github.event.pull_request.head.sha || github.sha }}" | cut -c1-7)"
+          printf '%s\n' 'extends RefCounted' '' \
+            "const SHA := \"$SHA\"" \
+            "const RUN := \"$GITHUB_RUN_NUMBER\"" \
+            "const BUILT := \"$(date -u +%Y-%m-%d)\"" '' \
+            'static func label() -> String:' \
+            '	if SHA == "dev":' '		return "dev (локальна збірка)"' \
+            '	return "#%s · %s · %s" % [RUN, SHA, BUILT]' > godot/scripts/build_info.gd
+          cat godot/scripts/build_info.gd
+      # versionCode росте з номером запуску CI: новіший APK ставиться поверх старішого (у репозиторії лишається 1 / 0.1.0)
+      - name: Android version from CI run
+        run: |
+          sed -i "s/^version\/code=.*/version\/code=$GITHUB_RUN_NUMBER/; s/^version\/name=.*/version\/name=\"0.1.$GITHUB_RUN_NUMBER\"/" godot/export_presets.cfg
+          grep -n "^version/" godot/export_presets.cfg
       - name: Export Android APK
         run: |
           mkdir -p godot/build/android

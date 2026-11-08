@@ -29,6 +29,7 @@ const Widgets = preload("res://scripts/ui/widgets.gd")
 const TouchCtl = preload("res://scripts/ui/touch_controls.gd")
 const AM = preload("res://scripts/ui/action_model.gd")
 const InventoryMod = preload("res://scripts/sim/inventory.gd")
+const BuildInfo = preload("res://scripts/build_info.gd")
 const Clock = preload("res://scripts/clock.gd")
 const TILE := ViewGeom.TILE
 
@@ -190,7 +191,7 @@ func _start_game(lat: float, lon: float, place_name: String) -> void:
 		return   # уже в грі (пізній GPS-callback чи повторний сигнал): другий бут ремонтував би панелі
 	session = SessionScript.new()
 	session.use_inventory = true          # spec 0009: new games play with the Minecraft-style inventory
-	if "capsule" in OS.get_cmdline_user_args():   # dev-перемикач `-- capsule` (spec 0010): Основна капсула; за замовчуванням OFF (OD-7 open)
+	if _capsule_enabled():   # Основна капсула (spec 0010) УВІМК за замовчуванням у збірках (OD-114); опт-аут `-- nocapsule` / web `?nocapsule` = старий шлях
 		session.use_catalog = true        # капсула вимагає відкритого складу (REQ-0010-59)
 		session.use_main_capsule = true
 	session.autosave = not shot_mode
@@ -198,8 +199,9 @@ func _start_game(lat: float, lon: float, place_name: String) -> void:
 		push_error("Старт світу відхилено: %s" % String(session.last_error))
 		session = null                    # не лишаємо порожню сесію: guard `session != null` заблокував би новий старт
 		return
+	print("RealWorld ", _build_line())   # консоль/web-console: яка збірка і чи ввімкнена капсула
 	_enter_session()
-	if "capsule" in OS.get_cmdline_user_args() and "forceraid" in OS.get_cmdline_user_args():   # dev-хук G5 (REQ-0010-120): рейд без 3 діб очікування; релізна збірка відмовить
+	if _capsule_enabled() and "forceraid" in OS.get_cmdline_user_args():   # dev-хук G5 (REQ-0010-120): рейд без 3 діб очікування; релізна збірка відмовить
 		MainCapsule.force_raid(session.sim, OS.has_feature("debug"))
 	_autosave()   # a new landing claims the save slot at once (the spawn screen warned about it)
 
@@ -298,7 +300,25 @@ func _build_menu(ui_theme: Theme) -> void:
 func _set_menu(on: bool) -> void:
 	panel_menu.visible = on
 	if on:
+		panel_menu.set_footer(_build_line())
 		_refresh_menu()
+
+# Основна капсула УВІМК за замовчуванням (OD-114, 2026-11-08; змінює дефолт OD-7 для збірок).
+# Опт-аут до старого шляху (порівняння/регресії): десктоп `-- nocapsule`, web `?nocapsule` в URL.
+func _capsule_enabled() -> bool:
+	if "nocapsule" in OS.get_cmdline_user_args():
+		return false
+	if OS.has_feature("web") and Engine.has_singleton("JavaScriptBridge"):
+		var off: Variant = JavaScriptBridge.eval("new URLSearchParams(window.location.search).has('nocapsule')", true)
+		return off != true
+	return true
+
+# Рядок збірки: що саме відкрито (sha/дата з CI) і які прапори ввімкнені в цій сесії.
+func _build_line() -> String:
+	var cap := "ВИМК"
+	if session != null and session.sim != null and bool(session.sim.get("use_main_capsule") == true):
+		cap = "УВІМК"
+	return "Збірка %s · капсула: %s" % [BuildInfo.label(), cap]
 
 func _refresh_menu_if_open() -> void:
 	if panel_menu != null and panel_menu.visible:
