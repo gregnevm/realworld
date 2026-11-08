@@ -4,7 +4,10 @@ extends Node2D
 const WorldGen = preload("res://scripts/world_gen.gd")
 const GameData = preload("res://scripts/data.gd")
 const InventoryMod = preload("res://scripts/sim/inventory.gd")
+const MainCapsule = preload("res://scripts/sim/capsule.gd")   # лише читання рівнів/імунітету для знаків на корпусі
 const ViewGeom = preload("res://scripts/ui/view_geom.gd")
+const CapsuleTexts = preload("res://scripts/ui/capsule_texts.gd")
+const Fmt = preload("res://scripts/ui/format.gd")
 const TILE := ViewGeom.TILE
 
 var sim: Variant
@@ -354,6 +357,9 @@ func _draw() -> void:
 		_draw_edge_threats(vrect, cam.zoom.x)
 		_draw_edge_bags(vrect, cam.zoom.x)
 	_draw_player()
+	for b in sim.buildings:   # hull plaque goes AFTER the pawn (T-Ніколая: герой біля капсули закривав підпис і ряди знаків)
+		if String(b.kind) == MainCapsule.KIND:
+			_draw_capsule_marks(Vector2(b.x * TILE, b.y * TILE), Vector2(b.x * TILE, b.y * TILE) + Vector2(TILE, TILE) * 0.5)
 	_draw_fx()
 
 # Shoreline: where land meets water, a thin pale foam line on the LAND edge and a dark wet rim on the
@@ -463,6 +469,73 @@ func _draw_building(b) -> void:
 		draw_rect(Rect2(p.x + 2, p.y - 2, TILE - 4, 3), Color(0, 0, 0, 0.5))
 		var bc := Color.html("5fd38a") if fr > 0.5 else (Color.html("ffcf5c") if fr > 0.25 else Color.html("ff6b6b"))
 		draw_rect(Rect2(p.x + 2, p.y - 2, (TILE - 4) * fr, 3), bc)
+
+# Основна капсула, greybox (spec 0010 REQ-0010-87; арт — лише після G0–G1, P4): ОДНА підписана табличка під корпусом (T-Ніколая: знаки без слів
+# лежали на спрайтах і не читались). Рядки: назва; «Рівень n/5» + ряд кружків; «Захист n/5» + ряд квадратів (R11: різна ФОРМА, не лише колір);
+# під імунітетом — ще рядок із часом і щит-кільце навколо корпусу. Корпус обведений, щоб серед столу/бочки було видно, ЩО саме капсула.
+func _draw_capsule_marks(p: Vector2, c: Vector2) -> void:
+	var cap: Dictionary = sim.main_capsule
+	var lvl: int = int(cap.get("level", 0))
+	var prot: int = int(cap.get("protection", 0))
+	var lamp_n: int = maxi(1, MainCapsule.max_level(sim))
+	var plate_n: int = maxi(1, MainCapsule.max_protection(sim))
+	var amber := Color(0.88, 0.69, 0.44, 1.0)
+	var steel := Color(0.53, 0.82, 0.84, 1.0)
+	var empty := Color(0.78, 0.83, 0.86, 0.5)
+	var fs := 10
+	var step := 10.0
+	var t_level: String = CapsuleTexts.t("mark_level") % [lvl, lamp_n]
+	var t_prot: String = CapsuleTexts.t("mark_protect") % [prot, plate_n]
+	var title: String = CapsuleTexts.t("capsule_title")
+	var imm: bool = MainCapsule.is_immune(sim)
+	var t_imm: String = CapsuleTexts.t("mark_immune") % Fmt.left_ms(MainCapsule.immune_left_ms(sim)) if imm else ""
+	var tw: float = 0.0
+	for s in [t_level, t_prot]:
+		tw = maxf(tw, _font.get_string_size(String(s), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x)
+	var w: float = maxf(tw + step * float(maxi(lamp_n, plate_n)) + 14.0, _font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 10.0)
+	w = maxf(w, _font.get_string_size(t_imm, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 10.0)
+	var rows: int = 4 if imm else 3
+	var box := Rect2(c.x - w * 0.5, p.y + TILE + 4.0, w, 13.0 * float(rows) + 3.0)
+	draw_rect(Rect2(p, Vector2(TILE, TILE)), amber, false, 1.5)
+	draw_line(Vector2(c.x, p.y + TILE), Vector2(c.x, box.position.y), amber, 1.0)
+	draw_rect(box, Color(0.04, 0.05, 0.06, 0.92))
+	draw_rect(box, Color(amber.r, amber.g, amber.b, 0.8), false, 1.0)
+	var y: float = box.position.y + 11.0
+	draw_string(_font, Vector2(box.position.x + 5.0, y), title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1.0, 0.93, 0.8))
+	y += 13.0
+	draw_string(_font, Vector2(box.position.x + 5.0, y), t_level, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, amber)
+	for i in lamp_n:
+		var at := Vector2(box.end.x - 5.0 - step * float(lamp_n - i) + step * 0.5, y - 3.5)
+		if i < lvl:
+			draw_circle(at, 3.6, amber)
+		else:
+			draw_arc(at, 3.2, 0.0, TAU, 12, empty, 1.5)
+	y += 13.0
+	draw_string(_font, Vector2(box.position.x + 5.0, y), t_prot, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, steel)
+	for i in plate_n:
+		var r := Rect2(box.end.x - 5.0 - step * float(plate_n - i) + step * 0.5 - 3.2, y - 6.7, 6.4, 6.4)
+		if i < prot:
+			draw_rect(r, steel)
+		else:
+			draw_rect(r, empty, false, 1.5)
+	if imm:
+		y += 13.0
+		draw_string(_font, Vector2(box.position.x + 5.0, y), t_imm, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, steel)
+		draw_circle(c, TILE * 0.80, Color(steel.r, steel.g, steel.b, 0.12))
+		draw_arc(c, TILE * 0.80, 0.0, TAU, 32, Color(steel.r, steel.g, steel.b, 0.85), 2.0)
+		var ring_txt: String = CapsuleTexts.t("immune_ring")   # кільце без слів читалось як радіус; підкладка — напис на тлі будівель нечитний (T-Ніколая)
+		var rw: float = _font.get_string_size(ring_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x + 10.0
+		var rr := Rect2(c.x - rw * 0.5, c.y - TILE * 0.95 - 13.0, rw, 17.0)
+		draw_rect(rr, Color(0.04, 0.05, 0.06, 0.92))
+		draw_rect(rr, Color(steel.r, steel.g, steel.b, 0.85), false, 1.0)
+		_mark_text(c + Vector2(0.0, -TILE * 0.95), ring_txt, Color(0.80, 0.97, 0.98))
+
+func _mark_text(at: Vector2, text: String, col: Color) -> void:
+	var fs := 11
+	var w: float = _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var pos := Vector2(at.x - w * 0.5, at.y)
+	draw_string_outline(_font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 3, Color(0.04, 0.05, 0.06, 0.9))
+	draw_string(_font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 
 func _draw_raider(e, idx: int = 0) -> void:
 	var c := Vector2(e.px * TILE, e.py * TILE)

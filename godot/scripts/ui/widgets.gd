@@ -452,7 +452,7 @@ class BannerWidget extends WidgetBase.Widget:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_card = CardKit.make(0.0)
 		var lbl: Label = _card.label
-		lbl.autowrap_mode = TextServer.AUTOWRAP_OFF
+		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # довгий банер рейду переноситься в межах екрана, а не втікає за правий край
 		lbl.add_theme_font_size_override("font_size", 17)
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		add_child(_card.panel)
@@ -465,6 +465,13 @@ class BannerWidget extends WidgetBase.Widget:
 		var text := String(evt.get("params", {}).get("text", ""))
 		status = StringName(evt.get("status", &"none"))
 		_card.label.text = text
+		var vw: float = get_viewport_rect().size.x if is_inside_tree() else 800.0
+		var fnt: Font = _card.label.get_theme_font("font")
+		var want: float = fnt.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 17).x + 8.0 if fnt != null else 400.0
+		var lw: float = clampf(want, 60.0, maxf(60.0, vw * 0.84 - 30.0))
+		_card.label.custom_minimum_size = Vector2(lw, 0.0)
+		offset_left = -(lw + 30.0) * 0.5   # явне центрування: grow-both лишав широкий банер, що починається від середини екрана
+		offset_right = (lw + 30.0) * 0.5
 		# R11: the banner text already carries its icon; the color echoes the urgency
 		var col: Color = Tokens.CRIT if status == &"raid_active" else (Tokens.WARN if status == &"raid_incoming" else Tokens.TEAL)
 		_card.label.add_theme_color_override("font_color", col)
@@ -476,6 +483,7 @@ class BannerWidget extends WidgetBase.Widget:
 
 class FlashWidget extends WidgetBase.Widget:
 	const HOLD := 2.2
+	const CAP_W := 340.0   # найширша картка відмови; довший текст переноситься
 	var _bus: Variant
 	var _card: Dictionary = {}
 	var _t := 0.0
@@ -484,7 +492,7 @@ class FlashWidget extends WidgetBase.Widget:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_card = CardKit.make(0.0)
 		var lbl: Label = _card.label
-		lbl.autowrap_mode = TextServer.AUTOWRAP_OFF
+		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # довгий банер рейду переноситься в межах екрана, а не втікає за правий край
 		lbl.add_theme_font_size_override("font_size", 15)
 		lbl.add_theme_color_override("font_color", Tokens.WARN)
 		_card.stripe.color = Tokens.WARN
@@ -498,6 +506,10 @@ class FlashWidget extends WidgetBase.Widget:
 	func _on_flash(evt: Dictionary) -> void:
 		text = String(evt.get("params", {}).get("text", ""))
 		_card.label.text = text
+		# Автоперенос без мінімальної ширини схлопує картку до однієї літери (довга відмова капсули читалась вертикально): ширина = природна ширина тексту, не більше CAP_W
+		var font: Font = (_card.label as Label).get_theme_font("font")
+		var nat: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x + 8.0
+		(_card.label as Label).custom_minimum_size.x = minf(nat, CAP_W)
 		_t = HOLD
 		modulate = Tokens.WHITE
 		visible = text != ""

@@ -10,6 +10,7 @@ const OverlayBase = preload("res://scripts/ui/overlay.gd")
 const Tokens = preload("res://scripts/ui/tokens.gd")
 const ViewGeom = preload("res://scripts/ui/view_geom.gd")
 const TILE := ViewGeom.TILE
+const CapsuleTexts = preload("res://scripts/ui/capsule_texts.gd")
 
 # ---- Ambient night (ALWAYS on — not a toggle). Every visible tile darkens by its OWN light level, so
 # campfires, torches and lamps carve warm pools out of the dark: the night the player SEES is the
@@ -59,6 +60,114 @@ class NightShade extends OverlayBase.Overlay:
 					run_x = x
 					run_a = a
 					run_w = warm
+
+# ---- Зона Основної капсули (spec 0010 REQ-0010-16): ALWAYS-ON маркер без хоткея (патерн NightShade, не в реєстрі). Показується ЛИШЕ коли капсулу
+# вибрано (її панель відкрита) або надійшло попередження/контакт рейду — slice вирішує (snap.capsule.main.ring.show), оверлей лише малює.
+# Метрика зони — Чебишов (дані), тож «кільце» — квадрат (2r+1) клітинок навколо капсули: правда про те, що саме діє, а не коло з іншою площею.
+# Попередження — інший колір І товща лінія + кутові «засічки» (R11: не лише колір). ----
+class CapsuleRing extends OverlayBase.Overlay:
+	func _init() -> void:
+		overlay_id = &"capsule_ring"
+		radio = false
+	func draw_overlay(host: CanvasItem, snap: Dictionary, _cull: Dictionary) -> void:
+		var main: Dictionary = (snap.get("capsule", {}) as Dictionary).get("main", {})
+		var ring: Dictionary = main.get("ring", {})
+		if not bool(ring.get("show", false)):
+			return
+		var r: int = int(ring.get("radius", 0))
+		var alert: bool = bool(ring.get("alert", false))
+		var col: Color = Tokens.CRIT if alert else Tokens.TEAL
+		var area := Rect2((int(ring.x) - r) * TILE, (int(ring.y) - r) * TILE, (2 * r + 1) * TILE, (2 * r + 1) * TILE)
+		host.draw_rect(area, Tokens.with_alpha(col, 0.07))
+		host.draw_rect(area, Tokens.with_alpha(col, 0.85), false, 3.0 if alert else 2.0)
+		var tick: float = TILE * 0.5
+		for corner in [Vector2(area.position.x, area.position.y), Vector2(area.end.x, area.position.y),
+				Vector2(area.position.x, area.end.y), Vector2(area.end.x, area.end.y)]:
+			var sx: float = 1.0 if corner.x <= area.position.x else -1.0
+			var sy: float = 1.0 if corner.y <= area.position.y else -1.0
+			host.draw_line(corner, corner + Vector2(tick * sx, 0.0), Tokens.with_alpha(col, 1.0), 4.0)
+			host.draw_line(corner, corner + Vector2(0.0, tick * sy), Tokens.with_alpha(col, 1.0), 4.0)
+		# підпис рамки (T-Ніколая: рамка без слів читалась як межа мапи) — табличка ПІД табличкою капсули (world_view), у кольорі рамки: верхній
+		# край рамки часто під топ-баром, а бічні краї — під боковими панелями. Під час тривоги — «сюди йде рейд» + ціль, і стрілки «звідки» (OD-88)
+		var font: Font = ThemeDB.fallback_font
+		var l1: String = CapsuleTexts.t("zone_label_alert" if alert else "zone_label")
+		var l2: String = CapsuleTexts.t("zone_label_alert2" if alert else "zone_label2")
+		var fs := 10
+		var w: float = maxf(font.get_string_size(l1, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x, font.get_string_size(l2, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x) + 12.0
+		var pill_rows: int = 4 if int(main.get("immune_left_ms", 0)) > 0 else 3   # висота таблички капсули (world_view._draw_capsule_marks)
+		var bpct: int = int(ring.get("buff_pct", 0))
+		var l3: String = CapsuleTexts.t("zone_label3") % bpct if (bpct > 0 and not alert) else ""
+		w = maxf(w, font.get_string_size(l3, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 12.0)
+		var bh: float = 42.0 if l3 != "" else 29.0
+		var bx0: float = (float(ring.x) + 0.5) * TILE - w * 0.5
+		var box := Rect2(bx0, (float(ring.y) + 1.0) * TILE + 4.0 + 13.0 * float(pill_rows) + 6.0, w, bh)
+		# T-Ніколая: підпис під табличкою тонув під нижньою панеллю слотів — якщо внизу немає місця на екрані, він іде НАД капсулу (над шкалою ядра в контакті)
+		var safe: Rect2 = _safe_world(host)
+		if safe.size.x > 0.0 and box.end.y > safe.end.y:
+			var clear: float = 10.0   # зазор над капсулою: у контакті там шкала ядра, під імунітетом — підпис щита-кільця
+			if float(ring.get("core_hp", -1.0)) >= 0.0:
+				clear = 46.0
+			if int(main.get("immune_left_ms", 0)) > 0:
+				clear = maxf(clear, TILE * 0.45 + 16.0)
+			box.position.y = float(ring.y) * TILE - bh - clear
+			box.position.y = maxf(box.position.y, safe.position.y)
+		host.draw_rect(box, Tokens.with_alpha(Tokens.BG, 0.92))
+		host.draw_rect(box, Tokens.with_alpha(col, 0.9), false, 1.0)
+		host.draw_string(font, box.position + Vector2(6.0, 11.0), l1, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Tokens.with_alpha(col, 1.0))
+		host.draw_string(font, box.position + Vector2(6.0, 24.0), l2, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Tokens.INK)
+		if l3 != "":
+			host.draw_string(font, box.position + Vector2(6.0, 37.0), l3, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Tokens.INK)
+		if alert:
+			_draw_incoming(host, area, int(ring.get("dir", 0)), col)
+		# контакт: шкала HP ядра НАД капсулою (T-Ніколая: «не дай пробити ядро» без шкали) — залита частина = що лишилось, підпис із числами
+		var chp: float = float(ring.get("core_hp", -1.0))
+		if chp >= 0.0:
+			var cmax: float = maxf(1.0, float(ring.get("core_max", 1.0)))
+			var frac: float = clampf(chp / cmax, 0.0, 1.0)
+			var bw: float = TILE * 3.0
+			var bx: float = (float(ring.x) + 0.5) * TILE - bw * 0.5
+			var by: float = float(ring.y) * TILE - 22.0
+			var cl: String = CapsuleTexts.t("core_bar") % [int(ceil(chp)), int(cmax)]
+			var cw: float = font.get_string_size(cl, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+			host.draw_rect(Rect2(bx - 2.0, by - 14.0, maxf(bw, cw + 8.0) + 4.0, 29.0), Tokens.with_alpha(Tokens.BG, 0.92))
+			host.draw_string(font, Vector2(bx + 2.0, by - 2.0), cl, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Tokens.INK)
+			host.draw_rect(Rect2(bx, by + 3.0, bw, 8.0), Tokens.with_alpha(Tokens.INK, 0.18))
+			host.draw_rect(Rect2(bx, by + 3.0, bw * frac, 8.0), Tokens.with_alpha(Tokens.CRIT, 1.0))   # ядро під атакою — червона шкала (T-Ніколая: блакитна не читалась як бій)
+			host.draw_rect(Rect2(bx, by + 3.0, bw, 8.0), Tokens.with_alpha(Tokens.INK, 0.9), false, 1.0)
+		# контакт: кожен рейдер — червоний ромб-позначка з обводкою (R11: форма, не лише колір) і лінія до ядра, щоб бій читався й коли спрайт далеко/малий
+		var core: Vector2 = area.get_center()
+		for rd in ring.get("raiders", []):
+			var at := Vector2(float(rd.x) * TILE, float(rd.y) * TILE)
+			var pts := PackedVector2Array([at + Vector2(0, -9), at + Vector2(9, 0), at + Vector2(0, 9), at + Vector2(-9, 0)])
+			host.draw_line(at, core, Tokens.with_alpha(col, 0.28), 1.5)
+			host.draw_colored_polygon(pts, Tokens.with_alpha(col, 0.55))
+			host.draw_polyline(PackedVector2Array([pts[0], pts[1], pts[2], pts[3], pts[0]]), Tokens.with_alpha(Tokens.INK, 0.95), 1.5)
+
+	# Екранна зона без верхньої смуги й нижньої панелі слотів, у світових координатах (порожній Rect2 — перетворення недоступне).
+	static func _safe_world(host: CanvasItem) -> Rect2:
+		var vp: Viewport = host.get_viewport()
+		if vp == null:
+			return Rect2()
+		var vr: Rect2 = vp.get_visible_rect()
+		var inv: Transform2D = host.get_global_transform_with_canvas().affine_inverse()
+		var k: float = maxf(0.01, vp.get_final_transform().get_scale().x)   # вікно-пікселі на одиницю контенту: смуги HUD задано в пікселях вікна
+		var a: Vector2 = inv * Vector2(0.0, vr.position.y + 104.0 / k)
+		var b: Vector2 = inv * Vector2(vr.end.x, vr.end.y - 108.0 / k)
+		return Rect2(a, b - a).abs()
+
+	# Три шеврони, що вказують на капсулу з того краю рамки, з якого йде рейд (0 захід, 1 схід, 2 північ, 3 південь — Threats.edge_cell).
+	func _draw_incoming(host: CanvasItem, area: Rect2, dir: int, col: Color) -> void:
+		var mid: Vector2 = area.get_center()
+		var inward: Vector2 = [Vector2.RIGHT, Vector2.LEFT, Vector2.DOWN, Vector2.UP][clampi(dir, 0, 3)]
+		var side: Vector2 = Vector2(-inward.y, inward.x)
+		var edge: Vector2 = mid - inward * (area.size.x * 0.5)
+		for i in 3:
+			var tip: Vector2 = edge - inward * (TILE * (0.2 + 0.7 * float(i)))
+			var back: Vector2 = tip - inward * (TILE * 0.7)
+			host.draw_line(back + side * TILE * 0.7, tip, Tokens.with_alpha(Tokens.BG, 0.9), 9.0)   # темна підкладка: стрілка читається і на світлому тлі
+			host.draw_line(back - side * TILE * 0.7, tip, Tokens.with_alpha(Tokens.BG, 0.9), 9.0)
+			host.draw_line(back + side * TILE * 0.7, tip, Tokens.with_alpha(col, 1.0), 5.0)
+			host.draw_line(back - side * TILE * 0.7, tip, Tokens.with_alpha(col, 1.0), 5.0)
 
 # Shared light math (sim.light_at parity: Manhattan distance, linear falloff to the source radius).
 class Lit extends RefCounted:

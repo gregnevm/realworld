@@ -7,6 +7,7 @@
 extends Node2D
 
 const SessionScript = preload("res://scripts/session.gd")
+const MainCapsule = preload("res://scripts/sim/capsule.gd")
 const WorldViewScript = preload("res://scripts/world_view.gd")
 const OverlayHost = preload("res://scripts/ui/overlay_host.gd")
 const HudRootScript = preload("res://scripts/ui/hud_root.gd")
@@ -119,6 +120,12 @@ func _ready() -> void:
 	router.bind(&"remove_tool", func(_s, _a: Dictionary) -> void:
 		var rt := String(WorldInputScript.WorldInput.REMOVE_TOOL)
 		view.selected_build = "" if String(view.selected_build) == rt else rt)
+	# generic view verb: a tap on a landmark (the Основна капсула) opens ITS panel by id — registry state, not a sim command
+	router.bind(&"open_panel", func(_s, a: Dictionary) -> void:
+		var pn: Variant = preg.get_panel(StringName(String(a.get("id", ""))))
+		if pn != null:
+			pn.visible = true   # not preg.toggle(): its open-tween writes position.y, which parks a dock panel over its neighbours (seen on `shot gear` too)
+		_refresh_menu_if_open())
 	router.bind(&"zoom_in", func(_s, _a: Dictionary) -> void: winput.zoom_step(1.25))
 	router.bind(&"zoom_out", func(_s, _a: Dictionary) -> void: winput.zoom_step(0.8))
 	Mechanics.register_all(preg, oreg)     # mechanics register themselves — no controller edit (R4)
@@ -192,6 +199,8 @@ func _start_game(lat: float, lon: float, place_name: String) -> void:
 		session = null                    # не лишаємо порожню сесію: guard `session != null` заблокував би новий старт
 		return
 	_enter_session()
+	if "capsule" in OS.get_cmdline_user_args() and "forceraid" in OS.get_cmdline_user_args():   # dev-хук G5 (REQ-0010-120): рейд без 3 діб очікування; релізна збірка відмовить
+		MainCapsule.force_raid(session.sim, OS.has_feature("debug"))
 	_autosave()   # a new landing claims the save slot at once (the spawn screen warned about it)
 
 # The spawn screen's «▶ Продовжити»: rebuild the whole session from the save file.
@@ -291,6 +300,10 @@ func _set_menu(on: bool) -> void:
 	if on:
 		_refresh_menu()
 
+func _refresh_menu_if_open() -> void:
+	if panel_menu != null and panel_menu.visible:
+		_refresh_menu()
+
 func _refresh_menu() -> void:
 	var states: Dictionary = {}
 	for p in preg.panels:
@@ -336,7 +349,11 @@ func _process(dt: float) -> void:
 	if view.hitstop <= 0.0:          # render-only hit-stop: the frame holds 40–60 ms, the sim never pauses
 		view.queue_redraw()
 	# VIEW state for this frame's snapshot (hud_root runs after us: parent before child)
-	hud_root.view_ctx = {"hover": view.hover, "hover_world": winput.hover_world(),
+	var open_panels: Array = []   # ids of the visible panels (generic: a landmark's ring shows while ITS panel is open)
+	for pn in preg.panels:
+		if bool(pn.visible):
+			open_panels.append(String(pn.panel_id))
+	hud_root.view_ctx = {"open_panels": open_panels, "hover": view.hover, "hover_world": winput.hover_world(),
 		"in_world": winput.tooltip_wanted(touch_ui) and not session.sim.dead and not panel_menu.visible,
 		"selected_build": String(view.selected_build), "speed": winput.speed,
 		"touch": touch_ui, "menu_open": panel_menu.visible,
@@ -445,6 +462,8 @@ func _shot_step(dt: float) -> void:
 			preg.toggle(&"gear")           # `shot gear`: open the loadout panel
 		if "light" in OS.get_cmdline_user_args():
 			oreg.toggle(&"light")          # `shot light`: radio-on the L/Light overlay (default frame = what a player sees)
+		if bool(session.sim.use_main_capsule):
+			_stage_capsule_shot()          # `shot capsule [lvl=N] [cpanel] [poor tap] [immune] [warn|contact] [death]`: spec 0010 W4a/W4b frames
 		session.sim.time.frac = 0.86       # dusk so daylight darkening is visible
 		if "death" in OS.get_cmdline_user_args():   # `shot death`: a REAL death (epitaph + bag), not a bare flag
 			session.sim.player.born = 1
@@ -463,7 +482,13 @@ func _shot_step(dt: float) -> void:
 			_on_overview()
 		if "buildmode" in OS.get_cmdline_user_args():
 			_set_mode(&"build")
-	if _t > 1.6 and not _shot:
+	var capsule_shot: bool = session != null and bool(session.sim.use_main_capsule)
+	if capsule_shot:
+		session.sim.messages.clear()   # capsule frames: no feed toasts over the panel (staging only; the phone feed sits over the right dock)
+	if capsule_shot and "tap" in OS.get_cmdline_user_args() and _t > 5.4 and not _shot_tapped:
+		_shot_tapped = true   # exactly what the filled button's intent dispatches; the flash lives 2.2 s, the frame is taken at 6.0 s
+		router.dispatch(&"capsule_upgrade", {}, session)
+	if _t > (6.0 if capsule_shot else 1.6) and not _shot:   # capsule frames wait out the goal toasts of the demo base
 		_shot = true
 		await RenderingServer.frame_post_draw
 		var img := get_viewport().get_texture().get_image()
@@ -474,6 +499,34 @@ func _shot_step(dt: float) -> void:
 		img.save_png("res://newhud_thumb.png")                      # small copy for a text-channel readback
 		print("NEWHUD_SHOT saved -> ", ProjectSettings.globalize_path("res://newhud_shot.png"))
 		get_tree().quit()
+
+var _shot_tapped := false
+
+# Dev staging of the Основна капсула frames (an artifact, not the game): `lvl=N` sets both axes to N for the hull marks; `cpanel` opens the
+# panel through the SAME open_panel verb a tap on the capsule dispatches (so the zone ring shows as it does for a player); `poor` empties the
+# pack and the stock; `tap` presses the filled «Прокачати» at 5.4 s (the refusal then flashes its first reason over the hero).
+func _stage_capsule_shot() -> void:
+	var sim: Variant = session.sim
+	var args: PackedStringArray = OS.get_cmdline_user_args()
+	for a in args:
+		if String(a).begins_with("lvl="):
+			var lv: int = clampi(int(String(a).substr(4)), 0, MainCapsule.max_level(sim))
+			sim.main_capsule.level = lv
+			sim.main_capsule.protection = clampi(lv, 0, MainCapsule.max_protection(sim))
+	if "poor" in args:
+		sim.stock = {}   # staging: the whole stock, not a res_key cell
+		for sl in sim.player.inv:
+			sl.id = ""
+			sl.n = 0
+	if "immune" in args:   # W4b: вікно імунітету — щит на корпусі + рядок у панелі (20 год лишилось)
+		sim.main_capsule.immune_until = int(sim.now_ms) + 20 * 3600000
+	if "warn" in args or "contact" in args:   # W4b: тривога рейду через dev-хук G5 (debug-збірка); `contact` — одразу наступний тік веде в контакт
+		MainCapsule.force_raid(sim, OS.has_feature("debug"))
+		if "contact" in args:
+			MainCapsule._announce(sim, int(sim.now_ms))
+			sim.capsule_raid.contact_at = int(sim.now_ms)
+	if "cpanel" in args:
+		router.dispatch(&"open_panel", {"id": "capsule_bay"}, session)
 
 func _build_demo_base() -> void:
 	var sim: Variant = session.sim
@@ -610,8 +663,11 @@ func _tick_action(dt: float) -> void:
 	view.action_target = act_target
 	view.action_mode = act_mode
 	view.action_build = act_build
+	# підпис дії над кнопкою ховається, поки відкрита панель капсули: інакше він лягає на рядок ціни (T-Ніколая, кадр 05)
+	var cap_pn: Variant = preg.get_panel(&"capsule_bay")
+	var cap_open: bool = cap_pn != null and bool(cap_pn.visible)
 	tc.bind_state({"mode": act_mode, "slots": _act_slots, "active": act_slot, "overview": act_overview,
-		"target": _target_label(act_target), "guide": _guide_slot()})
+		"target": "" if cap_open else _target_label(act_target), "guide": _guide_slot()})
 	var bb: Variant = preg.get_panel(&"build_bar")
 	if bb != null and not bool(sim.use_inventory) and bool(bb._open) != (act_mode == &"build"):
 		bb.set_drawer(act_mode == &"build")   # proactive drawer: Build mode opens it, any other mode closes it
@@ -622,7 +678,7 @@ func _target_label(t: Dictionary) -> String:
 	if t.is_empty():
 		return ""
 	var sim: Variant = session.sim
-	var v: Dictionary = AM.primary(act_mode, t, act_build)
+	var v: Dictionary = AM.primary(act_mode, t, act_build, sim)
 	var verb := String(v.get("verb", ""))
 	var what := ""
 	match StringName(t.kind):
@@ -636,11 +692,11 @@ func _target_label(t: Dictionary) -> String:
 		&"cell":
 			what = String(sim.building_def(act_build).get("name", act_build))
 	var verb_ua := {"order_gather": "Добути", "order_attack": "Атакувати", "build": "Збудувати", "repair": "Ремонт",
-		"order_move": "Іти", "deconstruct": "Розібрати"}
+		"order_move": "Іти", "deconstruct": "Розібрати", "open_panel": "Відкрити"}
 	return ("%s · %s" % [String(verb_ua.get(verb, "")), what]).strip_edges().trim_prefix("· ").trim_suffix(" ·")
 
 func _on_action_tap() -> void:
-	var v: Dictionary = AM.primary(act_mode, act_target, act_build)
+	var v: Dictionary = AM.primary(act_mode, act_target, act_build, session.sim)
 	if v.is_empty():
 		var why := {&"gather": "Поруч нема що добувати", &"build": "Нема місця попереду",
 		&"repair": "Поруч нема пошкоджених будівель", &"fight": "Поруч нема ворогів"}

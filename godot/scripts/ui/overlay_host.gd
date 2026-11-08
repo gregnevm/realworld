@@ -14,6 +14,9 @@ const TILE := ViewGeom.TILE
 # pools around every active light source. Drawn first so a radio overlay reads on top of it.
 var night: Variant = Overlays.NightShade.new()
 
+# The capsule's control-zone frame (always-on marker, no hotkey): it draws itself ONLY while the snapshot says it is shown.
+var capsule_ring: Variant = Overlays.CapsuleRing.new()
+
 var oreg: Variant                 # OverlayRegistry
 var snap: Dictionary = {}         # latest HudModel snapshot (env/clock the overlays read; R12)
 var map_n: int = 56               # live region size — set from sim.n so overlay cull matches the tilemap
@@ -29,5 +32,6 @@ func _draw() -> void:
 	else:
 		cull = ViewGeom.full_rect(map_n)
 	night.draw_overlay(self, snap, cull)
+	capsule_ring.draw_overlay(self, snap, cull)
 	for o in oreg.active_and_markers():
 		o.draw_overlay(self, snap, cull)

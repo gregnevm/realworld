@@ -167,6 +167,17 @@ static func recipe(id: String) -> Dictionary:
 	_build_cache()
 	return _recipes.get(id, {})
 
+# The first catalogue recipe that PRODUCES `res` ({} = none) — the view says «де взяти» from it. Sorted by id: deterministic.
+static func recipe_for(res: String) -> Dictionary:
+	_build_cache()
+	var ids: Array = (_recipes as Dictionary).keys()
+	ids.sort()
+	for id in ids:
+		var rc: Dictionary = _recipes[id]
+		if str((rc.get("output", {}) as Dictionary).get("id", "")) == res:
+			return rc
+	return {}
+
 # Ukrainian label of a catalogue research project (falls back to the id).
 static func research_label(id: String) -> String:
 	_build_cache()

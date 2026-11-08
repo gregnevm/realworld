@@ -118,8 +118,10 @@ class WorldInput extends Node:
 
 	# PURE click grammar (main.gd _handle_click parity): armed build wins; then a raider within
 	# ATTACK_RADIUS of the cursor; then a resource node under the cursor; then an OWN grow zone
-	# (cycles its crop — the farming v2 verb); else walk there.
-	static func decide_click(enemies: Array, nodes: Dictionary, n: int, selected_build: String, t: Vector2i, fx: float, fy: float, grow_cells: Dictionary = {}) -> Dictionary:
+	# (cycles its crop — the farming v2 verb); else walk there. `landmark_cells` (cell -> panel id, optional): a tap on a
+	# landmark (the Основна капсула) opens its panel — a view verb, never a sim mutation.
+	static func decide_click(enemies: Array, nodes: Dictionary, n: int, selected_build: String, t: Vector2i, fx: float, fy: float,
+			grow_cells: Dictionary = {}, landmark_cells: Dictionary = {}) -> Dictionary:
 		if selected_build == REMOVE_TOOL:
 			return {"verb": &"deconstruct", "args": {"x": t.x, "y": t.y}}
 		if selected_build != "":
@@ -133,9 +135,12 @@ class WorldInput extends Node:
 				best = e
 		if best != null:
 			return {"verb": &"order_attack", "args": {"target": best}}
-		if t.x >= 0 and t.y >= 0 and t.x < n and t.y < n and nodes.has(t.y * n + t.x):
+		var in_map: bool = t.x >= 0 and t.y >= 0 and t.x < n and t.y < n
+		if in_map and nodes.has(t.y * n + t.x):
 			return {"verb": &"order_gather", "args": {"x": t.x, "y": t.y}}
-		if grow_cells.has(t.y * n + t.x):
+		if in_map and landmark_cells.has(t.y * n + t.x):
+			return {"verb": &"open_panel", "args": {"id": String(landmark_cells[t.y * n + t.x])}}
+		if in_map and grow_cells.has(t.y * n + t.x):
 			return {"verb": &"set_crop", "args": {"x": t.x, "y": t.y}}
 		return {"verb": &"order_move", "args": {"x": t.x, "y": t.y}}
 
@@ -283,11 +288,15 @@ class WorldInput extends Node:
 		var sim: Variant = session.sim
 		var w: Vector2 = _pointer_world if pointer_is_touch else view.get_global_mouse_position()
 		var grow_cells: Dictionary = {}
+		var landmark_cells: Dictionary = {}
 		if sim.has_method("building_def"):
 			for cell in sim.bgrid:
-				if bool(sim.building_def(String(sim.bgrid[cell].kind)).get("grow", false)):
+				var def: Dictionary = sim.building_def(String(sim.bgrid[cell].kind))
+				if bool(def.get("grow", false)):
 					grow_cells[cell] = true
-		var d: Dictionary = decide_click(sim.enemies, sim.map.nodes, int(sim.n), String(view.selected_build), t, w.x / TILE, w.y / TILE, grow_cells)
+				if String(def.get("panel", "")) != "":
+					landmark_cells[cell] = String(def.panel)
+		var d: Dictionary = decide_click(sim.enemies, sim.map.nodes, int(sim.n), String(view.selected_build), t, w.x / TILE, w.y / TILE, grow_cells, landmark_cells)
 		router.dispatch(StringName(d.verb), d.args, session)
 
 	# Digits arm the ghost through the SAME select_build verb the BuildBar clicks use — one owner

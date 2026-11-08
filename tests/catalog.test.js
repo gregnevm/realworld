@@ -352,19 +352,30 @@ test("catalog: live-tier closure reaches the steel + bread + beer chains (pinned
   for (const id of LIVE_RAWS) assert.ok(rawIds.has(id), `live raw "${id}" is a catalogue raw`);
 });
 
-// ---- spec 0010 (Основна капсула) §5.1/REQ-0010-11/12/16/17/79/91/97: the ONE capsule_levels table ----------------------------
-// All the capsule numbers are DATA (godot/content/catalog.json -> capsule_levels), PROPOSED by the economy bot
-// (godot/tests/run_capsule_balance.gd, OD-107/59) and approved by the owner at merge; the code holds none of them. This validator
-// proves the table's SHAPE, not its values: continuous levels 0..5, known/reachable price ids, monotone radius and defence,
-// strictly growing price, buffs from a CLOSED vocabulary with no body-needs buff, one axis, no clone-roster entries.
-// godot/tests/run_catalog_tests.gd mirrors every check against the same file (and pins the identity of the ids vs data_bridge.gd).
-const CAPSULE_BUFF_KEYS = ["gather_mult", "melee_mult", "craft_mult", "research_mult"]; // mirrors MainCapsule.BUFF_KEYS (REQ-0010-79)
+// ---- spec 0010 (Основна капсула) §5.1/REQ-0010-11/12/16/17/91/97/99/101/102/105/106: the capsule_levels table, TWO axes -------------
+// All the capsule numbers are DATA (godot/content/catalog.json -> capsule_levels); the code holds none of them. Some are the OWNER's decisions
+// (+10% per level and +50% at level 5 — OD-98; x2 per level — OD-65/93; x16 at defence 5 — OD-103; ~50 m radius — OD-99; the raid's immunity and
+// the 50% — OD-24/107) and are pinned here as such; the rest is PROPOSED by the economy bot (godot/tests/run_capsule_balance.gd) and approved by
+// the owner at merge. This validator proves the table's SHAPE and the owner's coefficients, not the proposed values: continuous levels 0..5 on
+// BOTH axes (capsule level: cost + four buffs; defence level: cost + core_hp), one static zone radius, the closed four-axis buff vocabulary,
+// prices that get rarer with the level, no clone-roster entries. godot/tests/run_catalog_tests.gd mirrors every check against the same file
+// (and pins the identity of the ids vs data_bridge.gd).
+const CAPSULE_BUFF_KEYS = ["gather_mult", "craft_mult", "need_recovery_mult", "research_mult"]; // mirrors MainCapsule.BUFF_KEYS (REQ-0010-105, OD-73)
 const CAPSULE_ID_SHARED = ["wood", "stone", "scrap", "planks", "components"];          // the ids data_bridge.gd maps 1:1 (backpack AND stock speak them)
-const CAPSULE_STASH_REACH = 2.5;                                                        // mirrors Inventory.STASH_REACH: level-0 zone must cover the stash
-const CAPSULE_MAP_N = 56;                                                               // mirrors Session.MAP_N: R(5) <= n/4
-const CAPSULE_TOP_KEYS = ["version", "status", "note", "metric", "levels", "raid"];
-const CAPSULE_ROW_KEYS = ["level", "cost", "radius", "core_hp", "buffs"];
-const CAPSULE_RAID_KEYS = ["decided", "immunity_ms", "take_percent", "warning_s", "by_level"];
+const CAPSULE_STASH_REACH = 2.5;                                                        // mirrors Inventory.STASH_REACH: the zone must cover the stash
+const CAPSULE_MAP_N = 56;                                                               // mirrors Session.MAP_N: the zone stays under n/4
+const CAPSULE_TOP_KEYS = ["version", "status", "note", "feasibility_note", "metric", "zone", "levels", "protection", "raid"];
+const CAPSULE_ZONE_KEYS = ["radius_m", "cell_m", "radius_cells"];
+const CAPSULE_LEVEL_KEYS = ["level", "cost", "buffs"];
+const CAPSULE_PROT_TOP_KEYS = ["factor", "levels"];
+const CAPSULE_PROT_KEYS = ["level", "cost", "core_hp"];
+const CAPSULE_RAID_DECIDED = { immunity_ms: 86400000, take_percent: 50, grace_ms: 259200000, warn_min_ms: 600000, warn_max_ms: 1800000, cadence_min_ms: 259200000, cadence_max_ms: 345600000 }; // OD-24 / OD-107 / OD-66 / OD-88 / OD-86: verbatim
+const CAPSULE_RAID_PROPOSED = ["take_round", "queue_max", "roll_spread", "wealth_ref_points", "count_max", "by_level"];               // the bot's proposals (status: proposed, W3a)
+const CAPSULE_RAID_KEYS = ["decided", "proposed", ...Object.keys(CAPSULE_RAID_DECIDED), ...CAPSULE_RAID_PROPOSED];
+const RAIDER_POWER = (count, day) => count * (7 + 1.2 * day) * (28 * (1 + 0.18 * day));                                              // mirrors GameData.make_raider: dmg x hp per raider
+const CAPSULE_BUFF_STEP = 0.1;                                                          // OD-98: +10% per level, +50% at level 5
+const CAPSULE_RARITY = { wood: 0, stone: 1, planks: 2, scrap: 3, components: 4 };       // rank by the finite supply order (planks = processed wood), mirrors the bot
+const CAPSULE_BASIC_RAW = ["wood", "stone"];                                            // OD-75: level 1 is basic raw
 
 function capsuleTable() {
   const t = loadCatalog().capsule_levels;
@@ -372,31 +383,59 @@ function capsuleTable() {
   return t;
 }
 const totalUnits = (cost) => Object.values(cost).reduce((a, b) => a + b, 0);
+const rarest = (cost) => Math.max(...Object.keys(cost).map((id) => CAPSULE_RARITY[id]));
 
-test("capsule_levels: closed schema, version 1, still PROPOSED until the owner approves (OD-107/59)", () => {
+test("capsule_levels: closed schema, version 2, still PROPOSED until the owner approves (OD-73/76/99)", () => {
   const t = capsuleTable();
-  assert.deepStrictEqual(Object.keys(t).sort(), [...CAPSULE_TOP_KEYS].sort(), "no key outside the schema: a second axis / clone table has nowhere to hide (REQ-0010-17/97)");
-  assert.strictEqual(t.version, 1);
+  assert.deepStrictEqual(Object.keys(t).sort(), [...CAPSULE_TOP_KEYS].sort(), "no key outside the schema: a third axis / clone table has nowhere to hide (REQ-0010-17/97/99)");
+  assert.strictEqual(t.version, 2, "version 2 = two axes + one static zone (REQ-0010-60: the first-wave one-axis table is v1)");
   assert.ok(["proposed", "approved"].includes(t.status), `status is "proposed" (agent numbers) or "approved" (owner), got "${t.status}"`);
   assert.strictEqual(t.metric, "chebyshev", "the zone metric lives in the data (REQ-0010-80); only chebyshev is implemented");
   assert.ok(typeof t.note === "string" && t.note.length > 0, "the note says where the numbers come from");
+  assert.ok(typeof t.feasibility_note === "string" && /ЗДІЙСНЕННА/.test(t.feasibility_note) && /OD-109/.test(t.feasibility_note) && /g = 0\.\d+/.test(t.feasibility_note),
+    "the feasibility note says the ladder is feasible AFTER OD-109 and names the scale g");
+  assert.ok(/НЕ ЗДІЙСНЕННО/.test(t.feasibility_note) && /НЕ 60\.\.120/.test(t.feasibility_note),
+    "the note stays honest: it was infeasible before OD-109 and level 1 is NOT the 60..120 gather-minutes of OD-93 (the two requirements do not both hold on 56x56)");
 });
 
-test("capsule_levels: levels 0..5 are continuous, L0 is the bare capsule (REQ-0010-11/12/91)", () => {
+test("capsule_levels: the level-1 price fits the 24-slot backpack even at one unit per slot (OD-109, bot criterion C2)", () => {
+  const { levels, protection } = capsuleTable();
+  assert.ok(totalUnits(levels[1].cost) <= 24, `level 1 = ${totalUnits(levels[1].cost)} units`);
+  assert.ok(totalUnits(protection.levels[1].cost) <= 24, "defence level 1 likewise");
+  for (let i = 1; i < levels.length; i++) {
+    assert.deepStrictEqual(protection.levels[i].cost, levels[i].cost, `Q-5 A: the defence price of level ${i} equals the capsule price (the bot prices both axes by the same rules)`);
+  }
+});
+
+test("capsule_levels: the capsule axis — levels 0..5 are continuous, L0 is the bare capsule (REQ-0010-11/12/91)", () => {
   const { levels } = capsuleTable();
   assert.ok(Array.isArray(levels));
   // step 1 (OD-56) is exactly 0..5; step 2 widens the range BY DATA and re-pins this length together with the data (REQ-0010-91)
   assert.strictEqual(levels.length, 6, "levels 0..5");
-  assert.ok(levels.length <= 10, "invested keys are decimal strings hashed lexicographically: numeric order holds only up to level 9 (REQ-0010-82) — more levels need a RECORD_VERSION bump");
+  assert.ok(levels.length <= 10, "ledger keys are decimal strings hashed lexicographically: numeric order holds only up to level 9 (REQ-0010-82) — more levels need a RECORD_VERSION bump");
   levels.forEach((row, i) => {
-    assert.deepStrictEqual(Object.keys(row).sort(), [...CAPSULE_ROW_KEYS].sort(), `level ${i}: only {level,cost,radius,core_hp,buffs}`);
+    assert.deepStrictEqual(Object.keys(row).sort(), [...CAPSULE_LEVEL_KEYS].sort(), `level ${i}: only {level,cost,buffs} — the radius is NOT a level row (REQ-0010-16), the defence is its own axis (REQ-0010-99)`);
     assert.strictEqual(row.level, i, `levels[${i}].level is ${i}`);
   });
   assert.deepStrictEqual(levels[0].cost, {}, "level 0 costs nothing (you land on it)");
-  assert.deepStrictEqual(levels[0].buffs, {}, "level 0 gives no buff at all (REQ-0010-12)");
 });
 
-test("capsule_levels: prices are positive integers over ids the LIVE game reaches and both stocks speak (REQ-0010-11/13)", () => {
+test("capsule_levels: every level record carries EXACTLY the four buff axes, ~+10% per level, +50% at 5, 0 at 0 (REQ-0010-105/106, OD-73/98)", () => {
+  const { levels } = capsuleTable();
+  const NEEDS = /hunger|food|thirst|melee|dmg|damage/i;
+  for (const row of levels) {
+    assert.deepStrictEqual(Object.keys(row.buffs).sort(), [...CAPSULE_BUFF_KEYS].sort(), `level ${row.level}: exactly the four OD-73 axes (no melee, no hunger — a fifth axis only by the owner)`);
+    for (const [k, v] of Object.entries(row.buffs)) {
+      assert.ok(!NEEDS.test(k), `level ${row.level}: buff "${k}" must not touch hunger/melee`);
+      assert.ok(typeof v === "number", `level ${row.level}: ${k} is a number`);
+      // OD-98 (decided): linear +10% per level -> a multiplier 1 + 0.10*L (1.0 at level 0 = 0%, 1.5 at level 5 = +50%)
+      assert.ok(Math.abs(v - (1 + CAPSULE_BUFF_STEP * row.level)) < 1e-9, `level ${row.level}: ${k} = 1 + 0.10*L (OD-98), got ${v}`);
+    }
+  }
+  for (const key of CAPSULE_BUFF_KEYS) assert.strictEqual(levels[5].buffs[key], 1.5, `${key}: +50% at level 5 (OD-98)`);
+});
+
+test("capsule_levels: capsule prices are positive integers over ids the LIVE game reaches and both stocks speak (REQ-0010-11/13)", () => {
   const cat = loadCatalog();
   const live = reachability(cat, LIVE_RAWS);
   for (const row of capsuleTable().levels.slice(1)) {
@@ -410,66 +449,93 @@ test("capsule_levels: prices are positive integers over ids the LIVE game reache
   }
 });
 
-test("capsule_levels: radius and defence never shrink, the price strictly grows, R0 covers the stash (REQ-0010-16/17)", () => {
+test("capsule_levels: the price strictly grows ~x2 per level and gets RARER with the level; level 1 is basic raw (REQ-0010-101, OD-65/75/93)", () => {
   const { levels } = capsuleTable();
-  for (let i = 0; i < levels.length; i++) {
-    assert.ok(Number.isInteger(levels[i].radius) && levels[i].radius > 0, `level ${i}: radius is a positive integer`);
-    assert.ok(typeof levels[i].core_hp === "number" && levels[i].core_hp > 0, `level ${i}: core_hp > 0 (the ONE defence parameter, OD-108)`);
-    if (i === 0) continue;
-    assert.ok(levels[i].radius >= levels[i - 1].radius, `radius(${i}) >= radius(${i - 1})`);
-    assert.ok(levels[i].core_hp >= levels[i - 1].core_hp, `core_hp(${i}) >= core_hp(${i - 1})`);
-  }
   for (let i = 2; i < levels.length; i++) {
     assert.ok(totalUnits(levels[i].cost) > totalUnits(levels[i - 1].cost), `the price of level ${i} exceeds level ${i - 1}`);
   }
-  assert.ok(levels[0].radius >= Math.ceil(CAPSULE_STASH_REACH), "the level-0 zone covers the storage reach");
-  assert.ok(levels[levels.length - 1].radius <= Math.floor(CAPSULE_MAP_N / 4), "the top zone stays under a quarter of the map side");
-});
-
-test("capsule_levels: buffs are a CLOSED vocabulary of multipliers, none touches a body need (REQ-0010-79, OD-108)", () => {
-  const { levels } = capsuleTable();
-  const NEEDS = /hunger|cold|sleep|rest|thirst|food|need|temp|warm|health|hp/i;
-  for (const row of levels) {
-    for (const [k, v] of Object.entries(row.buffs)) {
-      assert.ok(CAPSULE_BUFF_KEYS.includes(k), `level ${row.level}: buff "${k}" is outside BUFF_KEYS`);
-      assert.ok(!NEEDS.test(k), `level ${row.level}: buff "${k}" must not touch hunger/cold/sleep`);
-      assert.ok(typeof v === "number" && v > 1.0, `level ${row.level}: ${k} is a multiplier above 1.0`);
-    }
+  for (let i = 2; i < levels.length; i++) {
+    const ratio = totalUnits(levels[i].cost) / totalUnits(levels[i - 1].cost);
+    // OD-65/93: ~x2 per level. The WEIGHT is gather-minutes at the bare-hand income (exactly x2 in the bot); the unit totals follow within a tolerance
+    assert.ok(ratio > 1.6 && ratio < 2.4, `cost(${i})/cost(${i - 1}) ~ 2 by total weight (OD-65/93), got ${ratio.toFixed(2)}`);
   }
-  for (const key of CAPSULE_BUFF_KEYS) {
-    let prev = 1.0;
-    for (const row of levels) {
-      const v = row.buffs[key] === undefined ? 1.0 : row.buffs[key];
-      assert.ok(v >= prev, `${key} never drops with the level (level ${row.level})`);
-      prev = v;
-    }
-  }
-});
-
-test("capsule_levels: one axis and no clone-roster entries anywhere in the table (REQ-0010-17/97, OD-57)", () => {
-  const text = JSON.stringify(capsuleTable());
-  assert.ok(!/clone|roster|genome|orbit|implant|axis|axes/i.test(text.replace(/"note":"[^"]*"/, '"note":""')), "the table mentions no clones / roster / orbit / separate axes");
-  for (const row of capsuleTable().levels) {
-    assert.ok(!("defense" in row) && !("defence" in row) && !("radius_cost" in row), "radius, defence and buffs are DERIVED of the level, not bought separately");
-  }
-});
-
-test("capsule_levels: the raid block carries the decided numbers and a monotone raider ladder (OD-24/58)", () => {
-  const { raid } = capsuleTable();
-  assert.deepStrictEqual(Object.keys(raid).sort(), [...CAPSULE_RAID_KEYS].sort(),
-    "grace/min-gap/queue/frequency/rounding are NOT delegated to the agent (OD-107): they are absent until the owner decides");
-  assert.strictEqual(raid.immunity_ms, 86400000, "24 h in UTC ms (OD-24)");
-  assert.strictEqual(raid.take_percent, 50, "50% of invested[L] is destroyed (OD-107)");
-  assert.deepStrictEqual([...raid.decided].sort(), ["immunity_ms", "take_percent"], "only these two are owner-decided; the rest is proposed");
-  assert.ok(typeof raid.warning_s === "number" && raid.warning_s > 0, "a positive warning interval");
-  assert.deepStrictEqual(Object.keys(raid.by_level), ["1", "2", "3", "4", "5"], "a raider for every upgradable level; level 0 is never raided (OD-107)");
-  let prev = { count: 0, day_equiv: 0, t_open_s: 0 };
-  for (const lvl of ["1", "2", "3", "4", "5"]) {
-    const r = raid.by_level[lvl];
-    for (const k of ["count", "day_equiv", "t_open_s"]) {
-      assert.ok(typeof r[k] === "number" && r[k] > 0, `raid.by_level[${lvl}].${k} is positive`);
-      assert.ok(r[k] >= prev[k], `raid.by_level[${lvl}].${k} never shrinks`);
-    }
+  assert.ok(Object.keys(levels[1].cost).every((id) => CAPSULE_BASIC_RAW.includes(id)), "level 1 is basic raw only (OD-75)");
+  let prev = 0;
+  for (let i = 1; i < levels.length; i++) {
+    const r = rarest(levels[i].cost);
+    assert.ok(r >= prev, `the rarest ingredient never gets more common with the level (level ${i}: rank ${r} < ${prev})`);
     prev = r;
+  }
+  assert.ok(rarest(levels[5].cost) > rarest(levels[1].cost), "level 5 asks for rarer ingredients than level 1 (OD-75)");
+});
+
+test("capsule_levels: the zone is ONE static radius in the data, not a level row; ~50 m (REQ-0010-16/80, OD-74/99)", () => {
+  const { zone, levels, protection } = capsuleTable();
+  assert.deepStrictEqual(Object.keys(zone).sort(), [...CAPSULE_ZONE_KEYS].sort());
+  assert.strictEqual(zone.radius_m, 50, "~50 m — the owner's number (OD-99)");
+  assert.ok(Number.isInteger(zone.radius_cells) && zone.radius_cells > 0, "the zone radius is a positive whole number of cells");
+  assert.ok(typeof zone.cell_m === "number" && zone.cell_m > 0, "cell_m is the (proposed, Q-4) map scale");
+  assert.strictEqual(zone.radius_cells, Math.ceil(zone.radius_m / zone.cell_m), "radius_cells = ceil(radius_m / cell_m): ONE function of the scale (Q-4)");
+  assert.ok(zone.radius_cells >= Math.ceil(CAPSULE_STASH_REACH), "the zone covers the storage reach");
+  assert.ok(zone.radius_cells <= Math.floor(CAPSULE_MAP_N / 4), "the zone stays under a quarter of the map side");
+  for (const row of [...levels, ...protection.levels]) {
+    assert.ok(!("radius" in row) && !("radius_cells" in row), `level ${row.level}: the radius belongs to NEITHER axis (static, OD-74/99)`);
+  }
+});
+
+test("capsule_levels: the defence axis — its own records 0..5, core_hp x2 per level, x16 at 5 (REQ-0010-99/102, OD-76/103)", () => {
+  const { protection } = capsuleTable();
+  assert.deepStrictEqual(Object.keys(protection).sort(), [...CAPSULE_PROT_TOP_KEYS].sort());
+  assert.strictEqual(protection.factor, 2, "x2 per level (OD-65/103): the coefficient is data");
+  const rows = protection.levels;
+  assert.strictEqual(rows.length, 6, "defence levels 0..5 (OD-76)");
+  rows.forEach((row, i) => {
+    assert.deepStrictEqual(Object.keys(row).sort(), [...CAPSULE_PROT_KEYS].sort(), `defence ${i}: only {level,cost,core_hp}`);
+    assert.strictEqual(row.level, i);
+    assert.ok(typeof row.core_hp === "number" && row.core_hp > 0, `defence ${i}: core_hp > 0 (the core always has some HP, even at 0)`);
+    if (i >= 1) assert.ok(Math.abs(row.core_hp / rows[i - 1].core_hp - protection.factor) < 0.01, `core_hp(${i})/core_hp(${i - 1}) ~ factor (x2 per level, OD-103)`);
+  });
+  assert.ok(Math.abs(rows[5].core_hp / rows[1].core_hp - 16) < 0.05, "core_hp(5)/core_hp(1) ~ 16 (OD-103)");
+  assert.deepStrictEqual(rows[0].cost, {}, "defence 0 costs nothing");
+  const cat = loadCatalog();
+  const live = reachability(cat, LIVE_RAWS);
+  for (const row of rows.slice(1)) {
+    assert.ok(Object.keys(row.cost).length > 0, `defence ${row.level} has a price`);
+    for (const [id, n] of Object.entries(row.cost)) {
+      assert.ok(Number.isInteger(n) && n > 0 && CAPSULE_ID_SHARED.includes(id) && live.obtainable.has(id), `defence ${row.level}: ${id} is a positive integer over a shared live id`);
+    }
+  }
+  for (let i = 2; i < rows.length; i++) assert.ok(totalUnits(rows[i].cost) > totalUnits(rows[i - 1].cost), `the defence price of level ${i} exceeds level ${i - 1}`);
+});
+
+test("capsule_levels: exactly TWO axes and no clone-roster entries anywhere in the table (REQ-0010-17/97/99, OD-57/76)", () => {
+  const text = JSON.stringify(capsuleTable());
+  assert.ok(!/clone|roster|genome|orbit|implant/i.test(text.replace(/"(note|feasibility_note)":"[^"]*"/g, '""')), "the table mentions no clones / roster / orbit / implants");
+  assert.deepStrictEqual(Object.keys(capsuleTable()).filter((k) => ["levels", "protection"].includes(k)), ["levels", "protection"], "two axes: the capsule level and the defence level");
+});
+
+test("capsule_levels: the raid block — the owner's decided numbers verbatim + the bot's PROPOSED ones, each named as such (OD-24/66/88/107, REQ-0010-62/81/112)", () => {
+  const { raid } = capsuleTable();
+  assert.deepStrictEqual(Object.keys(raid).sort(), [...CAPSULE_RAID_KEYS].sort(), "no key outside the schema: the cadence window is OD-86 verbatim (3..4 days); a min-gap between raids is NOT here (no decision sets one)");
+  for (const [k, v] of Object.entries(CAPSULE_RAID_DECIDED)) assert.strictEqual(raid[k], v, `${k} is the owner's number (${v})`);
+  assert.deepStrictEqual([...raid.decided].sort(), Object.keys(CAPSULE_RAID_DECIDED).sort(), "raid.decided names exactly the owner-decided numbers");
+  assert.deepStrictEqual([...raid.proposed].sort(), [...CAPSULE_RAID_PROPOSED].sort(), "raid.proposed names exactly the agent-proposed numbers (the owner approves them at merge)");
+  assert.ok(["floor", "ceil", "round"].includes(raid.take_round), "the rounding rule is one the code implements");
+  assert.ok(Number.isInteger(raid.queue_max) && raid.queue_max >= 1, "the queue has room for at least one waiting raid");
+  assert.ok(raid.roll_spread > 0 && raid.roll_spread < 1, "the roll spread is strictly inside (0,1): a spread of 0 turns the roll into a coin that never lands");
+  assert.ok(raid.wealth_ref_points > 0, "the reference wealth is positive");
+  const rows = Object.entries(raid.by_level);
+  assert.deepStrictEqual(rows.map(([k]) => k), ["1", "2", "3", "4", "5"], "one raider row per capsule level 1..5 (level 0 has no raid consequence)");
+  let prev = null;
+  for (const [k, row] of rows) {
+    assert.deepStrictEqual(Object.keys(row).sort(), ["count", "day_equiv"], `level ${k}: exactly {count, day_equiv}`);
+    assert.ok(Number.isInteger(row.count) && row.count >= 1 && row.count <= raid.count_max, `level ${k}: count within 1..count_max`);
+    assert.ok(Number.isInteger(row.day_equiv) && row.day_equiv >= 1, `level ${k}: day_equiv is a positive integer`);
+    const power = RAIDER_POWER(row.count, row.day_equiv);
+    if (prev) {
+      assert.ok(row.count >= prev.row.count && row.day_equiv >= prev.row.day_equiv, `level ${k}: the raid never gets smaller (REQ-0010-112)`);
+      assert.ok(Math.abs(power / prev.power - 2) < 0.05, `level ${k}: raid power ~x2 per level (OD-65), got x${(power / prev.power).toFixed(3)}`);
+    }
+    prev = { row, power };
   }
 });

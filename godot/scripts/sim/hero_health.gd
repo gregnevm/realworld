@@ -60,7 +60,10 @@ static func update(s, dt: float) -> void:
 	# 1) empty needs become located conditions (starvation kills; sleeplessness collapses)
 	Needs.update_deprivation(tracker, float(p.hunger) / 100.0, float(p.rest) / 100.0, dday)
 	# 2) the region's real climate bites: felt °C = tile temp (indoor buffering + emitters) + gear
-	Gear.update_comfort(tracker, s.hero_temp_c(), s.hero_insulation_c(), dday, EXPOSURE_PACE)
+	if s.get("use_main_capsule") == true:   # spec 0010 (REQ-0010-107): у зоні капсули відігрів/комфорт швидший (лише ВІДНОВЛЕННЯ; наростання — EXPOSURE_PACE — не чіпаємо)
+		Gear.update_comfort(tracker, s.hero_temp_c(), s.hero_insulation_c(), dday, EXPOSURE_PACE, s._capsule_recovery())
+	else:
+		Gear.update_comfort(tracker, s.hero_temp_c(), s.hero_insulation_c(), dday, EXPOSURE_PACE)
 	# 3) injuries heal/bleed/fester, blood moves, downed recomputes
 	tracker.tick({"dday": dday})
 	Gear.resolve_to_scar(tracker)
@@ -357,12 +360,16 @@ static func _cap_list(names: Array) -> Array:
 		out.append(StringName(str(c)))
 	return out
 
+const MSG_COLD_CAPSULE := "❄ Тут холодно (%.0f°C): збудуй укриття біля капсули — стіни з дверима тримають тепло в приміщенні."   # ON (spec 0010): без «постав багаття»
+
 # Spawn-time onboarding hint: if the felt °C is already outside the comfort band, say so before the
 # first hediff does (a Kyiv game starts on day 1 == deep winter; the player must learn "fire first").
 static func spawn_hint(s) -> void:
 	var felt: float = s.hero_felt_c()
 	if felt < Gear.COMFORT_MIN_C:
-		if s.get("use_inventory") == true:   # spec 0009: the campfire is an item in the hotbar, not a build-bar key
+		if s.get("use_main_capsule") == true:   # spec 0010 REQ-0010-40: капсула — домівка, «багаття першим кроком» не нав'язуємо
+			s._log(MSG_COLD_CAPSULE % felt, "warn")
+		elif s.get("use_inventory") == true:   # spec 0009: the campfire is an item in the hotbar, not a build-bar key
 			s._log("❄ Тут холодно (%.0f°C): постав багаття з хотбару (слот 1), потім стіни з дверима навколо — у приміщенні тепло тримається." % felt, "warn")   # gdlint: ignore=max-line-length
 		else:
 			s._log("❄ Тут холодно (%.0f°C): розпали багаття (9), а тоді обнеси клітинку стінами (1) з дверима (2) — у приміщенні тепло тримається." % felt, "warn")   # gdlint: ignore=max-line-length

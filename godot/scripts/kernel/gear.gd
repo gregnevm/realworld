@@ -270,9 +270,12 @@ class Hediff_Heatstroke extends Health.Hediff:
 #                                      A host whose game-day is short (the live sim's day is 150 s) slows
 #                                      the exposure clock here; recovery stays at its kernel speed, so
 #                                      warming up remains the fast half of the asymmetry.
+#   recover_scale : float              host multiplier of the RECOVERY only (default 1.0 = the kernel curve; exact
+#                                      no-op at 1.0): the capsule's need-recovery buff (spec 0010 REQ-0010-107)
+#                                      warms the pawn up faster inside its zone and never touches the onset.
 # Felt temp = ambient + insulation warmth (warmth only helps against cold; it also nudges felt temp up
 # toward heatstroke when already hot, exactly like wearing a parka in summer — the model is symmetric).
-static func update_comfort(tracker, temp_c: float, insulation: float, dday: float, gain_scale: float = 1.0) -> void:
+static func update_comfort(tracker, temp_c: float, insulation: float, dday: float, gain_scale: float = 1.0, recover_scale: float = 1.0) -> void:
 	if tracker == null:
 		return
 	var felt: float = temp_c + insulation
@@ -287,7 +290,7 @@ static func update_comfort(tracker, temp_c: float, insulation: float, dday: floa
 			tracker.hediffs.append(hypo)
 		hypo.severity = clampf(hypo.severity + COMFORT_GAIN_PER_C_DAY * gain_scale * past * dday, 0.0, 1.0)
 		if heat != null:
-			heat.severity = maxf(0.0, heat.severity - COMFORT_RECOVER_PER_DAY * dday)
+			heat.severity = maxf(0.0, heat.severity - COMFORT_RECOVER_PER_DAY * recover_scale * dday)
 	elif felt > COMFORT_MAX_C:
 		var past2: float = felt - COMFORT_MAX_C
 		if heat == null:
@@ -295,13 +298,13 @@ static func update_comfort(tracker, temp_c: float, insulation: float, dday: floa
 			tracker.hediffs.append(heat)
 		heat.severity = clampf(heat.severity + COMFORT_GAIN_PER_C_DAY * gain_scale * past2 * dday, 0.0, 1.0)
 		if hypo != null:
-			hypo.severity = maxf(0.0, hypo.severity - COMFORT_RECOVER_PER_DAY * dday)
+			hypo.severity = maxf(0.0, hypo.severity - COMFORT_RECOVER_PER_DAY * recover_scale * dday)
 	else:
 		# Inside the band: both comfort hediffs recede.
 		if hypo != null:
-			hypo.severity = maxf(0.0, hypo.severity - COMFORT_RECOVER_PER_DAY * dday)
+			hypo.severity = maxf(0.0, hypo.severity - COMFORT_RECOVER_PER_DAY * recover_scale * dday)
 		if heat != null:
-			heat.severity = maxf(0.0, heat.severity - COMFORT_RECOVER_PER_DAY * dday)
+			heat.severity = maxf(0.0, heat.severity - COMFORT_RECOVER_PER_DAY * recover_scale * dday)
 	# Sweep any comfort hediff that has fully receded (mirrors HealthTracker.tick's filter).
 	tracker.hediffs = tracker.hediffs.filter(func(h): return not (h is Hediff_Hypothermia or h is Hediff_Heatstroke) or not h.gone())
 

@@ -20,11 +20,21 @@ replacing it, and it does **not** touch `data.gd` — the Phase-0 playable slice
 table; this catalogue is the forward-engine superset.
 
 Besides the five def sections the file carries one non-def top-level key, **`capsule_levels`** (spec 0010 — the Основна
-капсула level table: `levels[0..5] = {level, cost, radius, core_hp, buffs}` plus a `raid` block). It is data for the
+капсула table, version 2: TWO independent axes — `levels[0..5] = {level, cost, buffs}` (capsule level: price + the four OD-73 buffs
+in every record) and `protection = {factor, levels[0..5] = {level, cost, core_hp}}` (defence level) — plus ONE static
+`zone = {radius_m, cell_m, radius_cells}`, a `raid` block of owner-decided numbers only and a `feasibility_note`). It is data for the
 `sim/capsule.gd` module, not content defs: it does not enter the id-uniqueness / reachability sweeps, its price ids must be
-reachable ones that `data_bridge` maps 1:1. Every number in it is `status:"proposed"` (economy bot
-`godot/tests/run_capsule_balance.gd`) until the owner approves it at merge — **except** `raid.immunity_ms` and
-`raid.take_percent`, which are owner decisions (OD-24/58, listed in `raid.decided`), not agent proposals.
+reachable ones that `data_bridge` maps 1:1. The owner decided the coefficients (+10% buff per level and +50% at level 5 — OD-98;
+x2 price per level — OD-65/93; defence x2 per level and x16 at level 5 — OD-103; ~50 m zone radius — OD-99; `raid.immunity_ms` and
+`raid.take_percent` — OD-24/107, listed in `raid.decided`); every other number (the concrete resources of a price, the defence price,
+the radius in cells, the core-HP base) is `status:"proposed"` — the economy bot `godot/tests/run_capsule_balance.gd` derives it, the
+owner approves at merge. **Prices (OD-109, 2026-11-07):** the owner's literal formula (level 1 = 90 gather-min, x2 per level) does not fit a 56x56
+map, so the owner decided "prices down, x2 per level stays". The bot solves ONE uniform scale `g = 0.0018` (proposed) by an explicit criterion on the
+rounded integer prices: for each of the 5 presets and each finite resource the full ladder 1..5 of BOTH axes uses <= 60% of the region's nodes (C1),
+level 1 fits the 24-slot pack (C2), total units x2 per level +-15% (C3), level 1 is basic raw and the rarest ingredient never gets commoner (C4).
+Result: level 1 = 4 wood + 1 stone, level 5 = 24 wood + 10 stone + 16 planks + 46 scrap (the defence axis has the same prices). `feasibility_note`
+says honestly that this is feasible AFTER OD-109 but that level 1 is ~0.16 gather-min, NOT the 60..120 of OD-93 (both cannot hold on this map;
+more supply is OD-110, open). Do not edit the prices by hand: change the bot, re-run, re-sync.
 
 Design canon: **RimWorld** for the survival/needs/quality/medical flavour, **Factorio** for the
 multi-step automation chains (ore → bar → intermediate → advanced) where RimWorld is thin on

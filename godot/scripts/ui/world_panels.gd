@@ -10,6 +10,9 @@ const PanelBase = preload("res://scripts/ui/panel.gd")
 const Widgets = preload("res://scripts/ui/widgets.gd")
 const Tokens = preload("res://scripts/ui/tokens.gd")
 const LatLon = preload("res://scripts/ui/latlon.gd")
+const UITheme = preload("res://scripts/ui/theme.gd")
+const Fmt = preload("res://scripts/ui/format.gd")
+const CapsuleTexts = preload("res://scripts/ui/capsule_texts.gd")
 
 # ---- LogisticsPanel (RIGHT dock, M) — trade hubs + convoys in flight, reading vm.logistics ----
 class LogisticsPanel extends PanelBase.Base:
@@ -109,6 +112,29 @@ class CapsulePanel extends PanelBase.Base:
 	var _invite_labels: Array = []
 	var _invite_buttons: Array = []
 	var _invite_ids: Array = []     # per-slot invite id refreshed in bind; read by the ONE-time handler
+	# --- Основна капсула (spec 0010, режим ON): один пул вузлів, збудований РАЗОМ з легасі-рядками (R2), показується лише при vm.capsule.main ---
+	const STORE_MAX := 6
+	var _coords: HBoxContainer
+	var _inv_head: Widgets.H2Header
+	var _m_nodes: Array = []        # усі вузли ON-режиму (bind перемикає їх разом із легасі-вузлами — одне місце правди про режим)
+	var _m_levels: Label
+	var _m_legend: Label
+	var _m_immune: Label
+	var _m_raid: Label
+	var _m_up: Button
+	var _m_up_cost: Label
+	var _m_up_why: Label
+	var _m_more: Button
+	var _m_more_box: VBoxContainer
+	var _m_more_open := false       # view-стан розкриття (D1): за замовчуванням згорнуто
+	var _m_prot_what: Label
+	var _m_prot: Button
+	var _m_prot_cost: Label
+	var _m_prot_why: Label
+	var _m_stash: Button
+	var _m_store_rows: Array = []
+	var _m_store_labels: Array = []
+	var _m_store_res: Array = []    # per-slot res id refreshed in bind; read by the ONE-time handler
 	func _init() -> void:
 		panel_id = &"capsule_bay"; dock = PanelBase.DOCK_RIGHT; priority = 70; hotkey = KEY_V; default_open = false
 		menu_label = "🚀 Капсула"; compact_open = 0
@@ -122,7 +148,9 @@ class CapsulePanel extends PanelBase.Base:
 		_status = Label.new()
 		_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		vb.add_child(_status)
+		_build_main(vb)
 		var coords := HBoxContainer.new()
+		_coords = coords
 		coords.add_theme_constant_override("separation", 6)
 		vb.add_child(coords)
 		_lat_edit = LineEdit.new()
@@ -138,6 +166,7 @@ class CapsulePanel extends PanelBase.Base:
 		_launch.pressed.connect(_on_launch)
 		vb.add_child(_launch)
 		var h2 := Widgets.H2Header.new()
+		_inv_head = h2
 		vb.add_child(h2); h2.set_header("Інвайти", "")
 		for i in INVITE_MAX:
 			var row := HBoxContainer.new()
@@ -153,6 +182,125 @@ class CapsulePanel extends PanelBase.Base:
 			row.add_child(btn)
 			_invite_rows.append(row); _invite_labels.append(lbl); _invite_buttons.append(btn)
 			_invite_ids.append(null)
+	# ON-режим: ОДНА головна залита дія «Прокачати»; «Захист» і «Склад» — під розкриттям «Ще» (REQ-0010-86, D1). Жодних нових H2-заголовків.
+	func _build_main(vb: VBoxContainer) -> void:
+		_m_levels = _m_label(vb, Tokens.INK)
+		_m_immune = _m_label(vb, Tokens.TEAL)
+		_m_raid = _m_label(vb, Tokens.WARN)
+		_m_up_why = _m_label(vb, Tokens.WARN)   # причина відмови — НАД кнопкою: нижче її перекриває молоток телефону (T-Ніколая: «чому неактивна?»)
+		_m_up = _m_button(vb, 44)
+		_m_up.theme_type_variation = UITheme.V_PRIMARY   # єдина залита кнопка панелі
+		_m_up.pressed.connect(func() -> void: emit_intent(&"capsule_upgrade", {}))
+		_m_up_cost = _m_label(vb, Tokens.MUT)
+		_m_more = _m_button(vb, 36)
+		_m_more.flat = true
+		_m_more.alignment = HORIZONTAL_ALIGNMENT_LEFT   # the phone's action circle sits over the dock's bottom-right: keep the label clear of it
+		_m_more.pressed.connect(_on_more)
+		_m_more_box = VBoxContainer.new()
+		_m_more_box.add_theme_constant_override("separation", 4)
+		_m_more_box.visible = false
+		vb.add_child(_m_more_box)
+		_m_nodes.append(_m_more_box)
+		_m_legend = _m_label(_m_more_box, Tokens.MUT)   # пояснення знаків — під «Ще»: на телефоні головна дія й ціна мусять вміститись над молотком
+		_m_legend.text = CapsuleTexts.t("legend_marks")
+		_m_prot_what = _m_label(_m_more_box, Tokens.MUT)
+		_m_prot_what.text = CapsuleTexts.t("protect_what")
+		_m_prot = _m_button(_m_more_box, 40)
+		_m_prot.pressed.connect(func() -> void: emit_intent(&"capsule_protect", {}))
+		_m_prot_cost = _m_label(_m_more_box, Tokens.MUT)
+		_m_prot_why = _m_label(_m_more_box, Tokens.WARN)
+		_m_stash = _m_button(_m_more_box, 40)
+		_m_stash.text = "⇣ Скласти рюкзак на склад"
+		_m_stash.pressed.connect(func() -> void: emit_intent(&"stash_all", {}))
+		for i in STORE_MAX:
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 6)
+			row.visible = false
+			_m_more_box.add_child(row)
+			var lbl := Label.new()
+			lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			lbl.add_theme_color_override("font_color", Tokens.MUT)
+			row.add_child(lbl)
+			var btn := Button.new()
+			btn.text = "Взяти 10"
+			btn.focus_mode = Control.FOCUS_NONE
+			btn.custom_minimum_size = Vector2(96, 34)
+			btn.pressed.connect(_on_store.bind(i))
+			row.add_child(btn)
+			_m_store_rows.append(row); _m_store_labels.append(lbl); _m_store_res.append("")
+	func _m_label(parent: Node, col: Color) -> Label:
+		var l := Label.new()
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.add_theme_color_override("font_color", col)
+		l.visible = false
+		parent.add_child(l)
+		_m_nodes.append(l)
+		return l
+	func _m_button(parent: Node, h: int) -> Button:
+		var b := Button.new()
+		b.focus_mode = Control.FOCUS_NONE
+		b.custom_minimum_size = Vector2(0, h)
+		b.visible = false
+		parent.add_child(b)
+		_m_nodes.append(b)
+		return b
+	func _on_more() -> void:
+		_m_more_open = not _m_more_open
+		_m_more_box.visible = _m_more_open
+		_m_more.text = ("▾ " if _m_more_open else "▸ ") + CapsuleTexts.t("more_label")
+	func _on_store(slot: int) -> void:
+		if String(_m_store_res[slot]) != "":
+			emit_intent(&"take_storage", {"res": String(_m_store_res[slot]), "n": 10})
+	func _bind_main(main: Dictionary) -> void:
+		var acts: Array = main.get("actions", [])
+		_m_levels.visible = true
+		_m_legend.visible = true
+		_m_prot_what.visible = true
+		_m_levels.text = "◎ Рівень %d/%d (бафи%s) · ▣ Захист %d/%d (ядро%s)" % [int(main.level), int(main.max), CapsuleTexts.t("level_max") if int(main.level) >= int(main.max) else "",
+			int(main.protection), int(main.max_protection), CapsuleTexts.t("level_max") if int(main.protection) >= int(main.max_protection) else ""]
+		var left: int = int(main.get("immune_left_ms", 0))
+		_m_immune.visible = left > 0
+		_m_immune.text = CapsuleTexts.t("immune_panel") % Fmt.left_ms(left)   # «пауза, а не бонус» — на знаку щита й в інспекторі; тут кожен рядок витісняє причину відмови під молоток
+		var rs: StringName = StringName(main.get("raid_state", &"none"))
+		_m_raid.visible = rs == &"warning" or rs == &"contact"
+		_m_raid.text = "⚠ Рейд на підході — підготуй турелі й стіни біля ядра" if rs == &"warning" else "⚔ Рейд: бій за ядро капсули"
+		_axis_rows(acts.has(&"upgrade"), main.get("upgrade", {}), _m_up, _m_up_cost, _m_up_why, "⬆ Прокачати до %d")
+		_axis_rows(acts.has(&"protection"), main.get("protect", {}), _m_prot, _m_prot_cost, _m_prot_why, "▣ Прокачати захист до %d")
+		_m_more.visible = true
+		_m_more_box.visible = _m_more_open
+		_m_more.text = ("▾ " if _m_more_open else "▸ ") + CapsuleTexts.t("more_label")
+		_m_stash.visible = acts.has(&"storage")
+		var st: Array = main.get("storage", []) if acts.has(&"storage") else []
+		for i in STORE_MAX:
+			if i < st.size():
+				_m_store_rows[i].visible = true
+				_m_store_labels[i].text = "%s  %d" % [String(st[i].label), int(st[i].n)]
+				_m_store_res[i] = String(st[i].res)
+			else:
+				_m_store_rows[i].visible = false   # hidden POOL SLOT (R2)
+				_m_store_res[i] = ""
+	# «Прокачати»/«Захист»: кнопка лише коли дія доступна за станом (жодних недоступних дій); без ресурсів — приглушена, АЛЕ тапається:
+	# відмова — та сама перша причина словами (REQ-0010-38), і в панелі, і над героєм.
+	func _axis_rows(offered: bool, ax: Dictionary, btn: Button, cost: Label, why: Label, fmt: String) -> void:
+		btn.visible = offered
+		cost.visible = offered
+		why.visible = offered and not bool(ax.get("can", false))
+		if not offered:
+			return
+		var can: bool = bool(ax.get("can", false))
+		btn.text = fmt % int(ax.get("next", 0))
+		btn.modulate = Tokens.WHITE if can else Tokens.DIMMED
+		cost.visible = can   # one line at a time (phone height): the price while affordable, the first missing resource when not
+		cost.text = "Ціна: " + String(ax.get("cost", "")) + " · " + CapsuleTexts.t("price_grows")
+		why.text = String(ax.get("why", ""))
+	func _set_legacy(on: bool) -> void:
+		_status.visible = on
+		_coords.visible = on
+		_launch.visible = on
+		_inv_head.visible = on
+		if not on:
+			for i in INVITE_MAX:
+				_invite_rows[i].visible = false
 	func _on_launch() -> void:
 		# Parsing lives HERE (the click), never in bind().
 		var parsed: Dictionary = LatLon.parse(_lat_edit.text, _lon_edit.text)
@@ -170,6 +318,14 @@ class CapsulePanel extends PanelBase.Base:
 		if not (vm is Dictionary) or not vm.has("capsule"):
 			return
 		var cap: Dictionary = vm.capsule
+		if cap.has("main"):   # ON: заряди/радіус/запуск/інвайти не показуються (REQ-0010-41), лишається панель капсули
+			_set_legacy(false)
+			_bind_main(cap.main)
+			return
+		if not _status.visible:   # легасі-вузли сховано == панель була в ON; перемикання ON -> OFF (на практиці прапор замкнений; свідомо чесно)
+			_set_legacy(true)
+			for n in _m_nodes:
+				n.visible = false
 		var charges: int = int(cap.get("charges", 0))
 		var drained := charges <= 0
 		_status_base = "Зарядів: %d · радіус %d км" % [charges, int(cap.get("radius_km", 0))]
