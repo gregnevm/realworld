@@ -55,6 +55,7 @@ const DEF := {
 	"name": "Основна капсула", "hp": 1.0, "blocks": true, "cost": {},
 	"capacity": GameData.BUILDINGS["storage"]["capacity"],
 	"storage": true, "indestructible": true, "landmark": true, "glyph": "◎",
+	"panel": "capsule_bay",   # тап по капсулі відкриває цю панель (view-verb open_panel; id панелі — дані, не ім'я механіки в контролері)
 }
 
 # ---------------- config (REQ-0010-03 / 59) ----------------
@@ -595,7 +596,7 @@ static func research_rate(s) -> float:
 # ЗАХИСТУ (опір ядра; `protection_invested`). Осі НЕЗАЛЕЖНІ (REQ-0010-17/99, Q-5 A): прокачка однієї не змінює іншу й не вимагає її.
 # Вартість береться СПЕРШУ з рюкзака, потім зі складу — лише поки герой у зоні (склад «капсули в її радіусі», REQ-0010-13/76/100);
 # АТОМАРНО: спершу план по всіх ресурсах, жодного списання при будь-якій нестачі. Повертає value-data (текст — у роутері, R10; verbs
-# capsule_upgrade/capsule_protection ще не заведено — це W4a):
+# capsule_upgrade/capsule_protect заведено в ui/input_verbs.gd (W4a), текст відмови — там же):
 #   {ok:true, axis, level|protection, paid:{res:n}}                              — рівень піднято, журнал дописано
 #   {ok:false, reason:&"no_capsule"|&"dead"|&"duplicate"|&"max"|&"cost", ...}    — світ не змінено
 #   для &"cost": missing:{res:n} (ключі за алфавітом — ПЕРША причина = перший ключ), far:bool (герой поза зоною, а склад покрив би
@@ -612,24 +613,17 @@ static func upgrade(s, cmd_id: int = -1) -> Dictionary:
 static func upgrade_protection(s, cmd_id: int = -1) -> Dictionary:
 	return _upgrade_axis(s, &"protection", cmd_id)
 
-static func _upgrade_axis(s, axis: StringName, cmd_id: int) -> Dictionary:
-	if s.get("use_main_capsule") != true or (s.main_capsule as Dictionary).is_empty():
-		return {"ok": false, "reason": &"no_capsule", "axis": axis}
-	if s.dead:
-		return {"ok": false, "reason": &"dead", "axis": axis}
-	if cmd_id >= 0:
-		var seen: Dictionary = s.capsule_cmds_tick
-		if seen.has(cmd_id):
-			return {"ok": false, "reason": &"duplicate", "axis": axis}
-		seen[cmd_id] = true
+# ЧИСТЕ читання (нічого не списує, не чіпає дедуп): що коштувала б наступна прокачка осі зараз — ОДНЕ джерело плану для upgrade/upgrade_protection
+# і для панелі (W4a: рядок «бракує …» у слайсі HUD не дублює логіку джерел). {axis, level, max, next, cost, plan:{res:{pack,stock}}, missing:{res:n},
+# far, can}; на `max` решта полів порожня. Склад береться лише коли герой у зоні (REQ-0010-13/76).
+static func quote(s, axis: StringName) -> Dictionary:
 	var prot: bool = axis == &"protection"
-	var field: String = "protection" if prot else "level"            # ключ рівня і в записі капсули, і в результаті
-	var book_key: String = "protection_invested" if prot else "invested"
-	var level: int = int(s.main_capsule.get(field, 0))
-	if level >= (max_protection(s) if prot else max_level(s)):
-		return {"ok": false, "reason": &"max", "axis": axis, field: level}
-	var next: int = level + 1
-	var cost: Dictionary = (protection_row(s, next) if prot else row(s, next)).cost
+	var level: int = int((s.main_capsule as Dictionary).get("protection" if prot else "level", 0))
+	var out: Dictionary = {"axis": axis, "level": level, "max": level >= (max_protection(s) if prot else max_level(s)), "next": level + 1,
+		"cost": {}, "plan": {}, "missing": {}, "far": false, "can": false}
+	if bool(out.max):
+		return out
+	var cost: Dictionary = (protection_row(s, level + 1) if prot else row(s, level + 1)).cost
 	var in_reach: bool = in_zone(s, hero_cell(s))
 	var plan: Dictionary = {}
 	var missing: Dictionary = {}
@@ -643,6 +637,35 @@ static func _upgrade_axis(s, axis: StringName, cmd_id: int) -> Dictionary:
 			missing[res] = need - from_pack - from_stock
 			far = far or (not in_reach and in_stock > 0)
 		plan[res] = {"pack": from_pack, "stock": from_stock}
+	out.cost = cost
+	out.plan = plan
+	out.missing = missing
+	out.far = far
+	out.can = missing.is_empty()
+	return out
+
+static func _upgrade_axis(s, axis: StringName, cmd_id: int) -> Dictionary:
+	if s.get("use_main_capsule") != true or (s.main_capsule as Dictionary).is_empty():
+		return {"ok": false, "reason": &"no_capsule", "axis": axis}
+	if s.dead:
+		return {"ok": false, "reason": &"dead", "axis": axis}
+	if cmd_id >= 0:
+		var seen: Dictionary = s.capsule_cmds_tick
+		if seen.has(cmd_id):
+			return {"ok": false, "reason": &"duplicate", "axis": axis}
+		seen[cmd_id] = true
+	var prot: bool = axis == &"protection"
+	var field: String = "protection" if prot else "level"            # ключ рівня і в записі капсули, і в результаті
+	var book_key: String = "protection_invested" if prot else "invested"
+	var q: Dictionary = quote(s, axis)
+	var level: int = int(q.level)
+	if bool(q.max):
+		return {"ok": false, "reason": &"max", "axis": axis, field: level}
+	var next: int = int(q.next)
+	var cost: Dictionary = q.cost
+	var plan: Dictionary = q.plan
+	var missing: Dictionary = q.missing
+	var far: bool = bool(q.far)
 	if not missing.is_empty():
 		return {"ok": false, "reason": &"cost", "axis": axis, "missing": missing, "far": far, field: level, "next": next}
 	for res in plan:
@@ -1181,7 +1204,7 @@ static func force_raid(s, debug_build: bool) -> Dictionary:
 	if _active(s):
 		return {"ok": false, "reason": &"active"}
 	var now: int = maxi(0, int(s.now_ms))
-	_plan(s, {"faction": "тестові мародери"}, 0.0, now)
+	_plan(s, {"faction": "мародери"}, 0.0, now)
 	s.capsule_raid.contact_at = now + int(raid_data(s).get("warn_min_ms", 0))
 	return {"ok": true, "raid_id": int(s.capsule_raid.id), "contact_at": int(s.capsule_raid.contact_at)}
 

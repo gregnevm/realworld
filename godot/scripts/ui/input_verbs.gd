@@ -5,6 +5,21 @@
 extends RefCounted
 
 const InventoryMod = preload("res://scripts/sim/inventory.gd")
+const MainCapsule = preload("res://scripts/sim/capsule.gd")
+const Fmt = preload("res://scripts/ui/format.gd")
+
+# Основна капсула (spec 0010, REQ-0010-36/38): sim повертає value-data, ТЕКСТ — тут (R10: ніякої української в sim). Перша причина
+# відмови словами; `duplicate` мовчить (повтор команди в тому ж тіку — не помилка гравця).
+static func capsule_result_text(r: Dictionary) -> String:
+	var prot: bool = StringName(r.get("axis", &"capsule")) == &"protection"
+	if bool(r.get("ok", false)):
+		return ("▣ Захист капсули: рівень %d" % int(r.get("protection", 0))) if prot else ("◎ Капсула: рівень %d" % int(r.get("level", 0)))
+	match StringName(r.get("reason", &"")):
+		&"cost": return Fmt.capsule_shortfall(r.get("missing", {}), bool(r.get("far", false)))
+		&"max": return "Вищого рівня нема."
+		&"no_capsule": return "Капсули нема."
+		&"dead": return "Зараз недоступно."
+	return ""
 
 # Install the standard grammar. `session` has `.sim` and `.travel_to(lat,lon,name)`.
 # Mutators that return {ok, msg} get their failure flashed (main.gd parity): the router is the ONE
@@ -70,5 +85,13 @@ static func install(ic) -> void:
 		elif r.has("msg"): s.sim._flash(String(r.msg))
 	ic.bind(&"accept_invite", accept)
 	ic.bind(&"take_invite", accept)
+	# Основна капсула: ДВІ осі — два verb-и (панель називає їх аліасами: R9 забороняє sim-імена в панелях). Захист викликає модуль напряму
+	# (Sim-делегата нема — ліміт публічних методів); перехід у регіон/склад — наявні stash_all/take_storage.
+	ic.bind(&"capsule_upgrade", func(s, _a):
+		var msg: String = capsule_result_text(s.sim.upgrade_capsule())
+		if msg != "": s.sim._flash(msg))
+	ic.bind(&"capsule_protect", func(s, _a):
+		var msg: String = capsule_result_text(MainCapsule.upgrade_protection(s.sim))
+		if msg != "": s.sim._flash(msg))
 	# permadeath loop-closer — the DeathScreen emits this; region-aware respawn lives in the session
 	ic.bind(&"respawn", func(s, _a): s.respawn())

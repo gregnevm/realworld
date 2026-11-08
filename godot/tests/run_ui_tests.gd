@@ -39,6 +39,14 @@ const HudRootScript = preload("res://scripts/ui/hud_root.gd")
 const LifecycleScript = preload("res://scripts/ui/lifecycle.gd")
 const InvPanels = preload("res://scripts/ui/inventory_panels.gd")
 const SessionScript = preload("res://scripts/session.gd")
+const CapsuleMod = preload("res://scripts/sim/capsule.gd")
+const InventoryMod = preload("res://scripts/sim/inventory.gd")
+const InputVerbsMod = preload("res://scripts/ui/input_verbs.gd")
+const UITheme = preload("res://scripts/ui/theme.gd")
+const CapsuleTexts = preload("res://scripts/ui/capsule_texts.gd")
+const HeroHealthMod = preload("res://scripts/sim/hero_health.gd")
+const WorldPanels = preload("res://scripts/ui/world_panels.gd")
+const PersistenceMod = preload("res://scripts/persistence.gd")
 
 
 func _init() -> void:
@@ -84,6 +92,15 @@ func _init() -> void:
 	_t_one_truth_overlays()
 	_t_touch_grammar()
 	_t_touch_frame()
+	await _t_capsule_ui()
+	_t_capsule_budget()
+	await _t_capsule_adv()
+	_t_capsule_adv_pure()
+	await _t_capsule_texts()
+	_t_capsule_g3()
+	_t_capsule_g3_qa()
+	_t_capsule_no_goal_gates()
+	await _t_capsule_w4b_adv()
 	_t_rule_tripwires()
 	# release the process-shared forward-engine model: its placed Things carry comp back-references
 	# (RefCounted cycles) that would otherwise show up as ObjectDB leaks at exit
@@ -1108,7 +1125,1072 @@ func _t_touch_frame() -> void:
 	sess.sim.dispose_farm()
 	sess.sim.dispose_power()
 
+# ---------------- Основна капсула, UI (spec 0010 W4a: REQ-0010-16/36/37/38/41/86/87/90) ----------------
+const CAPSULE_NOW_MS := 1700000000000
+
+func _capsule_session(on: bool) -> Variant:
+	var s: Variant = SessionScript.new()
+	s.autosave = false
+	s.use_inventory = true
+	s.use_catalog = on
+	s.use_main_capsule = on
+	ok(bool(s.start(50.4501, 30.5234, "Київ", CAPSULE_NOW_MS)), "capsule ui: %s session starts" % ("ON" if on else "OFF"))
+	return s
+
+func _cap_snap(s: Variant, ctx: Dictionary = {}) -> Dictionary:
+	var c: Dictionary = {"day": int(s.sim.time.day)}
+	c.merge(ctx, true)
+	return HudModel.snapshot(s, {"buildings": [], "stock": s.sim.stock, "items": []}, c, Balance.Balance.new())
+
+# Перша нестача за алфавітом, яку квота обіцяє, і віддати героєві рівно ціну осі (щоб натиснути «Прокачати» по-справжньому).
+func _grant_cost(s: Variant, axis: StringName) -> void:
+	var q: Dictionary = CapsuleMod.quote(s.sim, axis)
+	for res in q.cost:
+		InventoryMod.add(s.sim, String(res), int(q.cost[res]))
+
+func _t_capsule_ui() -> void:
+	var s: Variant = _capsule_session(true)
+	var sim: Variant = s.sim
+	var snap: Dictionary = _cap_snap(s)
+	var main: Dictionary = snap.capsule.get("main", {})
+	ok(not main.is_empty() and bool(main.active) and int(main.level) == 0 and int(main.protection) == 0, "REQ-0010-41: ON snapshot carries capsule.main (level 0, protection 0)")
+	ok(int(main.max) == CapsuleMod.max_level(sim) and int(main.max_protection) == CapsuleMod.max_protection(sim), "REQ-0010-86: maxima come from the data tables, not from the view")
+	# R8: value data only
+	ok(not _holds_object(main), "R8: capsule.main is value data (no live refs)")
+	# OFF: no main key at all — the OFF panel path is byte-for-byte what it was
+	var off: Variant = _capsule_session(false)
+	ok(not _cap_snap(off).capsule.has("main"), "REQ-0010-41: OFF snapshot has no capsule.main (charges/radius/launch rows stay)")
+	# --- the panel ---
+	var panel: Variant = WorldPanels.CapsulePanel.new()
+	get_root().add_child(panel)
+	await process_frame
+	panel.bind(snap)
+	ok(not panel._status.visible and not panel._launch.visible and not panel._coords.visible and not panel._inv_head.visible,
+		"REQ-0010-41: ON panel hides the charge/radius status, coordinate launch and invites")
+	var inv_hidden := true
+	for r in panel._invite_rows:
+		inv_hidden = inv_hidden and not bool(r.visible)
+	ok(inv_hidden, "REQ-0010-41: ON panel hides every invite row")
+	ok(panel._m_levels.visible and "Рівень 0/%d" % int(main.max) in String(panel._m_levels.text) and "Захист 0/%d" % int(main.max_protection) in String(panel._m_levels.text),
+		"panel: both axes are said in words with N/max")
+	ok(panel._m_up.visible and panel._m_up.theme_type_variation == UITheme.V_PRIMARY, "REQ-0010-37/86: «Прокачати» is the ONE filled primary action")
+	ok(not panel._m_prot.visible or not panel._m_more_box.visible, "REQ-0010-86 (D1): «Захист» and «Склад» are folded under «Ще» until opened")
+	var filled_ref: Array = [0]
+	_count_primary(panel, filled_ref)
+	ok(int(filled_ref[0]) == 1, "REQ-0010-37: the panel has exactly one filled button")
+	ok(panel.default_open == false and panel.compact_open == 0, "REQ-0010-37: the capsule panel is not a permanent HUD element")
+	var rb: int = int(panel.rebuild_count)
+	for i in 5:
+		panel.bind(_cap_snap(s))
+	ok(int(panel.rebuild_count) == rb, "R2: ON panel is built once and only rebound")
+	# --- refusal = the first reason in words, ONE truth in panel and flash (REQ-0010-38) ---
+	# the start kit pays level 1 outright — empty the pack and the stock so the refusal path is the one under test
+	sim.stock.clear()
+	for sl in sim.player.inv:
+		sl.id = ""
+		sl.n = 0
+	main = _cap_snap(s).capsule.main
+	panel.bind(_cap_snap(s))
+	var why: String = String(main.upgrade.why)
+	ok(why.begins_with("Бракує: ") and "×" in why and String(panel._m_up_why.text) == why and panel._m_up_why.visible,
+		"REQ-0010-38: the unaffordable upgrade shows its first reason in words (%s)" % why)
+	var router := InputCtl.InputController.new()
+	InputVerbsMod.install(router)
+	var intents: Array = []
+	panel.intent.connect(func(verb: StringName, args: Dictionary) -> void: intents.append(verb))
+	panel._m_up.pressed.emit()
+	ok(intents == [&"capsule_upgrade"], "REQ-0010-38: ONE tap on the filled button emits one intent, no keyboard")
+	for v in intents:
+		router.dispatch(v, {}, s)
+	ok(sim.flash_msg == why and int(sim.main_capsule.level) == 0, "REQ-0010-38: the refusal flashes the same first reason; nothing is spent")
+	# --- success through the router (R9) ---
+	_grant_cost(s, &"capsule")
+	panel.bind(_cap_snap(s))
+	ok(bool(_cap_snap(s).capsule.main.upgrade.can) and not panel._m_up_why.visible, "panel: with the price in the backpack the reason row is gone")
+	panel._m_up.pressed.emit()
+	router.dispatch(intents[intents.size() - 1], {}, s)
+	ok(int(sim.main_capsule.level) == 1 and sim.flash_msg == "◎ Капсула: рівень 1", "REQ-0010-36: capsule_upgrade through the router raises the level (%s)" % sim.flash_msg)
+	var m1: Dictionary = _cap_snap(s).capsule.main
+	panel.bind(_cap_snap(s))
+	ok(int(m1.level) == 1 and "Рівень 1/" in String(panel._m_levels.text), "REQ-0010-87: the level shown follows the sim (1)")
+	# protection axis: a separate verb, a separate row
+	_grant_cost(s, &"protection")
+	panel._on_more()
+	panel.bind(_cap_snap(s))
+	ok(panel._m_more_box.visible and panel._m_prot.visible, "REQ-0010-86: «Ще» reveals «Захист»")
+	panel._m_prot.pressed.emit()
+	router.dispatch(intents[intents.size() - 1], {}, s)
+	ok(intents[intents.size() - 1] == &"capsule_protect" and CapsuleMod.protection_of(sim) == 1 and int(sim.main_capsule.level) == 1,
+		"REQ-0010-36/100: capsule_protect raises ONLY the protection axis")
+	# --- actions by state (REQ-0010-86) ---
+	sim.main_capsule.level = CapsuleMod.max_level(sim)
+	sim.main_capsule.protection = 0
+	var mx: Dictionary = _cap_snap(s).capsule.main
+	panel.bind(_cap_snap(s))
+	ok(not (mx.actions as Array).has(&"upgrade") and (mx.actions as Array).has(&"protection") and not panel._m_up.visible and panel._m_prot.visible,
+		"REQ-0010-86: level 5 — «Прокачати» is gone, «Захист» stays")
+	sim.main_capsule.protection = CapsuleMod.max_protection(sim)
+	panel.bind(_cap_snap(s))
+	ok(not panel._m_prot.visible and (_cap_snap(s).capsule.main.actions as Array).has(&"storage"), "REQ-0010-86: protection 5 — «Захист» is gone, «Склад» stays")
+	ok(not (mx.actions as Array).has(&"safe_zone") and not (mx.actions as Array).has(&"reinforcement"),
+		"REQ-0010-86: no safe-zone/reinforcement action while the 0011 seam is a stub (no unavailable actions shown)")
+	# --- storage rows: take through the router ---
+	sim.main_capsule.level = 0
+	sim.main_capsule.protection = 0
+	InventoryMod.add(sim, "wood", 4)
+	InventoryMod.stash_all(sim)
+	if not panel._m_more_open:
+		panel._on_more()
+	panel.bind(_cap_snap(s))
+	ok(panel._m_stash.visible and panel._m_store_rows[0].visible, "panel: «Склад» lists the stock under «Ще»")
+	var got: Array = []
+	panel.intent.connect(func(verb: StringName, args: Dictionary) -> void: got.append([verb, args]))
+	panel._on_store(0)
+	ok(got.size() == 1 and got[0][0] == &"take_storage" and int(got[0][1].n) == 10, "panel: a storage row emits take_storage (10)")
+	# --- ring (REQ-0010-16): only when selected or warned ---
+	ok(not bool(_cap_snap(s).capsule.main.ring.show), "REQ-0010-16: no ring without a selection or a raid warning")
+	var rs: Dictionary = _cap_snap(s, {"open_panels": ["capsule_bay"]}).capsule.main.ring
+	ok(bool(rs.show) and not bool(rs.alert) and int(rs.radius) == CapsuleMod.zone_radius(sim), "REQ-0010-16: ring shows with the panel open, radius = the static data radius")
+	var tile: Vector2i = CapsuleMod.tile(sim)
+	ok(int(rs.x) == tile.x and int(rs.y) == tile.y, "REQ-0010-16: ring is centred on the capsule cell")
+	sim.capsule_raid.state = "warning"
+	var ra: Dictionary = _cap_snap(s).capsule.main.ring
+	ok(bool(ra.show) and bool(ra.alert), "REQ-0010-16: a raid warning shows the ring (alert) without any selection")
+	sim.capsule_raid.state = "none"
+	var lv_radii: Array = []
+	for lv in [0, 3, 5]:
+		sim.main_capsule.level = lv
+		sim.main_capsule.protection = 5 - lv
+		lv_radii.append(int(_cap_snap(s, {"open_panels": ["capsule_bay"]}).capsule.main.ring.radius))
+	ok(lv_radii[0] == lv_radii[1] and lv_radii[1] == lv_radii[2], "REQ-0010-16: ring radius is the same for every level and protection")
+	# --- tap on the capsule opens its panel; no «Розібрати» (REQ-0010-36/37) ---
+	var cap_cell: int = tile.y * int(sim.n) + tile.x
+	ok(sim.bgrid.has(cap_cell) and String(sim.building_def(CapsuleMod.KIND).get("panel", "")) == "capsule_bay", "the capsule def names its panel (data, not a controller special-case)")
+	var d: Dictionary = WorldInput.WorldInput.decide_click([], {}, int(sim.n), "", tile, tile.x + 0.5, tile.y + 0.5, {}, {cap_cell: "capsule_bay"})
+	ok(StringName(d.verb) == &"open_panel" and String(d.args.id) == "capsule_bay", "REQ-0010-37: one tap on the capsule -> open_panel")
+	d = WorldInput.WorldInput.decide_click([], {}, int(sim.n), "wall", tile, tile.x + 0.5, tile.y + 0.5, {}, {cap_cell: "capsule_bay"})
+	ok(StringName(d.verb) == &"build", "decide_click: an armed build still wins over a landmark")
+	d = WorldInput.WorldInput.decide_click([], {}, int(sim.n), "", tile, tile.x + 0.5, tile.y + 0.5)
+	ok(StringName(d.verb) == &"order_move", "decide_click: the optional landmark arg keeps the old signature's behaviour")
+	var t: Dictionary = AM.target_at(sim, tile, &"gather")
+	var pv: Dictionary = AM.primary(&"gather", t, "", sim)
+	ok(StringName(pv.get("verb", &"")) == &"open_panel", "touch action button on the capsule opens its panel")
+	var verbs: Array = []
+	for o in AM.options(sim, t):
+		verbs.append(StringName(o.verb))
+	ok(verbs.has(&"open_panel") and not verbs.has(&"deconstruct"), "REQ-0010-06/36: the radial offers the panel and no «Розібрати»")
+	# --- inspect ---
+	var ins: Dictionary = _cap_snap(s, {"hover": tile}).inspect
+	ok(bool(ins.shown) and String(ins.title) == "Основна капсула" and not ("розібрати" in String(ins.hint).to_lower()), "inspect: the capsule says what it is and does not offer «розібрати»")
+	var insr: Dictionary = _cap_snap(s, {"hover": tile, "selected_build": WorldInput.WorldInput.REMOVE_TOOL}).inspect
+	ok("не розбирається" in str(insr.lines), "inspect: the remove tool says the capsule cannot be removed")
+	# --- immunity + raid lines are words, not gender-marked ---
+	sim.main_capsule.immune_until = int(sim.now_ms) + 5400000
+	panel.bind(_cap_snap(s))
+	ok(panel._m_immune.visible and "1 год 30 хв" in String(panel._m_immune.text), "panel: the immunity window is said in hours and minutes")
+	# --- greybox hull marks are drawn from the sim levels, six distinguishable states per axis (REQ-0010-87) ---
+	ok(CapsuleMod.max_level(sim) == 5 and CapsuleMod.max_protection(sim) == 5, "REQ-0010-87: six states per axis (0..5)")
+	var wv: Variant = WorldViewScript.new()
+	wv.sim = sim
+	ok(wv.has_method("_draw_capsule_marks"), "REQ-0010-87: world_view draws the greybox level lamps / protection plates / immunity bubble (no art, P4)")
+	wv.free()
+	panel.queue_free()
+	await process_frame
+
+func _count_primary(node: Node, acc: Array) -> void:
+	if node is Button and (node as Button).visible and (node as Button).theme_type_variation == UITheme.V_PRIMARY:
+		acc[0] = int(acc[0]) + 1
+	for c in node.get_children():
+		_count_primary(c, acc)
+
+func _holds_object(v: Variant) -> bool:
+	if v is Object:
+		return true
+	if v is Dictionary:
+		for k in v:
+			if _holds_object(v[k]):
+				return true
+	if v is Array:
+		for e in v:
+			if _holds_object(e):
+				return true
+	return false
+
+# REQ-0010-37/90 (P9): the permanent-element set is the same at OFF and ON and within the design-system budget.
+func _t_capsule_budget() -> void:
+	var preg := PanelReg.PanelRegistry.new()
+	var oreg := OverlayReg.OverlayRegistry.new()
+	Mechanics.register_all(preg, oreg)
+	var perm: Array = []
+	for p in preg.panels:
+		var open_compact: bool = bool(p.default_open) if int(p.compact_open) < 0 else int(p.compact_open) == 1
+		if bool(p.default_open) or open_compact:
+			perm.append(String(p.panel_id))
+	var cap: Variant = preg.get_panel(&"capsule_bay")
+	ok(cap != null and not perm.has("capsule_bay"), "REQ-0010-37: capsule_bay is not in the permanent set")
+	var doc: String = _read(ProjectSettings.globalize_path("res://") + "../docs/ux/design-system.md")
+	var rx := RegEx.new()
+	rx.compile("Ліміт:\\s*(\\d+)")
+	var m: RegExMatch = rx.search(doc)
+	ok(m != null, "REQ-0010-90: design-system.md states the permanent-element budget")
+	var budget: int = int(m.get_string(1)) if m != null else 0
+	ok(perm.size() <= budget and budget == 16, "REQ-0010-37/90: permanent elements (%d) <= the design-system budget (%d)" % [perm.size(), budget])
+	# the overlay for the ring owns no hotkey/menu entry and is not a registry radio overlay (an always-on marker like NightShade)
+	var ring: Variant = Overlays.CapsuleRing.new()
+	ok(not bool(ring.radio) and int(ring.hotkey) == 0 and String(ring.menu_label) == "", "REQ-0010-37: the zone ring is a marker with no hotkey and no menu entry")
+	var named := false
+	for o in oreg.overlays:
+		named = named or String(o.overlay_id) == "capsule_ring"
+	ok(not named, "REQ-0010-37: the zone ring is not a registered overlay (no new toggle)")
+	for p in preg.panels:
+		p.free()   # Control nodes are not refcounted: unparented panels would leak at exit
+
+
+# ---------------- QA-adversary, spec 0010 W4a: атаки від REQ, а не від реалізації ----------------
+func _hash(s: Variant) -> String:
+	return String(PersistenceMod.world_hash(s.sim))
+
+func _cap_router() -> Variant:
+	var router := InputCtl.InputController.new()
+	InputVerbsMod.install(router)
+	return router
+
+# Скинути торбу й склад (старт-кіт оплачує рівень 1 сам).
+func _cap_poor(s: Variant) -> void:
+	s.sim.stock.clear()
+	for sl in s.sim.player.inv:
+		sl.id = ""
+		sl.n = 0
+
+func _cap_far(s: Variant) -> void:
+	var t: Vector2i = CapsuleMod.tile(s.sim)
+	s.sim.player.px = float(mini(int(s.sim.n) - 2, t.x + CapsuleMod.zone_radius(s.sim) + 6)) + 0.5
+	s.sim.player.py = float(t.y) + 0.5
+	ok(not CapsuleMod.in_zone(s.sim, CapsuleMod.hero_cell(s.sim)), "adv setup: the hero stands outside the zone")
+
+func _t_capsule_adv() -> void:
+	var router: Variant = _cap_router()
+	# --- D9 «що бачить гравець == що рахує сим»: slice.can/why проти справжнього результату дії, у 4 станах ---
+	for axis in [&"capsule", &"protection"]:
+		var verb: StringName = &"capsule_upgrade" if axis == &"capsule" else &"capsule_protect"
+		var key: String = "upgrade" if axis == &"capsule" else "protect"
+		for state in ["empty", "pack", "stock_near", "stock_far"]:
+			var s: Variant = _capsule_session(true)
+			_cap_poor(s)
+			if state != "empty":
+				_grant_cost(s, axis)
+			if state.begins_with("stock"):
+				InventoryMod.stash_all(s.sim)
+			if state == "stock_far":
+				_cap_far(s)
+			var ax: Dictionary = _cap_snap(s).capsule.main[key]
+			var h0: String = _hash(s)
+			s.sim.flash_msg = ""
+			var lvl0: int = int(s.sim.main_capsule.level)
+			router.dispatch(verb, {}, s)
+			var raised: bool = int(s.sim.main_capsule.level) > lvl0 or CapsuleMod.protection_of(s.sim) > 0
+			var expect_can: bool = state == "pack" or state == "stock_near"
+			ok(bool(ax.can) == expect_can, "D9 %s/%s: the panel's can (%s) says what the sim would do" % [axis, state, str(ax.can)])
+			ok(raised == bool(ax.can), "D9 %s/%s: the tap raised the axis iff the panel said it could" % [axis, state])
+			if not bool(ax.can):
+				ok(_hash(s) == h0, "REQ-0010-38 %s/%s: a refusal leaves world_hash untouched (no partial spend)" % [axis, state])
+				ok(String(ax.why) != "" and s.sim.flash_msg == String(ax.why), "REQ-0010-38 %s/%s: the flash is exactly the panel's first reason (%s)" % [axis, state, str(s.sim.flash_msg)])
+				ok(String(ax.why).begins_with("Бракує: "), "REQ-0010-38 %s/%s: the reason is in words" % [axis, state])
+				if state == "stock_far":
+					ok("підійди" in String(ax.why), "REQ-0010-38 %s: far from the zone the reason says to walk back" % axis)
+			else:
+				ok(String(ax.why) == "", "D9 %s/%s: an affordable axis carries no reason" % [axis, state])
+	# --- мертвий герой: відмова словами, без побічних ефектів ---
+	var dead: Variant = _capsule_session(true)
+	_grant_cost(dead, &"capsule")
+	dead.sim.dead = true
+	var hd: String = _hash(dead)
+	dead.sim.flash_msg = ""
+	router.dispatch(&"capsule_upgrade", {}, dead)
+	ok(int(dead.sim.main_capsule.level) == 0 and _hash(dead) == hd and dead.sim.flash_msg != "", "REQ-0010-38: a dead hero's tap is refused in words, nothing is spent")
+	# --- макс-рівні: повтор тапу після L5 нічого не робить і каже чому ---
+	var mx: Variant = _capsule_session(true)
+	mx.sim.main_capsule.level = CapsuleMod.max_level(mx.sim)
+	var hm: String = _hash(mx)
+	mx.sim.flash_msg = ""
+	router.dispatch(&"capsule_upgrade", {}, mx)
+	ok(_hash(mx) == hm and mx.sim.flash_msg != "", "REQ-0010-86: a stale tap on «Прокачати» at max is refused in words, no change")
+	# --- twin: однакові тапи -> однаковий світ і однаковий slice (детермінізм) ---
+	var a: Variant = _capsule_session(true)
+	var b: Variant = _capsule_session(true)
+	for sx in [a, b]:
+		_grant_cost(sx, &"capsule")
+		router.dispatch(&"capsule_upgrade", {}, sx)
+		_grant_cost(sx, &"protection")
+		router.dispatch(&"capsule_protect", {}, sx)
+		router.dispatch(&"capsule_upgrade", {}, sx)
+	ok(_hash(a) == _hash(b), "REQ-0010-36: the same taps on twin sessions give the same world_hash")
+	ok(var_to_str(_cap_snap(a).capsule.main) == var_to_str(_cap_snap(b).capsule.main), "twin sessions give the same capsule slice")
+	# --- відкриття панелі — view, не sim: хеш не рухається; open_panel не на дроті ---
+	var h_open: String = _hash(a)
+	var d: Dictionary = WorldInput.WorldInput.decide_click([], {}, int(a.sim.n), "", CapsuleMod.tile(a.sim), 1.0, 1.0, {}, {CapsuleMod.tile(a.sim).y * int(a.sim.n) + CapsuleMod.tile(a.sim).x: "capsule_bay"})
+	ok(StringName(d.verb) == &"open_panel" and _hash(a) == h_open, "REQ-0010-36: the tap's decision is a view verb and never touches the sim")
+	var Cmd: Variant = load("res://scripts/net/command.gd")
+	ok(not Cmd.WIRE_VERBS.has("open_panel"), "REQ-0010-36: open_panel is a view verb, not a wire verb")
+	# --- сліпий інструмент «Розібрати» на капсулі: відмова, капсула стоїть ---
+	var tile: Vector2i = CapsuleMod.tile(a.sim)
+	var hr: String = _hash(a)
+	router.dispatch(&"deconstruct", {"x": tile.x, "y": tile.y}, a)
+	ok(a.sim.bgrid.has(tile.y * int(a.sim.n) + tile.x) and _hash(a) == hr, "REQ-0010-06: the remove tool on the capsule changes nothing")
+	# --- save/load посеред: slice після round-trip через JSON той самий ---
+	var wire: Dictionary = JSON.parse_string(JSON.stringify(PersistenceMod.resume_payload(a.sim)))
+	var r: Variant = _capsule_session(true)
+	PersistenceMod.restore(r.sim, wire)
+	var m_a: Dictionary = _cap_snap(a, {"open_panels": ["capsule_bay"]}).capsule.main
+	var m_r: Dictionary = _cap_snap(r, {"open_panels": ["capsule_bay"]}).capsule.main
+	for k in ["level", "protection", "max", "max_protection", "actions", "ring", "upgrade", "protect"]:
+		ok(var_to_str(m_a[k]) == var_to_str(m_r[k]), "save/load: capsule.main.%s survives the round trip" % k)
+	# --- кільце: стани автомата ---
+	for st in ["none", "cancelled", "resolved"]:
+		a.sim.capsule_raid.state = st
+		ok(not bool(_cap_snap(a).capsule.main.ring.show), "REQ-0010-16: raid state «%s» without a selection shows no ring" % st)
+	a.sim.capsule_raid.state = "contact"
+	var rc: Dictionary = _cap_snap(a).capsule.main.ring
+	ok(bool(rc.show) and bool(rc.alert), "REQ-0010-16: contact shows the ring as an alert")
+	a.sim.capsule_raid.state = "none"
+	ok(not bool(_cap_snap(a, {"open_panels": ["gear", "stock"]}).capsule.main.ring.show), "REQ-0010-16: other open panels do not summon the ring")
+	var sel: Dictionary = _cap_snap(a, {"open_panels": ["capsule_bay"]}).capsule.main.ring
+	ok(not bool(sel.alert), "REQ-0010-16: a plain selection is not an alert")
+	a.sim.main_capsule.immune_until = int(a.sim.now_ms) + 1000
+	ok(not bool(_cap_snap(a).capsule.main.ring.show), "REQ-0010-16: the immunity shield alone does not summon the zone ring")
+	a.sim.main_capsule.immune_until = 0
+
+	# --- панель: стани дій (REQ-0010-86) × одна залита кнопка (REQ-0010-37) ---
+	var panel: Variant = WorldPanels.CapsulePanel.new()
+	get_root().add_child(panel)
+	await process_frame
+	var fresh: Variant = _capsule_session(true)
+	var combos: Array = [[0, 0], [0, 5], [5, 0], [5, 5], [3, 2]]
+	for c in combos:
+		fresh.sim.main_capsule.level = c[0]
+		fresh.sim.main_capsule.protection = c[1]
+		var sn: Dictionary = _cap_snap(fresh)
+		panel.bind(sn)
+		var acts: Array = sn.capsule.main.actions
+		ok(acts.has(&"upgrade") == (c[0] < 5) and acts.has(&"protection") == (c[1] < 5), "REQ-0010-86 L%d/P%d: actions follow the axes" % [c[0], c[1]])
+		ok(panel._m_up.visible == (c[0] < 5) and panel._m_prot.visible == (c[1] < 5), "REQ-0010-86 L%d/P%d: no button for a vanished action" % [c[0], c[1]])
+		var fr: Array = [0]
+		_count_primary(panel, fr)
+		ok(int(fr[0]) == (1 if c[0] < 5 else 0), "REQ-0010-37 L%d/P%d: at most ONE filled button (%d)" % [c[0], c[1], int(fr[0])])
+		ok("Рівень %d/5" % c[0] in String(panel._m_levels.text) and "Захист %d/5" % c[1] in String(panel._m_levels.text), "M5 L%d/P%d: the printed levels equal the sim" % [c[0], c[1]])
+		ok(not panel._m_up.visible or ("до %d" % (c[0] + 1)) in String(panel._m_up.text), "M5 L%d: the button names the NEXT level" % c[0])
+	# --- щит і рейд-рядки зникають разом зі станом (текст не залишається неправдою) ---
+	fresh.sim.main_capsule.immune_until = int(fresh.sim.now_ms) + 60000
+	panel.bind(_cap_snap(fresh))
+	ok(panel._m_immune.visible, "panel: immunity row shown while the window is open")
+	fresh.sim.main_capsule.immune_until = 0
+	panel.bind(_cap_snap(fresh))
+	ok(not panel._m_immune.visible, "M5: the immunity row disappears when the window closes")
+	fresh.sim.capsule_raid.state = "warning"
+	panel.bind(_cap_snap(fresh))
+	ok(panel._m_raid.visible, "panel: a raid warning is said in the panel")
+	fresh.sim.capsule_raid.state = "none"
+	panel.bind(_cap_snap(fresh))
+	ok(not panel._m_raid.visible, "M5: the raid row disappears when the state returns to none")
+	# --- жодних зарядів/радіусу в тексті усіх видимих міток при ON ---
+	var leak := false
+	for n in _all_labels(panel):
+		if n.is_visible_in_tree() or n.visible:
+			var t: String = String(n.text)
+			leak = leak or "Зарядів" in t or " км" in t or "Запуск" in t or "Інвайт" in t
+	ok(not leak, "REQ-0010-41: no visible label at ON speaks of charges, km, launch or invites")
+	# --- перемикання ON -> OFF на тій самій панелі повертає легасі й ховає ON-вузли ---
+	var off: Variant = _capsule_session(false)
+	panel.bind(_cap_snap(off))
+	var main_hidden := true
+	for n in panel._m_nodes:
+		main_hidden = main_hidden and not bool(n.visible)
+	ok(main_hidden and panel._status.visible and panel._launch.visible and panel._coords.visible and panel._inv_head.visible,
+		"REQ-0010-41: OFF binding restores the charge rows and hides every ON node")
+	# свіжа OFF-панель: жодного ON-вузла
+	var p2: Variant = WorldPanels.CapsulePanel.new()
+	get_root().add_child(p2)
+	await process_frame
+	p2.bind(_cap_snap(off))
+	var any_main := false
+	for n in p2._m_nodes:
+		any_main = any_main or bool(n.visible)
+	ok(not any_main and p2._status.visible, "REQ-0010-41: a fresh OFF panel shows no ON node")
+	ok(String(p2._status.text).begins_with("Зарядів:"), "REQ-0010-41: OFF keeps the charge text")
+	var ck: Array = _cap_snap(off).capsule.keys()
+	ck.sort()
+	ok(ck == ["charges", "invites", "radius_km"], "REQ-0010-41: the OFF capsule slice has exactly its old keys (%s)" % str(ck))
+	# --- склад: ліміт 6 рядків не може сховати ресурс мовчки? (лише фіксуємо поведінку: рядки відповідають запасу) ---
+	var stk: Variant = _capsule_session(true)
+	_cap_poor(stk)
+	InventoryMod.add(stk.sim, "wood", 3)
+	InventoryMod.stash_all(stk.sim)
+	var rows: Array = _cap_snap(stk).capsule.main.storage
+	var total := 0
+	for rw in rows:
+		total += int(rw.n)
+	var real_total := 0
+	for k in stk.sim.stock:
+		real_total += int(stk.sim.stock[k])
+	ok(total == real_total, "D9: the storage rows add up to the real stock (%d vs %d)" % [total, real_total])
+	p2.queue_free()
+	panel.queue_free()
+	await process_frame
+
+func _all_labels(node: Node) -> Array:
+	var out: Array = []
+	if node is Label or node is Button:
+		out.append(node)
+	for c in node.get_children():
+		out.append_array(_all_labels(c))
+	return out
+
+func _t_capsule_adv_pure() -> void:
+	# --- decide_click: позамежові клітинки не повинні псевдонімити в клітинку-орієнтир (індекс y*n+x) ---
+	var n := 56
+	var lm := {55: "capsule_bay"}   # клітинка (55, 0)
+	var d: Dictionary = WorldInput.WorldInput.decide_click([], {}, n, "", Vector2i(-1, 1), -0.5, 1.5, {}, lm)
+	ok(StringName(d.verb) != &"open_panel", "REQ-0010-37: a tap left of the map (-1,1) does not alias to the landmark cell (55,0)")
+	d = WorldInput.WorldInput.decide_click([], {}, n, "", Vector2i(n, -1), float(n) + 0.5, -0.5, {0: "capsule_bay"}, {0: "capsule_bay"})
+	ok(StringName(d.verb) != &"open_panel", "REQ-0010-37: a tap above-right of the map (56,-1) does not alias to the landmark cell (0,0)")
+	# --- ворог біля капсули не краде тап?  (граматика: атака має пріоритет — фіксуємо, що рішення детерміноване і не падає) ---
+	d = WorldInput.WorldInput.decide_click([], {}, n, "", Vector2i(3, 3), 3.5, 3.5, {}, {3 * n + 3: "capsule_bay"})
+	ok(StringName(d.verb) == &"open_panel" and String(d.args.id) == "capsule_bay", "REQ-0010-37: the tap on the landmark cell opens the panel it names")
+	d = WorldInput.WorldInput.decide_click([], {}, n, "", Vector2i(4, 3), 4.5, 3.5, {}, {3 * n + 3: "capsule_bay"})
+	ok(StringName(d.verb) == &"order_move", "REQ-0010-37: the neighbour cell still walks")
+	d = WorldInput.WorldInput.decide_click([], {}, n, String(WorldInput.WorldInput.REMOVE_TOOL), Vector2i(3, 3), 3.5, 3.5, {}, {3 * n + 3: "capsule_bay"})
+	ok(StringName(d.verb) == &"deconstruct", "decide_click: the armed remove tool is the tool's verb even over a landmark (the sim refuses it)")
+	# --- Fmt: ПЕРША причина = перший ключ за алфавітом, незалежно від порядку вставки ---
+	var w: String = Fmt.capsule_shortfall({"wood": 8, "stone": 2, "iron": 1}, false)
+	ok(w.begins_with("Бракує: ") and w.count("×") == 1 and "×1" in w, "REQ-0010-38: only the first (alphabetical) missing resource is named, once (%s)" % w)
+	ok(Fmt.capsule_shortfall({}, false) == "" and Fmt.capsule_shortfall({}, true) == "", "Fmt: nothing missing -> no reason, even if far")
+	ok(not ("підійди" in Fmt.capsule_shortfall({"wood": 1}, false)) and "підійди" in Fmt.capsule_shortfall({"wood": 1}, true), "Fmt: the walk-back hint appears only when far")
+	ok(Fmt.left_ms(0) == "0 хв" and Fmt.left_ms(1) == "1 хв" and Fmt.left_ms(60000) == "1 хв" and Fmt.left_ms(60001) == "2 хв" and Fmt.left_ms(3600000) == "1 год 0 хв" and Fmt.left_ms(-5) == "0 хв",
+		"Fmt.left_ms: ceil to the minute, never negative")
+	# --- роутер: усі причини відмови мають слова, крім duplicate ---
+	for rsn in [&"cost", &"max", &"no_capsule", &"dead"]:
+		var r: Dictionary = {"ok": false, "reason": rsn, "missing": {"wood": 1}, "far": false}
+		ok(InputVerbsMod.capsule_result_text(r) != "", "REQ-0010-38: refusal «%s» is said in words" % rsn)
+	ok(InputVerbsMod.capsule_result_text({"ok": true, "axis": &"protection", "protection": 3}) != InputVerbsMod.capsule_result_text({"ok": true, "axis": &"capsule", "level": 3}),
+		"REQ-0010-87 (D5): the two axes are named differently in the flash")
+	# --- бюджет: число в design-system і текст «Зараз їх N» не брешуть (M5) ---
+	var preg := PanelReg.PanelRegistry.new()
+	var oreg := OverlayReg.OverlayRegistry.new()
+	Mechanics.register_all(preg, oreg)
+	var perm := 0
+	for p in preg.panels:
+		if bool(p.default_open) or int(p.compact_open) == 1:
+			perm += 1
+	var doc: String = _read(ProjectSettings.globalize_path("res://") + "../docs/ux/design-system.md")
+	var rx := RegEx.new()
+	rx.compile("Зараз їх (\\d+)")
+	var m: RegExMatch = rx.search(doc)
+	ok(m != null and int(m.get_string(1)) == perm, "M5/REQ-0010-90: design-system says «Зараз їх N» and N equals the real permanent set (%d)" % perm)
+	var capsule_ids := 0
+	for p in preg.panels:
+		if "capsule" in String(p.panel_id):
+			capsule_ids += 1
+	ok(capsule_ids == 1, "REQ-0010-37: the capsule added exactly one (non-permanent) panel, no second one")
+	for p in preg.panels:
+		p.free()
+	# --- P4: арт не згенеровано до G0–G1 ---
+	var man: String = _read(ProjectSettings.globalize_path("res://") + "../art/manifest.json").to_lower()
+	ok(not ("main_capsule" in man), "REQ-0010-87 (P4): no art-manifest entry for the main capsule before G0-G1")
+
 # ---------------- Rule tripwires: R1/R3/R4/R7/R9/R10 as literal grep tests (the spec's whole point) ----------------
+# --- REQ-0010-10/40/85/27(UI): тексти смерті, спавну й панелі при ON, tripwire застарілих тверджень, OFF-рядки дослівно ---
+func _all_texts(n: Node, out: Array = []) -> Array:
+	if n is Label:
+		out.append(String((n as Label).text))
+	elif n is Button:
+		out.append(String((n as Button).text))
+	if n is Control:
+		out.append(String((n as Control).tooltip_text))
+	for c in n.get_children():
+		_all_texts(c, out)
+	return out
+
+func _stale_hits(lines: Array) -> Array:
+	var hits: Array = []
+	for ln in lines:
+		var low: String = String(ln).to_lower()
+		for bad in CapsuleTexts.FORBIDDEN_ON:
+			if String(bad) in low:
+				hits.append("%s <- %s" % [bad, String(ln).left(60)])
+	return hits
+
+# Усі `const MSG*` з файлу (рядки sim-шару: R1 не пускає їх у ui, тож tripwire читає вихідник).
+func _msg_consts(path: String) -> Array:
+	var rx := RegEx.new()
+	rx.compile("(?m)^const (MSG\\w*)\\s*:=\\s*\"(.*)\"")
+	var out: Array = []
+	for m in rx.search_all(_read_code(path)):
+		out.append(m.get_string(2))
+	return out
+
+func _t_capsule_texts() -> void:
+	# --- ключі: таблиця не порожня, кожен рядок заповнений, forbidden-список сам не вироджений ---
+	ok(CapsuleTexts.TEXTS.size() >= 10 and CapsuleTexts.FORBIDDEN_ON.size() >= 4, "REQ-0010-85: the capsule text table is keyed and the tripwire list is not empty")
+	var keys_ok := true
+	for k in CapsuleTexts.TEXTS:
+		if String(CapsuleTexts.TEXTS[k]) == "" or String(CapsuleTexts.t(String(k))) != String(CapsuleTexts.TEXTS[k]):
+			keys_ok = false
+	ok(keys_ok, "REQ-0010-85: every key resolves to a non-empty string")
+	# --- статичний скан за КЛЮЧАМИ таблиці й за const MSG* sim-модулів капсули ---
+	var table_lines: Array = []
+	for k in CapsuleTexts.TEXTS:
+		table_lines.append(String(CapsuleTexts.TEXTS[k]))
+	ok(_stale_hits(table_lines).is_empty(), "REQ-0010-40/85: no capsule text key carries a stale claim (%s)" % str(_stale_hits(table_lines)))
+	var sim_lines: Array = _msg_consts("res://scripts/sim/capsule.gd") + _msg_consts("res://scripts/sim/hero_health.gd")
+	ok(sim_lines.size() >= 8, "REQ-0010-85: the scan sees the sim-side capsule messages (%d)" % sim_lines.size())
+	ok(_stale_hits(sim_lines).is_empty(), "REQ-0010-40/85: sim capsule MSG_* carry no stale claim (%s)" % str(_stale_hits(sim_lines)))
+	# нові рядки капсули не лишаються розсипом по view-файлах: імунітет — лише через таблицю
+	ok(not ("Імунітет" in _read_code("res://scripts/ui/world_panels.gd")) and not ("імунітет" in _read_code("res://scripts/ui/hud_model.gd")),
+		"REQ-0010-85: the immunity strings live in capsule_texts.gd only")
+	# --- динамічний скан ON: спавн (холод) -> панель з імунітетом і тривогою -> смерть -> екран смерті -> респавн ---
+	var s: Variant = _capsule_session(true)
+	var sim: Variant = s.sim
+	var live: Array = []
+	sim.messages.clear()
+	sim.time.frac = 0.0
+	sim.spawn_hint()
+	var cold: bool = sim.hero_felt_c() < HeroHealthMod.Gear.COMFORT_MIN_C
+	for m in sim.messages:
+		live.append(String(m.text))
+	if cold:
+		ok("укриття біля капсули" in " ".join(live) and not ("багаття" in " ".join(live)), "REQ-0010-40: the ON cold spawn hint sends to a shelter by the capsule, not to «campfire first»")
+	else:
+		ok(true, "REQ-0010-40: spawn hint — felt temperature is inside the comfort band (no hint) [skipped]")
+	var panel: Variant = WorldPanels.CapsulePanel.new()
+	get_root().add_child(panel)
+	await process_frame
+	sim.main_capsule.immune_until = int(sim.now_ms) + 5400000
+	sim.capsule_raid.state = String(CapsuleMod.ST_WARNING)
+	panel.bind(_cap_snap(s, {"open_panels": ["capsule_bay"]}))
+	var panel_lines: Array = _all_texts(panel)
+	ok(_stale_hits(panel_lines).is_empty(), "REQ-0010-40: the ON capsule panel carries no stale claim (%s)" % str(_stale_hits(panel_lines)))
+	panel.queue_free()
+	sim.main_capsule.immune_until = 0
+	sim.capsule_raid.state = String(CapsuleMod.ST_NONE)
+	sim.player.born = 1
+	sim.time.day = 3
+	sim.last_death = {"cause": "переохолодження", "day": 3, "born": 1}
+	InventoryMod.add(sim, "wood", 5)
+	sim._on_death()
+	var snap: Dictionary = _cap_snap(s)
+	ok(bool(snap.death.get("capsule", false)) and not _holds_object(snap.death), "REQ-0010-10: the ON death slice carries capsule:true as value data")
+	var ds: Variant = LifecycleScript.DeathScreen.new()
+	get_root().add_child(ds)
+	await process_frame
+	ds.bind(snap.death)
+	var death_lines: Array = _all_texts(ds)
+	ok(_stale_hits(death_lines).is_empty(), "REQ-0010-10/40: the ON death screen carries no stale claim (%s)" % str(_stale_hits(death_lines)))
+	var death_text: String = " ".join(death_lines)
+	ok("З'явитись у капсулі" in death_text and "біля капсули" in death_text and "позначена на мапі" in death_text, "REQ-0010-10: the ON death screen leads to the capsule and shows the bag marker")
+	ok(not ("Торба лежить" in death_text) and not ("годин" in death_text) and not ("підбере" in death_text.to_lower()), "REQ-0010-10: no promise about the bag's fate or TTL (blocked on Q-10(a))")
+	for bad in ["загинув", "загинула", "з'явився", "з'явилась"]:
+		ok(not (bad in death_text.to_lower()), "D8: the ON death text has no grammatical gender («%s»)" % bad)
+	for m in sim.messages:
+		live.append(String(m.text))
+	s.respawn()
+	for m in s.sim.messages:
+		live.append(String(m.text))
+	ok(_stale_hits(live).is_empty(), "REQ-0010-40: ON feed lines (spawn, death, respawn) carry no stale claim (%s)" % str(_stale_hits(live)))
+	# --- OFF: ті самі екрани, рядки смерті/кнопка/підказка ДОСЛІВНО як до спеки ---
+	var off: Variant = _capsule_session(false)
+	var off_snap: Dictionary = _cap_snap(off)
+	ok(not off_snap.death.has("capsule"), "REQ-0010-85: the OFF death slice has no capsule key")
+	var DS = LifecycleScript.DeathScreen
+	ok(DS._fate({"inventory": true, "bag_items": 18}) == "Торба (18 предм.) лежить на місці загибелі — вона позначена на мапі, її можна забрати.\nПоселення й склад лишаються. Новий виживальник прибуде туди й почне з нуля.", "REQ-0010-85: OFF death fate (bag) is verbatim")
+	ok(DS._fate({"inventory": true, "bag_items": 0}) == "Рюкзак був порожній — втрачати нічого.\nПоселення й склад лишаються. Новий виживальник прибуде туди й почне з нуля.", "REQ-0010-85: OFF death fate (empty pack) is verbatim")
+	ok(DS._fate({}) == "Усе, що було при собі, втрачено.\nПоселення й склад лишаються. Новий виживальник прибуде туди й почне з нуля.", "REQ-0010-85: OFF death fate (classic) is verbatim")
+	ok(DS._lesson("переохолодження") == "Порада: багаття, а навколо — стіни з дверима: у приміщенні тепло тримається.", "REQ-0010-85: OFF cold lesson is verbatim")
+	ok(DS._lesson("") == "Порада: тримай тепло, їжу й сон — і будуй оборону до 5-го дня.", "REQ-0010-85: OFF default lesson is verbatim")
+	# кнопка: bind(ON) -> «З'явитись у капсулі», наступний bind(OFF) повертає «Новий виживальник» (екран живе між сесіями)
+	ds.bind(off_snap.death)
+	ok(String(ds._btn.text) == "Новий виживальник", "REQ-0010-85: the OFF button is «Новий виживальник»")
+	ds.bind(snap.death)
+	ok(String(ds._btn.text) == "З'явитись у капсулі", "REQ-0010-10: the ON button is set in bind, not in _ready")
+	ds.queue_free()
+	var hint_src: String = FileAccess.get_file_as_string("res://scripts/sim/hero_health.gd")
+	ok("постав багаття з хотбару (слот 1), потім стіни з дверима навколо" in hint_src and "розпали багаття (9), а тоді обнеси клітинку стінами (1) з дверима (2)" in hint_src, "REQ-0010-85: the OFF spawn hints are verbatim")
+	off.sim.messages.clear()
+	off.sim.time.frac = 0.0
+	off.sim.spawn_hint()
+	if off.sim.hero_felt_c() < HeroHealthMod.Gear.COMFORT_MIN_C:
+		ok("постав багаття з хотбару (слот 1)" in str(off.sim.messages), "REQ-0010-85: the OFF cold spawn hint still sends to the campfire")
+
+# --- REQ-0010-95: жодна дія капсули не заблокована невиконаною ціллю; обов'язкового ланцюга капсула не створює ---
+func _t_capsule_no_goal_gates() -> void:
+	var Goals = load("res://scripts/goals.gd")
+	var router: Variant = _cap_router()
+	var s: Variant = _capsule_session(true)
+	ok((s.goals_done as Dictionary).is_empty(), "REQ-0010-95: a fresh ON session has completed no goal")
+	_grant_cost(s, &"capsule")
+	var acts: Array = []
+	for a in CapsuleMod.actions(s.sim):
+		acts.append(a)
+	ok(acts.has(&"upgrade") and acts.has(&"storage"), "REQ-0010-95: capsule actions are offered with zero goals done")
+	router.dispatch(&"capsule_upgrade", {}, s)
+	ok(int(s.sim.main_capsule.level) == 1, "REQ-0010-95: the upgrade works with every goal unfinished (no goal gate)")
+	_grant_cost(s, &"protection")
+	router.dispatch(&"capsule_protect", {}, s)
+	ok(CapsuleMod.protection_of(s.sim) == 1, "REQ-0010-95: the protection axis works with every goal unfinished")
+	InventoryMod.add(s.sim, "wood", 3)
+	router.dispatch(&"stash_all", {}, s)
+	ok(int(s.sim.stock.get(s.sim.res_key("wood"), 0)) >= 3, "REQ-0010-95: the stash works with every goal unfinished")
+	# жодного коду ланцюга цілей на шляху капсули; жодного запису-орієнтиру з порядковим номером/залежністю
+	for f in ["res://scripts/sim/capsule.gd", "res://scripts/ui/input_verbs.gd", "res://scripts/ui/world_panels.gd", "res://scripts/ui/capsule_texts.gd"]:
+		var body: String = _read_code(f).to_lower()
+		ok(not ("goals_done" in body) and not ("goals.gd" in body) and not ("current_goal" in body), "REQ-0010-95: %s does not read the goal chain" % f.get_file())
+	var capsule_goal := false
+	for g in Goals.GOALS:
+		var gd: Dictionary = g
+		if "капсул" in String(gd.title).to_lower() or "capsule" in str(gd.get("id", "")) or gd.has("requires") or gd.has("after") or gd.has("step"):
+			capsule_goal = true
+	ok(not capsule_goal, "REQ-0010-95: the capsule adds no mandatory goal and no goal entry carries a dependency/ordinal")
+
+# --- W4b (qa-adversary): атаки на tripwire, щит імунітету, ON-смерть з порожньою торбою, стаб-спавн, чистоту знімка, гейти цілей ---
+class _SpawnStub extends RefCounted:
+	var use_main_capsule := false
+	var use_inventory := true
+	var felt := -10.0
+	var logs: Array = []
+	func hero_felt_c() -> float:
+		return felt
+	func _log(t: String, _k: String = "") -> void:
+		logs.append(t)
+
+func _visible_texts(n: Node, out: Array = []) -> Array:
+	if n is CanvasItem and not (n as CanvasItem).visible:
+		return out
+	if n is Label:
+		out.append(String((n as Label).text))
+	elif n is Button:
+		out.append(String((n as Button).text))
+	for c in n.get_children():
+		_visible_texts(c, out)
+	return out
+
+func _t_capsule_w4b_adv() -> void:
+	# --- tripwire чутливий: кожна заборонена фраза зі спеки §2 п.6 ловиться (без регістру), схвалені рядки — ні ---
+	for bad in ["Щоденна капсула", "Новий виживальник", "до 5-го дня", "Постав БАГАТТЯ першим кроком"]:
+		ok(not _stale_hits([bad]).is_empty(), "REQ-0010-40: the tripwire catches «%s»" % bad)
+	ok(_stale_hits(["З'явитись у капсулі", "збудуй укриття біля капсули"]).is_empty(), "REQ-0010-40: the tripwire does not flag the approved ON lines")
+	# --- статичний скан УСІХ рядкових літералів capsule.gd (не лише const MSG*): inline _log-рядки теж під tripwire ---
+	var lit := RegEx.new()
+	lit.compile("\"([^\"\\n]*)\"")
+	var lits: Array = []
+	for m in lit.search_all(_read_code("res://scripts/sim/capsule.gd")):
+		var t: String = m.get_string(1)
+		if " " in t or (t.length() > 0 and t.unicode_at(0) > 127):
+			lits.append(t)
+	ok(lits.size() >= 8, "REQ-0010-85: the literal scan of capsule.gd sees its text (%d)" % lits.size())
+	ok(_stale_hits(lits).is_empty(), "REQ-0010-40/85: no string literal in sim/capsule.gd carries a stale claim (%s)" % str(_stale_hits(lits)))
+	# D8: жодних родових форм у таблиці, літералах capsule.gd і MSG hero_health
+	var gendered := ["загинув", "загинула", "з'явився", "з'явилась", "прибув", "прибула", "померла"]
+	var every: Array = lits.duplicate()
+	for k in CapsuleTexts.TEXTS:
+		every.append(String(CapsuleTexts.TEXTS[k]))
+	every += _msg_consts("res://scripts/sim/hero_health.gd")
+	var g_hits: Array = []
+	for ln in every:
+		for w in gendered:
+			if w in String(ln).to_lower():
+				g_hits.append(w)
+	ok(g_hits.is_empty(), "D8: ON capsule texts carry no grammatical gender (%s)" % str(g_hits))
+	# --- спавн-підказка: детермінований стаб (не залежить від клімату) ---
+	var on := _SpawnStub.new()
+	on.use_main_capsule = true
+	HeroHealthMod.spawn_hint(on)
+	ok(on.logs.size() == 1 and "укриття" in on.logs[0] and "капсул" in on.logs[0] and not ("багаття" in String(on.logs[0]).to_lower()), "REQ-0010-40: ON cold spawn hint = shelter by the capsule, no campfire (stub)")
+	ok(_stale_hits(on.logs).is_empty(), "REQ-0010-40: the ON spawn hint passes the tripwire")
+	var off_inv := _SpawnStub.new()
+	HeroHealthMod.spawn_hint(off_inv)
+	ok(off_inv.logs.size() == 1 and "постав багаття з хотбару (слот 1)" in off_inv.logs[0], "REQ-0010-85: OFF+inventory spawn hint is the campfire one (stub)")
+	var off_cls := _SpawnStub.new()
+	off_cls.use_inventory = false
+	HeroHealthMod.spawn_hint(off_cls)
+	ok(off_cls.logs.size() == 1 and "розпали багаття (9)" in off_cls.logs[0], "REQ-0010-85: OFF classic spawn hint is the campfire one (stub)")
+	var warm := _SpawnStub.new()
+	warm.use_main_capsule = true
+	warm.felt = 20.0
+	HeroHealthMod.spawn_hint(warm)
+	ok(warm.logs.is_empty(), "REQ-0010-40: no spawn hint inside the comfort band even at ON")
+	# --- екран смерті ON: порожня торба, слайс без last_death, ON->OFF->ON перемикання bind ---
+	var DS = LifecycleScript.DeathScreen
+	var empty_on: String = DS._fate({"capsule": true, "inventory": true, "bag_items": 0})
+	ok("Рюкзак був порожній" in empty_on and "біля капсули" in empty_on and _stale_hits([empty_on]).is_empty(), "REQ-0010-10: ON death with an empty pack leads to the capsule, no stale claim")
+	ok(not ("Торба (" in empty_on), "REQ-0010-10: ON empty-pack death does not mention a bag")
+	var bag_on: String = DS._fate({"capsule": true, "inventory": true, "bag_items": 7})
+	ok("(7 предм.)" in bag_on and "позначена на мапі" in bag_on, "REQ-0010-10: ON death shows the bag count and map marker")
+	ok(DS._fate({"capsule": false, "inventory": true, "bag_items": 18}) == DS._fate({"inventory": true, "bag_items": 18}), "REQ-0010-85: capsule:false is exactly the OFF text")
+	for c in ["переохолодження", "голод", "тепловий удар", "втрата крові", ""]:
+		var l: String = DS._lesson(c, true)
+		ok(l != "" and _stale_hits([l]).is_empty(), "REQ-0010-40: ON lesson for «%s» is stale-free" % c)
+		ok(DS._lesson(c) == DS._lesson(c, false), "REQ-0010-85: the lesson defaults to the OFF text for «%s»" % c)
+	var sx: Variant = _capsule_session(true)
+	var fresh_slice: Dictionary = _cap_snap(sx).death
+	ok(bool(fresh_slice.get("capsule", false)), "REQ-0010-10: the ON death slice carries capsule:true even before any death")
+	var ds: Variant = LifecycleScript.DeathScreen.new()
+	get_root().add_child(ds)
+	await process_frame
+	ds.bind(fresh_slice)
+	ok(String(ds._btn.text) == "З'явитись у капсулі", "REQ-0010-10: ON button on a death-less slice")
+	ds.bind({"cause": "переохолодження", "day": 2, "lived": 2})
+	ok(String(ds._btn.text) == "Новий виживальник" and not ("капсул" in String(ds._what.text)), "REQ-0010-85: a slice without the capsule key restores the OFF screen (no ON leak)")
+	ok(String(ds._epitaph.text) == "Порада: багаття, а навколо — стіни з дверима: у приміщенні тепло тримається.", "REQ-0010-85: the OFF bind restores the OFF lesson verbatim (epitaph does not keep the ON branch)")
+	ds.bind(fresh_slice)
+	ok(String(ds._btn.text) == "З'явитись у капсулі" and _stale_hits(_all_texts(ds)).is_empty(), "REQ-0010-10: ON again after OFF, tripwire clean")
+	ds.queue_free()
+	# --- щит і рядок імунітету (REQ-0010-27 UI): рівно поки діє, зникає на межі ---
+	var s: Variant = _capsule_session(true)
+	var sim: Variant = s.sim
+	var panel: Variant = WorldPanels.CapsulePanel.new()
+	get_root().add_child(panel)
+	await process_frame
+	panel.bind(_cap_snap(s, {"open_panels": ["capsule_bay"]}))
+	ok(int(_cap_snap(s).capsule.main.immune_left_ms) == 0 and not ("Імунітет" in " ".join(_visible_texts(panel))), "REQ-0010-27: no immunity line without immunity")
+	ok(not ("імунітет" in " ".join(HudModel._inspect_capsule(sim).lines).to_lower()), "REQ-0010-27: the inspector has no immunity line without immunity")
+	var now: int = int(sim.now_ms)
+	sim.main_capsule.immune_until = now + 90 * 60000
+	var sn: Dictionary = _cap_snap(s, {"open_panels": ["capsule_bay"]})
+	ok(int(sn.capsule.main.immune_left_ms) == 90 * 60000, "REQ-0010-27: the snapshot carries the exact remaining ms")
+	panel.bind(sn)
+	var vis: String = " ".join(_visible_texts(panel))
+	ok("Імунітет" in vis and "1 год 30 хв" in vis, "REQ-0010-27: the panel row shows the remaining time (%s)" % vis)
+	ok("Імунітет до рейдів · 1 год 30 хв" in " ".join(HudModel._inspect_capsule(sim).lines), "REQ-0010-27: the inspector row shows the remaining time")
+	ok("Імунітет до рейдів · 1 год 30 хв" in vis, "G3: the panel row says WHAT the immunity is for («до рейдів») and shows hours + minutes (%s)" % vis)
+	ok(CapsuleTexts.t("mark_immune") % Fmt.left_ms(20 * 3600000) == "Імунітет до рейдів · 20 год 0 хв", "G3: the hull plate row reads «Імунітет до рейдів · 20 год 0 хв»")
+	sim.main_capsule.immune_until = now + 1
+	ok(CapsuleMod.is_immune(sim) and int(_cap_snap(s).capsule.main.immune_left_ms) == 1, "REQ-0010-27: one ms before the end the capsule is still immune")
+	sim.main_capsule.immune_until = now
+	var edge: Dictionary = _cap_snap(s, {"open_panels": ["capsule_bay"]})
+	panel.bind(edge)
+	ok(not CapsuleMod.is_immune(sim) and int(edge.capsule.main.immune_left_ms) == 0 and not ("Імунітет" in " ".join(_visible_texts(panel))), "REQ-0010-27: at immune_until == now the shield and the row are gone")
+	sim.main_capsule.immune_until = now - 5000
+	ok(int(_cap_snap(s).capsule.main.immune_left_ms) == 0, "REQ-0010-27: an expired mark never yields a negative remaining time")
+	# щит у world_view: гейт is_immune прямо перед бульбашкою (greybox, без тексту)
+	var wv_src: String = _read_code("res://scripts/world_view.gd")
+	var at: int = wv_src.find("func _draw_capsule_marks")
+	var body: String = wv_src.substr(at, wv_src.find("\nfunc ", at + 10) - at)
+	var gate: int = body.find("\tif imm:\n\t\ty += 13.0\n\t\tdraw_string(_font, Vector2(box.position.x + 5.0, y), t_imm")
+	gate = body.find("draw_circle(c, TILE", gate) if gate > 0 else -1
+	ok(gate > 0 and body.find("draw_arc", gate) > gate and body.count("is_immune") == 1, "REQ-0010-27: the shield is drawn only under is_immune (no unconditional bubble)")
+	var literal_text := false   # T-Ніколая: знаки підписані словами, але слова лише з таблиці capsule_texts.gd (R1/R2: жодного літерала в малюванні)
+	for ln in body.split("\n"):
+		if "draw_string(" in ln and "\"" in ln:
+			literal_text = true
+	ok(not literal_text, "REQ-0010-27/87: the plate texts come from the capsule text table (no string literal in the drawing code)")
+	# знімок — чисте читання
+	sim.main_capsule.immune_until = now + 90 * 60000
+	var h0: String = PersistenceMod.world_hash(sim)
+	var a1: Dictionary = _cap_snap(s, {"open_panels": ["capsule_bay"]})
+	var a2: Dictionary = _cap_snap(s, {"open_panels": ["capsule_bay"]})
+	ok(PersistenceMod.world_hash(sim) == h0, "REQ-0010-27: HudModel.snapshot (ON) does not touch the sim (world_hash stable)")
+	ok(JSON.stringify(a1.capsule) == JSON.stringify(a2.capsule) and JSON.stringify(a1.death) == JSON.stringify(a2.death), "REQ-0010-27: the capsule/death slices are deterministic")
+	# --- панель у всіх станах: рівень 0 / 1 / макс × тривога/контакт — без застарілих рядків і без гейтів ---
+	sim.main_capsule.immune_until = 0
+	for lvl in [0, 1, CapsuleMod.max_level(sim)]:
+		sim.main_capsule.level = lvl
+		for st in [CapsuleMod.ST_NONE, CapsuleMod.ST_WARNING, CapsuleMod.ST_CONTACT]:
+			sim.capsule_raid.state = String(st)
+			panel.bind(_cap_snap(s, {"open_panels": ["capsule_bay"]}))
+			var hits: Array = _stale_hits(_all_texts(panel))
+			ok(hits.is_empty(), "REQ-0010-40: panel L%d/%s is stale-free (%s)" % [lvl, st, str(hits)])
+			var low: String = " ".join(_all_texts(panel)).to_lower()
+			ok(not ("спершу" in low) and not ("виконай ціль" in low), "REQ-0010-95: panel L%d/%s gates nothing behind a goal" % [lvl, st])
+	panel.queue_free()
+	# OFF: жодного capsule.main, жодного capsule у слайсі смерті
+	var off: Variant = _capsule_session(false)
+	var osn: Dictionary = _cap_snap(off)
+	ok(not osn.capsule.has("main") and not osn.death.has("capsule"), "REQ-0010-85: OFF slices carry no capsule keys")
+	# --- ON-логи рейду (попередження) під tripwire ---
+	var r: Variant = _capsule_session(true)
+	r.sim.messages.clear()
+	var fr: Dictionary = CapsuleMod.force_raid(r.sim, true)
+	ok(bool(fr.get("ok", false)), "REQ-0010-40: the dev raid hook arms a raid (log scan fixture)")
+	CapsuleMod._announce(r.sim, int(r.sim.now_ms))
+	var raid_lines: Array = []
+	for m in r.sim.messages:
+		raid_lines.append(String(m.text))
+	ok(raid_lines.size() >= 1 and _stale_hits(raid_lines).is_empty(), "REQ-0010-40: ON raid feed lines are stale-free (%s)" % str(raid_lines))
+	# --- REQ-95: той самий результат дії з порожніми й з УСІМА виконаними цілями ---
+	var Goals = load("res://scripts/goals.gd")
+	var router: Variant = _cap_router()
+	var done: Variant = _capsule_session(true)
+	for g in Goals.GOALS:
+		done.goals_done[String(g.id)] = true
+	var none: Variant = _capsule_session(true)
+	_grant_cost(done, &"capsule")
+	_grant_cost(none, &"capsule")
+	router.dispatch(&"capsule_upgrade", {}, done)
+	router.dispatch(&"capsule_upgrade", {}, none)
+	ok(int(done.sim.main_capsule.level) == 1 and int(none.sim.main_capsule.level) == 1 and PersistenceMod.world_hash(done.sim) == PersistenceMod.world_hash(none.sim),
+		"REQ-0010-95: capsule upgrade is identical with no goals done and with all goals done (twin hash)")
+
+# G3 (тест Ніколая): банер без «~0», справжня назва ворога, коротка причина відмови, картка капсули, позначки рейдерів у контакті, ширина картки відмови.
+func _t_capsule_g3() -> void:
+	# 1. банер: склад невідомий (0) -> без числа; відомий -> «~N»
+	var warn0: String = CapsuleTexts.raid_banner("warning", {"dir": 2, "count": 0, "contact_at": 15 * 60000}, 0)
+	var warn5: String = CapsuleTexts.raid_banner("warning", {"dir": 2, "count": 5, "contact_at": 15 * 60000}, 0)
+	var con0: String = CapsuleTexts.raid_banner("contact", {"dir": 1, "count": 0}, 0)
+	var con5: String = CapsuleTexts.raid_banner("contact", {"dir": 1, "count": 5}, 0)
+	ok(warn0 != "" and not ("~0" in warn0) and not (" 0 рейдер" in warn0) and "15 хв" in warn0 and "з півночі" in warn0, "G3/REQ-0010-19: an unknown composition names no number, never «~0» (%s)" % warn0)
+	ok("~5 рейдерів" in warn5 and "15 хв" in warn5, "G3: a known composition is named (%s)" % warn5)
+	ok(con0 != "" and not (" 0 рейдер" in con0) and "РЕЙД" in con0, "G3: the contact banner without a count names no zero (%s)" % con0)
+	ok("5 рейдерів" in con5, "G3: the contact banner names the known count (%s)" % con5)
+	# 2. дев-хук називає ворога реальним словом, не «тестові»
+	var r: Variant = _capsule_session(true)
+	r.sim.main_capsule.level = 1
+	var fr: Dictionary = CapsuleMod.force_raid(r.sim, true)
+	var fac: String = String(r.sim.capsule_raid.faction)
+	ok(bool(fr.get("ok", false)) and fac != "" and not ("тест" in fac.to_lower()), "G3: the forced raid's enemy has a real name, not a debug leftover (%s)" % fac)
+	var bsrc: String = " ".join(CapsuleTexts.TEXTS.values()).to_lower()
+	ok(not ("тест" in bsrc), "G3: no «тест…» word in any capsule UI string")
+	# 3. причина відмови: перша причина словами, без ланцюжка залежностей
+	var why: String = Fmt.capsule_shortfall({"planks": 3, "wood": 8}, false)
+	ok(why.begins_with("Бракує: ") and why.count("×") == 1 and "«" in why and not ("дослідження" in why) and not (" з " in why) and not ("•" in why), "G3/REQ-0010-38: one reason, no dependency chain (%s)" % why)
+	ok(not ("дослідження" in Fmt.capsule_shortfall({"planks": 3}, true)), "G3: even with the walk-back hint no research chain is spelled out")
+	# 5/4. картка капсули: що дає рівень (число з даних) і що дає захист
+	var lines: String = " ".join(HudModel._inspect_capsule(r.sim).lines)
+	var pct: int = int(round(CapsuleMod.buff_bonus(r.sim, "gather_mult", 1) * 100.0))
+	ok(pct > 0 and ("+%d%% збір, крафт, відпочинок, дослідження за рівень" % pct) in lines, "G3: the card says what a level gives, the number from the data (+%d%%)" % pct)
+	ok("рейдери довше ламають ядро" in lines, "G3: the card says what protection gives")
+	ok("межа бази" in CapsuleTexts.t("zone_label"), "G3: the zone caption explains the boundary")
+	# 6. контакт: позначки рейдерів у слайсі лише в контакті, і оверлей їх малює
+	var calm: Dictionary = _cap_snap(r).capsule.main.ring
+	ok((calm.raiders as Array).is_empty(), "G3: no raider marks before the contact")
+	CapsuleMod._announce(r.sim, int(r.sim.now_ms))
+	r.sim.capsule_raid.contact_at = int(r.sim.now_ms)
+	r.sim.update(0.05)
+	var hot: Dictionary = _cap_snap(r).capsule.main
+	ok(String(hot.raid_state) == "contact" and (hot.ring.raiders as Array).size() > 0 and bool(hot.ring.alert) and bool(hot.ring.show), "G3: in the contact state the ring is alert and carries %d raider marks" % (hot.ring.raiders as Array).size())
+	var ov_src: String = _read_code("res://scripts/ui/overlays.gd")
+	ok("ring.get(\"raiders\"" in ov_src, "G3: the ring overlay draws the raider marks")
+	# 3. картка відмови над героєм не схлопується в стовпчик: мінімальна ширина = природна ширина тексту (до стелі)
+	var fw: Widgets.FlashWidget = Widgets.FlashWidget.new()
+	fw.build_once()
+	var bus: Variant = FeedbackBus.FeedbackBus.new()
+	fw.subscribe(bus)
+	bus.flash.emit({"params": {"text": "Бракує: камінь ×1 — добувай у скелях"}})
+	var lw: float = float((fw._card.label as Label).custom_minimum_size.x)
+	ok(lw >= 150.0 and lw <= Widgets.FlashWidget.CAP_W, "G3: the refusal card has a real width (%.0f px), not a one-letter column" % lw)
+	fw.free()
+	r.sim.dispose_farm()
+	r.sim.dispose_power()
+
+# ---- QA-противник G3 (REQ-0010-19/27/38/40/85): властивості й крайні стани, незалежно від тестів автора ----
+func _g3_contact_session(level: int) -> Variant:
+	var r: Variant = _capsule_session(true)
+	r.sim.main_capsule.level = level
+	if level > 0:
+		r.sim.main_capsule.first_upgrade_at = int(r.sim.now_ms)
+	CapsuleMod.force_raid(r.sim, true)
+	r.sim.update(0.05)   # planned -> warning
+	return r
+
+func _g3_to_contact(r: Variant) -> void:
+	r.sim.set_clock(int(r.sim.capsule_raid.contact_at))
+	r.sim.update(0.05)
+
+func _t_capsule_g3_qa() -> void:
+	# --- REQ-19: «~0» неможливе за жодного складу (властивість), число названо, коли відоме ---
+	var bad_count: Array = []
+	for n in [-1000, -5, -1, 0, 1, 2, 5, 32, 1000]:
+		for st in ["warning", "contact"]:
+			var rr: Dictionary = {"dir": 1, "count": n, "contact_at": 900000}
+			var txt: String = CapsuleTexts.raid_banner(st, rr, 0)
+			if txt == "" or "~0" in txt or "~-" in txt or " 0 рейдер" in txt or (n < 0 and ("%d рейдер" % n) in txt):
+				bad_count.append("%s/%d: %s" % [st, n, txt])
+			if n > 0 and not (str(n) in txt and "рейдерів" in txt):
+				bad_count.append("%s/%d lacks the known count: %s" % [st, n, txt])
+			if "%" in txt:
+				bad_count.append("unexpanded format in %s" % txt)
+	ok(bad_count.is_empty(), "G3-QA/REQ-0010-19: for any count the banner never says 0/negative and always names a known count (%s)" % str(bad_count))
+	ok(CapsuleTexts.raid_banner("warning", {}, 0) != "" and CapsuleTexts.raid_banner("none", {"count": 3}, 0) == "" and CapsuleTexts.raid_banner("planned", {"count": 3}, 0) == "",
+		"G3-QA/REQ-0010-19: empty record still gives a banner; non-alert states give none (sim banner stays)")
+	for d in [-7, 0, 3, 9]:
+		ok(CapsuleTexts.dir_word(d) != "", "G3-QA: direction %d out of/in range still yields a word" % d)
+	# реальний потік по рівнях 1..max: банер через шину (те, що бачить гравець) без нуля й без «тест»
+	var lvl_max: int = 5
+	for lvl in range(1, lvl_max + 1):
+		var r: Variant = _g3_contact_session(lvl)
+		if lvl == 1:
+			lvl_max = CapsuleMod.max_level(r.sim)
+		var bus: Variant = FeedbackBus.FeedbackBus.new()
+		var wb: String = bus._raid_banner(r.sim, String(r.sim.banner))
+		ok(String(r.sim.capsule_raid.state) == "warning" and int(r.sim.capsule_raid.count) > 0, "G3-QA: L%d forced raid is in warning with a real composition (%d)" % [lvl, int(r.sim.capsule_raid.count)])
+		ok("~%d рейдерів" % int(r.sim.capsule_raid.count) in wb and not ("~0" in wb) and "НАБЛИЖАЄТЬСЯ" in wb, "G3-QA/REQ-0010-19: L%d player-visible warning banner names the sim count (%s)" % [lvl, wb])
+		ok("тест" not in wb.to_lower() and "test" not in wb.to_lower(), "G3-QA: L%d warning banner has no debug word" % lvl)
+		_g3_to_contact(r)
+		var cb: String = bus._raid_banner(r.sim, String(r.sim.banner))
+		ok(String(r.sim.capsule_raid.state) == "contact" and "РЕЙД" in cb and not (" 0 рейдер" in cb) and "тест" not in cb.to_lower(),
+			"G3-QA: L%d contact banner is a real raid banner (%s)" % [lvl, cb])
+		var logs: String = " ".join(PackedStringArray((r.sim.messages as Array).map(func(m): return String(m.text)))).to_lower()
+		ok("тест" not in logs and "test" not in logs and ".gd" not in logs, "G3-QA/REQ-0010-40: L%d feed lines of the raid carry no debug leftover" % lvl)
+		r.sim.dispose_farm()
+		r.sim.dispose_power()
+	# рівень 0 (хук без прокачки): банер чесний, ніколи «0 рейдерів»
+	var r0: Variant = _g3_contact_session(0)
+	var bus0: Variant = FeedbackBus.FeedbackBus.new()
+	var w0: String = bus0._raid_banner(r0.sim, String(r0.sim.banner))
+	_g3_to_contact(r0)
+	var c0: String = bus0._raid_banner(r0.sim, String(r0.sim.banner))
+	ok(not ("~0" in w0) and not ("0 рейдер" in w0) and not ("0 рейдер" in c0), "G3-QA/REQ-0010-19: level-0 forced raid never shows a zero count (%s | %s)" % [w0, c0])
+	r0.sim.dispose_farm()
+	r0.sim.dispose_power()
+	# OFF: банер sim-а проходить дослівно
+	var off: Variant = _capsule_session(false)
+	off.sim.banner = "⚔ РЕЙД! 3 рейдерів — x"
+	var offbus: Variant = FeedbackBus.FeedbackBus.new()
+	ok(offbus._raid_banner(off.sim, String(off.sim.banner)) == "⚔ РЕЙД! 3 рейдерів — x", "G3-QA/OFF: raid banner untouched with the capsule flag off")
+	ok(not (_cap_snap(off).capsule as Dictionary).has("main"), "G3-QA/OFF: no capsule.main in the OFF snapshot")
+	off.sim.dispose_farm()
+	off.sim.dispose_power()
+
+	# --- «тест» ніколи не з'являється: усі рядкові літерали UI/капсули та таблиця ---
+	var rx := RegEx.new()
+	rx.compile("\"[^\"\n]*[Тт][Ее][Сс][Тт][^\"\n]*\"")
+	var leaks: Array = []
+	var files: Array = ["res://scripts/sim/capsule.gd", "res://scripts/world_view.gd"]
+	for f in DirAccess.get_files_at("res://scripts/ui"):
+		if String(f).ends_with(".gd"):
+			files.append("res://scripts/ui/" + String(f))
+	for f in files:
+		for m in rx.search_all(_read_code(String(f))):
+			leaks.append("%s: %s" % [String(f).get_file(), m.get_string()])
+	ok(leaks.is_empty(), "G3-QA/REQ-0010-40: no string literal with «тест» in ui/*, world_view, sim/capsule (%s)" % str(leaks))
+
+	# --- REQ-38: перша причина словами — для КОЖНОГО рівня обох осей, обох станів `far` ---
+	var rs: Variant = _capsule_session(true)
+	var shorts: Array = []
+	var checked: int = 0
+	for axis in [&"capsule", &"protection"]:
+		var top: int = CapsuleMod.max_protection(rs.sim) if axis == &"protection" else CapsuleMod.max_level(rs.sim)
+		for lv in range(0, top):
+			rs.sim.main_capsule["protection" if axis == &"protection" else "level"] = lv
+			var q: Dictionary = CapsuleMod.quote(rs.sim, axis)
+			if (q.missing as Dictionary).is_empty():
+				continue
+			for far in [false, true]:
+				var w: String = Fmt.capsule_shortfall(q.missing, far)
+				checked += 1
+				if not w.begins_with("Бракує: ") or w.count("×") != 1 or "дослідження" in w or " з " in w or "(" in w or w.count("Бракує") != 1:
+					shorts.append("%s L%d far=%s: %s" % [axis, lv, far, w])
+				for k in (q.missing as Dictionary).keys():
+					var id: String = String(k)
+					if id == id.to_lower() and id.is_valid_identifier() and (id + " ") in (w + " "):
+						shorts.append("raw id '%s' in %s" % [id, w])
+	ok(checked >= 4 and shorts.is_empty(), "G3-QA/REQ-0010-38: every ladder refusal is one reason in words, no chain, no raw id (%d checked; %s)" % [checked, str(shorts)])
+	rs.sim.main_capsule.level = 0
+	rs.sim.main_capsule.protection = 0
+	var q0: Dictionary = CapsuleMod.quote(rs.sim, &"capsule")
+	var snap_why: String = String(_cap_snap(rs).capsule.main.upgrade.why)
+	ok(snap_why == Fmt.capsule_shortfall(q0.missing, bool(q0.far)) and (bool(q0.can) or snap_why.begins_with("Бракує: ")), "G3-QA/REQ-0010-38: the snapshot refusal text is exactly the formatter's output for the sim quote (%s)" % snap_why)
+	_grant_cost(rs, &"capsule")
+	var afford: Dictionary = _cap_snap(rs).capsule.main.upgrade
+	ok(bool(afford.can) and String(afford.why) == "", "G3-QA/REQ-0010-38: when affordable there is no refusal text")
+	ok(Fmt.capsule_shortfall({}, false) == "" and Fmt.capsule_shortfall({}, true) == "", "G3-QA: empty shortfall -> empty string")
+
+	# --- ширина картки відмови ---
+	var fw: Widgets.FlashWidget = Widgets.FlashWidget.new()
+	fw.build_once()
+	var fbus: Variant = FeedbackBus.FeedbackBus.new()
+	fw.subscribe(fbus)
+	var lbl: Label = fw._card.label
+	var longt: String = Fmt.capsule_shortfall({"planks": 3}, true) + " · " + "дуже довгий додатковий пояснювальний хвіст, що мусить переноситись, а не розтягувати картку"
+	fbus.flash.emit({"params": {"text": longt}})
+	var w_long: float = lbl.custom_minimum_size.x
+	fbus.flash.emit({"params": {"text": "Бракує: камінь ×1"}})
+	var w_short: float = lbl.custom_minimum_size.x
+	fbus.flash.emit({"params": {"text": longt}})
+	ok(w_long == Widgets.FlashWidget.CAP_W, "G3-QA/REQ-0010-38: a very long refusal is capped at CAP_W and wraps (%.0f)" % w_long)
+	ok(w_short > 40.0 and w_short < w_long, "G3-QA: a short refusal after a long one shrinks the card, never stays stale or a letter column (%.0f < %.0f)" % [w_short, w_long])
+	fbus.flash.emit({"params": {"text": ""}})
+	ok(not fw.visible, "G3-QA: an empty flash hides the card")
+	fw.free()
+
+	# --- REQ-27: імунітет читається однаково в картці, панелі й на табличці ---
+	var imm: Variant = _capsule_session(true)
+	var now: int = int(imm.sim.now_ms)
+	imm.sim.main_capsule.immune_until = now + 20 * 3600000
+	var card: String = " ".join(HudModel._inspect_capsule(imm.sim).lines)
+	ok("Імунітет до рейдів · 20 год 0 хв" in card, "G3-QA/REQ-0010-27: card reads «Імунітет до рейдів · 20 год 0 хв»")
+	ok(CapsuleTexts.t("mark_immune") % Fmt.left_ms(CapsuleMod.immune_left_ms(imm.sim)) == "Імунітет до рейдів · 20 год 0 хв", "G3-QA/REQ-0010-27: the hull plate text has the same words")
+	var pn: Variant = WorldPanels.CapsulePanel.new()
+	pn.build_once()
+	pn.bind(_cap_snap(imm, {"open_panels": ["capsule_bay"]}))
+	ok(pn._m_immune.visible and "Імунітет до рейдів · 20 год 0 хв" in pn._m_immune.text, "G3-QA/REQ-0010-27: panel line reads the same (%s)" % pn._m_immune.text)
+	imm.sim.main_capsule.immune_until = now + 1
+	ok(Fmt.left_ms(1) == "1 хв" and "Імунітет до рейдів · 1 хв" in " ".join(HudModel._inspect_capsule(imm.sim).lines), "G3-QA/REQ-0010-27: 1 ms left is shown as «1 хв», never «0 хв» while immune")
+	imm.sim.main_capsule.immune_until = now
+	ok(not ("Імунітет" in " ".join(HudModel._inspect_capsule(imm.sim).lines)), "G3-QA/REQ-0010-27: immune_until == now means no immunity and no line")
+	pn.bind(_cap_snap(imm, {"open_panels": ["capsule_bay"]}))
+	ok(not pn._m_immune.visible, "G3-QA/REQ-0010-27: panel hides the immunity line when it has expired")
+	var imm_bad: Array = []
+	for k in CapsuleTexts.TEXTS:
+		var v: String = String(CapsuleTexts.TEXTS[k])
+		if "мунітет" in v and not ("до рейдів" in v):
+			imm_bad.append(k)
+	ok(imm_bad.is_empty(), "G3-QA/REQ-0010-27: every capsule string that says immunity says «до рейдів» (%s)" % str(imm_bad))
+	pn.free()
+	imm.sim.dispose_farm()
+	imm.sim.dispose_power()
+
+	# --- картка: твердження про рівень правдиве за даними (лінійність «за рівень», 4 осі) ---
+	var lin: Array = []
+	for key in CapsuleMod.BUFF_KEYS:
+		var b1: float = CapsuleMod.buff_bonus(rs.sim, String(key), 1)
+		for lv in range(1, CapsuleMod.max_level(rs.sim) + 1):
+			if absf(CapsuleMod.buff_bonus(rs.sim, String(key), lv) - b1 * float(lv)) > 0.005:
+				lin.append("%s L%d=%.3f vs %.3f" % [key, lv, CapsuleMod.buff_bonus(rs.sim, String(key), lv), b1 * lv])
+	ok(lin.is_empty() and CapsuleMod.BUFF_KEYS.size() == 4, "G3-QA/REQ-0010-85: «за рівень» on the card is true for the four axes at every level (%s)" % str(lin))
+	var zl: String = CapsuleTexts.t("zone_label") + " " + CapsuleTexts.t("zone_label2")
+	ok("межа бази" in zl and "бафи" in zl and "склад" in zl, "G3-QA: zone caption names the boundary, buffs and storage")
+
+	# --- контакт: позначки лише в контакті, межі, боти, значення-дані ---
+	var rc: Variant = _g3_contact_session(1)
+	var warn_ring: Dictionary = _cap_snap(rc).capsule.main.ring
+	ok(bool(warn_ring.alert) and bool(warn_ring.show) and (warn_ring.raiders as Array).is_empty(), "G3-QA: in warning the ring alerts (shown without selecting) but carries no raider marks")
+	_g3_to_contact(rc)
+	var hot: Dictionary = _cap_snap(rc).capsule.main
+	var alive: int = 0
+	for e in rc.sim.enemies:
+		if String(e.get("kind", "raider")) != "bot":
+			alive += 1
+	ok(String(hot.raid_state) == "contact" and bool(hot.ring.show) and bool(hot.ring.alert), "G3-QA: contact is visible without the capsule being selected (ring show+alert)")
+	ok((hot.ring.raiders as Array).size() == mini(alive, 32) and alive == int(rc.sim.capsule_raid.count), "G3-QA: one mark per living raider (%d marks, %d alive, %d planned)" % [(hot.ring.raiders as Array).size(), alive, int(rc.sim.capsule_raid.count)])
+	ok(not _holds_object(hot), "G3-QA/R8: the contact slice (with marks) is value data")
+	var n_map: int = int(rc.sim.n)
+	var in_map := true
+	for m in hot.ring.raiders:
+		if float(m.x) < 0.0 or float(m.y) < 0.0 or float(m.x) > float(n_map) or float(m.y) > float(n_map):
+			in_map = false
+	ok(in_map, "G3-QA: raider marks lie inside the map")
+	var first_raider: Dictionary = {}
+	for e in rc.sim.enemies:
+		if String(e.get("kind", "raider")) != "bot":
+			first_raider = e
+			break
+	if not first_raider.is_empty():
+		var bot: Dictionary = first_raider.duplicate(true)
+		bot["kind"] = "bot"
+		rc.sim.enemies.append(bot)
+		for i in 40:
+			rc.sim.enemies.append(first_raider.duplicate(true))
+		var capped: Array = _cap_snap(rc).capsule.main.ring.raiders
+		ok(capped.size() == 32, "G3-QA: marks are capped at 32 and a patrol bot adds none (%d)" % capped.size())
+		rc.sim.enemies.clear()
+		rc.sim.update(0.05)   # рейдерів нема -> розв'язка
+		var after: Dictionary = _cap_snap(rc).capsule.main
+		ok(String(after.raid_state) != "contact" and (after.ring.raiders as Array).is_empty(), "G3-QA: after the raid resolves no stale marks remain (%s)" % String(after.raid_state))
+	rc.sim.dispose_farm()
+	rc.sim.dispose_power()
+	rs.sim.dispose_farm()
+	rs.sim.dispose_power()
+
+
 func _t_rule_tripwires() -> void:
 	# R1 — one-way flow: no sim/kernel/session/social/persistence file references res://scripts/ui
 	var sim_side := ["res://scripts/sim.gd", "res://scripts/session.gd", "res://scripts/social.gd",
@@ -1147,7 +2229,8 @@ func _t_rule_tripwires() -> void:
 	ok(r7, "R7: no raw .position/PRESET_TOP_RIGHT in panels/widgets/overlays (pin_* only)")
 	# R9 — sim commands appear only in the router, never in panels/widgets
 	var cmds := ["try_build", "demolish", "craft_item", "dispatch_convoy", "try_launch_capsule",
-		"order_move", "order_gather", "order_attack", "accept_invite"]
+		"order_move", "order_gather", "order_attack", "accept_invite",
+		"upgrade_capsule", "upgrade_protection", "call_reinforcement"]   # spec 0010 REQ-0010-36: sim-імена капсули — лише в роутері
 	var r9 := true
 	for f in ["panels.gd", "widgets.gd", "catalog_panels.gd", "lifecycle.gd", "world_panels.gd"]:
 		var body := _read_code("res://scripts/ui/" + f)

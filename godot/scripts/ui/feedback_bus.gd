@@ -9,6 +9,8 @@
 # by the 40-cap trim, so (messages_seq - _last_seq) is exactly the count of unseen tail entries.
 extends RefCounted
 
+const CapsuleTexts = preload("res://scripts/ui/capsule_texts.gd")
+
 class FeedbackBus extends RefCounted:
 	signal banner(evt: Dictionary)   # {status:StringName, params:{text}}  — top urgent strip
 	signal flash(evt: Dictionary)    # {id, cls, params:{text}}            — transient center toast
@@ -27,7 +29,7 @@ class FeedbackBus extends RefCounted:
 		if int(sim.messages_seq) < _last_seq:
 			reset_cursors()
 		# banner: emit only on change
-		var b: String = String(sim.banner)
+		var b: String = _raid_banner(sim, String(sim.banner))
 		if b != _last_banner:
 			banner.emit({"status": _banner_status(b), "params": {"text": b}})
 			_last_banner = b
@@ -56,6 +58,16 @@ class FeedbackBus extends RefCounted:
 		_last_seq = 0
 		_last_banner = ""
 		_last_flash = ""
+
+	# При ON банер рейду несе напрямок, склад і час до контакту (OD-88) і що робити; решта банерів — як віддав sim.
+	func _raid_banner(sim, base: String) -> String:
+		if base == "" or sim.get("use_main_capsule") != true:
+			return base
+		var r: Variant = sim.get("capsule_raid")
+		if not (r is Dictionary) or "РЕЙД" not in base:
+			return base
+		var text: String = CapsuleTexts.raid_banner(String((r as Dictionary).get("state", "none")), r, int(sim.get("now_ms")))
+		return text if text != "" else base
 
 	func _banner_status(text: String) -> StringName:
 		if text == "":

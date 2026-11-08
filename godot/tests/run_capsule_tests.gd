@@ -209,6 +209,12 @@ func _init() -> void:
 	_t_need_recovery_through_body()
 	_t_need_onset_unchanged()
 	_t_comfort_recover_scale_kernel()
+	# --- wave 0010-W2d (OD-109: the ladder priced DOWN, x2 per level kept, feasible on the 56x56 map) ---
+	_t_w2d_ladder_x2_both_axes()
+	_t_w2d_ladder_rarity_and_order()
+	_t_w2d_level1_fits_pack_and_pays()
+	_t_w2d_ladder_feasible_on_map()
+	_t_w2d_ladder_data_integrity()
 	# --- wave 0010-W3a (raid core: predicate, consequence, state machine, immunity, token, own stream, hash) ---
 	_t_raid_pure_predicate()
 	_t_raid_pure_breach()
@@ -2890,7 +2896,9 @@ func _t_levels_table_data() -> void:
 	var code: PackedStringArray = PackedStringArray()
 	for line in FileAccess.get_file_as_string("res://scripts/sim/capsule.gd").split("\n"):
 		var stripped: String = String(line).strip_edges()
-		if not stripped.begins_with("#"):
+		# `EVENTS_KEEP` is the length of the view-memory event log (not a price, not in the hash): the ladder's wood 24 collided with it
+		# by coincidence once OD-109 scaled the prices down (test-bug, not a defect) — that ONE named non-table constant is exempt
+		if not stripped.begins_with("#") and not stripped.begins_with("const EVENTS_KEEP"):
 			code.append(String(line).get_slice("#", 0))
 	var body: String = "\n".join(code)
 	var hit: String = ""
@@ -8710,3 +8718,206 @@ func _t_w3b_off_inert() -> void:
 	ok(not MainCapsule.cadence_tick(a) and MainCapsule.drain_events(a).is_empty() and (a.capsule_raid as Dictionary).is_empty() and not Persistence.serialize_region(a).has("main_capsule"), "REQ-0010-01: OFF — no cadence, no events, no automaton, no record key")
 	_dispose(a)
 	_dispose(b)
+
+
+# =============================================================================================
+# wave 0010-W2d — OD-109: prices went DOWN, the coefficient x2 per level stays (OD-65/93), the ladder must be doable on the 56x56 map.
+# Written from REQ-0010-11/13/14/76/88/97/100/101 and OD-93/65/75/109, not from the bot's output. What a test may NOT pin: the concrete
+# numbers (they are `proposed`, the bot's), nor the old 1-2 h of gathering for level 1 (OD-109 scales it down; see the report's question).
+# =============================================================================================
+const W2D_LADDER_TOL := 0.15      # the bot's C3 (|total(L)/total(L-1) - 2| <= 2 x 0.15) — REQ-0010-101 says only «≈ ×2»
+const W2D_RESERVE := 0.60         # the bot's C1: both axes together take at most 60% of a region's finite nodes (the rest: building, tools)
+const W2D_RANK: Dictionary = {"wood": 0, "stone": 1, "planks": 2, "scrap": 3}   # rarity by the finite supply order (OD-75), as the bot's RARITY
+
+
+func _w2d_total(rows: Array, L: int) -> int:
+	var n: int = 0
+	var c: Dictionary = _cost_of(rows, L)
+	for res in c:
+		n += int(c[res])
+	return n
+
+
+func _w2d_axes() -> Dictionary:
+	return {"capsule": _raw_rows(), "protection": (_raw_table().get("protection", {}) as Dictionary).get("levels", [])}
+
+
+func _w2d_max_rank(rows: Array, L: int) -> int:
+	var r: int = -1
+	for res in _cost_of(rows, L):
+		r = maxi(r, int(W2D_RANK.get(String(res), 99)))
+	return r
+
+
+# REQ-0010-101/OD-65: total units of level L+1 / level L ~ x2 on BOTH axes, tightly (not the loose x2 +- 0.4 of the earlier check); every
+# listed resource >= 1 whole unit; the ladder is strictly increasing in the data's level order
+func _t_w2d_ladder_x2_both_axes() -> void:
+	var axes: Dictionary = _w2d_axes()
+	for ax in axes:
+		var rows: Array = axes[ax]
+		var bad: Array = []
+		var tot: Array = []
+		for L in range(1, 6):
+			tot.append(_w2d_total(rows, L))
+		for i in range(1, 5):
+			var ratio: float = float(tot[i]) / float(maxi(1, int(tot[i - 1])))
+			if absf(ratio - 2.0) > 2.0 * W2D_LADDER_TOL:
+				bad.append("L%d/L%d x%.3f" % [i + 1, i, ratio])
+		ok(bad.is_empty(), "REQ-0010-101/OD-65 [%s]: total units(L+1)/units(L) within 2 +- %.0f%% for L=1..4 — totals %s, off: %s" % [String(ax), 200.0 * W2D_LADDER_TOL, str(tot), str(bad)])
+		var whole: bool = true
+		for L in range(1, 6):
+			var c: Dictionary = (rows[L] as Dictionary).get("cost", {})
+			whole = whole and not c.is_empty()
+			for res in c:
+				whole = whole and typeof(c[res]) in [TYPE_INT, TYPE_FLOAT] and float(c[res]) >= 1.0 and float(c[res]) == floorf(float(c[res]))
+		ok(whole, "REQ-0010-101 [%s]: every listed resource of levels 1..5 is a whole number >= 1 (the rounding rule never prices a resource at 0)" % String(ax))
+		var span: float = float(tot[4]) / float(maxi(1, int(tot[0])))
+		ok(span >= 16.0 * 0.7 and span <= 16.0 * 1.4, "REQ-0010-101/OD-65 [%s]: four doublings compound to ~x16 from level 1 to 5 (%.2f; tolerance of rounding: 11..22)" % [String(ax), span])
+	# the same query through the code: MainCapsule.row(s, L).cost is what the data says, level by level (no hidden remap of the order)
+	var s: Variant = _on_pad()
+	var order_ok: bool = true
+	var rows_c: Array = _raw_rows()
+	for L in range(1, 6):
+		order_ok = order_ok and _same_numbers(MainCapsule.row(s, L).get("cost", {}), _cost_of(rows_c, L))
+	ok(order_ok, "REQ-0010-11/101: the module's row(L).cost is the data's level L in the data's order (level order is not shuffled)")
+	_dispose(s)
+
+
+# REQ-0010-101/OD-75: level 1 is basic raw only; the rarest ingredient never gets more common with the level; level 5 asks for the rarest
+func _t_w2d_ladder_rarity_and_order() -> void:
+	var axes: Dictionary = _w2d_axes()
+	for ax in axes:
+		var rows: Array = axes[ax]
+		var ranks: Array = []
+		var unknown: Array = []
+		for L in range(1, 6):
+			ranks.append(_w2d_max_rank(rows, L))
+			for res in _cost_of(rows, L):
+				if not W2D_RANK.has(String(res)):
+					unknown.append("L%d:%s" % [L, String(res)])
+		var mono: bool = true
+		for i in range(1, ranks.size()):
+			mono = mono and int(ranks[i]) >= int(ranks[i - 1])
+		ok(unknown.is_empty(), "REQ-0010-101 [%s]: every ingredient of the ladder is a resource the rarity order knows — %s" % [String(ax), str(unknown)])
+		ok(mono, "REQ-0010-101/OD-75 [%s]: the rarest ingredient's rank never falls with the level — %s" % [String(ax), str(ranks)])
+		ok(int(ranks[0]) <= int(W2D_RANK.stone), "REQ-0010-101/OD-75 [%s]: level 1 is basic raw material only (wood/stone), rank %d" % [String(ax), int(ranks[0])])
+		ok(int(ranks[4]) > int(ranks[0]), "REQ-0010-101/OD-75 [%s]: level 5 asks for something rarer than level 1 does (%d > %d)" % [String(ax), int(ranks[4]), int(ranks[0])])
+	# the buffs ride the SAME level order: a swapped pair of price rows would still be 'monotone' in buffs but not in price
+	var rows: Array = _raw_rows()
+	var by_price: bool = true
+	for L in range(2, 6):
+		by_price = by_price and _w2d_total(rows, L) > _w2d_total(rows, L - 1)
+	ok(by_price, "REQ-0010-11/101: the price of level L strictly grows with L (a swapped pair of levels is caught)")
+
+
+# REQ-0010-101 (C2 of the bot) + 13/76/14: level 1 fits into the backpack proper (non-hotbar slots) AND is really payable from a bare
+# backpack alone; the debit takes exactly that, the ledger remembers exactly that
+func _t_w2d_level1_fits_pack_and_pays() -> void:
+	var rows: Array = _raw_rows()
+	var slots: int = 0
+	for res in _cost_of(rows, 1):
+		var cap: int = Inventory.stack_max(String(res))
+		slots += int(ceil(float(_cost_of(rows, 1)[res]) / float(cap)))
+	var pack_slots: int = Inventory.SLOTS - Inventory.HOTBAR
+	ok(slots >= 1 and slots <= pack_slots, "REQ-0010-101: the level-1 price needs %d stack slots, the backpack proper has %d (level 1 is a first-hours goal, not a warehouse job)" % [slots, pack_slots])
+	for ax_fn in ["capsule", "protection"]:
+		var s: Variant = _on_pad()
+		_wipe(s)
+		var cost: Dictionary = _cost_of(rows, 1) if ax_fn == "capsule" else _cost_of((_raw_table().protection as Dictionary).levels, 1)
+		var stocked_before: String = var_to_str(s.stock)
+		var left: int = 0
+		for res in cost:
+			left += Inventory.add(s, String(res), int(cost[res]))
+		ok(left == 0, "REQ-0010-101 [%s]: the whole level-1 price fits an emptied backpack (nothing left over)" % ax_fn)
+		ok(var_to_str(s.stock) == stocked_before, "setup [%s]: the stock was not touched by filling the pack" % ax_fn)
+		var r: Dictionary = s.upgrade_capsule() if ax_fn == "capsule" else MainCapsule.upgrade_protection(s)
+		ok(bool(r.get("ok", false)), "REQ-0010-13/100 [%s]: the level-1 price paid from the backpack ALONE upgrades (%s)" % [ax_fn, str(r)])
+		var spent_all: bool = true
+		for res in cost:
+			spent_all = spent_all and _have(s, String(res)) == 0
+		ok(spent_all, "REQ-0010-13/100 [%s]: ... and the debit took exactly the price (nothing of those resources left)" % ax_fn)
+		var inv: Dictionary = s.main_capsule.get("invested" if ax_fn == "capsule" else "protection_invested", {})
+		ok(inv.has("1") and _same_numbers(inv["1"], cost), "REQ-0010-14/103 [%s]: the journal holds exactly the level-1 price — %s" % [ax_fn, var_to_str(inv)])
+		_dispose(s)
+	# one unit short of the cheapest ingredient: refused, nothing moves (a data price of the real ladder, not an injected one)
+	var s2: Variant = _on_pad()
+	_wipe(s2)
+	var c1: Dictionary = _cost_of(rows, 1)
+	var short_res: String = String(c1.keys()[0])
+	for res in c1:
+		var n: int = int(c1[res]) - (1 if String(res) == short_res else 0)
+		if n > 0:
+			Inventory.add(s2, String(res), n)
+	var sig: String = _funds_sig(s2)
+	var r2: Dictionary = s2.upgrade_capsule()
+	ok(not bool(r2.get("ok", false)) and _funds_sig(s2) == sig and s2.capsule_level() == 0, "REQ-0010-13: one unit short of the real level-1 price -> refused, no debit, level stays 0")
+	_dispose(s2)
+
+
+# OD-109/REQ-0010-101: «драбина здійсненна на карті 56×56». For EACH spawn preset and EACH finite resource the full ladder 1..5 of BOTH axes
+# (planks counted as wood at the catalogue recipe ratio) takes at most the bot's 60% of the region's nodes, and never more than the region has.
+func _t_w2d_ladder_feasible_on_map() -> void:
+	var ratio_wood_per_plank: float = 1.5
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(CATALOG_FILE))
+	for rc in (parsed as Dictionary).get("recipes", []):
+		if String(rc.get("id", "")) == "make_planks":
+			ratio_wood_per_plank = float(int((rc.inputs as Dictionary).get("wood", 1))) / float(int((rc.output as Dictionary).get("count", 1)))
+	var need: Dictionary = {"wood": 0.0, "stone": 0.0, "scrap": 0.0}
+	var axes: Dictionary = _w2d_axes()
+	for ax in axes:
+		for L in range(1, 6):
+			var c: Dictionary = _cost_of(axes[ax], L)
+			for res in c:
+				var key: String = "wood" if String(res) == "planks" else String(res)
+				var mult: float = ratio_wood_per_plank if String(res) == "planks" else 1.0
+				if need.has(key):
+					need[key] = float(need[key]) + float(c[res]) * mult
+	var kinds: Dictionary = {"wood": "tree", "stone": "rock", "scrap": "scrap"}
+	var worst: Array = []
+	var hard: Array = []
+	for pr in GameData.SPAWN_PRESETS:
+		var sim: Variant = Sim.new()
+		sim.use_inventory = true
+		sim.use_catalog = true
+		sim.use_main_capsule = true
+		sim.new_game(WorldGen.generate_map(float(pr.lat), float(pr.lon), 56), false)
+		var have: Dictionary = {"wood": 0, "stone": 0, "scrap": 0}
+		for k in (sim.map.nodes as Dictionary):
+			for res in kinds:
+				if String(sim.map.nodes[k].kind) == String(kinds[res]):
+					have[res] = int(have[res]) + int(sim.map.nodes[k].amount)
+		for res in need:
+			var frac: float = float(need[res]) / float(maxi(1, int(have[res])))
+			if frac > W2D_RESERVE:
+				worst.append("%s/%s %.0f%% of %d" % [String(pr.name), String(res), 100.0 * frac, int(have[res])])
+			if frac > 1.0:
+				hard.append("%s/%s" % [String(pr.name), String(res)])
+		_dispose(sim)
+	ok(hard.is_empty(), "OD-109/REQ-0010-101: the whole ladder of both axes never needs more of a resource than a 56x56 region holds — over: %s" % str(hard))
+	ok(worst.is_empty(), "OD-109/REQ-0010-101 (the bot's C1): both axes together take <= %.0f%% of every region's finite nodes, 5 presets — over: %s" % [100.0 * W2D_RESERVE, str(worst)])
+
+
+# data integrity around the scaling: the data still says WHAT is proposed and WHY; the x2 is the owner's number and stays the stated factor
+func _t_w2d_ladder_data_integrity() -> void:
+	var t: Dictionary = _raw_table()
+	ok(String(t.get("status", "")) == "proposed", "OD-109/OD-60: the scaled prices are the bot's PROPOSAL — the table's status stays 'proposed' until the owner approves ('%s')" % String(t.get("status", "")))
+	ok(String(t.get("feasibility_note", "")).length() > 40, "OD-109: the data carries a feasibility note that explains the scale (the honest 'level 1 is NOT 1-2 h' lives there)")
+	ok(absf(float((t.protection as Dictionary).get("factor", 0.0)) - 2.0) < 1.0e-9, "OD-65/103: the coefficient the data states is x2")
+	# REQ-0010-97: cheaper prices change no roster: the table still has no clone entry (ledgers and costs are plain resources)
+	var keys: Array = []
+	_all_keys(t, keys, "cost")
+	ok(_first_word_in(keys, ROSTER_WORDS) == "", "REQ-0010-97: the repriced table still names no clone/genome/implant/orbit key")
+	# REQ-0010-88: a repriced table never breaks an older save — a save at level 5 loads under a table whose prices changed (invested kept as is)
+	var src: Variant = _leveled(5)
+	var inv_before: String = var_to_str(src.main_capsule.get("invested", {}))
+	var payload: Dictionary = _json_rt(Persistence.resume_payload(src))
+	var cheaper: Dictionary = _table_copy()
+	for row in cheaper.levels:
+		for k in (row.cost as Dictionary):
+			row.cost[k] = maxi(1, int(row.cost[k]) / 3)
+	var y: Variant = Sim.new()
+	y.capsule_table = cheaper
+	var accepted: bool = Persistence.restore(y, payload)
+	ok(accepted and y.capsule_level() == 5 and var_to_str(y.main_capsule.get("invested", {})) == inv_before and inv_before != var_to_str({}), "REQ-0010-88/14: a level-5 save under repriced data loads, keeps level 5 and the journal exactly (what was paid stays what was paid)")
+	_dispose(y)
+	_dispose(src)

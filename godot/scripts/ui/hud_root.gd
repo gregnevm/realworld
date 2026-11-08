@@ -44,6 +44,7 @@ func _fit_viewport() -> void:
 # The side docks scroll: Vitals + Goals + Research (+ Gear/browsers on hotkeys) outgrow a 720p screen
 # and the bottom panel used to slide under the build bar. Each dock is a ScrollContainer sized to its
 # CONTENT (capped above the bar) every frame, so an empty strip never blocks clicks on the map.
+const RIGHT_THUMB_LIFT := 14.0         # phone: the right dock ends above the build/action button (it covered the last rows of tall panels)
 const DOCK_BOTTOM_GAP := 84.0          # keep docks clear of the BAR dock (build palette)
 var _left_scroll: ScrollContainer
 var _right_scroll: ScrollContainer
@@ -107,7 +108,7 @@ func _dock_scroll() -> ScrollContainer:
 func _fit_docks() -> void:
 	var cap: float = maxf(120.0, size.y - dock_bottom_gap - dock_top + 10.0)
 	_fit_one(_left_scroll, false, cap)
-	_fit_one(_right_scroll, true, cap)
+	_fit_one(_right_scroll, true, cap - (RIGHT_THUMB_LIFT if compact else 0.0))   # touch: the action button sits over the right dock's bottom corner
 
 func _fit_one(sc: ScrollContainer, right_edge: bool, cap: float) -> void:
 	var box: Control = sc.get_child(0)

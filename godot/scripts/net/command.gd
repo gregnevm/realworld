@@ -44,6 +44,8 @@ const WIRE_VERBS := {
 	"enqueue_research": {"id": "s"},
 	"start_research": {"id": "s"},
 	"clear_research": {},
+	"capsule_upgrade": {},   # spec 0010 REQ-0010-36: обидві осі прокачки капсули без аргументів — сервер валідує зміст
+	"capsule_protect": {},
 }
 
 # Refusal reasons — a closed set, so a client can branch on them and tests can assert on them.
