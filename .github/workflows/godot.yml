@@ -123,6 +123,18 @@ jobs:
           unzip -j -q Godot_v4.7-stable_export_templates.tpz "templates/web_*" "templates/version.txt" \
             -d ~/.local/share/godot/export_templates/4.7.stable
           rm Godot_v4.7-stable_export_templates.tpz
+      # штамп збірки: build_info.gd читає ☰-меню й консоль; у репозиторії там «dev» (див. scripts/build_info.gd)
+      - name: Stamp build
+        run: |
+          SHA="$(echo "${{ github.event.pull_request.head.sha || github.sha }}" | cut -c1-7)"
+          printf '%s\n' 'extends RefCounted' '' \
+            "const SHA := \"$SHA\"" \
+            "const RUN := \"$GITHUB_RUN_NUMBER\"" \
+            "const BUILT := \"$(date -u +%Y-%m-%d)\"" '' \
+            'static func label() -> String:' \
+            '	if SHA == "dev":' '		return "dev (локальна збірка)"' \
+            '	return "#%s · %s · %s" % [RUN, SHA, BUILT]' > godot/scripts/build_info.gd
+          cat godot/scripts/build_info.gd
       - name: Export Web build
         run: |
           # import first: exporting from a fresh checkout without the .godot cache misses resources;
@@ -204,6 +216,7 @@ jobs:
             echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=$RELEASE_KS_USER" >> "$GITHUB_ENV"
             echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=$RELEASE_KS_PASS" >> "$GITHUB_ENV"
           else
+            echo "::warning::ANDROID_RELEASE_KEYSTORE_* secrets не задано — APK підписано ефемерним CI-ключем з кешу. Якщо кеш зникне, ключ зміниться і оновлення поверх встановленого не пройде. Задай секрети (docs/agents/godot-ui-tests-build.md)."
             if [ ! -f ~/.android-ci/release.keystore ]; then
               "$KT" -genkeypair -keystore ~/.android-ci/release.keystore -storetype PKCS12 -storepass realworld-ci \
                 -alias realworld -keypass realworld-ci -keyalg RSA -keysize 3072 -validity 18250 -dname "CN=RealWorld CI,O=SSD,C=UA"
@@ -218,6 +231,23 @@ jobs:
             "export/android/debug_keystore = \"$HOME/.android-ci/debug.keystore\"" \
             'export/android/debug_keystore_user = "androiddebugkey"' \
             'export/android/debug_keystore_pass = "android"' > ~/.config/godot/editor_settings-4.7.tres
+      # штамп збірки: build_info.gd читає ☰-меню й консоль; у репозиторії там «dev» (див. scripts/build_info.gd)
+      - name: Stamp build
+        run: |
+          SHA="$(echo "${{ github.event.pull_request.head.sha || github.sha }}" | cut -c1-7)"
+          printf '%s\n' 'extends RefCounted' '' \
+            "const SHA := \"$SHA\"" \
+            "const RUN := \"$GITHUB_RUN_NUMBER\"" \
+            "const BUILT := \"$(date -u +%Y-%m-%d)\"" '' \
+            'static func label() -> String:' \
+            '	if SHA == "dev":' '		return "dev (локальна збірка)"' \
+            '	return "#%s · %s · %s" % [RUN, SHA, BUILT]' > godot/scripts/build_info.gd
+          cat godot/scripts/build_info.gd
+      # versionCode росте з номером запуску CI: новіший APK ставиться поверх старішого (у репозиторії лишається 1 / 0.1.0)
+      - name: Android version from CI run
+        run: |
+          sed -i "s/^version\/code=.*/version\/code=$GITHUB_RUN_NUMBER/; s/^version\/name=.*/version\/name=\"0.1.$GITHUB_RUN_NUMBER\"/" godot/export_presets.cfg
+          grep -n "^version/" godot/export_presets.cfg
       - name: Export Android APK
         run: |
           mkdir -p godot/build/android

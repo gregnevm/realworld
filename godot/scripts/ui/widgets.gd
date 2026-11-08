@@ -709,6 +709,7 @@ class PanelMenu extends WidgetBase.Widget:
 	signal closed
 	var _grid: GridContainer
 	var _btns: Dictionary = {}   # "kind:id" -> Button
+	var _footer: Label
 	func _build() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var pc := PanelContainer.new()
@@ -738,6 +739,14 @@ class PanelMenu extends WidgetBase.Widget:
 		_grid.add_theme_constant_override("h_separation", 6)
 		_grid.add_theme_constant_override("v_separation", 6)
 		vb.add_child(_grid)
+		_footer = Label.new()   # рядок збірки (sha · дата · прапори) — щоб було видно, яку версію відкрито
+		_footer.add_theme_color_override("font_color", Tokens.DIM)
+		_footer.add_theme_font_size_override("font_size", 13)
+		_footer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		vb.add_child(_footer)
+	func set_footer(text: String) -> void:
+		build_once()
+		_footer.text = text
 	# entries: [{kind: &"panel"|&"overlay", id, label}] — called once by the entry scene
 	func setup(entries: Array) -> void:
 		build_once()
