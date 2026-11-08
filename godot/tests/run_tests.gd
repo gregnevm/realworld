@@ -39,6 +39,7 @@ func _init() -> void:
 	_t_items()
 	_t_demolish()
 	_t_no_self_entomb()
+	_t_no_walk_into_new_wall()
 	_t_repair()
 	_t_inventory()
 	_t_osm_overlay()
@@ -374,6 +375,39 @@ func _t_no_self_entomb() -> void:
 			placed = s.bgrid.has((hy + d.y) * s.n + hx + d.x)
 			break
 	ok(placed, "no entomb: a wall next to the hero is still placed")
+
+# Плейтест 2026-11-08 #1b: стіна, поставлена на клітинку вже складеного шляху, не затягує героя в себе — він перекладає маршрут.
+func _t_no_walk_into_new_wall() -> void:
+	var s = Sim.new()
+	s.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
+	s.stock.stone = 200
+	s.stock.wood = 200
+	var hx := int(s.player.px)
+	var hy := int(s.player.py)
+	var goal := Vector2i(-1, -1)
+	var path: Array = []
+	for r in range(8, 3, -1):
+		for d in [Vector2i(r, 0), Vector2i(-r, 0), Vector2i(0, r), Vector2i(0, -r)]:
+			if goal.x < 0 and s._in(hx + d.x, hy + d.y) and not s.is_blocked(hx + d.x, hy + d.y):
+				var p: Array = s.compute_path(hx, hy, hx + d.x, hy + d.y)
+				if p.size() >= 5 and s.build_valid(p[2].x, p[2].y):
+					goal = Vector2i(hx + d.x, hy + d.y)
+					path = p
+	ok(goal.x >= 0, "no walk-in: a scenario with a clear path of ≥5 cells exists near spawn")
+	if goal.x < 0:
+		return
+	var blocked_cell: Vector2i = path[2]
+	s.order_move(goal.x, goal.y)
+	s.update(0.05)
+	s.try_build("wall", blocked_cell.x, blocked_cell.y)
+	ok(s.bgrid.has(blocked_cell.y * s.n + blocked_cell.x), "no walk-in: the wall landed on a cell of the hero's planned path")
+	var inside := false
+	for i in 600:
+		s.update(0.05)
+		if s.is_blocked(int(s.player.px), int(s.player.py)):
+			inside = true
+	ok(not inside, "no walk-in: the hero never stands inside the new wall")
+	ok(s.player.action == null and absf(s.player.px - (goal.x + 0.5)) < 1.0 and absf(s.player.py - (goal.y + 0.5)) < 1.0, "no walk-in: the hero still reaches the goal by a rerouted path")
 
 func _t_repair() -> void:
 	var s = Sim.new()

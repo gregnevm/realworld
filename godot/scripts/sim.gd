@@ -925,6 +925,16 @@ func _follow_path(o: Dictionary, path: Array, step: float) -> bool:
 	if path.is_empty():
 		return true
 	var nx: Vector2i = path[0]
+	if astar.is_point_solid(nx):
+		# плейтест 2026-11-08 #1b: стіну поставили на клітинку шляху, коли шлях уже складено — не входимо в неї,
+		# а перекладаємо маршрут до тієї самої мети (на місці, щоб action.path лишився тим самим масивом)
+		var goal: Vector2i = path[path.size() - 1]
+		var rerouted: Array = compute_path(int(o.px), int(o.py), goal.x, goal.y)
+		path.clear()
+		path.append_array(rerouted)
+		if path.is_empty():
+			return true
+		nx = path[0]
 	if _step_to(o, nx.x + 0.5, nx.y + 0.5, step):
 		path.remove_at(0)
 	return path.is_empty()
