@@ -42,7 +42,7 @@ jobs:
           gh release create main-latest out/RealWorld.apk \
             --repo "$GITHUB_REPOSITORY" --prerelease --target "$SHA" \
             --title "main · ${SHA::7}" \
-            --notes "Автозбірка main (${SHA}). Номер збірки — у ☰-меню гри. Основна капсула вимкнена за замовчуванням (OD-7); у web її видно з параметром ?capsule."
+            --notes "Автозбірка main (${SHA}). Номер збірки — у ☰-меню гри. Основна капсула ввімкнена за замовчуванням (OD-114); старий шлях — web з ?nocapsule."
 
   pages:
     if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'

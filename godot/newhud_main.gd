@@ -191,7 +191,7 @@ func _start_game(lat: float, lon: float, place_name: String) -> void:
 		return   # уже в грі (пізній GPS-callback чи повторний сигнал): другий бут ремонтував би панелі
 	session = SessionScript.new()
 	session.use_inventory = true          # spec 0009: new games play with the Minecraft-style inventory
-	if _capsule_requested():   # dev-перемикач `-- capsule` або web `?capsule` (spec 0010): Основна капсула; за замовчуванням OFF (OD-7 open)
+	if _capsule_enabled():   # Основна капсула (spec 0010) УВІМК за замовчуванням у збірках (OD-114); опт-аут `-- nocapsule` / web `?nocapsule` = старий шлях
 		session.use_catalog = true        # капсула вимагає відкритого складу (REQ-0010-59)
 		session.use_main_capsule = true
 	session.autosave = not shot_mode
@@ -201,7 +201,7 @@ func _start_game(lat: float, lon: float, place_name: String) -> void:
 		return
 	print("RealWorld ", _build_line())   # консоль/web-console: яка збірка і чи ввімкнена капсула
 	_enter_session()
-	if "capsule" in OS.get_cmdline_user_args() and "forceraid" in OS.get_cmdline_user_args():   # dev-хук G5 (REQ-0010-120): рейд без 3 діб очікування; релізна збірка відмовить
+	if _capsule_enabled() and "forceraid" in OS.get_cmdline_user_args():   # dev-хук G5 (REQ-0010-120): рейд без 3 діб очікування; релізна збірка відмовить
 		MainCapsule.force_raid(session.sim, OS.has_feature("debug"))
 	_autosave()   # a new landing claims the save slot at once (the spawn screen warned about it)
 
@@ -303,15 +303,15 @@ func _set_menu(on: bool) -> void:
 		panel_menu.set_footer(_build_line())
 		_refresh_menu()
 
-# Основна капсула вмикається dev-аргументом `-- capsule` (десктоп) або параметром `?capsule` в URL (web-збірка).
-# За замовчуванням OFF (OD-7 open): це лише перемикач для перегляду, не зміна рішення.
-func _capsule_requested() -> bool:
-	if "capsule" in OS.get_cmdline_user_args():
-		return true
+# Основна капсула УВІМК за замовчуванням (OD-114, 2026-11-08; змінює дефолт OD-7 для збірок).
+# Опт-аут до старого шляху (порівняння/регресії): десктоп `-- nocapsule`, web `?nocapsule` в URL.
+func _capsule_enabled() -> bool:
+	if "nocapsule" in OS.get_cmdline_user_args():
+		return false
 	if OS.has_feature("web") and Engine.has_singleton("JavaScriptBridge"):
-		var has: Variant = JavaScriptBridge.eval("new URLSearchParams(window.location.search).has('capsule')", true)
-		return has == true
-	return false
+		var off: Variant = JavaScriptBridge.eval("new URLSearchParams(window.location.search).has('nocapsule')", true)
+		return off != true
+	return true
 
 # Рядок збірки: що саме відкрито (sha/дата з CI) і які прапори ввімкнені в цій сесії.
 func _build_line() -> String:

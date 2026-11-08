@@ -86,7 +86,7 @@ realworld/
 - **Запуск GDD:** `python "C:\Users\gregn\.claude\skills\gdd_build\scripts\serve.py" "O:\realworld\GDD_BOOK"`
 - **Тести:** `npm test` (Node `node --test` — детерміноване sim-ядро + валідація `catalog.json`/пайплайну прогресії + чиста половина арт-пайплайну `tests/art.test.js`); `npm run lint` (tools/lint.mjs: порядок скриптів = контракт, strict-IIFE, без ES-модулів, без `Math.random` у sim-файлах, без Godot-3 API у `.gd`, без годинника/системного RNG у sim-корпусі `.gd` — spec 0012 REQ-10); `npm run smoke` (tools/smoke.mjs: Playwright + Chromium — спавн → drag-build → вибір/демонтаж → модалки → дослідження → рейд → смерть → reload/continue; падає на будь-якому console.error; у CI — job `browser-smoke` з артефактом скриншотів); headless-сьюти Godot — `test.cmd` у корені (перелік — у розділі «Godot-порт» вище). Обидва набори ганяються в CI (`.github/workflows/ci.yml` + `godot.yml`).
 - **Білд/деплой:** білду немає; статичний хостинг (GitHub Pages / Railway / itch.io).
-- **Версії збірок (Godot web/APK):** штамп `godot/scripts/build_info.gd` ставить CI; видно в ☰-меню. main публікується у prerelease `main-latest` + Pages (`.github/workflows/publish.yml`). Деталі й прапор капсули в збірках — `docs/agents/godot-ui-tests-build.md`.
+- **Версії збірок (Godot web/APK):** штамп `godot/scripts/build_info.gd` ставить CI; видно в ☰-меню. main публікується у prerelease `main-latest` + Pages (`.github/workflows/publish.yml`). Капсула в збірках УВІМК за замовчуванням (OD-114, опт-аут `nocapsule`). Деталі — `docs/agents/godot-ui-tests-build.md`.
 
 ## Ключові рішення (ADR-лайт)
 - **Vanilla JS, no-build** — миттєва ітерація, працює будь-де, ноль тулчейн-боргу на стадії прототипу. Альтернативу (Vite/TS) відкинули як передчасну.
