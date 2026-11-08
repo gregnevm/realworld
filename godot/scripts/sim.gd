@@ -619,6 +619,10 @@ func try_build(kind: String, x: int, y: int) -> void:
 	if def.is_empty() or bool(def.get("landmark", false)):   # landmark (капсула) не будується: вона одна (REQ-0010-06)
 		_flash("Тут не можна будувати." if def.is_empty() else "Основна капсула одна.")
 		return
+	# плейтест 2026-11-08 #1: непрохідна будівля на клітинці героя замуровує його всередині (A* стартує з solid-клітинки)
+	if bool(def.get("blocks", false)) and int(player.px) == x and int(player.py) == y:
+		_flash("Тут стоїть герой — відійди.")
+		return
 	if not research_ok(def):
 		_flash("🔒 Потребує дослідження: %s." % _research_label(def))
 		return

@@ -38,6 +38,7 @@ func _init() -> void:
 	_t_death_freeze()
 	_t_items()
 	_t_demolish()
+	_t_no_self_entomb()
 	_t_repair()
 	_t_inventory()
 	_t_osm_overlay()
@@ -349,6 +350,30 @@ func _t_inventory() -> void:
 	var twin = Sim.new()
 	twin.load_region(rec)
 	ok(twin.use_inventory and twin.bags.size() == 1 and (twin.player.inv as Array).size() == InventoryMod.SLOTS, "inv: load_region restores flag, bag and slots")
+
+# Плейтест 2026-11-08 #1: герой не може замурувати сам себе — непрохідна будівля на його клітинці відхиляється, нічого не списується.
+func _t_no_self_entomb() -> void:
+	var s = Sim.new()
+	s.new_game(WorldGen.generate_map(50.4501, 30.5234, 24))
+	var hx := int(s.player.px)
+	var hy := int(s.player.py)
+	s.stock.stone = 200
+	s.stock.wood = 200
+	var stone_before: int = int(s.stock.stone)
+	var wood_before: int = int(s.stock.wood)
+	var n_before: int = s.buildings.size()
+	s.try_build("wall", hx, hy)
+	ok(s.buildings.size() == n_before and not s.bgrid.has(hy * s.n + hx), "no entomb: a wall on the hero's own cell is refused")
+	ok(not s.is_blocked(hx, hy), "no entomb: the hero's cell stays walkable")
+	ok(int(s.stock.stone) == stone_before and int(s.stock.wood) == wood_before, "no entomb: a refused build costs nothing")
+	# regression guard: the neighbouring cell is still buildable (the rule is only about the hero's cell)
+	var placed := false
+	for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		if s.build_valid(hx + d.x, hy + d.y):
+			s.try_build("wall", hx + d.x, hy + d.y)
+			placed = s.bgrid.has((hy + d.y) * s.n + hx + d.x)
+			break
+	ok(placed, "no entomb: a wall next to the hero is still placed")
 
 func _t_repair() -> void:
 	var s = Sim.new()
