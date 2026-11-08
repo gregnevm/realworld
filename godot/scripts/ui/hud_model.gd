@@ -870,9 +870,6 @@ static func _ghost_refusal(sim, kind: String, def: Dictionary, t: Vector2i, cell
 		return "бракує: %s" % (GameData.cost_str(miss) if not bool(sim.get("use_catalog") == true) else _catalog_cost(sim, miss))
 	if not sim.build_valid(t.x, t.y):
 		return "тут не можна будувати"
-	var hero: Variant = sim.get("player")   # плейтест 2026-11-08 #1: той самий відказ, що в sim._kind_refusal
-	if hero is Dictionary and bool(def.get("blocks", false)) and int((hero as Dictionary).px) == t.x and int((hero as Dictionary).py) == t.y:
-		return "тут стоїть герой — відійди"
 	return ""
 
 static func _catalog_cost(_sim, cost: Dictionary) -> String:
