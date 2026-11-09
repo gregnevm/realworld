@@ -324,8 +324,6 @@ func _draw() -> void:
 		var pulse: float = 0.5 + 0.5 * sin(_now() * 5.0)
 		draw_arc(tc, TILE * (0.30 + 0.06 * pulse), 0, TAU, 28, Color(1, 0.81, 0.36, 0.95), 2.0)
 		draw_arc(tc, TILE * (0.44 + 0.10 * pulse), 0, TAU, 28, Color(1, 0.81, 0.36, 0.35 * (1.0 - pulse)), 2.0)
-	if not goal_pointer.is_empty():
-		_draw_goal_pointer()
 	if selected_build == REMOVE_TOOL and sim._in(hover.x, hover.y):
 		var own: bool = sim.bgrid.has(hover.y * n + hover.x)
 		var rr := Rect2(hover.x * TILE + 3, hover.y * TILE + 3, TILE - 6, TILE - 6)
@@ -363,6 +361,8 @@ func _draw() -> void:
 	for b in sim.buildings:   # hull plaque goes AFTER the pawn (T-Ніколая: герой біля капсули закривав підпис і ряди знаків)
 		if String(b.kind) == MainCapsule.KIND:
 			_draw_capsule_marks(Vector2(b.x * TILE, b.y * TILE), Vector2(b.x * TILE, b.y * TILE) + Vector2(TILE, TILE) * 0.5)
+	if not goal_pointer.is_empty():
+		_draw_goal_pointer()   # spec 0014: на самому верху — підпис кільця не ховається під табличкою капсули (fresh-eyes 2026-11-09)
 	_draw_fx()
 
 # Shoreline: where land meets water, a thin pale foam line on the LAND edge and a dark wet rim on the
