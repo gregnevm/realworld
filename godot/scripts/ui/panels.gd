@@ -625,8 +625,8 @@ class TopBarPanel extends PanelBase.Base:
 	# 2026-11 independent read (gamedev §5): unlabelled ✖/🗑 read as destructive, −/+ as speed. Zoom left
 	# the strip (pinch + the action button's vertical swipe do it), ✖ shows only while a tool is armed,
 	# and the remove tool says what it does in words.
-	const TOOLS := [["☰", &"toggle_menu", "Панелі та оверлеї"], ["✖", &"cancel_tool", "Скасувати інструмент"],
-		["♻ Розібрати", &"remove_tool", "Розібрати: торкнись своєї будівлі — повернеш частину ресурсів"]]
+	# C4 (2026-11-09): ☰ і ♻ Розібрати переїхали в нижню смугу TouchControls; у верхній лишився лише контекстний ✖.
+	const TOOLS := [["✖", &"cancel_tool", "Скасувати інструмент"]]
 	var _clock: Label
 	var _season: Label
 	var _weather: Label
@@ -672,7 +672,6 @@ class TopBarPanel extends PanelBase.Base:
 			tb.tooltip_text = String(t[2])
 			tb.focus_mode = Control.FOCUS_NONE
 			tb.custom_minimum_size = Vector2(40, 36)
-			tb.toggle_mode = StringName(t[1]) == &"remove_tool" or StringName(t[1]) == &"toggle_menu"
 			tb.pressed.connect(emit_intent.bind(StringName(t[1]), {}))
 			_tool_box.add_child(tb)
 			_tools.append(tb)
@@ -723,9 +722,7 @@ class TopBarPanel extends PanelBase.Base:
 			for chip in _chips:
 				chip.custom_minimum_size = Vector2(40, 36) if touch else Vector2.ZERO
 		if touch:
-			_tools[0].set_pressed_no_signal(bool(ui.get("menu", false)))
-			_tools[2].set_pressed_no_signal(bool(ui.get("remove", false)))
-			_tools[1].visible = bool(ui.get("armed", false))   # nothing armed → nothing to cancel → no ✖
+			_tools[0].visible = bool(ui.get("armed", false))   # nothing armed → nothing to cancel → no ✖
 
 # ---- GoalsPanel (LEFT dock, J) — the onboarding chain made visible: the current goal, HOW to do it
 # (keys named), its live progress and what comes next. Reads vm.goals (session goals_view, R8). ----

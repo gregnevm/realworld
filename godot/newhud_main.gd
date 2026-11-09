@@ -631,6 +631,7 @@ func _setup_action_controls() -> void:
 	tc.zoom_step.connect(func(d: int) -> void: winput.zoom_step(1.15 if d > 0 else 1.0 / 1.15))
 	tc.slot_step.connect(func(d: int) -> void: _apply_slot(posmod(act_slot + d, maxi(1, _act_slots.size()))))
 	tc.slot_selected.connect(_apply_slot)
+	tc.tool_pressed.connect(func(v: StringName) -> void: router.dispatch(v, {}, session))   # C4: ☰/♻ з нижньої смуги → ті самі intents, що були у верхній
 	tc.inventory_pressed.connect(func() -> void: preg.toggle(&"inventory" if bool(session.sim.use_inventory) else &"gear"))
 	tc.option_chosen.connect(func(o: Dictionary) -> void: router.dispatch(StringName(o.verb), o.args, session))
 	winput.long_pressed.connect(func(cell: Vector2i, screen: Vector2) -> void:
@@ -695,6 +696,7 @@ func _tick_action(dt: float) -> void:
 	# підпис дії над кнопкою ховається, поки відкрита панель капсули: інакше він лягає на рядок ціни (T-Ніколая, кадр 05)
 	var cap_pn: Variant = preg.get_panel(&"capsule_bay")
 	var cap_open: bool = cap_pn != null and bool(cap_pn.visible)
+	tc.set_tool_state(panel_menu.visible, String(view.selected_build) == String(WorldInputScript.WorldInput.REMOVE_TOOL))
 	tc.bind_state({"mode": act_mode, "slots": _act_slots, "active": act_slot, "overview": act_overview,
 		"target": "" if cap_open else _target_label(act_target), "guide": _guide_slot()})
 	var bb: Variant = preg.get_panel(&"build_bar")

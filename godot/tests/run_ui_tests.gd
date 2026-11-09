@@ -324,6 +324,16 @@ func _t_touch_controls() -> void:
 	tcn.slot_step.connect(func(_d: int) -> void: got.slot += 1)
 	tcn.zoom_step.connect(func(_d: int) -> void: got.zoom += 1)
 	tcn.overview_toggled.connect(func() -> void: got.over += 1)
+	# C4 (2026-11-09): ☰ і ♻ живуть у нижній смузі й подають ТІ САМІ intents, що верхня панель
+	tcn.set_tool_state(false, true)
+	ok(tcn._remove_btn.button_pressed and not tcn._menu_btn.button_pressed, "C4: the touch bar's ♻ reads armed, ☰ reads closed")
+	tcn.set_tool_state(true, false)
+	ok(tcn._menu_btn.button_pressed and not tcn._remove_btn.button_pressed, "C4: the touch bar's ☰ reads open")
+	var tools_got: Array = []
+	tcn.tool_pressed.connect(func(v: StringName) -> void: tools_got.append(v))
+	tcn._menu_btn.pressed.emit()
+	tcn._remove_btn.pressed.emit()
+	ok(tools_got == [&"toggle_menu", &"remove_tool"], "C4: the buttons emit the SAME intents the top bar used")
 	var c: Vector2 = tcn.act_center()
 	var touch := func(pos: Vector2, down: bool) -> void:
 		var e := InputEventScreenTouch.new()
@@ -1192,7 +1202,7 @@ func _t_touch_frame() -> void:
 	var top = preg.get_panel(&"top_bar")
 	top.bind(snap)
 	ok(top._tool_box.visible and not top._region.visible, "touch top strip shows the tools (☰ ✖ 🗑 − +) and drops the region label")
-	ok(top._tools[2].button_pressed, "the 🗑 tool reads armed")
+	ok(top._tools.size() == 1 and top._tools[0].visible, "C4: the top strip keeps only the contextual ✖ (armed tool) — ☰/♻ moved to the touch bar")
 	var vit = preg.get_panel(&"vitals")
 	vit.bind(snap)
 	ok(vit._meds.size() == 4 and not vit._carry.visible, "phone vitals: need medallions, no carry token (no bars)")
