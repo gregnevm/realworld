@@ -248,6 +248,12 @@ func _t_comprehension() -> void:
 	ok(String(g1.label) == "Багаття" and String(GP.compute(gs, {"goals": gvm.goals, "vitals": gvm.vitals, "clock": {"day": 5}}, false).label) == "",
 		"REQ-0014-13: the noun under the ring only while learning")
 	ok(GP.compute(gs, gvm, true).is_empty(), "REQ-0014-6: a ghost in hand hides the marker (never two frames at once)")
+	gs.map.nodes[(int(gs.player.py) + 3) * int(gs.n) + int(gs.player.px)] = {"kind": "tree", "amount": 12}   # a known node 3 cells south of the hero
+	var gg: Dictionary = GP.compute(gs, {"goals": {"current": {"id": "gather"}}, "vitals": {"comfort": &"ok"}, "clock": {"day": 1}}, false)
+	var gnode: Dictionary = {} if gg.is_empty() else gs.map.nodes.get(int(gg.cell.y) * int(gs.n) + int(gg.cell.x), {})
+	ok(not gg.is_empty() and (String(gnode.get("kind", "")) == "tree" or String(gnode.get("kind", "")) == "rock") and int(gnode.get("amount", 0)) > 0,
+		"REQ-0014-3: «добудь ресурси» → the ring sits on the nearest tree/rock with something left")
+	ok(GP.compute(gs, {"goals": {"current": {"id": "survive"}}, "vitals": {"comfort": &"ok"}, "clock": {"day": 1}}, false).is_empty(), "REQ-0014-1: goals without a place (survive) → no marker")
 	var gcold := {"goals": {"current": {}}, "vitals": {"comfort": &"cold"}, "clock": {"day": 3}}
 	var gc: Dictionary = GP.compute(gs, gcold, false)
 	ok(String(gc.get("kind", "")) == "need" and String(gc.get("build", "")) == "campfire", "REQ-0014-10: cold points at the campfire even with NO goal chain (OD-126)")
