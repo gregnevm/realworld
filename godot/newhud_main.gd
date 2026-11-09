@@ -487,6 +487,12 @@ func _shot_step(dt: float) -> void:
 			oreg.toggle(&"light")          # `shot light`: radio-on the L/Light overlay (default frame = what a player sees)
 		if bool(session.sim.use_main_capsule):
 			_stage_capsule_shot()          # `shot capsule [lvl=N] [cpanel] [poor tap] [immune] [warn|contact] [death]`: spec 0010 W4a/W4b frames
+		if "far" in OS.get_cmdline_user_args():   # `shot far`: hero 6 cells from the capsule — the far state of its plate (T-Ніколая 2026-11-09)
+			var sf: Variant = session.sim
+			for dx in [6, -6, 5, -5, 7, -7]:
+				if not sf.is_blocked(int(sf.player.px) + int(dx), int(sf.player.py)):
+					sf.player.px = float(int(sf.player.px) + int(dx)) + 0.5
+					break
 		session.sim.time.frac = 0.86       # dusk so daylight darkening is visible
 		if "death" in OS.get_cmdline_user_args():   # `shot death`: a REAL death (epitaph + bag), not a bare flag
 			session.sim.player.born = 1
