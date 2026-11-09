@@ -9,7 +9,7 @@
 #                     fix   {t, c, lat, lon}         a new GPS fix
 #                     ping  {t, c}                   heartbeat, no movement
 #                     bye   {t, c}                   leave
-# server -> client:   welcome  {t, c, region, cell, tick}   accepted; region = shared world anchor
+# server -> client:   welcome  {t, c, region, cell, tick, aoi} accepted; region = shared world anchor, aoi = view radius (m)
 #                     presence {t, c, d}                    d = Snapshot delta of the presence view
 #                     refuse   {t, c, for, reason}          a request was not applied (reason is a closed set)
 # The client NEVER sends a timestamp: the server stamps arrival time itself, so a client cannot
@@ -60,8 +60,8 @@ static func bye(client_id: int) -> Dictionary:
 	return {"t": T_BYE, "c": client_id}
 
 
-static func welcome(client_id: int, region: Dictionary, cell: String, tick: int) -> Dictionary:
-	return {"t": T_WELCOME, "c": client_id, "region": region, "cell": cell, "tick": tick}
+static func welcome(client_id: int, region: Dictionary, cell: String, tick: int, aoi_m: float = 0.0) -> Dictionary:
+	return {"t": T_WELCOME, "c": client_id, "region": region, "cell": cell, "tick": tick, "aoi": aoi_m}
 
 
 static func presence(client_id: int, delta: Variant) -> Dictionary:

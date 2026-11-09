@@ -28,7 +28,7 @@ static func snapshot(session, world: Dictionary, ctx: Dictionary, balance) -> Di
 		return {"alive": false}
 	var sim: Variant = session.sim
 	var p: Dictionary = sim.player
-	return {
+	var snap := {
 		"alive":     true,
 		"dead":      bool(sim.dead),
 		"region":    _region_slice(sim, session),
@@ -57,6 +57,12 @@ static func snapshot(session, world: Dictionary, ctx: Dictionary, balance) -> Di
 		"capsule":   _capsule_slice(sim, ctx),
 		"social_info": _social_slice(sim),
 	}
+	# spec 0013: the key exists ONLY while the presence layer is live — a world without it (flags OFF, no
+	# tick yet) keeps the byte-identical baseline snapshot (REQ-0012-3 / REQ-0010-85 pins).
+	var nearby := _nearby_slice(session)
+	if bool(nearby.get("available", false)):
+		snap["nearby"] = nearby
+	return snap
 
 # --- gear (craft/equip loadout, spec 0001; parity with main.gd's items panel) ---
 static func _gear_slice(sim) -> Dictionary:
@@ -884,6 +890,12 @@ static func _count_kind(sim, kind: String) -> int:
 		if String(b.kind) == kind:
 			c += 1
 	return c
+
+# --- nearby (RealGPS presence, spec 0013; session-owned, {available:false} on fakes / before the first tick) ---
+static func _nearby_slice(session) -> Dictionary:
+	if session == null or not session.has_method("nearby_view"):
+		return {"available": false}
+	return session.nearby_view()
 
 # --- goals (onboarding tracker, session-owned; {available:false} on fakes / before a session) ---
 static func _goals_slice(session) -> Dictionary:

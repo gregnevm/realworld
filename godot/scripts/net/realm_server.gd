@@ -106,7 +106,7 @@ func _on_hello(peer: int, cid: int, m: Dictionary, now_ms: int) -> void:
 	_client_peer[cid] = peer
 	_sent.erase(cid)
 	stats.accepted = int(stats.accepted) + 1
-	transport.send(peer, Protocol.welcome(cid, r.region, str(r.cell), tick_no))
+	transport.send(peer, Protocol.welcome(cid, r.region, str(r.cell), tick_no, float(realm.aoi_m)))
 
 
 # ---------------- presence push ----------------

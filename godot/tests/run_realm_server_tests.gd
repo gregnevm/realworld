@@ -10,6 +10,8 @@ const RealmServer = preload("res://scripts/net/realm_server.gd")
 const RealmClient = preload("res://scripts/net/realm_client.gd")
 const Transport = preload("res://scripts/net/transport.gd")
 const Persistence = preload("res://scripts/persistence.gd")
+const LocalRealm = preload("res://scripts/net/local_realm.gd")
+const Session = preload("res://scripts/session.gd")
 
 const KYIV := Vector2(50.4501, 30.5234)
 
@@ -23,6 +25,8 @@ func _init() -> void:
 	_t_rate_limit()
 	_t_expiry_and_close()
 	_t_determinism()
+	_t_local_realm()
+	_t_session_integration()
 	_t_websocket()
 	finish()
 
@@ -210,6 +214,58 @@ func _t_determinism() -> void:
 		views.append(h)
 	ok(views[0] == views[1], "the same players joining in opposite order produce identical presence views")
 
+
+func _t_local_realm() -> void:
+	var a := LocalRealm.new("Ти", KYIV.x, KYIV.y, 1000)
+	a.tick(2000)
+	var va: Dictionary = a.view()
+	ok(bool(va.available) and va.total == LocalRealm.AMBIENT_COUNT and va.sim == LocalRealm.AMBIENT_COUNT and va.live == 0, "solo hero sees the simulated survivors, all labelled sim")
+	ok(float(va.aoi_m) == Realm.DEFAULT_AOI_M and str(va.region) != "", "the hero went through the real client/server path (welcome carried aoi and region)")
+	var b := LocalRealm.new("Ти", KYIV.x, KYIV.y, 999999)
+	b.tick(1000000)
+	var names_a: Array = []
+	var names_b: Array = []
+	for r in va.rows:
+		names_a.append(str(r.name))
+	for r in b.view().rows:
+		names_b.append(str(r.name))
+	names_a.sort()
+	names_b.sort()
+	ok(names_a == names_b, "coordinates are the seed: the same place gets the same neighbours at any time")
+	var before_total: int = int(va.total)
+	var steps_ok := true
+	for t in range(3000, 120000, 1000):
+		a.tick(t)
+		if not a.view().refusal == "":
+			steps_ok = false
+	ok(steps_ok and int(a.view().total) == before_total, "two minutes of wandering never trips the GPS guard and nobody leaves the radar")
+	a.tick(120100)
+	var calls: int = a.server.tick_no
+	a.tick(120200)
+	ok(a.server.tick_no == calls, "the layer throttles itself to one step per second of device time")
+	a.relocate(35.6762, 139.6503, 130000)
+	a.tick(131000)
+	var vt: Dictionary = a.view()
+	ok(vt.available and vt.total == LocalRealm.AMBIENT_COUNT and str(vt.region) != str(va.region), "relocating (travel) re-joins elsewhere with that place's own neighbours")
+	ok(a.realm.count() == 1 + LocalRealm.AMBIENT_COUNT, "the old place's survivors were removed (no ghosts follow the hero)")
+
+
+func _t_session_integration() -> void:
+	var s := Session.new()
+	s.autosave = false
+	ok(not bool(s.nearby_view().available), "a session before start has no presence layer")
+	s.tick_realm(1000)
+	ok(s.realm_net == null, "tick_realm without a world is inert")
+	ok(s.start(50.4501, 30.5234, "Київ", 5000), "session starts")
+	s.tick_realm(6000)
+	s.tick_realm(8000)
+	var v: Dictionary = s.nearby_view()
+	ok(bool(v.available) and int(v.total) == LocalRealm.AMBIENT_COUNT, "after tick_realm the session exposes nearby value data")
+	var hash_before := Persistence.world_hash(s.sim)
+	for t in range(9000, 30000, 1000):
+		s.tick_realm(t)
+	ok(Persistence.world_hash(s.sim) == hash_before, "presence never touches the sim: world_hash is unchanged by 20 s of realm ticks")
+	ok(s.start(35.6762, 139.6503, "Кіото", 40000) and s.realm_net == null, "starting a new world drops the old presence layer")
 
 func _t_websocket() -> void:
 	var ws := Transport.WebSocketServer.new()

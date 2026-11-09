@@ -23,6 +23,9 @@ const R_DUPLICATE := &"duplicate"
 const R_UNKNOWN := &"unknown_player"
 const R_FULL := &"realm_full"
 
+const KIND_LIVE := "live"   # a real connected player
+const KIND_SIM := "sim"     # an offline-simulated survivor (spec 0002 seam: the same wire shape a live backend sends)
+
 const MAX_NAME_LEN := 24
 const DEFAULT_AOI_M := 1200.0     # proposed: a bit over one cell — you see the neighbours you could walk to
 const DEFAULT_MAX_PLAYERS := 2000
@@ -43,7 +46,7 @@ func _init(p_grid: Variant = null, p_aoi_m: float = DEFAULT_AOI_M) -> void:
 
 
 # ---------------- membership ----------------
-func join(id: int, p_name: String, lat: float, lon: float, now_ms: int) -> Dictionary:
+func join(id: int, p_name: String, lat: float, lon: float, now_ms: int, kind: String = KIND_LIVE) -> Dictionary:
 	if id < 0:
 		return _refuse(R_ID)
 	var nm := p_name.strip_edges()
@@ -57,7 +60,7 @@ func join(id: int, p_name: String, lat: float, lon: float, now_ms: int) -> Dicti
 	if not bool(fix.ok):
 		return _refuse(fix.reason)
 	var cell: Vector2i = grid.cell_of(lat, lon)
-	_players[id] = {"id": id, "name": nm, "lat": lat, "lon": lon, "t_ms": now_ms, "seen_ms": now_ms, "cell": cell}
+	_players[id] = {"id": id, "name": nm, "kind": kind, "lat": lat, "lon": lon, "t_ms": now_ms, "seen_ms": now_ms, "cell": cell}
 	_index_add(GeoGrid.key(cell), id)
 	_known[id] = {}
 	return {"ok": true, "reason": OK, "cell": GeoGrid.key(cell), "region": grid.region_of(cell)}
@@ -187,6 +190,7 @@ func presence_view(id: int) -> Dictionary:
 			"brg": int(roundf(brg)) % 360,
 			"dir": Geo.cardinal8(brg),
 			"same_region": same.has(int(oid)),
+			"kind": str(o.kind),
 		}
 	var cell: Vector2i = me.cell
 	return {

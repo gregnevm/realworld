@@ -46,6 +46,8 @@ const UITheme = preload("res://scripts/ui/theme.gd")
 const CapsuleTexts = preload("res://scripts/ui/capsule_texts.gd")
 const HeroHealthMod = preload("res://scripts/sim/hero_health.gd")
 const WorldPanels = preload("res://scripts/ui/world_panels.gd")
+const RealmPanels = preload("res://scripts/ui/realm_panels.gd")
+const LocalRealm = preload("res://scripts/net/local_realm.gd")
 const PersistenceMod = preload("res://scripts/persistence.gd")
 
 
@@ -83,6 +85,7 @@ func _init() -> void:
 	_t_panel_registry()
 	_t_overlay_registry()
 	_t_hotkey_contract()
+	_t_nearby()
 	_t_bus_no_dangling()
 	_t_world_input_grammar()
 	_t_playability_grammar()
@@ -853,6 +856,54 @@ func _t_hotkey_contract() -> void:
 	ok(no_dupes, "every registered hotkey is claimed exactly once across panels+overlays")
 	for p in preg.panels:
 		p.free()
+
+# ---------------- RealGPS presence UI (spec 0013 §4): radar geometry, slice, fixed-pool panel ----------------
+class _NearbySession extends _FakeSession:
+	var net: Variant = null
+	func nearby_view() -> Dictionary:
+		return net.view()
+
+func _t_nearby() -> void:
+	ok(Fmt.distance_m(340) == "340 м" and Fmt.distance_m(1200) == "1,2 км" and Fmt.distance_m(-5) == "0 м", "Fmt.distance_m: metres below a km, one decimal above, never negative")
+	ok(Fmt.realm_refusal("teleport").contains("GPS") and Fmt.realm_refusal("") == "" and Fmt.realm_refusal("zzz").contains("zzz"), "Fmt.realm_refusal: known reasons are words, unknown ones are surfaced, empty is silent")
+	var n: Vector2 = RealmPanels.RadarWidget.dot_offset(0.0, 600.0, 1200.0, 100.0)
+	var e: Vector2 = RealmPanels.RadarWidget.dot_offset(90.0, 1200.0, 1200.0, 100.0)
+	var far: Vector2 = RealmPanels.RadarWidget.dot_offset(180.0, 99999.0, 1200.0, 100.0)
+	ok(absf(n.x) < 0.001 and absf(n.y + 50.0) < 0.001, "radar: north at half range is straight up, half the radius")
+	ok(absf(e.x - 100.0) < 0.001 and absf(e.y) < 0.001, "radar: east at full range is on the right edge")
+	ok(absf(far.x) < 0.001 and absf(far.y - 100.0) < 0.001, "radar: beyond range clamps to the rim (south = down)")
+	var sess := _NearbySession.new()
+	sess.sim = _FakeSim.new()
+	sess.net = LocalRealm.new("Ти", 50.4501, 30.5234, 1000)
+	sess.net.tick(3000)
+	var snap := HudModel.snapshot(sess, {"buildings": [], "stock": {}, "items": []}, {"day": 5}, Balance.Balance.new())
+	ok(snap.has("nearby") and bool(snap.nearby.available) and snap.nearby.rows.size() == LocalRealm.AMBIENT_COUNT, "snapshot carries the nearby slice with the simulated neighbours")
+	ok(snap.nearby.sim == LocalRealm.AMBIENT_COUNT and snap.nearby.live == 0, "slice counts simulated vs live separately (honest labelling)")
+	var solo := HudModel.snapshot(_fake_session(), {"buildings": [], "stock": {}, "items": []}, {"day": 5}, Balance.Balance.new())
+	ok(not solo.has("nearby"), "a session without the layer adds no snapshot key (OFF baseline stays byte-identical)")
+	var panel: Variant = RealmPanels.NearbyPanel.new()
+	panel.build_once()
+	var kids0: int = panel.get_child(0).get_child_count()
+	panel.bind(snap)
+	var shown := 0
+	for r in panel._rows:
+		if r.visible:
+			shown += 1
+	ok(shown == LocalRealm.AMBIENT_COUNT and not panel._empty.visible, "panel shows one roster row per neighbour and hides the empty-state line")
+	ok(panel._names[0].text.begins_with("○") and panel._dists[0].text.contains("м"), "a simulated survivor reads as a hollow ○ with a distance, not colour alone (R11)")
+	panel.bind(snap)
+	panel.bind(snap)
+	ok(panel.rebuild_count == 1 and panel.get_child(0).get_child_count() == kids0, "build-once: three binds never rebuild or grow the tree (R2)")
+	var empty_vm := {"nearby": {"available": true, "region": "1:1", "pop": 1, "aoi_m": 1200.0, "live": 0, "sim": 0, "total": 0, "rows": [], "refusal": "teleport"}}
+	panel.bind(empty_vm)
+	ok(panel._empty.visible and not panel._rows[0].visible and panel._note.visible and panel._note.text.contains("GPS"), "empty roster shows the explanation, and a refused GPS fix is stated in words")
+	var many := {"nearby": {"available": true, "region": "1:1", "pop": 9, "aoi_m": 1200.0, "live": 9, "sim": 0, "total": 9,
+		"rows": [{"id": 1, "name": "А", "dist_m": 100, "brg": 0, "dir": "Пн", "same_region": true, "kind": "live"}], "refusal": ""}}
+	panel.bind(many)
+	ok(panel._note.visible and panel._note.text.contains("ще 8"), "players beyond the roster pool are summarised, not dropped silently")
+	panel.bind({"nearby": {"available": false}})
+	ok(not panel.visible, "no layer -> the panel hides itself")
+	panel.free()
 
 # ---------------- FeedbackBus subscribers disconnect on free (R8 / §2.7 cycle-leak guard) ----------------
 func _t_bus_no_dangling() -> void:

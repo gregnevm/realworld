@@ -15,6 +15,7 @@ var client_id: int = -1
 var joined: bool = false
 var region: Dictionary = {}
 var cell: String = ""
+var aoi_m: float = 0.0
 var view: Dictionary = {}
 var refusals: Array = []        # newest last, capped; each {for, reason}
 var presence_updates: int = 0
@@ -33,6 +34,7 @@ func handle(msg: Variant) -> void:
 			joined = true
 			region = (m.get("region", {}) as Dictionary).duplicate(true)
 			cell = str(m.get("cell", ""))
+			aoi_m = float(m.get("aoi", 0.0))
 		Protocol.T_PRESENCE:
 			var next: Variant = Snapshot.apply(view, m.get("d"))
 			if next is Dictionary:
@@ -55,7 +57,7 @@ func nearby_rows() -> Array:
 	var near: Dictionary = view.get("near", {})
 	for k in near:
 		var e: Dictionary = near[k]
-		rows.append({"id": int(k), "name": str(e.name), "dist_m": int(e.dist_m), "dir": str(e.dir), "brg": int(e.brg), "same_region": bool(e.same_region)})
+		rows.append({"id": int(k), "name": str(e.name), "dist_m": int(e.dist_m), "dir": str(e.dir), "brg": int(e.brg), "same_region": bool(e.same_region), "kind": str(e.get("kind", "live"))})
 	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return int(a.dist_m) < int(b.dist_m) or (int(a.dist_m) == int(b.dist_m) and int(a.id) < int(b.id)))
 	return rows

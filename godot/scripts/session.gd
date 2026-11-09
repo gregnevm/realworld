@@ -15,6 +15,7 @@ const Catalog = preload("res://scripts/kernel/catalog.gd")
 const GameData = preload("res://scripts/data.gd")
 const Goals = preload("res://scripts/goals.gd")
 const MainCapsule = preload("res://scripts/sim/capsule.gd")
+const LocalRealm = preload("res://scripts/net/local_realm.gd")   # spec 0013: the RealGPS stack, in-process
 const MAP_N := 56
 const STORE_PATH := "user://world.json"
 const SAVE_PATH := "user://save.json"   # the whole session (continue): store + live region + account
@@ -23,6 +24,7 @@ const SAVE_VERSION := 1
 var sim: Variant = null   # Sim (scripts/sim.gd); Variant, бо тести підставляють легкі фейки
 var store: Dictionary = {}
 var social: Dictionary = {}
+var realm_net: Variant = null   # LocalRealm (spec 0013): created lazily by tick_realm, never saved (a pure function of the place)
 const NO_HOME := {"lat": 0.0, "lon": 0.0, "name": ""}   # «дому нема»: початкове значення й те, до чого скидає відмовлений start()
 var home := NO_HOME.duplicate()
 var has_home := false   # explicit — a legitimate spawn at (0,0) must not read as "no home"
@@ -48,6 +50,7 @@ var _goal_t := 0.0
 # капсули взявся з нього, а не з 0 (0 == годинник не подано). Сим сам час не читає (REQ-0010-92).
 func start(lat: float, lon: float, place_name: String, now_ms: int = 0) -> bool:
 	last_error = &""
+	realm_net = null
 	var m := WorldGen.generate_map(lat, lon, MAP_N)
 	m["place_name"] = place_name
 	sim = Sim.new()
@@ -94,11 +97,28 @@ func _clear_world() -> void:
 	store = {}
 	social = {}
 	progression = null
+	realm_net = null
 
 # Годинник пристрою -> sim (Sim.set_clock, монотонно). Викликає край пристрою (newhud_main), ніколи сам sim.
 func push_clock(now_ms: int) -> void:
 	if sim != null:
 		sim.set_clock(now_ms)
+
+# RealGPS layer (spec 0013): advance presence to the device clock. The hero's GPS fix is the active region's
+# coordinate; a region change relocates (leave + re-join). Value data for the HUD NearbyPanel in nearby_view().
+func tick_realm(now_ms: int) -> void:
+	if sim == null or sim.get("map") == null or not (sim.map is Dictionary) or not sim.map.has("lat"):
+		return
+	var lat := float(sim.map.lat)
+	var lon := float(sim.map.lon)
+	if realm_net == null:
+		realm_net = LocalRealm.new("Ти", lat, lon, now_ms)
+	else:
+		realm_net.relocate(lat, lon, now_ms)
+		realm_net.tick(now_ms)
+
+func nearby_view() -> Dictionary:
+	return realm_net.view() if realm_net != null else {"available": false}
 
 # Serialize the active region into the store (seed + diff + save), advancing the hash chain.
 func commit_region() -> void:
