@@ -524,7 +524,8 @@ func _draw_capsule_marks(p: Vector2, c: Vector2) -> void:
 	var cell: Vector2 = Vector2((p.x + TILE * 0.5) / TILE, (p.y + TILE * 0.5) / TILE)
 	var near_hero: bool = Vector2(float(sim.player.px), float(sim.player.py)).distance_to(cell) <= 3.5
 	var near_ptr: bool = absi(hover.x - int(p.x / TILE)) <= 1 and hover.y >= int(p.y / TILE) and hover.y <= int(p.y / TILE) + 3
-	if not (near_hero or near_ptr or imm):
+	var placing: bool = selected_build != ""   # привид у руці: табличка не лежить на землі, куди ставиш («біля пішака»)
+	if not ((near_hero and not placing) or near_ptr or imm):
 		draw_rect(Rect2(p, Vector2(TILE, TILE)), amber, false, 1.5)
 		_mark_text(c + Vector2(0.0, TILE * 0.95), title, Color(1.0, 0.93, 0.8))
 		return
