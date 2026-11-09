@@ -484,9 +484,10 @@ func _draw_wall_links(b, c: Vector2) -> void:
 		var ny: int = int(b.y) + d.y
 		if nx >= int(sim.n) or ny >= int(sim.n):
 			continue
-		var nb = sim.bgrid.get(ny * int(sim.n) + nx)
-		if nb == null:
+		var ncell: int = ny * int(sim.n) + nx
+		if not sim.bgrid.has(ncell):
 			continue
+		var nb: Dictionary = sim.bgrid[ncell]
 		var nk := String(nb.kind)
 		if not (nk == "wall" or (nk.ends_with("_wall") and bool(sim.building_def(nk).get("blocks", false)))):
 			continue
