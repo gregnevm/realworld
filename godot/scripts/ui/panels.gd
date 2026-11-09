@@ -81,7 +81,7 @@ class StockPanel extends PanelBase.Base:
 			_total.set_token(ArtIcons.for_glyph("🎒") if pack else ArtIcons.building("storage"), "🎒" if pack else "Σ",
 				"Рюкзак: зайнято слотів" if pack else "Склад заповнено")
 		var tstate: StringName = &"crit" if fill >= 0.98 else (&"warn" if fill >= 0.85 else &"good")
-		var tcap: String = ("Повний" if tstate == &"crit" else ("Майже повний" if tstate == &"warn" else ("Рюкзак" if pack else "Склад") if learning else ""))
+		var tcap: String = ("Повний" if tstate == &"crit" else ("Майже повний" if tstate == &"warn" else ("Слоти" if pack else "Склад") if learning else ""))
 		_total.bind({"value": "%d/%d" % [int(st.total), int(st.cap)], "state": tstate, "caption": tcap})
 
 # ---- VitalsPanel (LEFT dock) — hero need bars (HP/hunger/rest/blood) + located-health readout ----
