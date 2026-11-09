@@ -96,6 +96,7 @@ func view() -> Dictionary:
 		"region": str(client.cell),
 		"pop": int(client.view.get("region_pop", 1)),
 		"aoi_m": float(client.aoi_m),
+		"cell_m": float(realm.grid.cell_m),
 		"live": live,
 		"sim": rows.size() - live,
 		"total": rows.size(),

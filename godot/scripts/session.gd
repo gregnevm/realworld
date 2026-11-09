@@ -24,6 +24,8 @@ const SAVE_VERSION := 1
 var sim: Variant = null   # Sim (scripts/sim.gd); Variant, бо тести підставляють легкі фейки
 var store: Dictionary = {}
 var social: Dictionary = {}
+var _map_b64: String = ""        # terrain cache for nearby_view (spec 0013)
+var _map_b64_key: int = -1
 var realm_net: Variant = null   # LocalRealm (spec 0013): created lazily by tick_realm, never saved (a pure function of the place)
 const NO_HOME := {"lat": 0.0, "lon": 0.0, "name": ""}   # «дому нема»: початкове значення й те, до чого скидає відмовлений start()
 var home := NO_HOME.duplicate()
@@ -117,8 +119,24 @@ func tick_realm(now_ms: int) -> void:
 		realm_net.relocate(lat, lon, now_ms)
 		realm_net.tick(now_ms)
 
+# Value data for the HUD minimap: presence rows + the active region's terrain (base64, rebuilt only when the
+# region's seed changes) + the hero's tile. Plain data — the view decodes the terrain once per seed.
 func nearby_view() -> Dictionary:
-	return realm_net.view() if realm_net != null else {"available": false}
+	if realm_net == null:
+		return {"available": false}
+	var v: Dictionary = realm_net.view()
+	if bool(v.get("available", false)) and sim != null and sim.get("map") is Dictionary and sim.map.has("tiles"):
+		var key := int(sim.map.get("seed", 0))
+		if key != _map_b64_key or _map_b64 == "":
+			_map_b64 = Marshalls.raw_to_base64(sim.map.tiles)
+			_map_b64_key = key
+		var cap: Dictionary = {}
+		if sim.get("use_main_capsule") == true:
+			var ct: Vector2i = MainCapsule.tile(sim)
+			cap = {"x": ct.x, "y": ct.y}
+		v["map"] = {"key": key, "n": int(sim.map.get("n", MAP_N)), "tiles": _map_b64,
+			"hero": {"x": float(sim.player.px), "y": float(sim.player.py)}, "capsule": cap}
+	return v
 
 # Serialize the active region into the store (seed + diff + save), advancing the hash chain.
 func commit_region() -> void:

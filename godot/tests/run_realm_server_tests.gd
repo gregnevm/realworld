@@ -261,6 +261,9 @@ func _t_session_integration() -> void:
 	s.tick_realm(8000)
 	var v: Dictionary = s.nearby_view()
 	ok(bool(v.available) and int(v.total) == LocalRealm.AMBIENT_COUNT, "after tick_realm the session exposes nearby value data")
+	ok(v.has("map") and int(v.map.n) == 56 and Marshalls.base64_to_raw(str(v.map.tiles)).size() == 56 * 56, "nearby_view carries the region terrain (base64, n*n tiles)")
+	ok(absf(float(v.map.hero.x) - float(s.sim.player.px)) < 0.001 and float(v.cell_m) == 760.0, "and the hero tile and the metres-per-cell scale for the minimap")
+	ok(v.map.capsule is Dictionary and (v.map.capsule as Dictionary).is_empty() and JSON.parse_string(JSON.stringify(v.rows)) is Array, "capsule tile is absent while the capsule flag is OFF; the rows are JSON-safe")
 	var hash_before := Persistence.world_hash(s.sim)
 	for t in range(9000, 30000, 1000):
 		s.tick_realm(t)
