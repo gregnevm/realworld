@@ -437,6 +437,8 @@ func _draw_building(b) -> void:
 			var u: float = ta - 1.0
 			pop = 0.4 + 0.6 * (1.0 + (c1 + 1.0) * u * u * u + c1 * u * u)
 			draw_arc(c + Vector2(0, TILE * 0.3), TILE * (0.3 + 0.5 * ta), 0, TAU, 24, Color(0.85, 0.78, 0.62, 0.5 * (1.0 - ta)), 2.0)
+	if blocking_wall:
+		_draw_wall_links(b, c)
 	var btex := building_texture(String(b.kind))
 	if btex != null:
 		var floorlike: bool = String(b.kind) == "floor" or String(b.kind).ends_with("_floor") or String(b.kind) == "grow_zone"
@@ -469,6 +471,28 @@ func _draw_building(b) -> void:
 		draw_rect(Rect2(p.x + 2, p.y - 2, TILE - 4, 3), Color(0, 0, 0, 0.5))
 		var bc := Color.html("5fd38a") if fr > 0.5 else (Color.html("ffcf5c") if fr > 0.25 else Color.html("ff6b6b"))
 		draw_rect(Rect2(p.x + 2, p.y - 2, (TILE - 4) * fr, 3), bc)
+
+# Плейтест 2026-11-08 #4: стіни читались рядом окремих плашок. Балка до східного/південного сусіда-стіни (view-only, без арту):
+# кожну пару малюємо один раз (від західної/північної клітинки), під спрайтами, тож контур лінії = контур споруди.
+func _draw_wall_links(b, c: Vector2) -> void:
+	var stone: bool = String(b.kind).begins_with("stone")
+	var beam := Color(0.46, 0.47, 0.50, 1.0) if stone else Color(0.43, 0.31, 0.19, 1.0)
+	var rim := Color(0.04, 0.05, 0.06, 0.85)
+	var w: float = TILE * 0.26
+	for d in [Vector2i(1, 0), Vector2i(0, 1)]:
+		var nx: int = int(b.x) + d.x
+		var ny: int = int(b.y) + d.y
+		if nx >= int(sim.n) or ny >= int(sim.n):
+			continue
+		var nb = sim.bgrid.get(ny * int(sim.n) + nx)
+		if nb == null:
+			continue
+		var nk := String(nb.kind)
+		if not (nk == "wall" or (nk.ends_with("_wall") and bool(sim.building_def(nk).get("blocks", false)))):
+			continue
+		var e: Vector2 = c + Vector2(d) * TILE
+		draw_line(c, e, rim, w + 2.0)
+		draw_line(c, e, beam, w)
 
 # Основна капсула, greybox (spec 0010 REQ-0010-87; арт — лише після G0–G1, P4): ОДНА підписана табличка під корпусом (T-Ніколая: знаки без слів
 # лежали на спрайтах і не читались). Рядки: назва; «Рівень n/5» + ряд кружків; «Захист n/5» + ряд квадратів (R11: різна ФОРМА, не лише колір);
