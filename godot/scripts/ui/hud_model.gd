@@ -64,7 +64,10 @@ static func snapshot(session, world: Dictionary, ctx: Dictionary, balance) -> Di
 	if bool(nearby.get("available", false)):
 		snap["nearby"] = nearby
 	# spec 0014 (B+C): the key exists only while there IS something to point at (a world without it keeps the baseline snapshot)
-	var gp: Dictionary = GoalPointerScript.compute(sim, snap, (String(ctx.get("selected_build", "")) != "" and _hover_in_map(sim, ctx)) or (bool(ctx.get("touch", false)) and String(ctx.get("action_build", "")) != ""))   # touch: брекети кнопки дії вже є «рамкою цілі»
+	# the hover ghost / touch brackets already frame the target → the marker steps aside (REQ-0014-6)
+	var ghost_on: bool = (String(ctx.get("selected_build", "")) != "" and _hover_in_map(sim, ctx)) \
+		or (bool(ctx.get("touch", false)) and String(ctx.get("action_build", "")) != "")
+	var gp: Dictionary = GoalPointerScript.compute(sim, snap, ghost_on)
 	if not gp.is_empty():
 		snap["goal_pointer"] = gp
 	return snap
