@@ -862,6 +862,10 @@ static func _ghost_refusal(sim, kind: String, def: Dictionary, t: Vector2i, cell
 		return "зайнято: %s" % String(sim.building_def(String(sim.bgrid[cell].kind)).get("name", "будівля"))
 	if sim.map.nodes.has(cell):
 		return "тут ресурс — спершу добудь його"
+	if sim.has_method("_kind_refusal"):   # the same per-kind refusal try_build raises (e.g. «Тут стоїть герой») — the ghost must not promise what the click refuses
+		var kr := String(sim._kind_refusal(def, t.x, t.y))
+		if kr != "":
+			return kr.rstrip(".")
 	if not bool(sim.research_ok(def)):
 		var need := String(def.get("research", ""))
 		return "🔒 потрібне дослідження: %s" % String(GameData.RESEARCH_LABEL.get(need, CatalogDefs.research_label(need)))

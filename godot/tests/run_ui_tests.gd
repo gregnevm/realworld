@@ -1021,6 +1021,10 @@ func _t_inspect_slice() -> void:
 	s.stock[s.res_key("stone")] = 30
 	vm = HudModel._inspect_slice(s, {"hover": Vector2i(6, 6), "selected_build": "wall"})
 	ok(StringName(vm.state) == &"good" and "затисни" in String(vm.hint), "a valid wall ghost is green and teaches the drag")
+	var hero := Vector2i(int(s.player.px), int(s.player.py))   # плейтест 2026-11-08 #1: привид не обіцяє те, що клік відхилить
+	vm = HudModel._inspect_slice(s, {"hover": hero, "selected_build": "wall"})
+	ok(StringName(vm.state) == &"crit" and "герой" in " ".join(vm.lines) and not ("можна ставити" in " ".join(vm.lines)),
+		"a blocking ghost on the hero's own cell is refused (matches try_build)")
 	vm = HudModel._inspect_slice(s, {"hover": Vector2i(9, 8)})   # the starting storage
 	ok("розібрати" in String(vm.hint) or "єдиний склад" in String(vm.hint), "hovering a building explains deconstruction")
 	vm = HudModel._inspect_slice(s, {"hover": Vector2i(1, 12)})
