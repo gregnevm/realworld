@@ -155,6 +155,13 @@ class VitalsPanel extends PanelBase.Base:
 		# the ring + the word say it; the felt °C itself lives in the tooltip
 		_warm.bind({"value": "", "state": wstate, "caption": wcap})
 		_warm.tooltip_text = "Відчуття тепла з одягом: %d°C (надворі — у верхній смузі)" % int(round(felt))
+		# spec 0014 REQ-0014-11: поки кільце на мапі вказує на засіб («холод → багаття»), медальйон «Холодно» дихає в такт слоту — зв'язок видно без тексту
+		var gp: Dictionary = vm.get("goal_pointer", {}) if vm is Dictionary else {}
+		if String(gp.get("kind", "")) == "need":
+			var kb: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
+			_warm.modulate = Tokens.WHITE.lerp(Tokens.AMBER, 0.45 * kb)
+		elif _warm.modulate != Tokens.WHITE:
+			_warm.modulate = Tokens.WHITE
 		var carry: Dictionary = v.carry
 		_carry.bind({"value": "%d/%d" % [int(carry.cur), int(carry.cap)], "state": &"info" if int(carry.cur) > 0 else &"good"})
 		var conds: Array = v.get("conditions", [])

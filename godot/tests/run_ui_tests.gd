@@ -260,6 +260,16 @@ func _t_comprehension() -> void:
 	ok(GP.compute(gs, {"goals": {"current": {}}, "vitals": {"comfort": &"ok"}, "clock": {"day": 3}}, false).is_empty(), "REQ-0014-10: warm and no goal → nothing to point at")
 	var slots_cold: Array = [{"id": "bld:campfire", "n": 1}, {"id": "", "n": 0}]
 	ok(InvPanels.SlotKit.guide_slot(gcold, slots_cold) == 0, "REQ-0014-11: cold → the campfire slot breathes (no goal chain needed)")
+	var vit_p = Panels.VitalsPanel.new()
+	vit_p.build_once()
+	var vit_vm := {"vitals": {"bars": [], "comfort": &"cold", "felt_c": -5.0, "carry": {"cur": 0, "cap": 8}, "conditions": []}, "clock": {"day": 1},
+		"goal_pointer": {"kind": "need", "cell": Vector2i(1, 1), "label": "", "build": "campfire"}}
+	vit_p.bind(vit_vm)
+	ok(vit_p._warm.modulate.b <= 1.0 and vit_p._warm.modulate.b >= Tokens.AMBER.b - 0.01, "REQ-0014-11: while a «need» pointer is live the medallion is tinted toward amber (the breath)")
+	vit_vm.erase("goal_pointer")
+	vit_p.bind(vit_vm)
+	ok(vit_p._warm.modulate == Tokens.WHITE, "REQ-0014-11: …and is back to normal when the pointer is gone")
+	vit_p.free()
 	var h0: String = String(PersistenceMod.world_hash(gs))
 	GP.compute(gs, gvm, false)
 	ok(h0 == String(PersistenceMod.world_hash(gs)), "REQ-0014-15: computing the pointer leaves world_hash untouched")
