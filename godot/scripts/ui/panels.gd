@@ -785,11 +785,16 @@ class GoalsPanel extends PanelBase.Base:
 		_hint.text = Fmt.touchify(String(cur.get("hint", ""))) if touch else String(cur.get("hint", ""))
 		# objective CHIP: one line (title · n/N); the how-to lives in the tooltip and the pulsing build slot
 		_count.visible = false
-		_hint.visible = false
+		_hint.visible = String(cur.get("id", "")) == "fire"
+		if _hint.visible:   # chip-sized: лише перші два речення (повний текст — у тултіпі нижче), щоб панель не лізла на джойстик
+			var sents: PackedStringArray = _hint.text.split(". ")
+			if sents.size() > 2:
+				_hint.text = ". ".join(sents.slice(0, 2)) + "."
+			tooltip_text = ""   # T-Ніколая 2026-11-09 (far.png №1): першу ціль не ховаємо в тултіп — на телефоні його нема; решту цілей навчив перший
 		var nxt := String(g.get("next", ""))
 		# the chip shows THIS goal's own progress; the chain step lives in the tooltip — «5/10» beside
 		# «Розпали багаття» read as «5 of 10 logs» in the first independent read (gamedev §5)
-		var tip: String = "Крок %d з %d · %s" % [int(g.get("done", 0)) + 1, int(g.get("total", 0)), _hint.text]
+		var tip: String = "Крок %d з %d · %s" % [int(g.get("done", 0)) + 1, int(g.get("total", 0)), (Fmt.touchify(String(cur.get("hint", ""))) if touch else String(cur.get("hint", "")))]
 		if nxt != "":
 			tip += "\nДалі: " + nxt
 		tooltip_text = tip
