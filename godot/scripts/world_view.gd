@@ -519,6 +519,15 @@ func _draw_capsule_marks(p: Vector2, c: Vector2) -> void:
 		tw = maxf(tw, _font.get_string_size(String(s), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x)
 	var w: float = maxf(tw + step * float(maxi(lamp_n, plate_n)) + 14.0, _font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 10.0)
 	w = maxf(w, _font.get_string_size(t_imm, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 10.0)
+	# T-Ніколая 2026-11-09 (OD «лише поруч/hover»): повна табличка — лише коли герой ≤3.5 клітинки або курсор на капсулі/під нею;
+	# здалеку — контур корпусу + назва одним рядком (тексти й числа спеки не змінено). Імунітет показуємо завжди (це подія, не стан).
+	var cell: Vector2 = Vector2((p.x + TILE * 0.5) / TILE, (p.y + TILE * 0.5) / TILE)
+	var near_hero: bool = Vector2(float(sim.player.px), float(sim.player.py)).distance_to(cell) <= 3.5
+	var near_ptr: bool = absi(hover.x - int(p.x / TILE)) <= 1 and hover.y >= int(p.y / TILE) and hover.y <= int(p.y / TILE) + 3
+	if not (near_hero or near_ptr or imm):
+		draw_rect(Rect2(p, Vector2(TILE, TILE)), amber, false, 1.5)
+		_mark_text(c + Vector2(0.0, TILE * 0.95), title, Color(1.0, 0.93, 0.8))
+		return
 	var rows: int = 4 if imm else 3
 	var box := Rect2(c.x - w * 0.5, p.y + TILE + 4.0, w, 13.0 * float(rows) + 3.0)
 	draw_rect(Rect2(p, Vector2(TILE, TILE)), amber, false, 1.5)
