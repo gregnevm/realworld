@@ -9,6 +9,7 @@ const Fmt = preload("res://scripts/ui/format.gd")
 const GameData = preload("res://scripts/data.gd")
 const InventoryMod = preload("res://scripts/sim/inventory.gd")
 const CatalogView = preload("res://scripts/ui/catalog_view.gd")
+const GoalPointerScript = preload("res://scripts/ui/goal_pointer.gd")
 const CatalogSim = preload("res://scripts/catalog_sim.gd")
 const Social = preload("res://scripts/social.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
@@ -62,6 +63,10 @@ static func snapshot(session, world: Dictionary, ctx: Dictionary, balance) -> Di
 	var nearby := _nearby_slice(session)
 	if bool(nearby.get("available", false)):
 		snap["nearby"] = nearby
+	# spec 0014 (B+C): the key exists only while there IS something to point at (a world without it keeps the baseline snapshot)
+	var gp: Dictionary = GoalPointerScript.compute(sim, snap, (String(ctx.get("selected_build", "")) != "" and _hover_in_map(sim, ctx)) or (bool(ctx.get("touch", false)) and String(ctx.get("action_build", "")) != ""))   # touch: брекети кнопки дії вже є «рамкою цілі»
+	if not gp.is_empty():
+		snap["goal_pointer"] = gp
 	return snap
 
 # --- gear (craft/equip loadout, spec 0001; parity with main.gd's items panel) ---
@@ -832,6 +837,11 @@ static func _inspect_ground(sim, t: Vector2i, cell: int) -> Dictionary:
 	var blocked: bool = WorldGen.is_terrain_blocked(tile)
 	return {"shown": true, "state": &"info", "title": name, "lines": lines,
 		"hint": "непрохідно" if blocked else "ЛКМ — іти сюди"}
+
+# the hover ghost is DRAWN only while the pointer is over the map (world_view): then it is the target frame, the marker steps aside (REQ-0014-6)
+static func _hover_in_map(sim, ctx: Dictionary) -> bool:
+	var h: Variant = ctx.get("hover", Vector2i(-9999, -9999))
+	return h is Vector2i and sim._in((h as Vector2i).x, (h as Vector2i).y)
 
 static func _inspect_ghost(sim, kind: String, t: Vector2i, cell: int) -> Dictionary:
 	var def: Dictionary = sim.building_def(kind)

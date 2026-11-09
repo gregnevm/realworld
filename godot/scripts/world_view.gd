@@ -56,6 +56,7 @@ var _last_epos: Array = []          # enemy world positions last frame (death po
 var _poofs: Array = []              # {pos, age}
 var action_target: Dictionary = {}  # touch scheme: what the action button will act on (scene sets it each frame)
 var action_mode: StringName = &"gather"
+var goal_pointer: Dictionary = {}   # spec 0014: {kind, build, cell, label} or {} — one breathing ring where the goal / the cold's remedy goes
 var action_build := ""              # build mode: the building the button will place (its ghost fills the brackets)
 const ACTION_COL := {&"gather": Color(0.44, 0.68, 0.33, 1.0), &"build": Color(0.88, 0.69, 0.44, 1.0), &"repair": Color(0.53, 0.82, 0.84, 1.0), &"fight": Color(0.88, 0.42, 0.36, 1.0)}
 var shake := 0.0                    # TRAUMA 0..1 (Eiserloh): events add, decays 1/s; the scene offsets the camera by trauma²
@@ -323,6 +324,8 @@ func _draw() -> void:
 		var pulse: float = 0.5 + 0.5 * sin(_now() * 5.0)
 		draw_arc(tc, TILE * (0.30 + 0.06 * pulse), 0, TAU, 28, Color(1, 0.81, 0.36, 0.95), 2.0)
 		draw_arc(tc, TILE * (0.44 + 0.10 * pulse), 0, TAU, 28, Color(1, 0.81, 0.36, 0.35 * (1.0 - pulse)), 2.0)
+	if not goal_pointer.is_empty():
+		_draw_goal_pointer()
 	if selected_build == REMOVE_TOOL and sim._in(hover.x, hover.y):
 		var own: bool = sim.bgrid.has(hover.y * n + hover.x)
 		var rr := Rect2(hover.x * TILE + 3, hover.y * TILE + 3, TILE - 6, TILE - 6)
@@ -494,6 +497,18 @@ func _draw_wall_links(b, c: Vector2) -> void:
 		var e: Vector2 = c + Vector2(d) * TILE
 		draw_line(c, e, rim, w + 2.0)
 		draw_line(c, e, beam, w)
+
+# spec 0014 (REQ-0014-5/13/16): кільце, що «дихає» (форма + рух, не лише колір), діаметр ≤ 1 клітинки; не інтерактивне (нічого не перехоплює).
+func _draw_goal_pointer() -> void:
+	var cell: Vector2i = goal_pointer.cell
+	var c := Vector2((cell.x + 0.5) * TILE, (cell.y + 0.5) * TILE)
+	var k: float = 0.5 + 0.5 * sin(_now() * 4.0)
+	var amber := Color(1.0, 0.81, 0.36)
+	draw_arc(c, TILE * (0.34 + 0.05 * k), 0.0, TAU, 28, Color(amber.r, amber.g, amber.b, 0.95), 2.5)
+	draw_arc(c, TILE * 0.20, 0.0, TAU, 20, Color(amber.r, amber.g, amber.b, 0.55), 1.5)
+	var word := String(goal_pointer.get("label", ""))
+	if word != "":
+		_mark_text(c + Vector2(0.0, TILE * 0.92), word, Color(1.0, 0.93, 0.8))
 
 # Основна капсула, greybox (spec 0010 REQ-0010-87; арт — лише після G0–G1, P4): ОДНА підписана табличка під корпусом (T-Ніколая: знаки без слів
 # лежали на спрайтах і не читались). Рядки: назва; «Рівень n/5» + ряд кружків; «Захист n/5» + ряд квадратів (R11: різна ФОРМА, не лише колір);

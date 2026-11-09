@@ -235,6 +235,28 @@ func _t_comprehension() -> void:
 			vis_n += 1
 	ok(vis_n == 5, "P2: the desktop hotbar really hides slots 6–8 (%d visible)" % vis_n)
 	bar.free()
+	# spec 0014 (B+C): маркер «де діяти» і «холодно → засіб»
+	var GP = preload("res://scripts/ui/goal_pointer.gd")
+	var gs = _live_sim()
+	var gvm := {"goals": {"current": {"build": "campfire"}}, "vitals": {"comfort": &"ok"}, "clock": {"day": 1}}
+	var g1: Dictionary = GP.compute(gs, gvm, false)
+	var g2: Dictionary = GP.compute(gs, gvm, false)
+	ok(not g1.is_empty() and g1 == g2, "REQ-0014-1: the pointer is a pure function (same input → same cell)")
+	var gcell: Vector2i = g1.cell
+	ok(gs.build_valid(gcell.x, gcell.y) and String(gs._kind_refusal(gs.building_def("campfire"), gcell.x, gcell.y)) == "" and gcell != Vector2i(int(gs.player.px), int(gs.player.py)),
+		"REQ-0014-2: the ring sits where try_build WOULD accept the campfire (never the hero's cell)")
+	ok(String(g1.label) == "Багаття" and String(GP.compute(gs, {"goals": gvm.goals, "vitals": gvm.vitals, "clock": {"day": 5}}, false).label) == "",
+		"REQ-0014-13: the noun under the ring only while learning")
+	ok(GP.compute(gs, gvm, true).is_empty(), "REQ-0014-6: a ghost in hand hides the marker (never two frames at once)")
+	var gcold := {"goals": {"current": {}}, "vitals": {"comfort": &"cold"}, "clock": {"day": 3}}
+	var gc: Dictionary = GP.compute(gs, gcold, false)
+	ok(String(gc.get("kind", "")) == "need" and String(gc.get("build", "")) == "campfire", "REQ-0014-10: cold points at the campfire even with NO goal chain (OD-126)")
+	ok(GP.compute(gs, {"goals": {"current": {}}, "vitals": {"comfort": &"ok"}, "clock": {"day": 3}}, false).is_empty(), "REQ-0014-10: warm and no goal → nothing to point at")
+	var slots_cold: Array = [{"id": "bld:campfire", "n": 1}, {"id": "", "n": 0}]
+	ok(InvPanels.SlotKit.guide_slot(gcold, slots_cold) == 0, "REQ-0014-11: cold → the campfire slot breathes (no goal chain needed)")
+	var h0: String = String(PersistenceMod.world_hash(gs))
+	GP.compute(gs, gvm, false)
+	ok(h0 == String(PersistenceMod.world_hash(gs)), "REQ-0014-15: computing the pointer leaves world_hash untouched")
 	var InvMod = preload("res://scripts/sim/inventory.gd")
 	ok(InvMod.words({"scrap": 8}).contains("брухт ×8"), "shortfall in words: the resource is named, not just ⚙")
 

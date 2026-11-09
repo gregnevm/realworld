@@ -12,6 +12,7 @@ const Tokens = preload("res://scripts/ui/tokens.gd")
 const UITheme = preload("res://scripts/ui/theme.gd")
 const ArtIcons = preload("res://scripts/ui/art_icons.gd")
 const GameData = preload("res://scripts/data.gd")
+const GoalPointerScript = preload("res://scripts/ui/goal_pointer.gd")
 
 const BLD := "bld:"
 
@@ -55,7 +56,7 @@ class SlotKit extends RefCounted:
 		var gl: Variant = vm.get("goals", {})
 		if not (gl is Dictionary):
 			return -1
-		var kind := String(((gl as Dictionary).get("current", {}) as Dictionary).get("build", ""))
+		var kind: String = GoalPointerScript.target_kind(vm)   # spec 0014 REQ-0014-11: «холодно» → слот багаття теж дихає, навіть без ланцюга цілей
 		if kind == "":
 			return -1
 		for i in mini(8, slots.size()):

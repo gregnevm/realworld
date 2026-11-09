@@ -376,12 +376,13 @@ func _process(dt: float) -> void:
 			open_panels.append(String(pn.panel_id))
 	hud_root.view_ctx = {"open_panels": open_panels, "hover": view.hover, "hover_world": winput.hover_world(),
 		"in_world": winput.tooltip_wanted(touch_ui) and not session.sim.dead and not panel_menu.visible,
-		"selected_build": String(view.selected_build), "speed": winput.speed,
+		"selected_build": String(view.selected_build), "action_build": String(view.action_build), "speed": winput.speed,
 		"touch": touch_ui, "menu_open": panel_menu.visible,
 		"pointer": winput.pointer_screen if winput.pointer_is_touch else get_viewport().get_mouse_position(),
 		"hero_screen": view.get_global_transform_with_canvas() * Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE - TILE * 1.1)}
 	overlay_host.map_n = int(session.sim.n)   # keep in lockstep with the live region (survives travel)
 	overlay_host.snap = hud_root.last_snap
+	view.goal_pointer = hud_root.last_snap.get("goal_pointer", {})   # spec 0014: view-only marker «де діяти» (OD-125: лише показ)
 	overlay_host.queue_redraw()
 	death_screen.visible = session.sim.dead
 	if session.sim.dead:
@@ -487,6 +488,9 @@ func _shot_step(dt: float) -> void:
 			oreg.toggle(&"light")          # `shot light`: radio-on the L/Light overlay (default frame = what a player sees)
 		if bool(session.sim.use_main_capsule):
 			_stage_capsule_shot()          # `shot capsule [lvl=N] [cpanel] [poor tap] [immune] [warn|contact] [death]`: spec 0010 W4a/W4b frames
+		if "ring" in OS.get_cmdline_user_args():   # `shot ring`: pointer off the map, nothing armed → the goal marker (spec 0014) is visible
+			view.hover = Vector2i(-9999, -9999)
+			view.selected_build = ""
 		if "far" in OS.get_cmdline_user_args():   # `shot far`: hero 6 cells from the capsule — the far state of its plate (T-Ніколая 2026-11-09)
 			var sf: Variant = session.sim
 			for dx in [6, -6, 5, -5, 7, -7]:
