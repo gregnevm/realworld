@@ -67,9 +67,10 @@ static func snapshot(session, world: Dictionary, ctx: Dictionary, balance) -> Di
 	# the hover ghost / touch brackets already frame the target → the marker steps aside (REQ-0014-6)
 	var ghost_on: bool = (String(ctx.get("selected_build", "")) != "" and _hover_in_map(sim, ctx)) \
 		or (bool(ctx.get("touch", false)) and String(ctx.get("action_build", "")) != "")
-	var gp: Dictionary = GoalPointerScript.compute(sim, snap, ghost_on)
-	if not gp.is_empty():
-		snap["goal_pointer"] = gp
+	if bool(ctx.get("goal_pointer", false)):   # view-прапор use_goal_pointer (REQ-0014-15): OFF (фікстури/бейзлайн-піни) → знімок байт-у-байт як до спеки
+		var gp: Dictionary = GoalPointerScript.compute(sim, snap, ghost_on)
+		if not gp.is_empty():
+			snap["goal_pointer"] = gp
 	return snap
 
 # --- gear (craft/equip loadout, spec 0001; parity with main.gd's items panel) ---

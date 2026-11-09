@@ -376,7 +376,7 @@ func _process(dt: float) -> void:
 			open_panels.append(String(pn.panel_id))
 	hud_root.view_ctx = {"open_panels": open_panels, "hover": view.hover, "hover_world": winput.hover_world(),
 		"in_world": winput.tooltip_wanted(touch_ui) and not session.sim.dead and not panel_menu.visible,
-		"selected_build": String(view.selected_build), "action_build": String(view.action_build), "speed": winput.speed,
+		"selected_build": String(view.selected_build), "action_build": String(view.action_build), "goal_pointer": true, "speed": winput.speed,
 		"touch": touch_ui, "menu_open": panel_menu.visible,
 		"pointer": winput.pointer_screen if winput.pointer_is_touch else get_viewport().get_mouse_position(),
 		"hero_screen": view.get_global_transform_with_canvas() * Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE - TILE * 1.1)}
