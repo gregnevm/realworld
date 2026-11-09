@@ -12,7 +12,7 @@
 | 2 | Headless-запуск | `godot.yml` headless-сьюти з гейтом ObjectDB-ліків | кожна правка | інші GPU, кадр |
 | 3 | Юніт/інтеграційні тести | `run_*.gd` (≈1000 перевірок) · `node --test` (сим-ядро, каталог, прогресія, арт, процес) | кожен PR | гру очима гравця |
 | 4 | Детермінізм | `run_determinism_tests` twin-хеш + крос-процесний `WORLD_HASH_FINAL` · `run_rejoin_tests` | кожен PR | чи цікаво |
-| 5 | Сценарні E2E | `tools/smoke.mjs` (Playwright, веб) · `run_smoke` · `run_net_spike` (сервер + 2 клієнти) | перед мерджем фічі | ламаються, коли гра змінюється |
+| 5 | Сценарні E2E | `run_smoke` · `run_net_spike` (сервер + 2 клієнти) | перед мерджем фічі | ламаються, коли гра змінюється |
 | 6 | Кадр інтерфейсу | CI `godot-hud-screenshot` · `newhud shot [inv\|bag\|death\|spawn\|fx\|touch…]` · `tools/ux/value_check.py` · агент `fresh-eyes` | кожна видима зміна | feel (статичний кадр) |
 | 7 | Експорт і доставка | CI `godot-web-build` (артефакт `web-build`) · `godot-android-build` (`android-apk`, `apksigner verify`) | кожен пуш | — |
 | P | **Процес** | `process.yml`: PR-гейт + звіт здоров'я; SessionStart-дайджест (§5, вмикає власник) | кожен PR / сесія | якість рішень власника |
@@ -38,7 +38,7 @@
 
 | Інструмент | Позиція | Чому / умова перегляду |
 |---|---|---|
-| Власні headless-сьюти `run_*.gd`, twin-хеш, Playwright smoke, `newhud shot`, gdlint, pre-commit | **Adopt** | Вже дають рівні 1–7; переїзд не додає сигналу. |
+| Власні headless-сьюти `run_*.gd`, twin-хеш, `newhud shot`, gdlint, pre-commit | **Adopt** | Вже дають рівні 1–7; переїзд не додає сигналу. |
 | PR-гейт, звіт процесу, SessionStart-хук, агенти ролей (`docs/process/`) | **Adopt** | Механізми принципів P1–P10. |
 | `gdmutant` (мутаційне тестування GDScript, 0.1.4) | **Trial — підключено** | `mutation.yml`: на PR, що змінює `kernel/`/`sim/`, мутує ≤ 2 змінені файли й ганяє наші ж `run_*.gd` через `--runner command` (без міграції на GUT/gdUnit4); не блокує. Вихід: за 2 тижні не знайде жодного сліпого тесту або шумить — Hold; знайде — Adopt і поріг на вцілілих. **Перший прогін 2026-11-05** (`kernel/climate.gd` лише проти `run_kernel_tests`): 18,3% — 21 вбито, 94 вижило (напр. видалений `return &"fog"` у `weather()` не ловить жоден тест). Відтоді kernel-файли судяться обома сьютами (kernel + sim). |
 | `godot-ai` MCP (MIT, сцени/скриншоти/ввід/логи, Godot 4.7+) | **Trial** (локально) | Для інтерактивних UI-сесій на десктопі власника. Умови: коміт перед сесією (R12), увімкнено лише потрібні інструменти (R4), не в CI. |

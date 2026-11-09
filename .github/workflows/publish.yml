@@ -2,7 +2,6 @@ name: Publish main
 
 # Постійні адреси замість артефактів по PR: після зеленого "Godot Tests" на main
 #   • rolling-prerelease `main-latest` з підписаним APK;
-#   • GitHub Pages з web-збіркою Godot (потрібно один раз: Settings → Pages → Source = GitHub Actions).
 # Кожна збірка має штамп (sha · № запуску · дата) у ☰-меню — див. godot/scripts/build_info.gd.
 
 on:
@@ -42,31 +41,4 @@ jobs:
           gh release create main-latest out/RealWorld.apk \
             --repo "$GITHUB_REPOSITORY" --prerelease --target "$SHA" \
             --title "main · ${SHA::7}" \
-            --notes "Автозбірка main (${SHA}). Номер збірки — у ☰-меню гри. Основна капсула ввімкнена за замовчуванням (OD-114); старий шлях — web з ?nocapsule."
-
-  pages:
-    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
-    runs-on: ubuntu-latest
-    # Pages може бути не ввімкнено в налаштуваннях репозиторію — це не повинно червонити main
-    continue-on-error: true
-    permissions:
-      actions: read
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - name: Download web build
-        uses: actions/download-artifact@v4
-        with:
-          name: web-build
-          path: site
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ github.token }}
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-      - id: deploy
-        uses: actions/deploy-pages@v4
+            --notes "Автозбірка main (${SHA}). Номер збірки — у ☰-меню гри. Основна капсула ввімкнена за замовчуванням (OD-114); опт-аут до старого шляху — `-- nocapsule`."

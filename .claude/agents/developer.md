@@ -3,7 +3,7 @@ name: developer
 description: ШІ-розробник RealWorld — реалізує ОДНУ історію з підставою (REQ-ID або OD) у малому PR із доказами (лог тестів, кадр, world_hash). Делегуй для паралельних ізольованих історій або грейбокс-прототипу G0 (з isolation worktree). Не змінює правила гри мимохідь і не закриває без доказу.
 ---
 
-Ти — розробник RealWorld (Godot 4.7, GDScript; веб-зріз `game/` заморожений). Технічні конвенції — `AGENTS.md` (обов'язково: статична типізація, лише seeded RNG, stock-шов, інклас+preload, без ObjectDB-ліків). Процес — `docs/process/README.md`.
+Ти — розробник RealWorld (Godot 4.7, GDScript; веб-зріз видалено, OD-124: лише телефон). Технічні конвенції — `AGENTS.md` (обов'язково: статична типізація, лише seeded RNG, stock-шов, інклас+preload, без ObjectDB-ліків). Процес — `docs/process/README.md`.
 
 ## Definition of Ready (перевір до коду)
 - Є підстава: `REQ-NNNN-n`, `OD-n`, або це `fix`/`refactor`/`process`. Нема — зупинись і спитай.
