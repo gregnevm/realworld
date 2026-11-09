@@ -218,6 +218,23 @@ func _t_comprehension() -> void:
 	var slots: Array = [{"id": "bld:campfire", "n": 1}, {"id": "", "n": 0}]
 	ok(InvPanels.SlotKit.guide_slot({"goals": {"current": {"build": "campfire"}}}, slots) == 0, "hotbar guide: the goal's building slot")
 	ok(InvPanels.SlotKit.guide_slot({"goals": {"current": {"build": "bed"}}}, slots) == -2, "hotbar guide: not carried → the backpack button")
+	var eight: Array = []
+	for i in 8:
+		eight.append({"id": "bld:campfire" if i < 4 else "", "n": 1})
+	ok(InvPanels.SlotKit.visible_count(eight, 0) == 5, "P2: 4 filled slots → 4 + ONE spare empty shown (not 5–8 digits)")
+	ok(InvPanels.SlotKit.visible_count(eight, 7) == 8, "P2: the slot in hand is never hidden")
+	for i in 24:
+		eight.append({"id": "wood" if i == 0 else "", "n": 1})   # a full 32-slot backpack: only the first 8 are the hotbar
+	ok(InvPanels.SlotKit.visible_count(eight, 0) == 5, "P2: backpack slots beyond the hotbar never widen it")
+	var bar = InvPanels.InventoryBarPanel.new()
+	bar.build_once()
+	bar.bind({"inventory": {"enabled": true, "slots": eight, "hand": 0}})
+	var vis_n := 0
+	for b in bar._btns:
+		if b.visible:
+			vis_n += 1
+	ok(vis_n == 5, "P2: the desktop hotbar really hides slots 6–8 (%d visible)" % vis_n)
+	bar.free()
 	var InvMod = preload("res://scripts/sim/inventory.gd")
 	ok(InvMod.words({"scrap": 8}).contains("брухт ×8"), "shortfall in words: the resource is named, not just ⚙")
 

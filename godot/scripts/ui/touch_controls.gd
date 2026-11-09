@@ -12,6 +12,7 @@ const UITheme = preload("res://scripts/ui/theme.gd")
 const WidgetBase = preload("res://scripts/ui/widget.gd")
 const ArtIcons = preload("res://scripts/ui/art_icons.gd")
 const AM = preload("res://scripts/ui/action_model.gd")
+const InventoryPanels = preload("res://scripts/ui/inventory_panels.gd")
 
 const MODE_COLOR := {&"gather": Tokens.GOOD, &"build": Tokens.AMBER, &"repair": Tokens.TEAL, &"fight": Tokens.CRIT}
 
@@ -146,9 +147,10 @@ class TouchControls extends Control:
 		var slots: Array = st.get("slots", [])
 		var active: int = int(st.get("active", 0))
 		var guide: int = int(st.get("guide", -1))
+		var shown: int = InventoryPanels.SlotKit.visible_count(slots, active)
 		for i in _slot_btns.size():
 			var b: Button = _slot_btns[i]
-			if i < slots.size():
+			if i < slots.size() and i < shown:
 				var sl: Dictionary = slots[i]
 				b.visible = true
 				b.set_pressed_no_signal(i == active)
