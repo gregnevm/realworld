@@ -42,6 +42,12 @@ echo.
 echo === Net transport spike (spec 0006 - server + 3 clients, one joining mid-run) ===
 "%GODOT%" --headless --path "%~dp0godot" -s res://tests/run_net_spike.gd
 echo.
+echo === RealGPS presence layer (spec 0013 - grid, guard, router, realm) ===
+"%GODOT%" --headless --path "%~dp0godot" -s res://tests/run_realm_tests.gd
+echo.
+echo === RealGPS server (spec 0013 - protocol, loopback + real WebSocket, local realm, session) ===
+"%GODOT%" --headless --path "%~dp0godot" -s res://tests/run_realm_server_tests.gd
+echo.
 echo === Playthrough smoke ===
 "%GODOT%" --headless --path "%~dp0godot" -s res://tests/run_smoke.gd
 echo.

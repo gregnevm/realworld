@@ -55,6 +55,11 @@ const TERRAIN := {
 	"forest": Color("2f5133"),
 	"water": Color("2b3f5c"),
 	"road":  Color("4a4036"),
+	"rock":  Color("4a5159"),
+	"sand":  Color("5a5238"),
+	"snow":  Color("8a96a0"),
+	"soil":  Color("3a2f22"),
+	"ruin":  Color("3a3430"),
 }
 
 static func res(id: String) -> Color:

@@ -263,3 +263,22 @@ static func left_ms(ms: int) -> String:
 	if mins >= 60:
 		return "%d год %d хв" % [mins / 60, mins % 60]
 	return "%d хв" % mins
+
+# --- RealGPS presence (spec 0013) ---
+# Distance for a radar row: whole metres below a kilometre, one decimal above ("340 м", "1,2 км").
+static func distance_m(m: int) -> String:
+	if m < 1000:
+		return "%d м" % maxi(m, 0)
+	return ("%.1f км" % (float(m) / 1000.0)).replace(".", ",")
+
+# Closed refusal set of the realm channel (net/realm_protocol.gd + gps_guard.gd) -> one player-facing line.
+static func realm_refusal(reason: String) -> String:
+	match reason:
+		"teleport":     return "GPS-стрибок відхилено — надто швидко для людини"
+		"time_back":    return "GPS-фікс застарів — відхилено"
+		"bad_fix":      return "Некоректні координати — відхилено"
+		"rate_limited": return "Забагато запитів — зачекай мить"
+		"realm_full":   return "Світ переповнений — спробуй пізніше"
+		"id_bound", "duplicate": return "Цей гравець уже в мережі"
+		"": return ""
+		_:              return "Мережа відхилила запит (%s)" % reason

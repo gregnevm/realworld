@@ -345,6 +345,7 @@ func _process(dt: float) -> void:
 		return
 	view.sim = session.sim            # travel/respawn swap the sim under the session — track it
 	session.push_clock(_clock.now_ms())   # годинник пристрою -> sim (монотонно); сам sim час не читає
+	session.tick_realm(_clock.now_ms())   # spec 0013: RealGPS присутність (власний тротлінг 1 с)
 	var sdt := dt * winput.speed
 	if sdt > 0.0 and not session.sim.dead:
 		session.sim.update(sdt)
@@ -480,6 +481,8 @@ func _shot_step(dt: float) -> void:
 			preg.get_panel(&"build_bar").set_category(1)   # `shot drawer`: touch build drawer opened on «Побут»
 		if "gear" in OS.get_cmdline_user_args():
 			preg.toggle(&"gear")           # `shot gear`: open the loadout panel
+		if "nearby" in OS.get_cmdline_user_args():
+			preg.toggle(&"nearby")         # `shot nearby`: the RealGPS radar + roster (spec 0013)
 		if "light" in OS.get_cmdline_user_args():
 			oreg.toggle(&"light")          # `shot light`: radio-on the L/Light overlay (default frame = what a player sees)
 		if bool(session.sim.use_main_capsule):
