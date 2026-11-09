@@ -260,6 +260,15 @@ func _t_comprehension() -> void:
 	ok(GP.compute(gs, {"goals": {"current": {}}, "vitals": {"comfort": &"ok"}, "clock": {"day": 3}}, false).is_empty(), "REQ-0014-10: warm and no goal → nothing to point at")
 	var slots_cold: Array = [{"id": "bld:campfire", "n": 1}, {"id": "", "n": 0}]
 	ok(InvPanels.SlotKit.guide_slot(gcold, slots_cold) == 0, "REQ-0014-11: cold → the campfire slot breathes (no goal chain needed)")
+	var slots_nofire: Array = [{"id": "axe", "n": 1}, {"id": "", "n": 0}]
+	ok(InvPanels.SlotKit.guide_slot(gcold, slots_nofire) == -2, "REQ-0014-12: cold but the campfire is NOT in the hotbar → the backpack button breathes (-2), not a slot")
+	var inv_sess = _capsule_session(false)   # an inventory world: «you place what you CARRY» (spec 0009)
+	var inv_mod = preload("res://scripts/sim/inventory.gd")
+	while int(inv_mod.count(inv_sess.sim, inv_mod.BLD + "campfire")) > 0 and bool(inv_mod.take(inv_sess.sim, inv_mod.BLD + "campfire", 1)):
+		pass
+	ok(GP.compute(inv_sess.sim, gcold, false).is_empty(), "REQ-0014-12: not carried → no marker on the map (it would point at an action the player cannot do yet)")
+	inv_mod.add(inv_sess.sim, inv_mod.BLD + "campfire", 1)
+	ok(not GP.compute(inv_sess.sim, gcold, false).is_empty(), "REQ-0014-12: …and once the campfire is carried the marker appears")
 	var vit_p = Panels.VitalsPanel.new()
 	vit_p.build_once()
 	var vit_vm := {"vitals": {"bars": [], "comfort": &"cold", "felt_c": -5.0, "carry": {"cur": 0, "cap": 8}, "conditions": []}, "clock": {"day": 1},
