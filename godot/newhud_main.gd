@@ -497,7 +497,7 @@ func _shot_step(dt: float) -> void:
 				if not sf.is_blocked(int(sf.player.px) + int(dx), int(sf.player.py)):
 					sf.player.px = float(int(sf.player.px) + int(dx)) + 0.5
 					break
-		session.sim.time.frac = 0.86       # dusk so daylight darkening is visible
+		session.sim.time.frac = 0.5 if "day" in OS.get_cmdline_user_args() else 0.86   # `shot day`: noon — an honest daylight frame for value_check (the default dusk biases the metric dark)
 		if "death" in OS.get_cmdline_user_args():   # `shot death`: a REAL death (epitaph + bag), not a bare flag
 			session.sim.player.born = 1
 			session.sim.time.day = 3
