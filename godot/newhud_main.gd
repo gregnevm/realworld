@@ -376,12 +376,13 @@ func _process(dt: float) -> void:
 			open_panels.append(String(pn.panel_id))
 	hud_root.view_ctx = {"open_panels": open_panels, "hover": view.hover, "hover_world": winput.hover_world(),
 		"in_world": winput.tooltip_wanted(touch_ui) and not session.sim.dead and not panel_menu.visible,
-		"selected_build": String(view.selected_build), "speed": winput.speed,
+		"selected_build": String(view.selected_build), "action_build": String(view.action_build), "goal_pointer": true, "speed": winput.speed,
 		"touch": touch_ui, "menu_open": panel_menu.visible,
 		"pointer": winput.pointer_screen if winput.pointer_is_touch else get_viewport().get_mouse_position(),
 		"hero_screen": view.get_global_transform_with_canvas() * Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE - TILE * 1.1)}
 	overlay_host.map_n = int(session.sim.n)   # keep in lockstep with the live region (survives travel)
 	overlay_host.snap = hud_root.last_snap
+	view.goal_pointer = hud_root.last_snap.get("goal_pointer", {})   # spec 0014: view-only marker «де діяти» (OD-128: лише показ)
 	overlay_host.queue_redraw()
 	death_screen.visible = session.sim.dead
 	if session.sim.dead:
@@ -487,7 +488,16 @@ func _shot_step(dt: float) -> void:
 			oreg.toggle(&"light")          # `shot light`: radio-on the L/Light overlay (default frame = what a player sees)
 		if bool(session.sim.use_main_capsule):
 			_stage_capsule_shot()          # `shot capsule [lvl=N] [cpanel] [poor tap] [immune] [warn|contact] [death]`: spec 0010 W4a/W4b frames
-		session.sim.time.frac = 0.86       # dusk so daylight darkening is visible
+		if "ring" in OS.get_cmdline_user_args():   # `shot ring`: pointer off the map, nothing armed → the goal marker (spec 0014) is visible
+			view.hover = Vector2i(-9999, -9999)
+			view.selected_build = ""
+		if "far" in OS.get_cmdline_user_args():   # `shot far`: hero 6 cells from the capsule — the far state of its plate (T-Ніколая 2026-11-09)
+			var sf: Variant = session.sim
+			for dx in [6, -6, 5, -5, 7, -7]:
+				if not sf.is_blocked(int(sf.player.px) + int(dx), int(sf.player.py)):
+					sf.player.px = float(int(sf.player.px) + int(dx)) + 0.5
+					break
+		session.sim.time.frac = 0.5 if "day" in OS.get_cmdline_user_args() else 0.86   # `shot day`: noon — an honest daylight frame for value_check (the default dusk biases the metric dark)
 		if "death" in OS.get_cmdline_user_args():   # `shot death`: a REAL death (epitaph + bag), not a bare flag
 			session.sim.player.born = 1
 			session.sim.time.day = 3
@@ -625,6 +635,7 @@ func _setup_action_controls() -> void:
 	tc.zoom_step.connect(func(d: int) -> void: winput.zoom_step(1.15 if d > 0 else 1.0 / 1.15))
 	tc.slot_step.connect(func(d: int) -> void: _apply_slot(posmod(act_slot + d, maxi(1, _act_slots.size()))))
 	tc.slot_selected.connect(_apply_slot)
+	tc.tool_pressed.connect(func(v: StringName) -> void: router.dispatch(v, {}, session))   # C4: ☰/♻ з нижньої смуги → ті самі intents, що були у верхній
 	tc.inventory_pressed.connect(func() -> void: preg.toggle(&"inventory" if bool(session.sim.use_inventory) else &"gear"))
 	tc.option_chosen.connect(func(o: Dictionary) -> void: router.dispatch(StringName(o.verb), o.args, session))
 	winput.long_pressed.connect(func(cell: Vector2i, screen: Vector2) -> void:
@@ -689,6 +700,7 @@ func _tick_action(dt: float) -> void:
 	# підпис дії над кнопкою ховається, поки відкрита панель капсули: інакше він лягає на рядок ціни (T-Ніколая, кадр 05)
 	var cap_pn: Variant = preg.get_panel(&"capsule_bay")
 	var cap_open: bool = cap_pn != null and bool(cap_pn.visible)
+	tc.set_tool_state(panel_menu.visible, String(view.selected_build) == String(WorldInputScript.WorldInput.REMOVE_TOOL))
 	tc.bind_state({"mode": act_mode, "slots": _act_slots, "active": act_slot, "overview": act_overview,
 		"target": "" if cap_open else _target_label(act_target), "guide": _guide_slot()})
 	var bb: Variant = preg.get_panel(&"build_bar")

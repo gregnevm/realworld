@@ -12,6 +12,7 @@ const Tokens = preload("res://scripts/ui/tokens.gd")
 const UITheme = preload("res://scripts/ui/theme.gd")
 const ArtIcons = preload("res://scripts/ui/art_icons.gd")
 const GameData = preload("res://scripts/data.gd")
+const GoalPointerScript = preload("res://scripts/ui/goal_pointer.gd")
 
 const BLD := "bld:"
 
@@ -41,11 +42,21 @@ class SlotKit extends RefCounted:
 
 	# Onboarding guide (gamedev §6: the goal points at a PLACE, not only at the corner chip): the hotbar slot
 	# holding the current goal's building, -2 = the goal needs a building that is not in the hotbar, -1 = none.
+	# T-Ніколая 2026-11-09 (P2): порожні слоти 5–8 з цифрами читались як «чогось бракує». Показуємо заповнені + ОДИН запасний порожній
+	# (і слот у руці); цифрові хоткеї працюють як і раніше — ховаємо лише вигляд.
+	static func visible_count(slots: Array, hand: int) -> int:
+		var n: int = mini(slots.size(), 8)   # inv.slots — весь рюкзак (32); хотбар — перші 8
+		var last := -1
+		for i in n:
+			if String((slots[i] as Dictionary).get("id", "")) != "":
+				last = i
+		return mini(n, maxi(last + 2, hand + 1))
+
 	static func guide_slot(vm: Dictionary, slots: Array) -> int:
 		var gl: Variant = vm.get("goals", {})
 		if not (gl is Dictionary):
 			return -1
-		var kind := String(((gl as Dictionary).get("current", {}) as Dictionary).get("build", ""))
+		var kind: String = GoalPointerScript.target_kind(vm)   # spec 0014 REQ-0014-11: «холодно» → слот багаття теж дихає, навіть без ланцюга цілей
 		if kind == "":
 			return -1
 		for i in mini(8, slots.size()):
@@ -110,7 +121,9 @@ class InventoryBarPanel extends PanelBase.Base:
 		var slots: Array = inv.slots
 		var hand: int = int(inv.hand)
 		var guide: int = SlotKit.guide_slot(vm, slots)
+		var shown: int = SlotKit.visible_count(slots, hand)
 		for i in _btns.size():
+			_btns[i].visible = i < shown
 			SlotKit.fill_slot(_btns[i], slots[i], str(i + 1))
 			_btns[i].set_pressed_no_signal(i == hand)
 			SlotKit.pulse(_btns[i], i == guide and i != hand)

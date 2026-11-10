@@ -218,6 +218,70 @@ func _t_comprehension() -> void:
 	var slots: Array = [{"id": "bld:campfire", "n": 1}, {"id": "", "n": 0}]
 	ok(InvPanels.SlotKit.guide_slot({"goals": {"current": {"build": "campfire"}}}, slots) == 0, "hotbar guide: the goal's building slot")
 	ok(InvPanels.SlotKit.guide_slot({"goals": {"current": {"build": "bed"}}}, slots) == -2, "hotbar guide: not carried → the backpack button")
+	var eight: Array = []
+	for i in 8:
+		eight.append({"id": "bld:campfire" if i < 4 else "", "n": 1})
+	ok(InvPanels.SlotKit.visible_count(eight, 0) == 5, "P2: 4 filled slots → 4 + ONE spare empty shown (not 5–8 digits)")
+	ok(InvPanels.SlotKit.visible_count(eight, 7) == 8, "P2: the slot in hand is never hidden")
+	for i in 24:
+		eight.append({"id": "wood" if i == 0 else "", "n": 1})   # a full 32-slot backpack: only the first 8 are the hotbar
+	ok(InvPanels.SlotKit.visible_count(eight, 0) == 5, "P2: backpack slots beyond the hotbar never widen it")
+	var bar = InvPanels.InventoryBarPanel.new()
+	bar.build_once()
+	bar.bind({"inventory": {"enabled": true, "slots": eight, "hand": 0}})
+	var vis_n := 0
+	for b in bar._btns:
+		if b.visible:
+			vis_n += 1
+	ok(vis_n == 5, "P2: the desktop hotbar really hides slots 6–8 (%d visible)" % vis_n)
+	bar.free()
+	# spec 0014 (B+C): маркер «де діяти» і «холодно → засіб»
+	var GP = preload("res://scripts/ui/goal_pointer.gd")
+	var gs = _live_sim()
+	var gvm := {"goals": {"current": {"build": "campfire"}}, "vitals": {"comfort": &"ok"}, "clock": {"day": 1}}
+	var g1: Dictionary = GP.compute(gs, gvm, false)
+	var g2: Dictionary = GP.compute(gs, gvm, false)
+	ok(not g1.is_empty() and g1 == g2, "REQ-0014-1: the pointer is a pure function (same input → same cell)")
+	var gcell: Vector2i = g1.cell
+	ok(gs.build_valid(gcell.x, gcell.y) and String(gs._kind_refusal(gs.building_def("campfire"), gcell.x, gcell.y)) == "" and gcell != Vector2i(int(gs.player.px), int(gs.player.py)),
+		"REQ-0014-2: the ring sits where try_build WOULD accept the campfire (never the hero's cell)")
+	ok(String(g1.label) == "Багаття" and String(GP.compute(gs, {"goals": gvm.goals, "vitals": gvm.vitals, "clock": {"day": 5}}, false).label) == "",
+		"REQ-0014-13: the noun under the ring only while learning")
+	ok(GP.compute(gs, gvm, true).is_empty(), "REQ-0014-6: a ghost in hand hides the marker (never two frames at once)")
+	gs.map.nodes[(int(gs.player.py) + 3) * int(gs.n) + int(gs.player.px)] = {"kind": "tree", "amount": 12}   # a known node 3 cells south of the hero
+	var gg: Dictionary = GP.compute(gs, {"goals": {"current": {"id": "gather"}}, "vitals": {"comfort": &"ok"}, "clock": {"day": 1}}, false)
+	var gnode: Dictionary = {} if gg.is_empty() else gs.map.nodes.get(int(gg.cell.y) * int(gs.n) + int(gg.cell.x), {})
+	ok(not gg.is_empty() and (String(gnode.get("kind", "")) == "tree" or String(gnode.get("kind", "")) == "rock") and int(gnode.get("amount", 0)) > 0,
+		"REQ-0014-3: «добудь ресурси» → the ring sits on the nearest tree/rock with something left")
+	ok(GP.compute(gs, {"goals": {"current": {"id": "survive"}}, "vitals": {"comfort": &"ok"}, "clock": {"day": 1}}, false).is_empty(), "REQ-0014-1: goals without a place (survive) → no marker")
+	var gcold := {"goals": {"current": {}}, "vitals": {"comfort": &"cold"}, "clock": {"day": 3}}
+	var gc: Dictionary = GP.compute(gs, gcold, false)
+	ok(String(gc.get("kind", "")) == "need" and String(gc.get("build", "")) == "campfire", "REQ-0014-10: cold points at the campfire even with NO goal chain (OD-129)")
+	ok(GP.compute(gs, {"goals": {"current": {}}, "vitals": {"comfort": &"ok"}, "clock": {"day": 3}}, false).is_empty(), "REQ-0014-10: warm and no goal → nothing to point at")
+	var slots_cold: Array = [{"id": "bld:campfire", "n": 1}, {"id": "", "n": 0}]
+	ok(InvPanels.SlotKit.guide_slot(gcold, slots_cold) == 0, "REQ-0014-11: cold → the campfire slot breathes (no goal chain needed)")
+	var slots_nofire: Array = [{"id": "axe", "n": 1}, {"id": "", "n": 0}]
+	ok(InvPanels.SlotKit.guide_slot(gcold, slots_nofire) == -2, "REQ-0014-12: cold but the campfire is NOT in the hotbar → the backpack button breathes (-2), not a slot")
+	var inv_sess = _capsule_session(false)   # an inventory world: «you place what you CARRY» (spec 0009)
+	var inv_mod = preload("res://scripts/sim/inventory.gd")
+	while int(inv_mod.count(inv_sess.sim, inv_mod.BLD + "campfire")) > 0 and bool(inv_mod.take(inv_sess.sim, inv_mod.BLD + "campfire", 1)):
+		pass
+	ok(GP.compute(inv_sess.sim, gcold, false).is_empty(), "REQ-0014-12: not carried → no marker on the map (it would point at an action the player cannot do yet)")
+	inv_mod.add(inv_sess.sim, inv_mod.BLD + "campfire", 1)
+	ok(not GP.compute(inv_sess.sim, gcold, false).is_empty(), "REQ-0014-12: …and once the campfire is carried the marker appears")
+	var vit_p = Panels.VitalsPanel.new()
+	vit_p.build_once()
+	var vit_vm := {"vitals": {"bars": [], "comfort": &"cold", "felt_c": -5.0, "carry": {"cur": 0, "cap": 8}, "conditions": []}, "clock": {"day": 1},
+		"goal_pointer": {"kind": "need", "cell": Vector2i(1, 1), "label": "", "build": "campfire"}}
+	vit_p.bind(vit_vm)
+	ok(vit_p._warm.modulate.b <= 1.0 and vit_p._warm.modulate.b >= Tokens.AMBER.b - 0.01, "REQ-0014-11: while a «need» pointer is live the medallion is tinted toward amber (the breath)")
+	vit_vm.erase("goal_pointer")
+	vit_p.bind(vit_vm)
+	ok(vit_p._warm.modulate == Tokens.WHITE, "REQ-0014-11: …and is back to normal when the pointer is gone")
+	vit_p.free()
+	var h0: String = String(PersistenceMod.world_hash(gs))
+	GP.compute(gs, gvm, false)
+	ok(h0 == String(PersistenceMod.world_hash(gs)), "REQ-0014-15: computing the pointer leaves world_hash untouched")
 	var InvMod = preload("res://scripts/sim/inventory.gd")
 	ok(InvMod.words({"scrap": 8}).contains("брухт ×8"), "shortfall in words: the resource is named, not just ⚙")
 
@@ -307,6 +371,16 @@ func _t_touch_controls() -> void:
 	tcn.slot_step.connect(func(_d: int) -> void: got.slot += 1)
 	tcn.zoom_step.connect(func(_d: int) -> void: got.zoom += 1)
 	tcn.overview_toggled.connect(func() -> void: got.over += 1)
+	# C4 (2026-11-09): ☰ і ♻ живуть у нижній смузі й подають ТІ САМІ intents, що верхня панель
+	tcn.set_tool_state(false, true)
+	ok(tcn._remove_btn.button_pressed and not tcn._menu_btn.button_pressed, "C4: the touch bar's ♻ reads armed, ☰ reads closed")
+	tcn.set_tool_state(true, false)
+	ok(tcn._menu_btn.button_pressed and not tcn._remove_btn.button_pressed, "C4: the touch bar's ☰ reads open")
+	var tools_got: Array = []
+	tcn.tool_pressed.connect(func(v: StringName) -> void: tools_got.append(v))
+	tcn._menu_btn.pressed.emit()
+	tcn._remove_btn.pressed.emit()
+	ok(tools_got == [&"toggle_menu", &"remove_tool"], "C4: the buttons emit the SAME intents the top bar used")
 	var c: Vector2 = tcn.act_center()
 	var touch := func(pos: Vector2, down: bool) -> void:
 		var e := InputEventScreenTouch.new()
@@ -1021,6 +1095,10 @@ func _t_inspect_slice() -> void:
 	s.stock[s.res_key("stone")] = 30
 	vm = HudModel._inspect_slice(s, {"hover": Vector2i(6, 6), "selected_build": "wall"})
 	ok(StringName(vm.state) == &"good" and "затисни" in String(vm.hint), "a valid wall ghost is green and teaches the drag")
+	var hero := Vector2i(int(s.player.px), int(s.player.py))   # плейтест 2026-11-08 #1: привид не обіцяє те, що клік відхилить
+	vm = HudModel._inspect_slice(s, {"hover": hero, "selected_build": "wall"})
+	ok(StringName(vm.state) == &"crit" and "герой" in " ".join(vm.lines) and not ("можна ставити" in " ".join(vm.lines)),
+		"a blocking ghost on the hero's own cell is refused (matches try_build)")
 	vm = HudModel._inspect_slice(s, {"hover": Vector2i(9, 8)})   # the starting storage
 	ok("розібрати" in String(vm.hint) or "єдиний склад" in String(vm.hint), "hovering a building explains deconstruction")
 	vm = HudModel._inspect_slice(s, {"hover": Vector2i(1, 12)})
@@ -1171,7 +1249,7 @@ func _t_touch_frame() -> void:
 	var top = preg.get_panel(&"top_bar")
 	top.bind(snap)
 	ok(top._tool_box.visible and not top._region.visible, "touch top strip shows the tools (☰ ✖ 🗑 − +) and drops the region label")
-	ok(top._tools[2].button_pressed, "the 🗑 tool reads armed")
+	ok(top._tools.size() == 1 and top._tools[0].visible, "C4: the top strip keeps only the contextual ✖ (armed tool) — ☰/♻ moved to the touch bar")
 	var vit = preg.get_panel(&"vitals")
 	vit.bind(snap)
 	ok(vit._meds.size() == 4 and not vit._carry.visible, "phone vitals: need medallions, no carry token (no bars)")

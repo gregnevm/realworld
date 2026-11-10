@@ -9,6 +9,7 @@ const Fmt = preload("res://scripts/ui/format.gd")
 const GameData = preload("res://scripts/data.gd")
 const InventoryMod = preload("res://scripts/sim/inventory.gd")
 const CatalogView = preload("res://scripts/ui/catalog_view.gd")
+const GoalPointerScript = preload("res://scripts/ui/goal_pointer.gd")
 const CatalogSim = preload("res://scripts/catalog_sim.gd")
 const Social = preload("res://scripts/social.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
@@ -62,6 +63,14 @@ static func snapshot(session, world: Dictionary, ctx: Dictionary, balance) -> Di
 	var nearby := _nearby_slice(session)
 	if bool(nearby.get("available", false)):
 		snap["nearby"] = nearby
+	# spec 0014 (B+C): the key exists only while there IS something to point at (a world without it keeps the baseline snapshot)
+	# the hover ghost / touch brackets already frame the target → the marker steps aside (REQ-0014-6)
+	var ghost_on: bool = (String(ctx.get("selected_build", "")) != "" and _hover_in_map(sim, ctx)) \
+		or (bool(ctx.get("touch", false)) and String(ctx.get("action_build", "")) != "")
+	if bool(ctx.get("goal_pointer", false)):   # view-прапор use_goal_pointer (REQ-0014-15): OFF (фікстури/бейзлайн-піни) → знімок байт-у-байт як до спеки
+		var gp: Dictionary = GoalPointerScript.compute(sim, snap, ghost_on)
+		if not gp.is_empty():
+			snap["goal_pointer"] = gp
 	return snap
 
 # --- gear (craft/equip loadout, spec 0001; parity with main.gd's items panel) ---
@@ -833,6 +842,11 @@ static func _inspect_ground(sim, t: Vector2i, cell: int) -> Dictionary:
 	return {"shown": true, "state": &"info", "title": name, "lines": lines,
 		"hint": "непрохідно" if blocked else "ЛКМ — іти сюди"}
 
+# the hover ghost is DRAWN only while the pointer is over the map (world_view): then it is the target frame, the marker steps aside (REQ-0014-6)
+static func _hover_in_map(sim, ctx: Dictionary) -> bool:
+	var h: Variant = ctx.get("hover", Vector2i(-9999, -9999))
+	return h is Vector2i and sim._in((h as Vector2i).x, (h as Vector2i).y)
+
 static func _inspect_ghost(sim, kind: String, t: Vector2i, cell: int) -> Dictionary:
 	var def: Dictionary = sim.building_def(kind)
 	if def.is_empty():
@@ -862,6 +876,10 @@ static func _ghost_refusal(sim, kind: String, def: Dictionary, t: Vector2i, cell
 		return "зайнято: %s" % String(sim.building_def(String(sim.bgrid[cell].kind)).get("name", "будівля"))
 	if sim.map.nodes.has(cell):
 		return "тут ресурс — спершу добудь його"
+	if sim.has_method("_kind_refusal"):   # the same per-kind refusal try_build raises (e.g. «Тут стоїть герой») — the ghost must not promise what the click refuses
+		var kr := String(sim._kind_refusal(def, t.x, t.y))
+		if kr != "":
+			return kr.rstrip(".")
 	if not bool(sim.research_ok(def)):
 		var need := String(def.get("research", ""))
 		return "🔒 потрібне дослідження: %s" % String(GameData.RESEARCH_LABEL.get(need, CatalogDefs.research_label(need)))

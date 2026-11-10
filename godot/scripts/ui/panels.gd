@@ -81,7 +81,7 @@ class StockPanel extends PanelBase.Base:
 			_total.set_token(ArtIcons.for_glyph("🎒") if pack else ArtIcons.building("storage"), "🎒" if pack else "Σ",
 				"Рюкзак: зайнято слотів" if pack else "Склад заповнено")
 		var tstate: StringName = &"crit" if fill >= 0.98 else (&"warn" if fill >= 0.85 else &"good")
-		var tcap: String = ("Повний" if tstate == &"crit" else ("Майже повний" if tstate == &"warn" else ("Рюкзак" if pack else "Склад") if learning else ""))
+		var tcap: String = ("Повний" if tstate == &"crit" else ("Майже повний" if tstate == &"warn" else ("Слоти" if pack else "Склад") if learning else ""))
 		_total.bind({"value": "%d/%d" % [int(st.total), int(st.cap)], "state": tstate, "caption": tcap})
 
 # ---- VitalsPanel (LEFT dock) — hero need bars (HP/hunger/rest/blood) + located-health readout ----
@@ -155,6 +155,13 @@ class VitalsPanel extends PanelBase.Base:
 		# the ring + the word say it; the felt °C itself lives in the tooltip
 		_warm.bind({"value": "", "state": wstate, "caption": wcap})
 		_warm.tooltip_text = "Відчуття тепла з одягом: %d°C (надворі — у верхній смузі)" % int(round(felt))
+		# spec 0014 REQ-0014-11: поки кільце на мапі вказує на засіб («холод → багаття»), медальйон «Холодно» дихає в такт слоту — зв'язок видно без тексту
+		var gp: Dictionary = vm.get("goal_pointer", {}) if vm is Dictionary else {}
+		if String(gp.get("kind", "")) == "need":
+			var kb: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
+			_warm.modulate = Tokens.WHITE.lerp(Tokens.AMBER, 0.45 * kb)
+		elif _warm.modulate != Tokens.WHITE:
+			_warm.modulate = Tokens.WHITE
 		var carry: Dictionary = v.carry
 		_carry.bind({"value": "%d/%d" % [int(carry.cur), int(carry.cap)], "state": &"info" if int(carry.cur) > 0 else &"good"})
 		var conds: Array = v.get("conditions", [])
@@ -625,8 +632,8 @@ class TopBarPanel extends PanelBase.Base:
 	# 2026-11 independent read (gamedev §5): unlabelled ✖/🗑 read as destructive, −/+ as speed. Zoom left
 	# the strip (pinch + the action button's vertical swipe do it), ✖ shows only while a tool is armed,
 	# and the remove tool says what it does in words.
-	const TOOLS := [["☰", &"toggle_menu", "Панелі та оверлеї"], ["✖", &"cancel_tool", "Скасувати інструмент"],
-		["♻ Розібрати", &"remove_tool", "Розібрати: торкнись своєї будівлі — повернеш частину ресурсів"]]
+	# C4 (2026-11-09): ☰ і ♻ Розібрати переїхали в нижню смугу TouchControls; у верхній лишився лише контекстний ✖.
+	const TOOLS := [["✖", &"cancel_tool", "Скасувати інструмент"]]
 	var _clock: Label
 	var _season: Label
 	var _weather: Label
@@ -672,7 +679,6 @@ class TopBarPanel extends PanelBase.Base:
 			tb.tooltip_text = String(t[2])
 			tb.focus_mode = Control.FOCUS_NONE
 			tb.custom_minimum_size = Vector2(40, 36)
-			tb.toggle_mode = StringName(t[1]) == &"remove_tool" or StringName(t[1]) == &"toggle_menu"
 			tb.pressed.connect(emit_intent.bind(StringName(t[1]), {}))
 			_tool_box.add_child(tb)
 			_tools.append(tb)
@@ -723,9 +729,7 @@ class TopBarPanel extends PanelBase.Base:
 			for chip in _chips:
 				chip.custom_minimum_size = Vector2(40, 36) if touch else Vector2.ZERO
 		if touch:
-			_tools[0].set_pressed_no_signal(bool(ui.get("menu", false)))
-			_tools[2].set_pressed_no_signal(bool(ui.get("remove", false)))
-			_tools[1].visible = bool(ui.get("armed", false))   # nothing armed → nothing to cancel → no ✖
+			_tools[0].visible = bool(ui.get("armed", false))   # nothing armed → nothing to cancel → no ✖
 
 # ---- GoalsPanel (LEFT dock, J) — the onboarding chain made visible: the current goal, HOW to do it
 # (keys named), its live progress and what comes next. Reads vm.goals (session goals_view, R8). ----
@@ -785,11 +789,16 @@ class GoalsPanel extends PanelBase.Base:
 		_hint.text = Fmt.touchify(String(cur.get("hint", ""))) if touch else String(cur.get("hint", ""))
 		# objective CHIP: one line (title · n/N); the how-to lives in the tooltip and the pulsing build slot
 		_count.visible = false
-		_hint.visible = false
+		_hint.visible = String(cur.get("id", "")) == "fire"
+		if _hint.visible:   # chip-sized: лише перші два речення (повний текст — у тултіпі нижче), щоб панель не лізла на джойстик
+			var sents: PackedStringArray = _hint.text.split(". ")
+			if sents.size() > 2:
+				_hint.text = ". ".join(sents.slice(0, 2)) + "."
+			tooltip_text = ""   # T-Ніколая 2026-11-09 (far.png №1): першу ціль не ховаємо в тултіп — на телефоні його нема; решту цілей навчив перший
 		var nxt := String(g.get("next", ""))
 		# the chip shows THIS goal's own progress; the chain step lives in the tooltip — «5/10» beside
 		# «Розпали багаття» read as «5 of 10 logs» in the first independent read (gamedev §5)
-		var tip: String = "Крок %d з %d · %s" % [int(g.get("done", 0)) + 1, int(g.get("total", 0)), _hint.text]
+		var tip: String = "Крок %d з %d · %s" % [int(g.get("done", 0)) + 1, int(g.get("total", 0)), (Fmt.touchify(String(cur.get("hint", ""))) if touch else String(cur.get("hint", "")))]
 		if nxt != "":
 			tip += "\nДалі: " + nxt
 		tooltip_text = tip

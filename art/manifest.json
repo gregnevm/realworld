@@ -985,6 +985,20 @@
    "approved": "v3"
   },
   {
+   "id": "bld_stone_wall_link",
+   "kind": "sprite",
+   "src": "buildings/stone_wall_link",
+   "label": "Кам'яна стіна (зв'язка)",
+   "tier": 1,
+   "manual": true,
+   "size": 128,
+   "subject": "horizontal connecting course of a rough stacked-stone wall: a low band of mortared grey stones running straight left-to-right across the ENTIRE width of the frame edge to edge, centred vertically, tileable end to end, NO tower and NO vertical element, no ground",
+   "status": "approved",
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette, strong dark outline, no text; the band touches both left and right edges of the image",
+   "hash": "fc1b3674",
+   "approved": "v0"
+  },
+  {
    "id": "bld_stonecutter_table",
    "kind": "sprite",
    "src": "buildings/stonecutter_table",
@@ -1113,6 +1127,20 @@
    "hash": "898c9387",
    "approved": "v1",
    "auto": "wall — a structural piece, a single 1×1 grid-cell segment designed to repeat in a row"
+  },
+  {
+   "id": "bld_wall_link",
+   "kind": "sprite",
+   "src": "buildings/wall_link",
+   "label": "Стіна (зв'язка)",
+   "tier": 0,
+   "manual": true,
+   "size": 128,
+   "subject": "horizontal connecting rail of a wooden palisade fence: a thick weathered log beam running straight left-to-right across the ENTIRE width of the frame edge to edge, centred vertically, tileable end to end, NO fence post and NO vertical element, no ground",
+   "status": "approved",
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette, strong dark outline, no text; the beam touches both left and right edges of the image",
+   "hash": "2b0c978c",
+   "approved": "v0"
   },
   {
    "id": "bld_warehouse",

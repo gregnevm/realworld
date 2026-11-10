@@ -56,6 +56,7 @@ var _last_epos: Array = []          # enemy world positions last frame (death po
 var _poofs: Array = []              # {pos, age}
 var action_target: Dictionary = {}  # touch scheme: what the action button will act on (scene sets it each frame)
 var action_mode: StringName = &"gather"
+var goal_pointer: Dictionary = {}   # spec 0014: {kind, build, cell, label} or {} — one breathing ring where the goal / the cold's remedy goes
 var action_build := ""              # build mode: the building the button will place (its ghost fills the brackets)
 const ACTION_COL := {&"gather": Color(0.44, 0.68, 0.33, 1.0), &"build": Color(0.88, 0.69, 0.44, 1.0), &"repair": Color(0.53, 0.82, 0.84, 1.0), &"fight": Color(0.88, 0.42, 0.36, 1.0)}
 var shake := 0.0                    # TRAUMA 0..1 (Eiserloh): events add, decays 1/s; the scene offsets the camera by trauma²
@@ -360,6 +361,8 @@ func _draw() -> void:
 	for b in sim.buildings:   # hull plaque goes AFTER the pawn (T-Ніколая: герой біля капсули закривав підпис і ряди знаків)
 		if String(b.kind) == MainCapsule.KIND:
 			_draw_capsule_marks(Vector2(b.x * TILE, b.y * TILE), Vector2(b.x * TILE, b.y * TILE) + Vector2(TILE, TILE) * 0.5)
+	if not goal_pointer.is_empty():
+		_draw_goal_pointer()   # spec 0014: на самому верху — підпис кільця не ховається під табличкою капсули (fresh-eyes 2026-11-09)
 	_draw_fx()
 
 # Shoreline: where land meets water, a thin pale foam line on the LAND edge and a dark wet rim on the
@@ -437,6 +440,8 @@ func _draw_building(b) -> void:
 			var u: float = ta - 1.0
 			pop = 0.4 + 0.6 * (1.0 + (c1 + 1.0) * u * u * u + c1 * u * u)
 			draw_arc(c + Vector2(0, TILE * 0.3), TILE * (0.3 + 0.5 * ta), 0, TAU, 24, Color(0.85, 0.78, 0.62, 0.5 * (1.0 - ta)), 2.0)
+	if blocking_wall:
+		_draw_wall_links(b, c)
 	var btex := building_texture(String(b.kind))
 	if btex != null:
 		var floorlike: bool = String(b.kind) == "floor" or String(b.kind).ends_with("_floor") or String(b.kind) == "grow_zone"
@@ -470,6 +475,48 @@ func _draw_building(b) -> void:
 		var bc := Color.html("5fd38a") if fr > 0.5 else (Color.html("ffcf5c") if fr > 0.25 else Color.html("ff6b6b"))
 		draw_rect(Rect2(p.x + 2, p.y - 2, (TILE - 4) * fr, 3), bc)
 
+# Плейтест 2026-11-08 #4: стіни читались рядом окремих плашок. Балка до східного/південного сусіда-стіни (view-only, без арту):
+# кожну пару малюємо один раз (від західної/північної клітинки), під спрайтами, тож контур лінії = контур споруди.
+func _draw_wall_links(b, c: Vector2) -> void:
+	var stone: bool = String(b.kind).begins_with("stone")
+	var beam := Color(0.46, 0.47, 0.50, 1.0) if stone else Color(0.43, 0.31, 0.19, 1.0)
+	var rim := Color(0.04, 0.05, 0.06, 0.85)
+	var w: float = TILE * 0.26
+	for d in [Vector2i(1, 0), Vector2i(0, 1)]:
+		var nx: int = int(b.x) + d.x
+		var ny: int = int(b.y) + d.y
+		if nx >= int(sim.n) or ny >= int(sim.n):
+			continue
+		var ncell: int = ny * int(sim.n) + nx
+		if not sim.bgrid.has(ncell):
+			continue
+		var nb: Dictionary = sim.bgrid[ncell]
+		var nk := String(nb.kind)
+		if not (nk == "wall" or (nk.ends_with("_wall") and bool(sim.building_def(nk).get("blocks", false)))):
+			continue
+		var link_tex := art_texture("sprite", "bld_stone_wall_link" if stone else "bld_wall_link")   # gen-art 2026-11-10 (OD-127 supplement: арт стін); фолбек — процедурна балка
+		if link_tex != null:
+			var m: Vector2 = c + Vector2(d) * (TILE * 0.5)
+			draw_set_transform(m, 0.0 if d.x == 1 else PI * 0.5, Vector2.ONE)
+			draw_texture_rect(link_tex, Rect2(-TILE * 0.5, -TILE * 0.5, TILE, TILE), false)   # балка в кадрі ~20% висоти: виглядає з-поміж спрайтів як зв'язка (товща ховається за ними)
+			draw_set_transform_matrix(Transform2D.IDENTITY)
+			continue
+		var e: Vector2 = c + Vector2(d) * TILE
+		draw_line(c, e, rim, w + 2.0)
+		draw_line(c, e, beam, w)
+
+# spec 0014 (REQ-0014-5/13/16): кільце, що «дихає» (форма + рух, не лише колір), діаметр ≤ 1 клітинки; не інтерактивне (нічого не перехоплює).
+func _draw_goal_pointer() -> void:
+	var cell: Vector2i = goal_pointer.cell
+	var c := Vector2((cell.x + 0.5) * TILE, (cell.y + 0.5) * TILE)
+	var k: float = 0.5 + 0.5 * sin(_now() * 4.0)
+	var amber := Color(1.0, 0.81, 0.36)
+	draw_arc(c, TILE * (0.34 + 0.05 * k), 0.0, TAU, 28, Color(amber.r, amber.g, amber.b, 0.95), 2.5)
+	draw_arc(c, TILE * 0.20, 0.0, TAU, 20, Color(amber.r, amber.g, amber.b, 0.55), 1.5)
+	var word := String(goal_pointer.get("label", ""))
+	if word != "":
+		_mark_text(c + Vector2(0.0, TILE * 0.92), word, Color(1.0, 0.93, 0.8))
+
 # Основна капсула, greybox (spec 0010 REQ-0010-87; арт — лише після G0–G1, P4): ОДНА підписана табличка під корпусом (T-Ніколая: знаки без слів
 # лежали на спрайтах і не читались). Рядки: назва; «Рівень n/5» + ряд кружків; «Захист n/5» + ряд квадратів (R11: різна ФОРМА, не лише колір);
 # під імунітетом — ще рядок із часом і щит-кільце навколо корпусу. Корпус обведений, щоб серед столу/бочки було видно, ЩО саме капсула.
@@ -494,6 +541,16 @@ func _draw_capsule_marks(p: Vector2, c: Vector2) -> void:
 		tw = maxf(tw, _font.get_string_size(String(s), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x)
 	var w: float = maxf(tw + step * float(maxi(lamp_n, plate_n)) + 14.0, _font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 10.0)
 	w = maxf(w, _font.get_string_size(t_imm, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 10.0)
+	# T-Ніколая 2026-11-09 (OD «лише поруч/hover»): повна табличка — лише коли герой ≤3.5 клітинки або курсор на капсулі/під нею;
+	# здалеку — контур корпусу + назва одним рядком (тексти й числа спеки не змінено). Імунітет показуємо завжди (це подія, не стан).
+	var cell: Vector2 = Vector2((p.x + TILE * 0.5) / TILE, (p.y + TILE * 0.5) / TILE)
+	var near_hero: bool = Vector2(float(sim.player.px), float(sim.player.py)).distance_to(cell) <= 3.5
+	var near_ptr: bool = absi(hover.x - int(p.x / TILE)) <= 1 and hover.y >= int(p.y / TILE) and hover.y <= int(p.y / TILE) + 3
+	var placing: bool = selected_build != ""   # привид у руці: табличка не лежить на землі, куди ставиш («біля пішака»)
+	if not ((near_hero and not placing) or near_ptr or imm):
+		draw_rect(Rect2(p, Vector2(TILE, TILE)), amber, false, 1.5)
+		_mark_text(c + Vector2(0.0, TILE * 0.95), title, Color(1.0, 0.93, 0.8))
+		return
 	var rows: int = 4 if imm else 3
 	var box := Rect2(c.x - w * 0.5, p.y + TILE + 4.0, w, 13.0 * float(rows) + 3.0)
 	draw_rect(Rect2(p, Vector2(TILE, TILE)), amber, false, 1.5)
