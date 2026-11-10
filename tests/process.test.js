@@ -231,7 +231,7 @@ test("checkPr: docs-only PR needs only intent/type/pillar; warnings for fix, art
 
 test("classifyFiles: generated/binary files do not count toward diff size", async () => {
   const { classifyFiles } = await lib();
-  const c = classifyFiles(["game/js/catalog_data.js", "art/manifest.json", "godot/assets/gen/x.png", "godot/scripts/sim.gd", "a.md"]);
+  const c = classifyFiles(["art/manifest.json", "godot/assets/gen/x.png", "godot/scripts/sim.gd", "a.md"]);
   assert.deepStrictEqual(c.sized, ["godot/scripts/sim.gd"]);
   assert.deepStrictEqual(c.doc, ["a.md"]);
 });
@@ -387,9 +387,6 @@ function lintIn(files, { add = true } = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "rw-lint-"));
   try {
     fs.cpSync(path.join(ROOT, "tools"), path.join(tmp, "tools"), { recursive: true });
-    fs.mkdirSync(path.join(tmp, "game"), { recursive: true });
-    fs.copyFileSync(path.join(ROOT, "game", "index.html"), path.join(tmp, "game", "index.html"));
-    fs.cpSync(path.join(ROOT, "game", "js"), path.join(tmp, "game", "js"), { recursive: true });
     fs.copyFileSync(path.join(ROOT, ".gitignore"), path.join(tmp, ".gitignore"));
     for (const [rel, src] of Object.entries(files)) {
       fs.mkdirSync(path.dirname(path.join(tmp, rel)), { recursive: true });

@@ -230,12 +230,12 @@ const DOC = [/\.md$/, /^docs\//, /^specs\//, /^GDD_BOOK\//];
 const ART = [/^godot\/assets\/gen\//, /^art\//];
 // what the player SEES — a change here needs a frame (кадр) in the evidence
 const UI = [/^godot\/scripts\/ui\//, /^godot\/scripts\/world_view\.gd$/, /^godot\/newhud/, /^godot\/scenes\//,
-  /^godot\/assets\//, /^game\/js\/(ui|render|input)\.js$/, /^game\/(styles\.css|index\.html)$/];
+  /^godot\/assets\//];
 // the RULES of the game — a player-facing change here needs a basis (REQ/OD/spec)
 const RULES = [/^godot\/scripts\/sim(\.gd|\/)/, /^godot\/scripts\/(data|catalog_defs|goals|world_gen)\.gd$/,
-  /^godot\/scripts\/kernel\//, /^godot\/content\//, /^game\/js\/(game|entities|catalog_data|progression|logistics|worldgen)\.js$/];
+  /^godot\/scripts\/kernel\//, /^godot\/content\//];
 // generated or binary — excluded from the diff-size heuristic
-const GENERATED = [/\.png$/, /\.uid$/, /\.import$/, /^game\/js\/catalog_data\.js$/, /^art\/manifest\.json$/];
+const GENERATED = [/\.png$/, /\.uid$/, /\.import$/, /^art\/manifest\.json$/];
 
 const any = (res, f) => res.some((re) => re.test(f));
 export function classifyFiles(files) {
