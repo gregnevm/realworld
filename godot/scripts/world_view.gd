@@ -494,6 +494,13 @@ func _draw_wall_links(b, c: Vector2) -> void:
 		var nk := String(nb.kind)
 		if not (nk == "wall" or (nk.ends_with("_wall") and bool(sim.building_def(nk).get("blocks", false)))):
 			continue
+		var link_tex := art_texture("sprite", "bld_stone_wall_link" if stone else "bld_wall_link")   # gen-art 2026-11-10 (OD-127 supplement: арт стін); фолбек — процедурна балка
+		if link_tex != null:
+			var m: Vector2 = c + Vector2(d) * (TILE * 0.5)
+			draw_set_transform(m, 0.0 if d.x == 1 else PI * 0.5, Vector2.ONE)
+			draw_texture_rect(link_tex, Rect2(-TILE * 0.5, -TILE * 0.5, TILE, TILE), false)   # балка в кадрі ~20% висоти: виглядає з-поміж спрайтів як зв'язка (товща ховається за ними)
+			draw_set_transform_matrix(Transform2D.IDENTITY)
+			continue
 		var e: Vector2 = c + Vector2(d) * TILE
 		draw_line(c, e, rim, w + 2.0)
 		draw_line(c, e, beam, w)
