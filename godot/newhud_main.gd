@@ -382,7 +382,7 @@ func _process(dt: float) -> void:
 		"hero_screen": view.get_global_transform_with_canvas() * Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE - TILE * 1.1)}
 	overlay_host.map_n = int(session.sim.n)   # keep in lockstep with the live region (survives travel)
 	overlay_host.snap = hud_root.last_snap
-	view.goal_pointer = hud_root.last_snap.get("goal_pointer", {})   # spec 0014: view-only marker «де діяти» (OD-125: лише показ)
+	view.goal_pointer = hud_root.last_snap.get("goal_pointer", {})   # spec 0014: view-only marker «де діяти» (OD-128: лише показ)
 	overlay_host.queue_redraw()
 	death_screen.visible = session.sim.dead
 	if session.sim.dead:

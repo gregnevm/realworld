@@ -1,6 +1,6 @@
-# RealWorld — ui/goal_pointer.gd : spec 0014 (B+C, OD-124/125/126, 2026-11-09). A world marker: WHERE to act on the current goal /
+# RealWorld — ui/goal_pointer.gd : spec 0014 (B+C, OD-127/125/126, 2026-11-09). A world marker: WHERE to act on the current goal /
 # the cold's remedy. VIEW-ONLY: a pure function of (sim, vm slices) — nothing is written, no RNG, no clock; the tap does nothing
-# (OD-125 «лише показ»). One marker at a time (REQ-0014-8).
+# (OD-128 «лише показ»). One marker at a time (REQ-0014-8).
 extends RefCounted
 
 const FormatScript = preload("res://scripts/ui/format.gd")
@@ -8,7 +8,7 @@ const InventoryMod = preload("res://scripts/sim/inventory.gd")
 const LEARN_DAYS := 2          # = VitalsPanel.LEARN_DAYS: the word under the ring only while learning (REQ-0014-13)
 const REACH := 6               # search radius (cells) around the hero
 
-# The building kind the marker is about: the cold's remedy beats the goal chain (works without the chain, OD-126), else the
+# The building kind the marker is about: the cold's remedy beats the goal chain (works without the chain, OD-129), else the
 # current goal's own building. "" = nothing to point at.
 static func target_kind(vm: Dictionary) -> String:
 	if StringName((vm.get("vitals", {}) as Dictionary).get("comfort", &"ok")) == &"cold":

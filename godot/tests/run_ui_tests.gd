@@ -256,7 +256,7 @@ func _t_comprehension() -> void:
 	ok(GP.compute(gs, {"goals": {"current": {"id": "survive"}}, "vitals": {"comfort": &"ok"}, "clock": {"day": 1}}, false).is_empty(), "REQ-0014-1: goals without a place (survive) → no marker")
 	var gcold := {"goals": {"current": {}}, "vitals": {"comfort": &"cold"}, "clock": {"day": 3}}
 	var gc: Dictionary = GP.compute(gs, gcold, false)
-	ok(String(gc.get("kind", "")) == "need" and String(gc.get("build", "")) == "campfire", "REQ-0014-10: cold points at the campfire even with NO goal chain (OD-126)")
+	ok(String(gc.get("kind", "")) == "need" and String(gc.get("build", "")) == "campfire", "REQ-0014-10: cold points at the campfire even with NO goal chain (OD-129)")
 	ok(GP.compute(gs, {"goals": {"current": {}}, "vitals": {"comfort": &"ok"}, "clock": {"day": 3}}, false).is_empty(), "REQ-0014-10: warm and no goal → nothing to point at")
 	var slots_cold: Array = [{"id": "bld:campfire", "n": 1}, {"id": "", "n": 0}]
 	ok(InvPanels.SlotKit.guide_slot(gcold, slots_cold) == 0, "REQ-0014-11: cold → the campfire slot breathes (no goal chain needed)")
