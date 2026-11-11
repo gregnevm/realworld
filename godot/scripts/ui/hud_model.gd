@@ -38,7 +38,6 @@ static func snapshot(session, world: Dictionary, ctx: Dictionary, balance) -> Di
 		"light":     _light_slice(sim),
 		"heat":      _heat_slice(sim),
 		"inspect":   _inspect_slice(sim, ctx),
-		"speed":     float(ctx.get("speed", 1.0)),
 		"ui":        _ui_slice(ctx),
 		"goals":     _goals_slice(session),
 		"death":     _death_slice(sim),
@@ -58,6 +57,8 @@ static func snapshot(session, world: Dictionary, ctx: Dictionary, balance) -> Di
 		"capsule":   _capsule_slice(sim, ctx),
 		"social_info": _social_slice(sim),
 	}
+	if not bool(sim.get("use_realtime") == true):   # spec 0012 REQ-27: за реального часу швидкості нема — ні поля, ні чіпів
+		snap["speed"] = float(ctx.get("speed", 1.0))
 	# spec 0013: the key exists ONLY while the presence layer is live — a world without it (flags OFF, no
 	# tick yet) keeps the byte-identical baseline snapshot (REQ-0012-3 / REQ-0010-85 pins).
 	var nearby := _nearby_slice(session)

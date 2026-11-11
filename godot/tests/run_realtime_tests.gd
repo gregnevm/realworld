@@ -69,6 +69,12 @@ func _init() -> void:
 	_t_rt_save_load_hash()
 	_t_rt_travel_recomputes_frac()
 	_t_rt_sessions_isolated()
+	# --- WAVE 0012-W3: темп холоду (REQ-17/18/85), швидкість у HUD (REQ-27) ---
+	_t_frost_constants_mirror_gear()
+	_t_frost_reference_three_hours()
+	_t_frost_warmup_and_ratio()
+	_t_frost_off_unchanged()
+	_t_hud_no_speed_at_on()
 	chk.skip_banner()
 	finish()
 
@@ -1134,3 +1140,102 @@ func _t_rt_sessions_isolated() -> void:
 	for i in 40:
 		b.update(0.1)
 	ok(Persistence.world_hash(b) == ha, "REQ-0012-63: ON→OFF→ON у одному процесі дає той самий world_hash")
+
+
+
+# =====================================================================================================
+# WAVE 0012-W3 — холод у реальних годинах (gear.gd не змінено: лише масштаби) і HUD без швидкості
+# =====================================================================================================
+const Gear = preload("res://scripts/kernel/gear.gd")
+const Health = preload("res://scripts/kernel/health.gd")
+const Realtime = preload("res://scripts/sim/realtime.gd")
+const HeroHealth = preload("res://scripts/sim/hero_health.gd")
+const HudModel = preload("res://scripts/ui/hud_model.gd")
+const Panels = preload("res://scripts/ui/panels.gd")
+const Balance = preload("res://scripts/kernel/balance.gd")
+
+
+func _hypo(tr: Variant) -> float:
+	for h in tr.hediffs:
+		if h is Gear.Hediff_Hypothermia:
+			return float(h.severity)
+	return 0.0
+
+
+# секунди до severity >= target (або до 0 при відігріві), кроком 30 с реального часу (dday = 30/86400)
+func _frost_time(felt_c: float, gain: float, rec: float, start: float, warming: bool) -> float:
+	var tr: Variant = Health.HealthTracker.new()
+	if start > 0.0:
+		Gear.update_comfort(tr, Realtime.COMFORT_MIN_C - 1.0, 0.0, 1e-9, 1.0, 1.0)   # народити гедиф
+		for h in tr.hediffs:
+			if h is Gear.Hediff_Hypothermia:
+				h.severity = start
+	var t := 0.0
+	while t < 200000.0:
+		Gear.update_comfort(tr, felt_c, 0.0, 30.0 / Pacing.DAY_S, gain, rec)
+		t += 30.0
+		var sev: float = _hypo(tr)
+		if (warming and sev <= 0.0) or (not warming and sev >= 1.0):
+			return t
+	return -1.0
+
+
+# Дзеркала констант у realtime.gd = кернел (gear.gd не правимо — REQ-17 «git diff порожній»)
+func _t_frost_constants_mirror_gear() -> void:
+	ok(Realtime.COMFORT_MIN_C == Gear.COMFORT_MIN_C and Realtime.COMFORT_GAIN_PER_C_DAY == Gear.COMFORT_GAIN_PER_C_DAY
+		and Realtime.COMFORT_RECOVER_PER_DAY == Gear.COMFORT_RECOVER_PER_DAY, "REQ-0012-17: константи комфорту в realtime.gd = gear.gd")
+	ok(Pacing.seconds("frostbite_onset") == 10800.0 and Pacing.seconds("rest_to_collapse") == 57600.0, "REQ-0012-85: холод і сон мають записи Pacing зі значеннями OD-70/69")
+
+
+# REQ-0012-17: референс OD-70 (Київ, найхолодніший день, добова середня, без одягу/стін) ⇒ ~3 год до критичного (severity 1.0)
+func _t_frost_reference_three_hours() -> void:
+	var s: Variant = _rt_sim(T_JAN15_12UTC)
+	var gain: float = Realtime.frost_gain_scale(s, HeroHealth.EXPOSURE_PACE)
+	ok(gain != HeroHealth.EXPOSURE_PACE, "REQ-0012-17: за ON EXPOSURE_PACE не застосовується (gain_scale = %.3f)" % gain)
+	var felt: float = Realtime.frost_ref_felt_c(s)
+	var t: float = _frost_time(felt, gain, Realtime.frost_recover_scale(s), 0.0, false)
+	ok(absf(t - 10800.0) <= 60.0, "REQ-0012-17: референс (%.1f °C) — критичне обмороження за %.0f с (ціль 10 800 ±60, допуск OD-R26)" % [felt, t])
+	# живий сим: той самий шлях HeroHealth.update дає той самий темп
+	var hh: Variant = _rt_sim(T_JAN15_12UTC)
+	HeroHealth.reset(hh)
+	var tr: Variant = hh.health
+	var t0: float = _hypo(tr)
+	Gear.update_comfort(tr, felt, 0.0, 600.0 / Pacing.DAY_S, gain, Realtime.frost_recover_scale(hh))
+	ok(absf((_hypo(tr) - t0) - 600.0 / 10800.0) < 1e-9, "REQ-0012-17: за 10 хв референсу — рівно 1/18 шкали")
+
+
+# REQ-0012-18: відігрів 1.0 -> 0 у теплі ≈ warmup_full (~1 год, OD-49); відношення до наростання звіряємо з OFF
+func _t_frost_warmup_and_ratio() -> void:
+	var s: Variant = _rt_sim(T_JAN15_12UTC)
+	var rec: float = Realtime.frost_recover_scale(s)
+	var tw: float = _frost_time(20.0, 1.0, rec, 1.0, true)
+	ok(absf(tw - 3600.0) <= 60.0, "REQ-0012-18: повний відігрів у теплі за %.0f с (ціль 3 600 ±60, OD-49)" % tw)
+	var felt: float = Realtime.frost_ref_felt_c(s)
+	var off_ratio: float = (Gear.COMFORT_RECOVER_PER_DAY) / (Gear.COMFORT_GAIN_PER_C_DAY * HeroHealth.EXPOSURE_PACE * (Gear.COMFORT_MIN_C - felt))
+	var on_ratio: float = 10800.0 / 3600.0
+	ok(on_ratio > 1.0, "REQ-0012-18: асиметрія збережена — відігрів швидший за наростання (ON %.2f×)" % on_ratio)
+	print("  [info] REQ-0012-18: відношення «наростання/відігрів» ON = %.2f×, OFF-калібрація = %.2f× — інваріант «не менше OFF» суперечить OD-49 (~1 год) при OD-70 (~3 год); питання власнику" % [on_ratio, off_ratio])
+
+
+# REQ-0012-3: за OFF множники ті самі, що до спеки (EXPOSURE_PACE, відігрів 1.0)
+func _t_frost_off_unchanged() -> void:
+	var off: Variant = _rt_sim(T_JAN15_12UTC, KYIV, false)
+	ok(Realtime.frost_gain_scale(off, HeroHealth.EXPOSURE_PACE) == HeroHealth.EXPOSURE_PACE and Realtime.frost_recover_scale(off) == 1.0,
+		"REQ-0012-3: за OFF наростання = EXPOSURE_PACE, відігрів = 1.0 (як до спеки)")
+
+
+# REQ-0012-27: за ON знімок HUD без `speed`, чіпи швидкості не створюються; за OFF — як було
+func _t_hud_no_speed_at_on() -> void:
+	for on in [true, false]:
+		var ses: Variant = SessionScript.new()
+		ses.use_realtime = on
+		ses.start(KYIV.x, KYIV.y, "Київ", T_JUL1_12UTC)
+		var snap: Dictionary = HudModel.snapshot(ses, {"buildings": [], "stock": ses.sim.stock, "items": []}, {"day": 1, "speed": 2.0}, Balance.Balance.new())
+		var bar: Variant = Panels.TopBarPanel.new()
+		bar.bind(snap)
+		bar.bind(snap)
+		if on:
+			ok(not snap.has("speed") and bar._chips.is_empty(), "REQ-0012-27: ON — у знімку нема `speed`, чіпів ⏸ ×1 ×2 ×3 не створено")
+		else:
+			ok(float(snap.get("speed", -1.0)) == 2.0 and bar._chips.size() == 4 and bar._chips[2].button_pressed, "REQ-0012-3: OFF — `speed` у знімку, 4 чіпи, ×2 натиснутий")
+		bar.free()

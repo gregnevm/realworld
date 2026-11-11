@@ -640,6 +640,7 @@ class TopBarPanel extends PanelBase.Base:
 	var _temp: Label
 	var _region: Label
 	var _chips: Array = []
+	var _chip_box: HBoxContainer
 	var _tools: Array = []
 	var _tool_box: HBoxContainer
 	var _touch := false
@@ -656,19 +657,9 @@ class TopBarPanel extends PanelBase.Base:
 		_temp = _cell(hb, "Температура надворі. Що відчуває тіло — у панелі «Життєві»; карта тепла — T.")
 		_region = _cell(hb, "")
 		_region.add_theme_color_override("font_color", Tokens.ACCENT)
-		var chips := HBoxContainer.new()
-		chips.add_theme_constant_override("separation", 2)
-		hb.add_child(chips)
-		for m in CHIPS:
-			var b := Button.new()
-			b.toggle_mode = true
-			b.focus_mode = Control.FOCUS_NONE   # Space must stay the pause key, not «press focused chip»
-			b.text = "⏸" if m == 0.0 else "×%d" % int(m)
-			b.tooltip_text = "Пауза (Space)" if m == 0.0 else "Швидкість ×%d (+/−)" % int(m)
-			b.add_theme_font_size_override("font_size", 12)
-			b.pressed.connect(_on_chip.bind(m))
-			chips.add_child(b)
-			_chips.append(b)
+		_chip_box = HBoxContainer.new()   # чіпи ⏸ ×1 ×2 ×3 створюються ліниво — лише коли vm несе `speed` (spec 0012 REQ-27)
+		_chip_box.add_theme_constant_override("separation", 2)
+		hb.add_child(_chip_box)
 		_tool_box = HBoxContainer.new()
 		_tool_box.add_theme_constant_override("separation", 2)
 		_tool_box.visible = false
@@ -682,6 +673,18 @@ class TopBarPanel extends PanelBase.Base:
 			tb.pressed.connect(emit_intent.bind(StringName(t[1]), {}))
 			_tool_box.add_child(tb)
 			_tools.append(tb)
+	func _build_chips() -> void:
+		for m in CHIPS:
+			var b := Button.new()
+			b.toggle_mode = true
+			b.focus_mode = Control.FOCUS_NONE   # Space must stay the pause key, not «press focused chip»
+			b.text = "⏸" if m == 0.0 else "×%d" % int(m)
+			b.tooltip_text = "Пауза (Space)" if m == 0.0 else "Швидкість ×%d (+/−)" % int(m)
+			b.add_theme_font_size_override("font_size", 12)
+			b.custom_minimum_size = Vector2(40, 36) if _touch else Vector2.ZERO
+			b.pressed.connect(_on_chip.bind(m))
+			_chip_box.add_child(b)
+			_chips.append(b)
 	func _cell(parent: Control, tip: String) -> Label:
 		var l := Label.new()
 		l.tooltip_text = tip
@@ -716,6 +719,9 @@ class TopBarPanel extends PanelBase.Base:
 			_region.tooltip_text = "%s · seed %s — координати = seed світу: ними можна ділитися" % [
 				Fmt.region_line(String(reg.get("name", "")), float(reg.get("lat", 0.0)), float(reg.get("lon", 0.0))),
 				Fmt.seed_hex(int(reg.get("seed", 0)))]
+		if _chips.is_empty() and vm.has("speed"):
+			_build_chips()
+		_clock.tooltip_text = "Час доби й номер дня. Доба — 2.5 хв на ×1." if vm.has("speed") else "Місцевий час регіону (як на годиннику) і прожиті дні."
 		var speed: float = float(vm.get("speed", 1.0))
 		for i in _chips.size():
 			_chips[i].set_pressed_no_signal(is_equal_approx(float(CHIPS[i]), speed))
