@@ -17,6 +17,7 @@
 # kernel only shapes the curves.
 extends RefCounted
 
+const Realtime = preload("res://scripts/sim/realtime.gd")   # spec 0012: темп холоду за ON
 const Health = preload("res://scripts/kernel/health.gd")
 const Gear = preload("res://scripts/kernel/gear.gd")
 const Needs = preload("res://scripts/kernel/needs.gd")
@@ -60,10 +61,13 @@ static func update(s, dt: float) -> void:
 	# 1) empty needs become located conditions (starvation kills; sleeplessness collapses)
 	Needs.update_deprivation(tracker, float(p.hunger) / 100.0, float(p.rest) / 100.0, dday)
 	# 2) the region's real climate bites: felt °C = tile temp (indoor buffering + emitters) + gear
-	if s.get("use_main_capsule") == true:   # spec 0010 (REQ-0010-107): у зоні капсули відігрів/комфорт швидший (лише ВІДНОВЛЕННЯ; наростання — EXPOSURE_PACE — не чіпаємо)
-		Gear.update_comfort(tracker, s.hero_temp_c(), s.hero_insulation_c(), dday, EXPOSURE_PACE, s._capsule_recovery())
+	# spec 0012 REQ-17/18: за ON наростання/відігрів — з Pacing (frostbite_onset/warmup_full), EXPOSURE_PACE не діє; OFF — як було
+	var gain: float = Realtime.frost_gain_scale(s, EXPOSURE_PACE)
+	var rec: float = Realtime.frost_recover_scale(s)
+	if s.get("use_main_capsule") == true:   # spec 0010 (REQ-0010-107): у зоні капсули відігрів/комфорт швидший (лише ВІДНОВЛЕННЯ; наростання не чіпаємо)
+		Gear.update_comfort(tracker, s.hero_temp_c(), s.hero_insulation_c(), dday, gain, rec * s._capsule_recovery())
 	else:
-		Gear.update_comfort(tracker, s.hero_temp_c(), s.hero_insulation_c(), dday, EXPOSURE_PACE)
+		Gear.update_comfort(tracker, s.hero_temp_c(), s.hero_insulation_c(), dday, gain, rec)
 	# 3) injuries heal/bleed/fester, blood moves, downed recomputes
 	tracker.tick({"dday": dday})
 	Gear.resolve_to_scar(tracker)

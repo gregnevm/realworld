@@ -61,3 +61,28 @@ static func hunger_rate(s) -> float:
 
 static func tire_rate(s) -> float:
 	return 100.0 * Pacing.fall_per_day("rest_to_collapse") / float(s.time.day_len) if s.use_realtime else 0.30
+
+# ---------------- холод (REQ-0012-17/18/85): масштаби для Gear.update_comfort; gear.gd не змінюється ----------------
+# Референс OD-70 «київська зима без вогню/стін»: Київ, найхолодніший день кліматичної моделі (день 1), добова середня
+# (frac 0.25 — член diurnal = 0), без одягу й погоди. Година доби й одяг референсу рішенням не задані (OD-R26) —
+# це робоче тлумачення; «критичне обмороження» = severity 1.0 (нуль шкали, як голод — OD-52).
+const FROST_REF := Vector2(50.4501, 30.5234)
+const COMFORT_MIN_C := 12.0                  # = Gear.COMFORT_MIN_C (тест звіряє)
+const COMFORT_GAIN_PER_C_DAY := 0.05         # = Gear.COMFORT_GAIN_PER_C_DAY
+const COMFORT_RECOVER_PER_DAY := 2.0         # = Gear.COMFORT_RECOVER_PER_DAY
+
+static func frost_ref_felt_c(s) -> float:
+	return s.climate.temperature_c(FROST_REF.x, FROST_REF.y, 1, 0.25)
+
+# Множник наростання: OFF — EXPOSURE_PACE як було; ON — так, щоб референс дійшов до 1.0 за Pacing.frostbite_onset.
+static func frost_gain_scale(s, off_pace: float) -> float:
+	if not s.use_realtime:
+		return off_pace
+	var past: float = COMFORT_MIN_C - frost_ref_felt_c(s)
+	return Pacing.DAY_S / (COMFORT_GAIN_PER_C_DAY * past * Pacing.seconds("frostbite_onset"))
+
+# Множник відігріву: OFF — 1.0 (кернел як є); ON — повний відігрів 1.0 -> 0 за Pacing.warmup_full (OD-49, ~1 год).
+static func frost_recover_scale(s) -> float:
+	if not s.use_realtime:
+		return 1.0
+	return Pacing.DAY_S / (COMFORT_RECOVER_PER_DAY * Pacing.seconds("warmup_full"))
