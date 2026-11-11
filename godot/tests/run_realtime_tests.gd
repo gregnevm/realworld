@@ -1016,12 +1016,12 @@ func _t_rt_day_counter_midnight() -> void:
 # REQ-0012-7: сезон — з реальної дати, півкулі протилежні
 func _t_rt_season_from_real_date() -> void:
 	var jan: Variant = _rt_sim(T_JAN15_12UTC)
-	ok(int(jan.climate_day()) == 1, "REQ-0012-7: 15 січня = день 1 кліматичної моделі (найхолодніша точка), а не «день 1 від старту» (%d)" % int(jan.climate_day()))
+	ok(int(Sim.Realtime.climate_day(jan)) == 1, "REQ-0012-7: 15 січня = день 1 кліматичної моделі (найхолодніша точка), а не «день 1 від старту» (%d)" % int(Sim.Realtime.climate_day(jan)))
 	var aug1: int = Calendar.days_from_civil(2026, 8, 1) * Calendar.DAY_MS + 12 * MS_H
 	var north: Variant = _rt_sim(aug1, Vector2(50.0, 30.0))
 	var south: Variant = _rt_sim(aug1, Vector2(-50.0, 30.0))
-	var sn: int = north.climate.season(50.0, north.climate_day())
-	var ss: int = south.climate.season(-50.0, south.climate_day())
+	var sn: int = north.climate.season(50.0, Sim.Realtime.climate_day(north))
+	var ss: int = south.climate.season(-50.0, Sim.Realtime.climate_day(south))
 	ok(sn == 2 and ss == 0, "REQ-0012-7: 1 серпня — літо на півночі (%d), зима на півдні (%d)" % [sn, ss])
 	var fazy := true
 	for m in range(1, 13):
@@ -1034,7 +1034,7 @@ func _t_rt_season_from_real_date() -> void:
 	ok(nov.season_name() == "осінь", "REQ-0012-7: HUD-назва сезону теж з реальної дати — листопад у Києві «осінь» (%s), а не «зима» дня 1" % nov.season_name())
 	ok(north.ambient_temp_c() > south.ambient_temp_c(), "REQ-0012-7: у липні на 50° пн тепліше, ніж на 50° пд")
 	var off: Variant = _rt_sim(T_JUL1_12UTC, KYIV, false)
-	ok(int(off.climate_day()) == int(off.time.day), "REQ-0012-3: за OFF кліматичний день = лічильник днів, як до спеки")
+	ok(int(Sim.Realtime.climate_day(off)) == int(off.time.day), "REQ-0012-3: за OFF кліматичний день = лічильник днів, як до спеки")
 
 
 # REQ-0012-64: одне джерело daylight живить яскравість і light_at (штраф у темряві)

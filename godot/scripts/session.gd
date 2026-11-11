@@ -171,7 +171,7 @@ func travel_to(lat: float, lon: float, place_name: String) -> void:
 	sim.social = social
 	sim.time.day = gday
 	if sim.use_realtime:
-		sim._rt_init()   # spec 0012 REQ-9: таймзона — властивість РЕГІОНУ; frac перераховується з now, а не переноситься
+		Sim.Realtime.init(sim)   # spec 0012 REQ-9: таймзона — властивість РЕГІОНУ; frac перераховується з now, а не переноситься
 	else:
 		sim.time.frac = gfrac
 

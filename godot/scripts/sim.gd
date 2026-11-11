@@ -20,8 +20,7 @@ const MainCapsule = preload("res://scripts/sim/capsule.gd")
 const Persistence = preload("res://scripts/persistence.gd")
 const OrbitStub = preload("res://scripts/sim/orbit_stub.gd")
 const Haul = preload("res://scripts/sim/haul.gd")
-const Calendar = preload("res://scripts/calendar.gd")   # spec 0012: реальна дата/цивільний час/сонце — чисті функції від now
-const Pacing = preload("res://scripts/pacing.gd")       # spec 0012 §5.3: таблиця темпу реального часу (читається лише за ON)
+const Realtime = preload("res://scripts/sim/realtime.gd")   # spec 0012: реальний час 1:1 (лише ON)
 
 var map: Dictionary
 var n: int = 0
@@ -53,11 +52,7 @@ var config_error: StringName = &""  # непорожнє => new_game нічог�
 var load_error: StringName = &""    # непорожнє => load_region відхилив запис ДО мутацій (MainCapsule.validate_region)
 var use_realtime: bool = false:   # spec 0012: ON = реальний час 1:1 (доба 86 400 с, frac від now і таймзони регіону); ДО new_game, далі замкнений (REQ-0012-5)
 	set(v):
-		if (map as Dictionary).is_empty() or v == use_realtime:
-			config_error = &""
-			use_realtime = v
-		else:
-			config_error = &"realtime_flag_locked"
+		use_realtime = Realtime.set_flag(self, v)
 var cal: Dictionary = {}            # spec 0012 (лише ON): останній Calendar.local(now, tz) + tz регіону; похідне від now — не сейв, не хеш
 var now_ms: int = 0                 # ВХІД часу (UTC-мс), лише через set_clock; НЕ в сейві й НЕ в world_hash (REQ-0010-92)
 var capsule_table: Dictionary = {}  # override таблиці capsule_levels (тести/пак контенту); {} = каталог (MainCapsule.table)
@@ -153,7 +148,7 @@ func new_game(m: Dictionary, hint: bool = true) -> void:
 		return   # ДО будь-якої мутації: порожній світ + явна причина (REQ-0010-03/59)
 	map = m
 	n = m.n
-	_rt_init()
+	Realtime.init(self)
 	var sp: Vector2i = m.spawn
 	player = _default_player(sp)
 	bags = []
@@ -274,7 +269,7 @@ func load_region(data: Dictionary) -> void:
 		stock[k] = data.stock[k]
 	time.day = int(data.day)
 	if use_realtime:
-		_rt_init()   # frac за ON не зберігається (REQ-0012-65): відновлюється з now і таймзони регіону
+		Realtime.init(self)   # frac за ON не зберігається (REQ-0012-65): відновлюється з now і таймзони регіону
 	else:
 		time.frac = float(data.frac)
 	buildings = []
@@ -491,7 +486,7 @@ func apply_temp_anomaly(delta_c: float, days: float) -> void:
 
 # Outdoor ambient °C right now: the real-latitude climate model + weather dip + incident anomaly.
 func ambient_temp_c() -> float:
-	var t: float = climate.temperature_c(float(map.lat), float(map.lon), climate_day(), float(time.frac))
+	var t: float = climate.temperature_c(float(map.lat), float(map.lon), Realtime.climate_day(self), float(time.frac))
 	if weather == &"cold_snap":
 		t -= COLD_SNAP_DIP_C
 	return t + temp_offset
@@ -544,42 +539,10 @@ func health_reset() -> void:
 
 # Ambient daylight 0..1 from the real-latitude model (long winter nights at high latitude).
 func daylight_level() -> float:
-	if use_realtime and now_ms > 0:   # spec 0012 REQ-8/64: реальна геометрія сонця (сонячний час — лише візуал), одне джерело
-		return Calendar.daylight(now_ms, float(map.lat), float(map.lon))
+	var real: float = Realtime.daylight(self)   # spec 0012 REQ-8/64: за ON — геометрія сонця, одне джерело
+	if real >= 0.0:
+		return real
 	return climate.daylight(float(map.lat), int(time.day), float(time.frac))
-
-# «День» для кліматичної моделі: OFF — лічильник днів (день 1 = пік зими, як було); ON — реальна дата регіону (REQ-0012-7).
-func climate_day() -> int:
-	if use_realtime and not cal.is_empty():
-		return Calendar.climate_day(int(cal.doy), Calendar.is_leap(int(cal.year)))
-	return int(time.day)
-
-# ---------------- реальний час (spec 0012, лише ON) ----------------
-func _rt_init() -> void:
-	if not use_realtime:
-		return
-	time.day_len = Pacing.DAY_S
-	cal = {"tz": Calendar.tz_for(float(map.lat), float(map.lon))}
-	_rt_sync(false)
-
-# Годинник -> frac/день. Перетин цивільної опівночі регіону додає дні до лічильника прожитих днів (time.day);
-# без поданого годинника (now_ms == 0) frac стоїть — sim сам час не читає (REQ-0012-10).
-func _rt_sync(announce: bool) -> void:
-	if now_ms <= 0 or cal.is_empty():
-		return
-	var tz: Dictionary = cal.tz
-	var loc: Dictionary = Calendar.local(now_ms, tz)
-	var prev: int = int(cal.get("epoch_day", int(loc.epoch_day)))
-	var gained: int = int(loc.epoch_day) - prev
-	loc["tz"] = tz
-	cal = loc
-	time.frac = float(loc.frac)
-	if gained > 0:
-		time.day += gained
-		if announce:
-			_log("🌅 Новий день: %02d.%02d" % [int(loc.day), int(loc.month)])
-			if not use_main_capsule:
-				_grant_daily_capsule()   # REQ-0012-26: заряд за ON прив'язаний до реальної опівночі, не до лічильника тіків
 
 # Light 0..1 on a tile: ambient daylight vs the brightest reachable light source (linear falloff).
 func light_at(x: int, y: int) -> float:
@@ -611,7 +574,7 @@ func is_wet() -> bool:
 	return weather == &"rain" or weather == &"snow"
 
 func season_name() -> String:
-	return str(Climate.SEASON_NAME.get(climate.season(float(map.lat), climate_day()), "?"))
+	return str(Climate.SEASON_NAME.get(climate.season(float(map.lat), Realtime.climate_day(self)), "?"))
 
 # spec B3: unlit night work is slower — up to +50% time in pitch black; torches/lamps cancel it.
 func dark_work_mult() -> float:
@@ -997,7 +960,7 @@ func update(dt: float) -> void:
 	if dead:
 		return  # match JS: the sim freezes after death (no needs/raids/convoys advance)
 	if use_realtime:
-		_rt_sync(true)   # spec 0012: frac/день — від годинника пристрою, а не лічильник тіків (REQ-0012-6)
+		Realtime.sync(self, true)   # spec 0012: frac/день — від годинника пристрою, а не лічильник тіків (REQ-0012-6)
 	else:
 		time.frac += dt / time.day_len
 		while time.frac >= 1.0:
@@ -1029,14 +992,9 @@ func _update_player(dt: float) -> void:
 	p.atk_cd = max(0.0, p.atk_cd - dt)
 	p.eat_cd = max(0.0, p.eat_cd - dt)
 	p.dep_cd = max(0.0, p.dep_cd - dt)
-	var hunger_rate: float = 0.42
-	var tire_rate: float = 0.30
-	if use_realtime:   # spec 0012 REQ-13/14/15: темп у реальних годинах з таблиці Pacing через fall_per_day/day_len (не захардкоджений *dt)
-		hunger_rate = 100.0 * Pacing.fall_per_day("hunger_to_critical") / float(time.day_len)
-		tire_rate = 100.0 * Pacing.fall_per_day("rest_to_collapse") / float(time.day_len)
-	p.hunger = clampf(p.hunger - hunger_rate * dt, 0, 100)
+	p.hunger = clampf(p.hunger - Realtime.hunger_rate(self) * dt, 0, 100)   # spec 0012: OFF 0.42 як було; ON — з Pacing
 	var rest0: float = p.rest   # spec 0010 (REQ-0010-107): множник відновлення сну застосовується до приросту OFF-рядка нижче
-	p.rest = clampf(p.rest - (-14.0 if p.sleeping else tire_rate) * dt, 0, 100)   # сон +14/с — і за ON: sleep_full TBD (OD-R26, REQ-16 blocked)
+	p.rest = clampf(p.rest - (-14.0 if p.sleeping else Realtime.tire_rate(self)) * dt, 0, 100)   # сон +14/с — і за ON: sleep_full TBD (OD-R26, REQ-16 blocked)
 	if use_main_capsule and p.sleeping:   # сон у зоні капсули відновлює швидше (need_recovery_mult); наростання втоми (0.30) і межі не чіпаємо
 		p.rest = clampf(rest0 + (p.rest - rest0) * _capsule_recovery(), 0, 100)
 	# located health (sim/hero_health.gd): empty needs and the real climate grow condition hediffs,
@@ -1271,8 +1229,7 @@ func _capsule_recovery() -> float:
 # Годинник пристрою -> sim: єдиний вхід абсолютного часу (власник Clock — spec 0012). Монотонний: відкат не скорочує таймери.
 func set_clock(ms: int) -> void:
 	now_ms = maxi(now_ms, ms)
-	if use_realtime:
-		_rt_sync(true)   # годинник посунувся між тіками — той самий шлях, що в update()
+	Realtime.sync(self, true)   # spec 0012: годинник посунувся між тіками — той самий шлях, що в update()
 
 # ---------------- capsules & invites (spec 0002) ----------------
 # Bodies live in sim/world_meta.gd (capsule travel + invite envelopes); delegates keep the sim API.

@@ -10,6 +10,7 @@ extends RefCounted
 
 const GameData = preload("res://scripts/data.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
+const Realtime = preload("res://scripts/sim/realtime.gd")   # spec 0012: кліматичний день від реальної дати (ON)
 
 const THREAT_STREAM_SALT := 0x7A1D5EED  # decorrelates the threat stream from the weather stream
 const DIRECTOR_STREAM_SALT := 0x0D1EC70  # the Balance director's own storyteller stream
@@ -27,7 +28,7 @@ static func env_init(s) -> void:
 	s.director_rng.seed = s.region_seed() ^ DIRECTOR_STREAM_SALT
 	s.temp_offset = 0.0
 	s.temp_offset_days = 0.0
-	s.weather = s.climate.weather(float(s.map.lat), float(s.map.lon), s.climate_day(), float(s.time.frac), s.env_rng)
+	s.weather = s.climate.weather(float(s.map.lat), float(s.map.lon), Realtime.climate_day(s), float(s.time.frac), s.env_rng)
 	s.weather_t = 0.15 + s.env_rng.randf() * 0.2
 	recompute_indoor(s)
 
@@ -35,7 +36,7 @@ static func update_environment(s, dday: float) -> void:
 	s.weather_t -= dday
 	if s.weather_t <= 0.0:
 		var prev: StringName = s.weather
-		s.weather = s.climate.weather(float(s.map.lat), float(s.map.lon), s.climate_day(), float(s.time.frac), s.env_rng)
+		s.weather = s.climate.weather(float(s.map.lat), float(s.map.lon), Realtime.climate_day(s), float(s.time.frac), s.env_rng)
 		s.weather_t = 0.15 + s.env_rng.randf() * 0.2
 		if s.weather != prev:
 			s._log("⛅ Погода: %s." % WEATHER_LABEL.get(s.weather, str(s.weather)))
