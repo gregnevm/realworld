@@ -29,6 +29,8 @@ realworld/
   AGENTS.md            ← цей файл (контекст для агентів)
   godot/               порт у Godot 4.7 — форвардний рушій (деталі в розділі «Godot-порт»)
     scripts/kernel/       механічний кернел (spec 0003) + дерево контенту (catalog.gd)
+    scripts/calendar.gd   spec 0012: реальна дата, цивільний час із DST, геометрія сонця (чисті функції від now)
+    scripts/pacing.gd     spec 0012 §5.3: таблиця темпу реального часу (лише за use_realtime=ON; dev `-- realtime`)
     scripts/goals.gd      онбординг-ланцюг «Цілі» (чисті перевірки стану; липке виконання в session)
     content/catalog.json  335 def; валідовано catalog.gd ↔ tests/catalog.test.js (`catalog_data.js`/JS-дзеркало видалено)
     tests/                headless-сьюти Godot (run_*.gd)

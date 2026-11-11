@@ -43,6 +43,7 @@ var bench_announced := false   # one-time «стіл працює» toast (the R
 var goals_done: Dictionary = {}   # goal id -> true
 var use_inventory := false        # spec 0009: set by the entry scene BEFORE start(); tests keep the stock path
 var use_catalog := false          # spec 0008: відкритий склад; ON-капсула його вимагає (REQ-0010-59). ДО start()
+var use_realtime := false         # spec 0012: реальний час 1:1; ставиться ДО start(), далі замкнений (dev-перемикач `-- realtime`)
 var use_main_capsule := false     # spec 0010: Основна капсула; ставиться ДО start(), далі замкнений (dev-перемикач `-- capsule`)
 var last_error: StringName = &""  # чому start()/restore_game()/travel_to() відмовили (&"" — усе гаразд); для UI/тестів
 var _goal_t := 0.0
@@ -58,6 +59,7 @@ func start(lat: float, lon: float, place_name: String, now_ms: int = 0) -> bool:
 	sim = Sim.new()
 	sim.use_inventory = use_inventory   # spec 0009: the playable scene opts new games into the personal inventory
 	sim.use_catalog = use_catalog
+	sim.use_realtime = use_realtime   # spec 0012: ДО new_game (setter замикається після мапи, REQ-0012-5)
 	sim.use_main_capsule = use_main_capsule   # ДО new_game: setter замикається після нього (REQ-0010-02/60)
 	push_clock(now_ms)
 	sim.new_game(m, false)   # the session issues the climate hint itself, after the landing lines
@@ -168,7 +170,10 @@ func travel_to(lat: float, lon: float, place_name: String) -> void:
 		sim._log("🛬 Нова місцевість: %s · біом %s." % [place_name, m.biome], "good")
 	sim.social = social
 	sim.time.day = gday
-	sim.time.frac = gfrac
+	if sim.use_realtime:
+		Sim.Realtime.init(sim)   # spec 0012 REQ-9: таймзона — властивість РЕГІОНУ; frac перераховується з now, а не переноситься
+	else:
+		sim.time.frac = gfrac
 
 # Permadeath: a fresh pawn at the clan home. If you died away, fly home first (region identity,
 # NOT presence of any storage — you may have built one at a remote outpost).
@@ -352,6 +357,7 @@ func restore_game(path: String = SAVE_PATH) -> bool:
 		last_error = restored.load_error
 		return false
 	sim = restored
+	use_realtime = bool(sim.use_realtime)   # spec 0012 REQ-62: значення з сейву перемагає дефолт збірки (і в обидва боки)
 	var h: Dictionary = d.get("home", {})
 	home = {"lat": float(h.get("lat", 0.0)), "lon": float(h.get("lon", 0.0)), "name": str(h.get("name", ""))}
 	has_home = bool(d.get("has_home", true))

@@ -20,6 +20,7 @@ const MainCapsule = preload("res://scripts/sim/capsule.gd")
 const Persistence = preload("res://scripts/persistence.gd")
 const OrbitStub = preload("res://scripts/sim/orbit_stub.gd")
 const Haul = preload("res://scripts/sim/haul.gd")
+const Realtime = preload("res://scripts/sim/realtime.gd")   # spec 0012: реальний час 1:1 (лише ON)
 
 var map: Dictionary
 var n: int = 0
@@ -49,6 +50,10 @@ var use_main_capsule: bool = false:   # spec 0010: ON = Основна капс�
 var main_capsule: Dictionary = {}   # {} при OFF/до посадки; запис — MainCapsule.new_record (tile живе тут)
 var config_error: StringName = &""  # непорожнє => new_game нічого не створив (див. MainCapsule.preflight)
 var load_error: StringName = &""    # непорожнє => load_region відхилив запис ДО мутацій (MainCapsule.validate_region)
+var use_realtime: bool = false:   # spec 0012: ON = реальний час 1:1 (доба 86 400 с, frac від now і таймзони регіону); ДО new_game, далі замкнений (REQ-0012-5)
+	set(v):
+		use_realtime = Realtime.set_flag(self, v)
+var cal: Dictionary = {}            # spec 0012 (лише ON): останній Calendar.local(now, tz) + tz регіону; похідне від now — не сейв, не хеш
 var now_ms: int = 0                 # ВХІД часу (UTC-мс), лише через set_clock; НЕ в сейві й НЕ в world_hash (REQ-0010-92)
 var capsule_table: Dictionary = {}  # override таблиці capsule_levels (тести/пак контенту); {} = каталог (MainCapsule.table)
 var capsule_cmds_tick: Dictionary = {}   # дедуп cmd_id upgrade_capsule в межах тіка: очищається на початку update(); не хеш
@@ -143,6 +148,7 @@ func new_game(m: Dictionary, hint: bool = true) -> void:
 		return   # ДО будь-якої мутації: порожній світ + явна причина (REQ-0010-03/59)
 	map = m
 	n = m.n
+	Realtime.init(self)
 	var sp: Vector2i = m.spawn
 	player = _default_player(sp)
 	bags = []
@@ -237,6 +243,7 @@ func load_region(data: Dictionary) -> void:
 	load_error = MainCapsule.validate_region(data, not map.is_empty(), use_main_capsule)
 	if load_error != &"":
 		return   # відхилено ДО будь-якої мутації: ні мапи, ні будівель, ні потоків (REQ-0010-60/83)
+	use_realtime = bool(data.get("use_realtime", false))   # spec 0012: сейв без ключа -> OFF (REQ-0012-4/62); ДО мапи
 	use_main_capsule = bool(data.get("use_main_capsule", false))   # ДО мапи й будівель; сейв без ключа -> OFF (REQ-0010-02)
 	var nn := int(data.n)
 	var decoded: Dictionary = Persistence.map_from_record(data)
@@ -261,7 +268,10 @@ func load_region(data: Dictionary) -> void:
 	for k in data.stock:
 		stock[k] = data.stock[k]
 	time.day = int(data.day)
-	time.frac = float(data.frac)
+	if use_realtime:
+		Realtime.init(self)   # frac за ON не зберігається (REQ-0012-65): відновлюється з now і таймзони регіону
+	else:
+		time.frac = float(data.frac)
 	buildings = []
 	bgrid = {}
 	_reset_local_threats()
@@ -476,7 +486,7 @@ func apply_temp_anomaly(delta_c: float, days: float) -> void:
 
 # Outdoor ambient °C right now: the real-latitude climate model + weather dip + incident anomaly.
 func ambient_temp_c() -> float:
-	var t: float = climate.temperature_c(float(map.lat), float(map.lon), int(time.day), float(time.frac))
+	var t: float = climate.temperature_c(float(map.lat), float(map.lon), Realtime.climate_day(self), float(time.frac))
 	if weather == &"cold_snap":
 		t -= COLD_SNAP_DIP_C
 	return t + temp_offset
@@ -529,6 +539,9 @@ func health_reset() -> void:
 
 # Ambient daylight 0..1 from the real-latitude model (long winter nights at high latitude).
 func daylight_level() -> float:
+	var real: float = Realtime.daylight(self)   # spec 0012 REQ-8/64: за ON — геометрія сонця, одне джерело
+	if real >= 0.0:
+		return real
 	return climate.daylight(float(map.lat), int(time.day), float(time.frac))
 
 # Light 0..1 on a tile: ambient daylight vs the brightest reachable light source (linear falloff).
@@ -561,7 +574,7 @@ func is_wet() -> bool:
 	return weather == &"rain" or weather == &"snow"
 
 func season_name() -> String:
-	return str(Climate.SEASON_NAME.get(climate.season(float(map.lat), int(time.day)), "?"))
+	return str(Climate.SEASON_NAME.get(climate.season(float(map.lat), Realtime.climate_day(self)), "?"))
 
 # spec B3: unlit night work is slower — up to +50% time in pitch black; torches/lamps cancel it.
 func dark_work_mult() -> float:
@@ -946,13 +959,16 @@ func update(dt: float) -> void:
 		flash_t = max(0.0, flash_t - dt)
 	if dead:
 		return  # match JS: the sim freezes after death (no needs/raids/convoys advance)
-	time.frac += dt / time.day_len
-	while time.frac >= 1.0:
-		time.frac -= 1.0
-		time.day += 1
-		_log("🌅 Новий день: %d" % time.day)
-		if not use_main_capsule:
-			_grant_daily_capsule()   # щоденний заряд spec 0002 — лише OFF (REQ-0010-41)
+	if use_realtime:
+		Realtime.sync(self, true)   # spec 0012: frac/день — від годинника пристрою, а не лічильник тіків (REQ-0012-6)
+	else:
+		time.frac += dt / time.day_len
+		while time.frac >= 1.0:
+			time.frac -= 1.0
+			time.day += 1
+			_log("🌅 Новий день: %d" % time.day)
+			if not use_main_capsule:
+				_grant_daily_capsule()   # щоденний заряд spec 0002 — лише OFF (REQ-0010-41)
 	_update_environment(dt / time.day_len)
 	SimPower.update(self, dt)   # after environment (solar reads daylight, wind reads weather)
 	SimFarm.update(self, dt)    # after power (hydroponics grows only when the net delivered)
@@ -976,9 +992,9 @@ func _update_player(dt: float) -> void:
 	p.atk_cd = max(0.0, p.atk_cd - dt)
 	p.eat_cd = max(0.0, p.eat_cd - dt)
 	p.dep_cd = max(0.0, p.dep_cd - dt)
-	p.hunger = clampf(p.hunger - 0.42 * dt, 0, 100)
+	p.hunger = clampf(p.hunger - Realtime.hunger_rate(self) * dt, 0, 100)   # spec 0012: OFF 0.42 як було; ON — з Pacing
 	var rest0: float = p.rest   # spec 0010 (REQ-0010-107): множник відновлення сну застосовується до приросту OFF-рядка нижче
-	p.rest = clampf(p.rest - (-14.0 if p.sleeping else 0.30) * dt, 0, 100)
+	p.rest = clampf(p.rest - (-14.0 if p.sleeping else Realtime.tire_rate(self)) * dt, 0, 100)   # сон +14/с — і за ON: sleep_full TBD (OD-R26, REQ-16 blocked)
 	if use_main_capsule and p.sleeping:   # сон у зоні капсули відновлює швидше (need_recovery_mult); наростання втоми (0.30) і межі не чіпаємо
 		p.rest = clampf(rest0 + (p.rest - rest0) * _capsule_recovery(), 0, 100)
 	# located health (sim/hero_health.gd): empty needs and the real climate grow condition hediffs,
@@ -1213,6 +1229,7 @@ func _capsule_recovery() -> float:
 # Годинник пристрою -> sim: єдиний вхід абсолютного часу (власник Clock — spec 0012). Монотонний: відкат не скорочує таймери.
 func set_clock(ms: int) -> void:
 	now_ms = maxi(now_ms, ms)
+	Realtime.sync(self, true)   # spec 0012: годинник посунувся між тіками — той самий шлях, що в update()
 
 # ---------------- capsules & invites (spec 0002) ----------------
 # Bodies live in sim/world_meta.gd (capsule travel + invite envelopes); delegates keep the sim API.

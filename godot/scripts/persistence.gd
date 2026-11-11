@@ -121,6 +121,10 @@ static func serialize_region(sim) -> Dictionary:
 	if capsule_on:
 		rec["use_main_capsule"] = true
 		rec["main_capsule"] = MainCapsule.to_record(sim)
+	# spec 0012: реальний час — прапор лише при ON; frac за ON похідний від now/таймзони, тож не в сейві й не в world_hash (REQ-0012-2/65)
+	if sim.get("use_realtime") == true:
+		rec["use_realtime"] = true
+		rec.erase("frac")
 	return rec
 
 static func _pick(src: Dictionary, fields: Array) -> Dictionary:

@@ -194,6 +194,7 @@ func _start_game(lat: float, lon: float, place_name: String) -> void:
 	if _capsule_enabled():   # Основна капсула (spec 0010) УВІМК за замовчуванням у збірках (OD-114); опт-аут `-- nocapsule` / web `?nocapsule` = старий шлях
 		session.use_catalog = true        # капсула вимагає відкритого складу (REQ-0010-59)
 		session.use_main_capsule = true
+	session.use_realtime = "realtime" in OS.get_cmdline_user_args()   # spec 0012: реальний час 1:1 — поки лише dev-перемикач `-- realtime` (дефолт збірки — рішення власника)
 	session.autosave = not shot_mode
 	if not session.start(lat, lon, place_name, _clock.now_ms()):
 		push_error("Старт світу відхилено: %s" % String(session.last_error))
@@ -304,6 +305,16 @@ func _set_menu(on: bool) -> void:
 		_refresh_menu()
 
 # Основна капсула УВІМК за замовчуванням (OD-114, 2026-11-08; змінює дефолт OD-7 для збірок).
+# spec 0012 REQ-28/83: за реального часу множник часу завжди 1 — швидкості ×2/×3 і пауза лише за debug-прапором
+# `-- devtime` у debug-збірці (dev_time_scale: не пишеться в сейв, не в world_hash; годинник `now` від нього не прискорюється).
+# За OFF — байт-у-байт як було (чіпи ×1–×3 і пауза, REQ-0012-3).
+func _time_scale() -> float:
+	if session == null or session.sim == null or not bool(session.sim.use_realtime):
+		return winput.speed
+	if OS.has_feature("debug") and "devtime" in OS.get_cmdline_user_args():
+		return winput.speed
+	return 1.0
+
 # Опт-аут до старого шляху (порівняння/регресії): десктоп `-- nocapsule`, web `?nocapsule` в URL.
 func _capsule_enabled() -> bool:
 	if "nocapsule" in OS.get_cmdline_user_args():
@@ -346,7 +357,7 @@ func _process(dt: float) -> void:
 	view.sim = session.sim            # travel/respawn swap the sim under the session — track it
 	session.push_clock(_clock.now_ms())   # годинник пристрою -> sim (монотонно); сам sim час не читає
 	session.tick_realm(_clock.now_ms())   # spec 0013: RealGPS присутність (власний тротлінг 1 с)
-	var sdt := dt * winput.speed
+	var sdt := dt * _time_scale()
 	if sdt > 0.0 and not session.sim.dead:
 		session.sim.update(sdt)
 		session.tick_research(sdt)    # research benches fund the tech pipeline each frame
