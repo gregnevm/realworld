@@ -40,6 +40,7 @@ func _init() -> void:
 	_t_session_ascend()
 	_t_bag_ttl()
 	_t_ascend_pack()
+	_t_bag_kit_returns()
 	_t_reinforcement()
 	_t_record_shape_and_survival()
 	_t_genome_loot_and_synthesis()
@@ -319,8 +320,10 @@ func _t_bag_ttl() -> void:
 	var s: Variant = _new_session(true)
 	s.start(50.45, 30.52, "Київ", T0)
 	var cid: String = String(Orbit.active_clone(s.orbit)["id"])
+	s.sim.player.items = ["axe"]
 	InvMod.drop_bag(s.sim)
 	var bag: Dictionary = s.sim.bags[0]
+	ok((bag["items"] as Array) == ["axe"] and (s.sim.player.items as Array).is_empty(), "REQ-0011-32: the Orbit bag carries the kit (items/equipped) and the body is left without it")
 	ok(int(bag["expires_at"]) == T0 + D and String(bag["owner_clone_id"]) == cid, "REQ-0011-33: expires_at = now + 24 h, owner_clone_id is a mere label")
 	s.sim.set_clock(T0 + D - 1000)
 	InvMod.pickup_bags(s.sim, {"px": -50.0, "py": -50.0})
@@ -433,6 +436,21 @@ func _t_death_screen() -> void:
 
 
 # REQ-0011-7/8: from the BACKPACK, only near the capsule; partial transfer; far/dead/no-orbit refused.
+func _t_bag_kit_returns() -> void:
+	var InvMod: Variant = load("res://scripts/sim/inventory.gd")
+	var s: Variant = _new_session(true)
+	s.start(50.45, 30.52, "Київ", T0)
+	s.sim.player.items = ["axe"]
+	InvMod.drop_bag(s.sim)
+	var b: Dictionary = s.sim.bags[0]
+	var px: float = float(b["x"]) + 0.5
+	var py: float = float(b["y"]) + 0.5
+	var finder: Dictionary = {"px": px, "py": py, "items": []}
+	InvMod.pickup_bags(s.sim, finder)
+	ok(s.sim.bags.is_empty(), "REQ-0011-32: anyone walking over the bag picks it up (OD-91)")
+	ok((finder["items"] as Array) == ["axe"], "REQ-0011-32: the kit goes to whoever picked the bag up (not bound to the owner)")
+
+
 func _t_ascend_pack() -> void:
 	var InvMod: Variant = load("res://scripts/sim/inventory.gd")
 	var s: Variant = _new_session(true)

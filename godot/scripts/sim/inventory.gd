@@ -288,10 +288,15 @@ static func drop_bag(s) -> void:
 	for sl in s.player.inv:
 		if String(sl.id) != "":
 			slots.append({"id": String(sl.id), "n": int(sl.n)})
-	if slots.is_empty():
+	var orbit_bag: bool = int(s.get("bag_ttl_ms")) > 0 and int(s.now_ms) > 0   # spec 0011 REQ-0011-32/33/56: лише за Орбіти; OFF-торба байт-у-байт
+	var kit: Array = (s.player.items as Array).duplicate() if orbit_bag else []
+	if slots.is_empty() and kit.is_empty():
 		return
 	var bag: Dictionary = {"x": int(s.player.px), "y": int(s.player.py), "slots": slots, "day": int(s.time.day)}
-	if int(s.get("bag_ttl_ms")) > 0 and int(s.now_ms) > 0:   # spec 0011 REQ-0011-33/56: лише за Орбіти — TTL і мітка походження; OFF-торба байт-у-байт
+	if orbit_bag:   # торба Орбіти несе й спорядження (items/equipped), TTL і мітку походження
+		bag["items"] = kit
+		bag["equipped"] = (s.player.equipped as Dictionary).duplicate(true)
+		s.player.items = []
 		bag["expires_at"] = int(s.now_ms) + int(s.bag_ttl_ms)
 		bag["owner_clone_id"] = String(s.get("active_clone_id"))
 	s.bags.append(bag)
@@ -324,6 +329,9 @@ static func pickup_bags(s, actor: Variant = null) -> void:
 			if rest > 0:
 				left.append({"id": String(sl.id), "n": rest})
 		if left.is_empty():
+			for it in (bag.get("items", []) as Array):   # REQ-0011-32: інструменти й зброя з торби Орбіти повертаються до того, хто підібрав
+				if not (who.items as Array).has(it):
+					(who.items as Array).append(it)
 			s.bags.erase(bag)
 			s._log("🎒 Торбу підібрано — усе повернулось.", "good")
 		else:
