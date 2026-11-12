@@ -7795,8 +7795,11 @@ func _raid_fuzz(seed_v: int, steps: int) -> Dictionary:
 								if str(ra[k]) != str(rb.get(k)):
 									dk.append("region." + str(k))
 									if k == "player":
+										for pk in (rb[k] as Dictionary).keys():
+											if not (ra[k] as Dictionary).has(pk):
+												dk.append("player extra in restored: " + str(pk) + "=" + str(rb[k][pk]))
 										for pk in (ra[k] as Dictionary).keys():
-											if str(ra[k][pk]) != str((rb[k] as Dictionary).get(pk)):
+											if pk not in ["skills", "born", "inv", "hand"] and str(ra[k][pk]) != str((rb[k] as Dictionary).get(pk)):
 												dk.append("player.%s: %s != %s" % [pk, str(ra[k][pk]), str((rb[k] as Dictionary).get(pk))])
 							bad.append("step %d: restore changed world_hash in state %s keys=%s" % [i, st0, str(dk)])
 						_dispose(s)
