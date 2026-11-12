@@ -44,7 +44,7 @@ static func sync(s, announce: bool) -> void:
 
 # «День» кліматичної моделі: OFF — лічильник днів (день 1 = пік зими, як було); ON — реальна дата (REQ-0012-7).
 static func climate_day(s) -> int:
-	if s.use_realtime and not (s.cal as Dictionary).is_empty():
+	if s.use_realtime and (s.cal as Dictionary).has("doy"):   # до першої подачі годинника (відновлення сейву) дати ще нема
 		return Calendar.climate_day(int(s.cal.doy), Calendar.is_leap(int(s.cal.year)))
 	return int(s.time.day)
 
@@ -86,3 +86,25 @@ static func frost_recover_scale(s) -> float:
 	if not s.use_realtime:
 		return 1.0
 	return Pacing.DAY_S / (COMFORT_RECOVER_PER_DAY * Pacing.seconds("warmup_full"))
+
+# ---------------- офлайн-догін (REQ-0012-31…34, 67, 84; OD-53, OD-49, OD-139) ----------------
+# Чиста функція від (стан, saved_at, now) — годинник не читається. Кроки К1:
+#   (1) лічильник прожитих днів (OD-139) — за реальними цивільними опівночами регіону між saved_at і now
+#       (це годинник, а не симуляція: ліміт догону його не обрізає — як мітки UTC-мс у 0010 REQ-114/116);
+#   (2) потреби героя офлайн — правило не задано (OD-R25, REQ-35 blocked): стан не змінюється;
+#   (3) напади — у К1 відсутні (OD-53, REQ-84): у звіті 0 подій нападу.
+# Ліміт догону симуляції — 24 год (OD-49); `applied_ms` — скільки симуляційного часу «зараховано» (для потреб/виробництва,
+# коли їхні правила з'являться). now < saved_at — нульовий догін (REQ-33/68).
+const CATCH_UP_LIMIT_MS := 86400000   # OD-49 (2026-11-08): 24 год реального офлайн-часу, стартове до плейтесту
+
+static func catch_up(s, saved_at: int, now: int) -> Dictionary:
+	var report := {"offline_ms": 0, "applied_ms": 0, "days": 0, "attacks": 0}
+	if not s.use_realtime or saved_at <= 0 or now <= saved_at or (s.cal as Dictionary).is_empty():
+		return report
+	var tz: Dictionary = s.cal.tz
+	var days: int = int(Calendar.local(now, tz).epoch_day) - int(Calendar.local(saved_at, tz).epoch_day)
+	s.time.day += maxi(0, days)
+	report.offline_ms = now - saved_at
+	report.applied_ms = mini(now - saved_at, CATCH_UP_LIMIT_MS)
+	report.days = maxi(0, days)
+	return report

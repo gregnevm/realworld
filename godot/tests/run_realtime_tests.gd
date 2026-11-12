@@ -75,6 +75,13 @@ func _init() -> void:
 	_t_frost_warmup_and_ratio()
 	_t_frost_off_unchanged()
 	_t_hud_no_speed_at_on()
+	# --- WAVE 0012-W4: таймери режисера = таблиця рейдів капсули (REQ-23), офлайн-догін (REQ-31…34, 67, 84) ---
+	_t_director_timers_match_capsule_table()
+	_t_catch_up_pure_and_bounds()
+	_t_catch_up_days_and_limit()
+	_t_catch_up_additive()
+	_t_catch_up_no_attacks()
+	_t_catch_up_session_roundtrip()
 	chk.skip_banner()
 	finish()
 
@@ -1239,3 +1246,120 @@ func _t_hud_no_speed_at_on() -> void:
 		else:
 			ok(float(snap.get("speed", -1.0)) == 2.0 and bar._chips.size() == 4 and bar._chips[2].button_pressed, "REQ-0012-3: OFF — `speed` у знімку, 4 чіпи, ×2 натиснутий")
 		bar.free()
+
+
+
+# =====================================================================================================
+# WAVE 0012-W4 — таймери режисера (одне джерело з таблицею рейдів капсули) і офлайн-догін
+# =====================================================================================================
+const MainCapsule = preload("res://scripts/sim/capsule.gd")
+const T_NOV10_23_KYIV := 1794344400000   # 10.11.2026 23:00 за Києвом (21:00 UTC)
+
+
+# REQ-0012-23: у робочому режимі К1 (капсула ON) рейд іде автоматом капсули в UTC-мс; його таблиця і Pacing — одні числа
+func _t_director_timers_match_capsule_table() -> void:
+	var rd: Dictionary = MainCapsule.raid_data(Sim.new())
+	ok(int(rd.grace_ms) == int(Pacing.seconds("raid_grace") * 1000.0), "REQ-0012-23: raid_grace (Pacing) = grace_ms таблиці капсули = 3 доби (OD-66)")
+	ok(int(rd.warn_min_ms) == int(float(Pacing.TABLE.raid_warn.lo) * 1000.0) and int(rd.warn_max_ms) == int(float(Pacing.TABLE.raid_warn.hi) * 1000.0),
+		"REQ-0012-23: raid_warn 10–30 хв (OD-88) = warn_min/max_ms капсули")
+	ok(int(rd.cadence_min_ms) == int(float(Pacing.TABLE.raid_mtb.lo) * 1000.0) and int(rd.cadence_max_ms) == int(float(Pacing.TABLE.raid_mtb.hi) * 1000.0),
+		"REQ-0012-23: raid_mtb 3–4 доби (OD-86) = cadence_min/max_ms капсули")
+	ok(not Pacing.is_set("patrol_interval"), "REQ-0012-23: patrol_interval — TBD (OD-R26), не вигадано")
+
+
+func _rt_state(s: Variant) -> String:
+	return "%d|%s" % [int(s.time.day), Persistence.world_hash(s)]
+
+
+# REQ-0012-31/32/33: чиста функція; двічі однаково; now <= saved_at — нуль
+func _t_catch_up_pure_and_bounds() -> void:
+	var a: Variant = _rt_sim(T_NOV10_23_KYIV)
+	var b: Variant = _rt_sim(T_NOV10_23_KYIV)
+	var ra: Dictionary = Realtime.catch_up(a, T_NOV10_23_KYIV, T_NOV10_23_KYIV + 6 * MS_H)
+	var rb: Dictionary = Realtime.catch_up(b, T_NOV10_23_KYIV, T_NOV10_23_KYIV + 6 * MS_H)
+	ok(ra == rb and _rt_state(a) == _rt_state(b), "REQ-0012-32: однакові (стан, saved_at, now) ⇒ той самий звіт і world_hash")
+	for now in [T_NOV10_23_KYIV, T_NOV10_23_KYIV - MS_H, 0]:
+		var c: Variant = _rt_sim(T_NOV10_23_KYIV)
+		var before: String = _rt_state(c)
+		var r: Dictionary = Realtime.catch_up(c, T_NOV10_23_KYIV, now)
+		ok(int(r.applied_ms) == 0 and int(r.days) == 0 and _rt_state(c) == before, "REQ-0012-33: now ≤ saved_at (Δ=%d мс) ⇒ нульовий догін, стан не змінено" % (now - T_NOV10_23_KYIV))
+	var off: Variant = _rt_sim(T_NOV10_23_KYIV, KYIV, false)
+	var off_before: String = _rt_state(off)
+	Realtime.catch_up(off, T_NOV10_23_KYIV, T_NOV10_23_KYIV + 30 * MS_H)
+	ok(_rt_state(off) == off_before, "REQ-0012-1: за OFF догін — no-op")
+
+
+# REQ-0012-33 / OD-139: дні — за цивільними опівночами (без стелі), симуляційний час — стеля 24 год (OD-49)
+func _t_catch_up_days_and_limit() -> void:
+	var cases: Array = [[2 * MS_H, 1, 2 * MS_H], [30 * 60000, 0, 30 * 60000], [Realtime.CATCH_UP_LIMIT_MS, 1, Realtime.CATCH_UP_LIMIT_MS],
+		[Realtime.CATCH_UP_LIMIT_MS + 1, 1, Realtime.CATCH_UP_LIMIT_MS], [3 * 24 * MS_H, 3, Realtime.CATCH_UP_LIMIT_MS]]
+	for c in cases:
+		var s: Variant = _rt_sim(T_NOV10_23_KYIV)
+		var d0: int = int(s.time.day)
+		var r: Dictionary = Realtime.catch_up(s, T_NOV10_23_KYIV, T_NOV10_23_KYIV + int(c[0]))
+		ok(int(r.days) == int(c[1]) and int(s.time.day) == d0 + int(c[1]) and int(r.applied_ms) == int(c[2]) and int(r.offline_ms) == int(c[0]),
+			"REQ-0012-33: офлайн %d мс ⇒ +%d дн. (опівночі Києва), зараховано %d мс (стеля 24 год)" % [int(c[0]), int(c[1]), int(c[2])])
+
+
+# REQ-0012-34: адитивність на абсолютній сітці — catch(t0,t1)+catch(t1,t2) == catch(t0,t2)
+func _t_catch_up_additive() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261112
+	var bad: Array = []
+	for i in 200:
+		var t0: int = T_NOV10_23_KYIV + rng.randi_range(0, 48) * MS_H + rng.randi_range(0, 3599999)
+		var t1: int = t0 + rng.randi_range(0, 20) * MS_H + rng.randi_range(0, 3599999)
+		var t2: int = t1 + rng.randi_range(0, 20) * MS_H + rng.randi_range(0, 3599999)
+		var one: Variant = _rt_sim(t0)
+		Realtime.catch_up(one, t0, t2)
+		var two: Variant = _rt_sim(t0)
+		Realtime.catch_up(two, t0, t1)
+		Realtime.catch_up(two, t1, t2)
+		if _rt_state(one) != _rt_state(two):
+			bad.append([t0, t1, t2])
+	ok(bad.is_empty(), "REQ-0012-34: 200 випадкових розбиттів інтервалу ⇒ той самий стан (%d збоїв)" % bad.size())
+
+
+# REQ-0012-84 (стаб до OD-R22≡Q-1): догін не розв'язує нападів — ні ворогів, ні шкоди героєві й будівлям
+func _t_catch_up_no_attacks() -> void:
+	var s: Variant = _rt_sim(T_NOV10_23_KYIV)
+	var hp0: float = float(s.player.hp)
+	var enemies0: int = (s.enemies as Array).size()
+	var bhp0: Array = []
+	for b in s.buildings:
+		bhp0.append(float(b.hp))
+	var r: Dictionary = Realtime.catch_up(s, T_NOV10_23_KYIV, T_NOV10_23_KYIV + 20 * MS_H)
+	var bhp1: Array = []
+	for b in s.buildings:
+		bhp1.append(float(b.hp))
+	ok(int(r.attacks) == 0 and (s.enemies as Array).size() == enemies0 and float(s.player.hp) == hp0 and bhp0 == bhp1,
+		"REQ-0012-84: догін 20 год — 0 нападів, ворогів не додано, HP героя й будівель без змін")
+
+
+# REQ-0012-31/67/68: Session пише saved_at; «Продовжити» догоняє; повторне відновлення того самого сейву — без подвійного рахунку
+func _t_catch_up_session_roundtrip() -> void:
+	var path := "user://rt_w4_test.json"
+	var ses: Variant = SessionScript.new()
+	ses.use_realtime = true
+	ses.start(KYIV.x, KYIV.y, "Київ", T_NOV10_23_KYIV)
+	ses.autosave = false
+	var d0: int = int(ses.sim.time.day)
+	ok(ses.save_game(path), "REQ-0012-31: ON-сейв записано")
+	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))
+	ok(raw.get("saved_at") is String and Clock.from_wire(raw.saved_at, 0) == T_NOV10_23_KYIV, "REQ-0012-31: saved_at — UTC-мс рядком (%s)" % str(raw.get("saved_at")))
+	var later: int = T_NOV10_23_KYIV + 26 * MS_H   # 12.11 01:00 — дві опівночі
+	var r1: Variant = SessionScript.new()
+	ok(r1.restore_game(path, later), "REQ-0012-31: відновлення з догоном")
+	ok(int(r1.sim.time.day) == d0 + 2 and int(r1.last_catch_up.days) == 2 and int(r1.last_catch_up.attacks) == 0, "REQ-0012-31: +2 дні за дві опівночі офлайн; 0 нападів")
+	ok(is_equal_approx(float(r1.sim.time.frac), 1.0 / 24.0), "REQ-0012-31: після догону годинник — 01:00 за Києвом")
+	var r2: Variant = SessionScript.new()
+	r2.restore_game(path, later)
+	ok(int(r2.sim.time.day) == int(r1.sim.time.day) and Persistence.world_hash(r2.sim) == Persistence.world_hash(r1.sim), "REQ-0012-67: той самий сейв двічі ⇒ той самий стан (без подвійного часу)")
+	r1.save_game(path)
+	var r3: Variant = SessionScript.new()
+	r3.restore_game(path, later)
+	ok(int(r3.sim.time.day) == int(r1.sim.time.day), "REQ-0012-67: сейв після догону (saved_at = now) і повторний вхід у той самий момент — дні не нараховано вдруге")
+	var r4: Variant = SessionScript.new()
+	r4.restore_game(path, T_NOV10_23_KYIV)   # годинник відкочено нижче saved_at
+	ok(int(r4.sim.time.day) == int(r1.sim.time.day) and int(r4.sim.now_ms) >= later, "REQ-0012-68: відкат годинника нижче saved_at не відкочує день і годинник світу")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
