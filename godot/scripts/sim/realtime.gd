@@ -78,6 +78,8 @@ static func frost_ref_felt_c(s) -> float:
 static func frost_gain_scale(s, off_pace: float) -> float:
 	if not s.use_realtime:
 		return off_pace
+	if in_start_window(s):
+		return 0.0   # OD-150 (REQ-0012-54): перші 15 хв після першої посадки холод не накопичується — посадка вночі взимку не вбиває новачка
 	var past: float = COMFORT_MIN_C - frost_ref_felt_c(s)
 	return Pacing.DAY_S / (COMFORT_GAIN_PER_C_DAY * past * Pacing.seconds("frostbite_onset"))
 
@@ -102,8 +104,10 @@ static func catch_up(s, saved_at: int, now: int) -> Dictionary:
 	if not s.use_realtime or saved_at <= 0 or now <= saved_at or (s.cal as Dictionary).is_empty():
 		return report
 	var tz: Dictionary = s.cal.tz
-	var days: int = int(Calendar.local(now, tz).epoch_day) - int(Calendar.local(saved_at, tz).epoch_day)
+	var end_day: int = int(Calendar.local(now, tz).epoch_day)
+	var days: int = end_day - int(Calendar.local(saved_at, tz).epoch_day)
 	s.time.day += maxi(0, days)
+	s.cal["epoch_day"] = end_day   # дні за цей проміжок пораховано тут — наступний sync() не додасть їх удруге
 	report.offline_ms = now - saved_at
 	report.applied_ms = mini(now - saved_at, CATCH_UP_LIMIT_MS)
 	report.days = maxi(0, days)
@@ -151,3 +155,16 @@ static func work_dday(s, dt: float) -> float:
 # ---------------- сон (OD-143: sleep_full = 1 год; REQ-0012-16) ----------------
 static func sleep_rate(s) -> float:
 	return 100.0 / Pacing.seconds("sleep_full") if s.use_realtime else 14.0
+
+
+# ---------------- безпечний старт (OD-150; REQ-0012-54) і пауза застосунку (OD-149; REQ-0012-38) ----------------
+const START_WARM_MS := 900000      # OD-150: 15 хв після першої посадки капсули — без наростання холоду
+const MICRO_PAUSE_MS := 5000       # OD-149: розрив кадрів ≥ 5 с (застосунок був згорнутий) — догін, а не величезний dt
+const MAX_FRAME_DT := 0.25         # OD-149: коротший розрив (дзвінок на 3 с) — dt кадру обрізається
+
+static func in_start_window(s) -> bool:
+	var cap: Dictionary = s.main_capsule
+	if cap.is_empty() or int(s.now_ms) <= 0:
+		return false
+	var landed: int = int(cap.get("landed_at", 0))
+	return landed > 0 and int(s.now_ms) - landed < START_WARM_MS

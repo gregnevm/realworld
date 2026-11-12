@@ -96,6 +96,14 @@ func _init() -> void:
 	_t_location_validate()
 	_t_location_providers_same_world()
 	_t_location_nearest_free()
+	# --- WAVE 0012-W8: хвіст К1 — картка повернення, версія темпу, клімат/режисер/матриця прапорів ---
+	_t_return_summary_line()
+	_t_pacing_version_in_save()
+	_t_diurnal_from_local_clock()
+	_t_director_ignores_daylight()
+	_t_flag_matrix_daily_capsule()
+	_t_app_pause_goes_through_catch_up()
+	_t_start_warm_window()
 	chk.skip_banner()
 	finish()
 
@@ -1616,3 +1624,139 @@ func _t_location_nearest_free() -> void:
 			all[WorldGen.canon_coord(10.0 + dy * Location.FREE_STEP_DEG, 10.0 + dx * Location.FREE_STEP_DEG)] = true
 	var none: Dictionary = Location.nearest_free(10.0, 10.0, all)
 	ok(not bool(none.ok) and none.reason == Location.R_NO_FREE, "REQ-0012-76: усе в радіусі зайнято ⇒ явна помилка, пошук завершується")
+
+
+
+# =====================================================================================================
+# WAVE 0012-W8 — хвіст кроку 1
+# =====================================================================================================
+
+func _last_logs(ses: Variant, n: int) -> String:
+	var lines: Array = []
+	var msgs: Array = ses.sim.messages
+	for e in msgs.slice(maxi(0, msgs.size() - n)):
+		lines.append(String((e as Dictionary).get("text", "")))
+	return "\n".join(lines)
+
+
+# REQ-0012-37/72 (OD-148): після догону — один рядок-підсумок; «обрізано», коли офлайн довший за ліміт
+func _t_return_summary_line() -> void:
+	var path := "user://rt_w8_test.json"
+	var ses: Variant = SessionScript.new()
+	ses.use_realtime = true
+	ses.start(KYIV.x, KYIV.y, "Київ", T_NOV10_23_KYIV)
+	ses.sim.player.hunger = 100.0
+	ses.save_game(path)
+	var r: Variant = SessionScript.new()
+	r.restore_game(path, T_NOV10_23_KYIV + 30 * MS_H)
+	var tail: String = _last_logs(r, 3)
+	ok(tail.contains("Поки тебе не було: 30 год") and tail.contains("🍖 −") and tail.contains("✂ враховано 24 год") and tail.contains("нападів не було"),
+		"REQ-0012-37/72: картка повернення — тривалість, втрати, «обрізано до 24 год», без нападів")
+	var q: Variant = SessionScript.new()
+	q.restore_game(path, T_NOV10_23_KYIV + 30000)
+	ok(not _last_logs(q, 3).contains("Поки тебе не було"), "REQ-0012-37: повернення за 30 с — без картки (шуму нема)")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+# REQ-0012-73: ON-сейв несе schema + pacing_version; новіша версія темпу — відмова з причиною
+func _t_pacing_version_in_save() -> void:
+	var path := "user://rt_w8b_test.json"
+	var ses: Variant = SessionScript.new()
+	ses.use_realtime = true
+	ses.start(KYIV.x, KYIV.y, "Київ", T_JUL1_12UTC)
+	ses.save_game(path)
+	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))
+	ok(String(raw.get("schema", "")) == "realtime" and int(raw.get("pacing_version", 0)) == Pacing.VERSION, "REQ-0012-73: ON-сейв — schema=realtime, pacing_version=%d" % Pacing.VERSION)
+	raw["pacing_version"] = Pacing.VERSION + 1
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(JSON.stringify(raw, "", true, true))
+	f.close()
+	var r: Variant = SessionScript.new()
+	ok(not r.restore_game(path, T_JUL1_12UTC) and r.last_error == &"pacing_newer" and r.sim == null, "REQ-0012-73: сейв новішої таблиці темпу — відмова (pacing_newer), не мовчазне OFF")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+# REQ-0012-87: добовий хід температури за ON — від місцевого годинника: уночі холодніше, ніж удень, у той самий день
+func _t_diurnal_from_local_clock() -> void:
+	var s: Variant = _rt_sim(1782975600000)   # 02.07 10:00 Київ... далі 14:00 і 04:00
+	s.set_clock(1782990000000)   # 02.07 14:00 за Києвом
+	s.update(0.1)
+	var day_t: float = float(s.ambient_temp_c()) - float(s.temp_offset)
+	s.set_clock(1783040400000)   # 03.07 04:00 за Києвом
+	s.update(0.1)
+	var night_t: float = float(s.ambient_temp_c()) - float(s.temp_offset)
+	ok(night_t < day_t, "REQ-0012-87: 04:00 холодніше за 14:00 того ж сезону (%.1f < %.1f °C) — фаза доби з місцевого годинника" % [night_t, day_t])
+
+
+# REQ-0012-88: режисер і загрози не читають daylight/час доби
+func _t_director_ignores_daylight() -> void:
+	var bad: Array = []
+	for f in ["res://scripts/sim/director.gd", "res://scripts/sim/threats.gd"]:
+		var src: String = FileAccess.get_file_as_string(f)
+		for w in ["daylight", "light_at", "time.frac", "phase_name"]:
+			if src.contains(w):
+				bad.append("%s:%s" % [f.get_file(), w])
+	ok(bad.is_empty(), "REQ-0012-88: director/threats не читають daylight, light_at, frac (%s)" % str(bad))
+
+
+# REQ-0012-26/66: матриця use_realtime × use_main_capsule для щоденного заряду капсули (spec 0002)
+func _t_flag_matrix_daily_capsule() -> void:
+	# (ON, капсула OFF): заряд — на реальній опівночі регіону, не від лічильника тіків
+	var s: Variant = _rt_sim(1794347999000 - MS_H)
+	s.capsule.charges = 0
+	for i in 20:
+		s.update(1.0)
+	ok(int(s.capsule.charges) == 0, "REQ-0012-26: ON без капсули — тіки без опівночі заряду не дають")
+	s.set_clock(1794348000000)
+	s.update(0.1)
+	ok(int(s.capsule.charges) > 0, "REQ-0012-26/66: ON без капсули — опівніч за Києвом дає щоденний заряд (за now)")
+	# (ON, капсула ON): заряд не нараховується (REQ-0010-41)
+	var c: Variant = Sim.new()
+	c.use_realtime = true
+	c.use_inventory = true
+	c.use_catalog = true
+	c.use_main_capsule = true
+	c.set_clock(1794347999000 - MS_H)
+	c.new_game(WorldGen.generate_map(KYIV.x, KYIV.y, 56), false)
+	var ch0: int = int(c.capsule.charges)
+	c.set_clock(1794348000000 + MS_H)
+	c.update(0.1)
+	ok(int(c.capsule.charges) == ch0, "REQ-0012-66: ON + капсула — щоденний заряд не нараховується (REQ-0010-41)")
+
+
+
+# REQ-0012-38 (OD-149): згорнутий застосунок не тікає; розрив ≥ 5 с — догін (дні рахуються один раз), коротший — dt обрізано
+func _t_app_pause_goes_through_catch_up() -> void:
+	var ses: Variant = SessionScript.new()
+	ses.use_realtime = true
+	var t0: int = T_NOV10_23_KYIV + 59 * 60000   # 23:59 за Києвом
+	ses.start(KYIV.x, KYIV.y, "Київ", t0)
+	ok(is_equal_approx(ses.frame_dt(0.016, t0), 0.016), "REQ-0012-38: звичайний кадр — dt як є")
+	ok(is_equal_approx(ses.frame_dt(3.0, t0 + 3000), Realtime.MAX_FRAME_DT), "REQ-0012-38: мікро-пауза 3 с — dt обрізано до 0.25 с")
+	var d0: int = int(ses.sim.time.day)
+	var h0: float = float(ses.sim.player.hunger)
+	var t1: int = t0 + 2 * MS_H   # через опівніч
+	ok(ses.frame_dt(7200.0, t1) == 0.0, "REQ-0012-38: розрив 2 год — кадр сим не тікає (dt = 0), час іде через догін")
+	ses.push_clock(t1)
+	ses.sim.update(0.1)
+	ok(int(ses.sim.time.day) == d0 + 1, "REQ-0012-38: опівніч у розриві пораховано рівно один раз (догін + sync)")
+	ok(float(ses.sim.player.hunger) < h0 and int(ses.last_catch_up.attacks) == 0, "REQ-0012-38/84: потреби впали за догоном, нападів нема")
+	var off: Variant = SessionScript.new()
+	off.start(KYIV.x, KYIV.y, "Київ", t0)
+	ok(off.frame_dt(7200.0, t1) == 7200.0, "REQ-0012-3: за OFF dt кадру не змінюється")
+
+
+# REQ-0012-54 (OD-150): перші 15 хв після першої посадки капсули холод не накопичується
+func _t_start_warm_window() -> void:
+	var c: Variant = Sim.new()
+	c.use_realtime = true
+	c.use_inventory = true
+	c.use_catalog = true
+	c.use_main_capsule = true
+	c.set_clock(T_JAN15_12UTC)
+	c.new_game(WorldGen.generate_map(KYIV.x, KYIV.y, 56), false)
+	ok(Realtime.frost_gain_scale(c, HeroHealth.EXPOSURE_PACE) == 0.0, "REQ-0012-54: щойно після посадки взимку — холод не накопичується")
+	c.set_clock(T_JAN15_12UTC + Realtime.START_WARM_MS - 1)
+	ok(Realtime.in_start_window(c), "REQ-0012-54: на 14:59 вікно ще діє")
+	c.set_clock(T_JAN15_12UTC + Realtime.START_WARM_MS)
+	ok(not Realtime.in_start_window(c) and Realtime.frost_gain_scale(c, HeroHealth.EXPOSURE_PACE) > 0.0, "REQ-0012-54: з 15-ї хвилини холод діє як завжди")

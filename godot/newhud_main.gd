@@ -365,9 +365,11 @@ func _process(dt: float) -> void:
 			_shot_step(dt)   # `shot spawn`: the spawn screen itself is the subject
 		return
 	view.sim = session.sim            # travel/respawn swap the sim under the session — track it
-	session.push_clock(_clock.now_ms())   # годинник пристрою -> sim (монотонно); сам sim час не читає
-	session.tick_realm(_clock.now_ms())   # spec 0013: RealGPS присутність (власний тротлінг 1 с)
-	var sdt := dt * _time_scale()
+	var now_ms: int = _clock.now_ms()
+	var fdt: float = session.frame_dt(dt, now_ms)   # spec 0012 REQ-38: за ON розрив кадрів ≥ 5 с — догін, не величезний dt (ДО push_clock)
+	session.push_clock(now_ms)   # годинник пристрою -> sim (монотонно); сам sim час не читає
+	session.tick_realm(now_ms)   # spec 0013: RealGPS присутність (власний тротлінг 1 с)
+	var sdt := fdt * _time_scale()
 	if sdt > 0.0 and not session.sim.dead:
 		session.sim.update(sdt)
 		session.tick_research(sdt)    # research benches fund the tech pipeline each frame

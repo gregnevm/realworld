@@ -50,7 +50,8 @@ var use_realtime := false         # spec 0012: реальний час 1:1; ст
 var use_main_capsule := false     # spec 0010: Основна капсула; ставиться ДО start(), далі замкнений (dev-перемикач `-- capsule`)
 var hint_active: Dictionary = {}    # spec 0012 (ON): {id, since_ms} — видима підказка (≤ 1); не сейв, не хеш
 var hint_cooldowns: Dictionary = {} # spec 0012 (ON): id -> until_ms; sticky у сейві поза world_hash (REQ-0012-49/51)
-var last_catch_up: Dictionary = {}   # spec 0012: звіт останнього догону (для картки «поки тебе не було»); не сейв
+var last_catch_up: Dictionary = {}
+var _frame_now: int = 0             # spec 0012 REQ-38: годинник попереднього кадру (розрив ⇒ догін); не сейв   # spec 0012: звіт останнього догону (для картки «поки тебе не було»); не сейв
 var last_error: StringName = &""  # чому start()/restore_game()/travel_to() відмовили (&"" — усе гаразд); для UI/тестів
 var _goal_t := 0.0
 
@@ -359,8 +360,10 @@ func save_game(path: String = SAVE_PATH) -> bool:
 		"bench_announced": bench_announced,
 		"meta": {"place": String(sim.map.get("place_name", "")), "day": int(sim.time.day), "dead": bool(sim.dead)},
 	}
-	if sim.use_realtime:   # spec 0012 REQ-49: cooldown-и підказок — sticky, у сейві (поза world_hash)
+	if sim.use_realtime:   # spec 0012 REQ-49: cooldown-и підказок — sticky, у сейві (поза world_hash); REQ-73: схема й версія темпу
 		data["hints"] = _hints_to_wire()
+		data["schema"] = "realtime"
+		data["pacing_version"] = Sim.Realtime.Pacing.VERSION
 	if sim.use_realtime:   # spec 0012 REQ-31: мітка збереження — годинник пристрою (UTC-мс, рядком); OFF-сейв без нового ключа (REQ-2)
 		data["saved_at"] = Clock.to_wire(int(sim.now_ms))
 	var f := FileAccess.open(path, FileAccess.WRITE)
@@ -397,6 +400,9 @@ func restore_game(path: String = SAVE_PATH, now_ms: int = 0) -> bool:
 	var d := _read_save(path)
 	if d.is_empty():
 		return false
+	if int(d.get("pacing_version", 0)) > Sim.Realtime.Pacing.VERSION:
+		last_error = &"pacing_newer"   # spec 0012 REQ-73: сейв новішої збірки (інша таблиця темпу) — відмова з причиною, не мовчазне OFF
+		return false
 	var restored: Variant = Sim.new()
 	if not Persistence.restore(restored, d.active):
 		last_error = restored.load_error
@@ -410,7 +416,8 @@ func restore_game(path: String = SAVE_PATH, now_ms: int = 0) -> bool:
 		for k in hc:
 			hint_cooldowns[String(k)] = Clock.from_wire(hc[k], 0)
 	last_catch_up = Sim.Realtime.catch_up(sim, Clock.from_wire(d.get("saved_at", "0"), 0), now_ms)
-	push_clock(maxi(now_ms, Clock.from_wire(d.get("saved_at", "0"), 0)))   # монотонно: відкат годинника нижче saved_at не відкочує світ (REQ-68)
+	push_clock(maxi(now_ms, Clock.from_wire(d.get("saved_at", "0"), 0)))
+	_log_catch_up(last_catch_up)   # монотонно: відкат годинника нижче saved_at не відкочує світ (REQ-68)
 	var h: Dictionary = d.get("home", {})
 	home = {"lat": float(h.get("lat", 0.0)), "lon": float(h.get("lon", 0.0)), "name": str(h.get("name", ""))}
 	has_home = bool(d.get("has_home", true))
@@ -440,6 +447,44 @@ func restore_game(path: String = SAVE_PATH, now_ms: int = 0) -> bool:
 	sim.research_unlocked = progression.research.unlocked   # the gates are live before the first tick
 	sim._log("▶ Продовжено: %s · день %d." % [str(sim.map.get("place_name", "")), int(sim.time.day)], "good")
 	return true
+
+# spec 0012 REQ-38 (OD-149): dt кадру для сима. OFF — як є. ON — розрив кадрів ≥ 5 с (застосунок у фоні) іде через догін
+# (без нападів, REQ-84) і цей кадр сим не тікає; коротший розрив — dt обрізається до 0.25 с. Викликати ДО push_clock.
+func frame_dt(dt: float, now_ms: int) -> float:
+	if sim == null or not sim.use_realtime:
+		return dt
+	var prev: int = _frame_now
+	_frame_now = maxi(_frame_now, now_ms)
+	if prev > 0 and now_ms - prev >= Sim.Realtime.MICRO_PAUSE_MS:
+		last_catch_up = Sim.Realtime.catch_up(sim, prev, now_ms)
+		_log_catch_up(last_catch_up)
+		return 0.0
+	return minf(dt, Sim.Realtime.MAX_FRAME_DT)
+
+# spec 0012 REQ-37/72 (OD-148): один рядок-підсумок у стрічці після догону ≥ 1 хв — що змінилось, без абзаців; «обрізано», якщо Δ > ліміту.
+func _log_catch_up(r: Dictionary) -> void:
+	var off_ms: int = int(r.get("offline_ms", 0))
+	if off_ms < 60000:
+		return
+	var parts: Array = ["⏳ Поки тебе не було: %s" % _dur_words(off_ms)]
+	if float(r.get("hunger_lost", 0.0)) >= 1.0:
+		parts.append("🍖 −%d" % int(round(float(r.hunger_lost))))
+	if float(r.get("rest_lost", 0.0)) >= 1.0:
+		parts.append("💤 −%d" % int(round(float(r.rest_lost))))
+	if int(r.get("days", 0)) > 0:
+		parts.append("🌅 +%d дн." % int(r.days))
+	if off_ms > int(r.get("applied_ms", 0)):
+		parts.append("✂ враховано %s" % _dur_words(int(r.applied_ms)))
+	parts.append("🛡 нападів не було")
+	sim._log(" · ".join(parts), "warn")
+
+static func _dur_words(ms: int) -> String:
+	var mins: int = ms / 60000
+	if mins < 60:
+		return "%d хв" % mins
+	if mins < 48 * 60:
+		return "%d год" % (mins / 60)
+	return "%d дн." % (mins / 1440)
 
 func stored_region_count() -> int:
 	return (store.get("regions", {}) as Dictionary).size()
