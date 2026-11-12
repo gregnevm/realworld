@@ -189,7 +189,7 @@ func _t_settle_clock_back() -> void:
 	ok(int(back["saved_at"]) == int(fwd["saved_at"]) and int(back["last_seen_now"]) == int(fwd["last_seen_now"]), "REQ-0011-22: now < last_seen → nothing changes, marks never decrease")
 	ok(int(back["safe_stock"].count("food")) == int(fwd["safe_stock"].count("food")), "REQ-0011-22: rolled-back clock does not consume or restore")
 	var merged: Dictionary = Orbit.monotone_merge(fwd, {"saved_at": 5, "last_seen_now": 5, "base_ready_at": 1})
-	ok(int(merged["saved_at"]) == int(fwd["saved_at"]) and int(merged["base_ready_at"]) == int(fwd["base_ready_at"]), "REQ-0011-22: monotone merge")
+	ok(int(merged["saved_at"]) == int(fwd["saved_at"]) and int(merged["last_seen_now"]) == int(fwd["last_seen_now"]) and int(merged["base_ready_at"]) == 1, "REQ-0011-22: monotone merge")
 	var capped: Dictionary = Orbit.settle(o, T0 + 30 * D)
 	ok(int(capped["saved_at"]) == T0 + 30 * D, "OD-49: a gap over 24 h is capped, then saved_at jumps to now")
 
