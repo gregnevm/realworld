@@ -87,6 +87,11 @@ func _init() -> void:
 	_t_sleep_full_one_hour()
 	_t_offline_needs_floor()
 	_t_hints_touch_first_at_on()
+	# --- WAVE 0012-W6: м'які підказки FTUE (OD-146) ---
+	_t_hints_pure_priority_cooldown()
+	_t_hints_session_lifecycle()
+	_t_hints_five_biomes()
+	_t_hints_saved_outside_hash()
 	chk.skip_banner()
 	finish()
 
@@ -1457,3 +1462,91 @@ func _t_hints_touch_first_at_on() -> void:
 	panel.bind({"goals": {"available": true, "done": 9, "total": 10, "current": {"id": "survive", "title": "x", "hint": survive, "pct": 0.1}}, "ui": {"realtime": true, "touch": false}})
 	ok(not panel._hint.text.contains("Space") and not panel._hint.text.contains("⏸"), "REQ-0012-30: панель цілей за ON на десктопі теж touch-first (%s)" % panel._hint.text)
 	panel.free()
+
+
+
+# =====================================================================================================
+# WAVE 0012-W6 — м'які підказки FTUE відкритого світу (spec 0012 §3.8, OD-146)
+# =====================================================================================================
+const Hints = preload("res://scripts/hints.gd")
+
+
+# REQ-0012-48: чиста функція; пріоритет ситуацій; cooldown вимикає лише свою підказку
+func _t_hints_pure_priority_cooldown() -> void:
+	ok(Hints.MAIN_CAPSULE_KIND == MainCapsule.KIND, "REQ-0012-48: дзеркало KIND капсули в hints.gd = MainCapsule.KIND")
+	var all := {"threat": true, "cold": true, "heat_near": false, "hunger": 10.0, "night_soon": true, "hotbar_empty": true, "built": false}
+	ok(Hints.evaluate(all, {}, 1000) == "threat" and Hints.evaluate(all, {}, 1000) == Hints.evaluate(all.duplicate(), {}, 1000), "REQ-0012-48: той самий вхід ⇒ той самий id; загроза — найвищий пріоритет")
+	ok(Hints.evaluate(all, {"threat": 5000}, 1000) == "cold", "REQ-0012-49: підказка на cooldown пропускається — наступна за пріоритетом")
+	ok(Hints.evaluate(all, {"threat": 5000}, 5000) == "threat", "REQ-0012-49: cooldown закінчився — підказка повертається")
+	var warm := all.duplicate()
+	warm.threat = false
+	warm.heat_near = true
+	ok(Hints.evaluate(warm, {}, 0) == "hunger", "REQ-0012-48: холод біля джерела тепла — не підказка (тепло вже є)")
+	ok(Hints.evaluate({"built": true}, {}, 0) == "", "REQ-0012-49: нема ситуації — нема підказки")
+	ok(Hints.def_of("cold").build == "campfire" and Hints.def_of("threat").build == "wall", "REQ-0012-50: слот, що дихає, — від ситуації (холод → багаття, машина → стіна), а не від номера кроку")
+	var bad: Array = []
+	for h in Hints.HINTS:
+		for w in ["Space", "WASD", "ЛКМ", "ПКМ", "клікни", "5-го дня", "Крок"]:
+			if String(h.hint).contains(w) or String(h.title).contains(w):
+				bad.append(String(h.id))
+	ok(bad.is_empty(), "REQ-0012-30/55: тексти підказок — touch-first, без «днів 1–5» і кроків (%s)" % str(bad))
+
+
+# REQ-0012-47/49/53: за ON у сесії — ≤ 1 підказка; гасне з ситуацією або за 60 с; cooldown 10 хв; чипа «Цілі» без підказки нема
+func _t_hints_session_lifecycle() -> void:
+	var ses: Variant = SessionScript.new()
+	ses.use_realtime = true
+	ses.use_inventory = true
+	ses.start(KYIV.x, KYIV.y, "Київ", T_JUL1_12UTC)
+	ses.tick_goals(1.0)
+	var v: Dictionary = ses.goals_view()
+	ok(bool(v.hints) and bool(v.available) and String(v.current.id) == "gather", "REQ-0012-46: перша підказка нового світу — «розвідай околиці», а не «розпали багаття» (%s)" % str(v.get("current", {}).get("id", "")))
+	ok(not str(v).contains("Крок") and int(v.total) == 0, "REQ-0012-47: жодного «крок N з M» у підказці")
+	ses.sim.set_clock(T_JUL1_12UTC + Hints.SHOW_MS)
+	ses.tick_goals(1.0)
+	ok(not bool(ses.goals_view().available), "REQ-0012-49: за 60 с підказка гасне сама; чипа «Цілі» без підказки нема (REQ-53)")
+	ok(int(ses.hint_cooldowns.get("gather", 0)) == T_JUL1_12UTC + Hints.SHOW_MS + Hints.COOLDOWN_MS, "REQ-0012-49: після згасання — cooldown 10 хв")
+	ses.sim.set_clock(T_JUL1_12UTC + Hints.SHOW_MS + 60000)
+	ses.sim.player.hunger = 20.0
+	ses.tick_goals(1.0)
+	ok(String(ses.goals_view().current.id) == "hunger", "REQ-0012-48: нова ситуація (голод) — нова підказка, поки «розвідай» на cooldown")
+	ses.sim.player.hunger = 90.0
+	ses.sim.set_clock(T_JUL1_12UTC + Hints.SHOW_MS + 61000)
+	ses.tick_goals(1.0)
+	ok(not bool(ses.goals_view().available) and ses.hint_cooldowns.has("hunger"), "REQ-0012-49: ситуація минула — підказка гасне одразу й іде на cooldown")
+	var h0: String = Persistence.world_hash(ses.sim)
+	ses.tick_goals(1.0)
+	ok(Persistence.world_hash(ses.sim) == h0, "REQ-0012-51: підказки лише спостерігають — world_hash не змінюється")
+
+
+# REQ-0012-46: у 5 біомах перший набір підказок непорожній і не прив'язаний до біому
+func _t_hints_five_biomes() -> void:
+	var spots: Array = [["сніг", 69.35, 88.20], ["ліс", 48.40, 24.50], ["пустеля", 23.40, 13.00], ["місто", 50.4501, 30.5234], ["узбережжя", 46.48, 30.73]]
+	for sp in spots:
+		var ses: Variant = SessionScript.new()
+		ses.use_realtime = true
+		ses.use_inventory = true
+		ses.start(float(sp[1]), float(sp[2]), String(sp[0]), T_JAN15_12UTC)
+		ses.tick_goals(1.0)
+		var v: Dictionary = ses.goals_view()
+		ok(bool(v.available) and String(v.current.id) != "fire", "REQ-0012-46: %s — перша підказка «%s»" % [String(sp[0]), String(v.get("current", {}).get("title", "—"))])
+
+
+# REQ-0012-49/51: cooldown-и — у сейві (поза world_hash), переживають «Продовжити»; за OFF ключа нема
+func _t_hints_saved_outside_hash() -> void:
+	var path := "user://rt_w6_test.json"
+	var ses: Variant = SessionScript.new()
+	ses.use_realtime = true
+	ses.start(KYIV.x, KYIV.y, "Київ", T_JUL1_12UTC)
+	ses.hint_cooldowns = {"cold": T_JUL1_12UTC + 123456}
+	ses.save_game(path)
+	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))
+	ok(raw.has("hints") and String(raw.hints.cold) == str(T_JUL1_12UTC + 123456), "REQ-0012-49: cooldown-и в сейві (UTC-мс рядком)")
+	var r: Variant = SessionScript.new()
+	r.restore_game(path, T_JUL1_12UTC)
+	ok(int(r.hint_cooldowns.get("cold", 0)) == T_JUL1_12UTC + 123456, "REQ-0012-51: cooldown-и переживають «Продовжити»")
+	var off: Variant = SessionScript.new()
+	off.start(KYIV.x, KYIV.y, "Київ", T_JUL1_12UTC)
+	off.save_game(path)
+	ok(not (JSON.parse_string(FileAccess.get_file_as_string(path)) as Dictionary).has("hints"), "REQ-0012-2: за OFF у сейві ключа hints нема")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))

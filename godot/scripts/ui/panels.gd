@@ -782,6 +782,7 @@ class GoalsPanel extends PanelBase.Base:
 		if not bool(g.get("available", false)):
 			visible = false
 			return
+		visible = true
 		_count.set_header("Цілі", "%d/%d" % [int(g.get("done", 0)), int(g.get("total", 0))])
 		if bool(g.get("all_done", false)):
 			_title.text = "🏁 Базу закладено!"
@@ -802,6 +803,13 @@ class GoalsPanel extends PanelBase.Base:
 			if sents.size() > 2:
 				_hint.text = ". ".join(sents.slice(0, 2)) + "."
 			tooltip_text = ""   # T-Ніколая 2026-11-09 (far.png №1): першу ціль не ховаємо в тултіп — на телефоні його нема; решту цілей навчив перший
+		if bool(g.get("hints", false)):   # spec 0012 REQ-48/53: ефемерна підказка ситуації — без «крок N з M», текст видно одразу
+			_hint.visible = true
+			tooltip_text = ""
+			_title.tooltip_text = ""
+			_bar.visible = false
+			_next.visible = false
+			return
 		var nxt := String(g.get("next", ""))
 		# the chip shows THIS goal's own progress; the chain step lives in the tooltip — «5/10» beside
 		# «Розпали багаття» read as «5 of 10 logs» in the first independent read (gamedev §5)
