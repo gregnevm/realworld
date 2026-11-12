@@ -445,9 +445,10 @@ func _t_ascend_pack() -> void:
 	ok(bool(near["ok"]) and int(near["moved"]["wood"]) >= 30, "REQ-0011-8: near the capsule the backpack stack goes to the safe stock")
 	ok(InvMod.count(s.sim, "wood") == 0 and int(s.orbit["safe_stock"].count("wood")) >= 30, "…and leaves the backpack (moved, not copied)")
 	InvMod.add(s.sim, "stone", 5)
+	var stone_before: int = InvMod.count(s.sim, "stone")
 	s.sim.player.px = float(cap[0]) + 30.0
 	ok(String(s.orbit_ascend_pack(["stone"])["reason"]) == "far", "REQ-0011-8: far from the capsule the ascend is refused")
-	ok(InvMod.count(s.sim, "stone") == 5, "…and nothing is lost")
+	ok(InvMod.count(s.sim, "stone") == stone_before, "…and nothing is lost")
 	s.sim.player.px = float(cap[0]) + 1.0
 	ok(String(s.orbit_ascend_pack(["iron_ore"])["reason"]) == "empty", "an id the backpack does not hold moves nothing")
 	s.sim.dead = true
