@@ -46,6 +46,7 @@ func _init() -> void:
 	_t_bag_ttl_capsule_only()
 	_t_respawn_anchor_default()
 	_t_tech_branch_and_sources()
+	_t_no_account_reset()
 	_t_reinforcement()
 	_t_record_shape_and_survival()
 	_t_genome_loot_and_synthesis()
@@ -564,6 +565,13 @@ func _t_tech_branch_and_sources() -> void:
 	r.restore_game(path, T0 + 20 * H)
 	ok(float(r.sim.player.hp) == hp and Persistence.world_hash(r.sim) == h0, "REQ-0011-65: the login catch-up leaves the hero's HP and the world hash untouched")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+# REQ-0010-89 (OD-162): in step 1 NO verb resets/deletes an account or regenerates a region — nothing for a seed fragment to break.
+func _t_no_account_reset() -> void:
+	var src: String = FileAccess.get_file_as_string("res://scripts/session.gd")
+	for bad in ["func reset_account", "func delete_account", "func regenerate_region", "func wipe_account"]:
+		ok(not (bad in src), "REQ-0010-89: Session has no `%s` in step 1" % bad.trim_prefix("func "))
 
 
 func _t_ascend_pack() -> void:
