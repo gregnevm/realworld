@@ -43,6 +43,7 @@ func _init() -> void:
 	_t_bag_ttl()
 	_t_ascend_pack()
 	_t_bag_kit_returns()
+	_t_bag_ttl_capsule_only()
 	_t_reinforcement()
 	_t_record_shape_and_survival()
 	_t_genome_loot_and_synthesis()
@@ -453,6 +454,39 @@ func _t_bag_kit_returns() -> void:
 	InvMod.pickup_bags(s.sim, finder)
 	ok(s.sim.bags.is_empty(), "REQ-0011-32: anyone walking over the bag picks it up (OD-91)")
 	ok((finder["items"] as Array) == ["axe"], "REQ-0011-32: the kit goes to whoever picked the bag up (not bound to the owner)")
+
+
+# REQ-0010-116/118 (OD-158): TTL 24 h under `use_main_capsule` WITHOUT the Orbit; the expiry hands the contents to the bag_expired seam exactly once.
+func _t_bag_ttl_capsule_only() -> void:
+	var InvMod: Variant = load("res://scripts/sim/inventory.gd")
+	var s: Variant = SessionScript.new()
+	s.use_inventory = true
+	s.use_catalog = true
+	s.use_main_capsule = true
+	s.autosave = false
+	s.start(50.45, 30.52, "Київ", T0)
+	if s.sim == null:
+		ok(false, "REQ-0010-116: precondition — a capsule world (%s)" % String(s.last_error))
+		return
+	ok(s.orbit == null and int(s.sim.bag_ttl_ms) == 86400000, "REQ-0010-116: capsule ON, Orbit OFF — the bag TTL is 24 h")
+	InvMod.drop_bag(s.sim)
+	if s.sim.bags.is_empty():
+		InvMod.add(s.sim, "wood", 3)
+		InvMod.drop_bag(s.sim)
+	var bag: Dictionary = s.sim.bags[0]
+	ok(int(bag["expires_at"]) == T0 + D, "REQ-0010-116: expires_at = death moment + 86 400 000 ms")
+	var calls: Array = []
+	InvMod.expired_sink = func(items: Array, pos: Vector2i) -> void: calls.append([items.size(), pos])
+	s.sim.set_clock(T0 + D)
+	InvMod.pickup_bags(s.sim, {"px": -50.0, "py": -50.0})
+	InvMod.pickup_bags(s.sim, {"px": -50.0, "py": -50.0})
+	InvMod.expired_sink = Callable()
+	ok(calls.size() == 1 and s.sim.bags.is_empty(), "REQ-0010-118: the expired bag reaches the bag_expired seam exactly once and is gone")
+	var off: Variant = SessionScript.new()
+	off.use_inventory = true
+	off.autosave = false
+	off.start(50.45, 30.52, "Київ", T0)
+	ok(int(off.sim.bag_ttl_ms) == 0, "REQ-0010-116: capsule OFF and Orbit OFF — no TTL, the bag is byte-for-byte as before")
 
 
 func _t_ascend_pack() -> void:

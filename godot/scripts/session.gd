@@ -213,7 +213,7 @@ func respawn(clone_id: String = "") -> void:
 func _sync_orbit_to_sim() -> void:
 	if sim == null:
 		return
-	sim.bag_ttl_ms = 86400000 if orbit != null else 0
+	sim.bag_ttl_ms = 86400000 if (orbit != null or bool(sim.use_main_capsule)) else 0   # OD-158 (Q-10(а)=A): TTL торби — і за капсулою без Орбіти (робочий режим К1)
 	sim.active_clone_id = String(Orbit.active_clone(orbit).get("id", "")) if orbit != null else ""
 
 # spec 0011: value data для екрана смерті/Орбіти (лише читання): сплячі клони + секунди до безкоштовного базового.
