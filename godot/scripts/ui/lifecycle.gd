@@ -9,6 +9,7 @@ extends RefCounted
 const Tokens = preload("res://scripts/ui/tokens.gd")
 const UITheme = preload("res://scripts/ui/theme.gd")
 const LatLon = preload("res://scripts/ui/latlon.gd")
+const Location = preload("res://scripts/location.gd")   # spec 0012 §3.7: провайдер GPS і валідація
 const WorldGen = preload("res://scripts/world_gen.gd")
 const WidgetBase = preload("res://scripts/ui/widget.gd")
 const Fmt = preload("res://scripts/ui/format.gd")
@@ -120,6 +121,7 @@ class SpawnScreen extends Control:
 	var _lon_edit: LineEdit
 	var _status: Label
 	var _more: VBoxContainer   # every secondary way in, folded under «Інше місце…»
+	var _device: Location.DeviceProvider = Location.DeviceProvider.new()   # GPS телефону: фікс кладе край пристрою (feed); у К1 — плагіна ще нема
 
 	func _ready() -> void:
 		# hud_root gotcha: під CanvasLayer Control НЕ успадковує розмір в'юпорта — FULL_RECT колапсує
@@ -304,7 +306,11 @@ class SpawnScreen extends Control:
 				_lon_edit.text = str(lon)
 				_start_from_coords()
 				return
-		_status.text = "GPS доступний у веб-збірці. Введи координати вручну і тисни «Висадка»."
+		var fix: Dictionary = Location.validate(_device.current())   # spec 0012 REQ-39/75: GPS телефону — через провайдер; без фіксу — явний стан
+		if bool(fix.ok):
+			_choose(float(fix.lat), float(fix.lon), "Моя локація")
+			return
+		_status.text = String(fix.msg)
 
 # --- death: the permadeath loop-closer ----------------------------------------------------------
 class DeathScreen extends Control:

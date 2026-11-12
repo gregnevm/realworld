@@ -92,6 +92,10 @@ func _init() -> void:
 	_t_hints_session_lifecycle()
 	_t_hints_five_biomes()
 	_t_hints_saved_outside_hash()
+	# --- WAVE 0012-W7: локація — провайдери, валідація, «вільне поруч» (OD-147) ---
+	_t_location_validate()
+	_t_location_providers_same_world()
+	_t_location_nearest_free()
 	chk.skip_banner()
 	finish()
 
@@ -1550,3 +1554,65 @@ func _t_hints_saved_outside_hash() -> void:
 	off.save_game(path)
 	ok(not (JSON.parse_string(FileAccess.get_file_as_string(path)) as Dictionary).has("hints"), "REQ-0012-2: за OFF у сейві ключа hints нема")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+
+# =====================================================================================================
+# WAVE 0012-W7 — локація (spec 0012 §3.7, OD-147)
+# =====================================================================================================
+const Location = preload("res://scripts/location.gd")
+
+
+# REQ-0012-75: кожен невалідний вхід — явний стан, регіон не створюється
+func _t_location_validate() -> void:
+	var cases: Array = [
+		[{"lat": NAN, "lon": 30.0}, Location.R_NAN], [{"lat": 50.0, "lon": INF}, Location.R_NAN], [{"lat": "50", "lon": 30.0}, Location.R_NAN],
+		[{"lat": 90.5, "lon": 0.5}, Location.R_RANGE], [{"lat": 10.0, "lon": -180.01}, Location.R_RANGE],
+		[{"lat": 0.0, "lon": 0.0}, Location.R_NULL_ISLAND], [{"denied": true}, Location.R_DENIED], [{"unavailable": true}, Location.R_UNAVAILABLE],
+		[{"lat": 50.0, "lon": 30.0, "age_ms": Location.MAX_FIX_AGE_MS + 1}, Location.R_STALE],
+		[{"lat": 50.0, "lon": 30.0, "accuracy_m": Location.MAX_ACCURACY_M + 1.0}, Location.R_INACCURATE],
+	]
+	for c in cases:
+		var v: Dictionary = Location.validate(c[0])
+		ok(not bool(v.ok) and v.reason == c[1] and String(v.msg) != "", "REQ-0012-75: %s ⇒ %s («%s»)" % [str(c[0]), String(c[1]), String(v.get("msg", ""))])
+	ok(bool(Location.validate({"lat": 90.0, "lon": -180.0}).ok) and bool(Location.validate({"lat": 0.0, "lon": 0.001}).ok), "REQ-0012-75: межі ±90/±180 і точка біля (0,0) — валідні")
+	for bad in [[NAN, 30.0], [0.0, 0.0], [95.0, 30.0]]:
+		var ses: Variant = SessionScript.new()
+		ok(not ses.start(float(bad[0]), float(bad[1]), "x", T_JUL1_12UTC) and ses.sim == null and ses.last_error != &"",
+			"REQ-0012-75: Session.start(%s) відмовляє (%s) і не створює регіон" % [str(bad), String(ses.last_error)])
+	ok(Location.fake_allowed(false, false) and Location.fake_allowed(true, true) and not Location.fake_allowed(true, false),
+		"REQ-0012-40: фейк-GPS — у ПК/dev-збірці, у мобільному релізі — ні")
+
+
+# REQ-0012-39/41: підміна провайдера не міняє код sim; однакові канонізовані координати ⇒ той самий світ
+func _t_location_providers_same_world() -> void:
+	var fake: Location.LocationProvider = Location.FakeProvider.new(KYIV.x, KYIV.y)
+	var dev := Location.DeviceProvider.new()
+	ok(not bool(Location.validate(dev.current()).ok) and Location.validate(dev.current()).reason == Location.R_UNAVAILABLE, "REQ-0012-39: GPS телефону без фіксу — явне «недоступно», не тихий фолбек")
+	dev.feed({"lat": KYIV.x + 0.00001, "lon": KYIV.y - 0.00001, "age_ms": 1000, "accuracy_m": 12.0})   # той самий canon_coord (4 знаки)
+	var a: Dictionary = Location.validate(fake.current())
+	var b: Dictionary = Location.validate(dev.current())
+	var sa: Variant = _rt_sim(T_JUL1_12UTC, Vector2(float(a.lat), float(a.lon)))
+	var sb: Variant = _rt_sim(T_JUL1_12UTC, Vector2(float(b.lat), float(b.lon)))
+	ok(WorldGen.canon_coord(float(a.lat), float(a.lon)) == WorldGen.canon_coord(float(b.lat), float(b.lon)) and sa.region_seed() == sb.region_seed(),
+		"REQ-0012-41: фейк і GPS телефону з тими самими канонізованими координатами ⇒ той самий seed регіону")
+	ok(fake.kind() != dev.kind(), "REQ-0012-39: провайдери підмінювані (fake / device) без зміни sim")
+
+
+# REQ-0012-43/44/76: детерміновано; заглушка зайнятості — «вільно»; межі кулі; явна помилка за радіусом
+func _t_location_nearest_free() -> void:
+	var occ := Location.OccupancyProvider.new()
+	var r0: Dictionary = Location.nearest_free(KYIV.x, KYIV.y, occ.snapshot())
+	ok(bool(r0.ok) and int(r0.ring) == 0 and r0.lat == KYIV.x, "REQ-0012-44: без сервера все вільне — місце = саме місце")
+	occ.occupied[WorldGen.canon_coord(KYIV.x, KYIV.y)] = true
+	var r1: Dictionary = Location.nearest_free(KYIV.x, KYIV.y, occ.snapshot())
+	var r1b: Dictionary = Location.nearest_free(KYIV.x, KYIV.y, occ.snapshot())
+	ok(bool(r1.ok) and int(r1.ring) == 1 and r1 == r1b, "REQ-0012-43: зайнято ⇒ найближче вільне на кільці 1, однаково за однакових входів")
+	var pole: Dictionary = Location.nearest_free(89.995, 179.995, {WorldGen.canon_coord(89.995, 179.995): true})
+	ok(bool(pole.ok) and absf(float(pole.lat)) <= 90.0 and absf(float(pole.lon)) <= 180.0, "REQ-0012-76: біля полюса й ±180 — визначений результат у межах кулі")
+	var all := {}
+	for dy in range(-Location.FREE_MAX_RING, Location.FREE_MAX_RING + 1):
+		for dx in range(-Location.FREE_MAX_RING, Location.FREE_MAX_RING + 1):
+			all[WorldGen.canon_coord(10.0 + dy * Location.FREE_STEP_DEG, 10.0 + dx * Location.FREE_STEP_DEG)] = true
+	var none: Dictionary = Location.nearest_free(10.0, 10.0, all)
+	ok(not bool(none.ok) and none.reason == Location.R_NO_FREE, "REQ-0012-76: усе в радіусі зайнято ⇒ явна помилка, пошук завершується")

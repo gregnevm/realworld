@@ -20,7 +20,8 @@ const MAP_N := 56
 const STORE_PATH := "user://world.json"
 const SAVE_PATH := "user://save.json"   # the whole session (continue): store + live region + account
 const Clock = preload("res://scripts/clock.gd")
-const Hints = preload("res://scripts/hints.gd")   # spec 0012 §3.8: м'які підказки FTUE за ON (OD-146)   # spec 0012: saved_at у сейві — int64 рядком (to_wire/from_wire)
+const Hints = preload("res://scripts/hints.gd")   # spec 0012 §3.8: м'які підказки FTUE за ON (OD-146)
+const Location = preload("res://scripts/location.gd")   # spec 0012 §3.7: валідація місця, провайдери, «вільне поруч»
 const SAVE_VERSION := 1
 
 var sim: Variant = null   # Sim (scripts/sim.gd); Variant, бо тести підставляють легкі фейки
@@ -59,6 +60,10 @@ var _goal_t := 0.0
 func start(lat: float, lon: float, place_name: String, now_ms: int = 0) -> bool:
 	last_error = &""
 	realm_net = null
+	var loc: Dictionary = Location.validate({"lat": lat, "lon": lon})   # spec 0012 REQ-75: невалідне місце не створює регіон
+	if not bool(loc.ok):
+		last_error = StringName(loc.reason)
+		return false
 	var m := WorldGen.generate_map(lat, lon, MAP_N)
 	m["place_name"] = place_name
 	sim = Sim.new()
