@@ -39,6 +39,7 @@ func _init() -> void:
 	_t_session_save_restore()
 	_t_session_ascend()
 	_t_bag_ttl()
+	_t_ascend_pack()
 	_t_genome_loot_and_synthesis()
 	_t_tuning_and_base_rules()
 	_t_determinism_scenario()
@@ -424,6 +425,33 @@ func _t_death_screen() -> void:
 	ds.bind_orbit(rows, 120)
 	ok((box.get_child(2) as Button).disabled and "120" in (box.get_child(2) as Button).text, "REQ-0011-60: base clone shows the cooldown seconds and is disabled")
 	ds.queue_free()
+
+
+# REQ-0011-7/8: from the BACKPACK, only near the capsule; partial transfer; far/dead/no-orbit refused.
+func _t_ascend_pack() -> void:
+	var InvMod: Variant = load("res://scripts/sim/inventory.gd")
+	var s: Variant = _new_session(true)
+	s.use_main_capsule = true
+	s.use_catalog = true
+	s.start(50.45, 30.52, "Київ", T0)
+	if s.sim == null or (s.sim.main_capsule as Dictionary).is_empty():
+		ok(false, "REQ-0011-8: precondition — a capsule world (%s)" % String(s.last_error))
+		return
+	InvMod.add(s.sim, "wood", 30)
+	var cap: Array = s.sim.main_capsule.tile
+	s.sim.player.px = float(cap[0]) + 1.0
+	s.sim.player.py = float(cap[1]) + 0.5
+	var near: Dictionary = s.orbit_ascend_pack(["wood"])
+	ok(bool(near["ok"]) and int(near["moved"]["wood"]) >= 30, "REQ-0011-8: near the capsule the backpack stack goes to the safe stock")
+	ok(InvMod.count(s.sim, "wood") == 0 and int(s.orbit["safe_stock"].count("wood")) >= 30, "…and leaves the backpack (moved, not copied)")
+	InvMod.add(s.sim, "stone", 5)
+	s.sim.player.px = float(cap[0]) + 30.0
+	ok(String(s.orbit_ascend_pack(["stone"])["reason"]) == "far", "REQ-0011-8: far from the capsule the ascend is refused")
+	ok(InvMod.count(s.sim, "stone") == 5, "…and nothing is lost")
+	s.sim.player.px = float(cap[0]) + 1.0
+	ok(String(s.orbit_ascend_pack(["iron_ore"])["reason"]) == "empty", "an id the backpack does not hold moves nothing")
+	s.sim.dead = true
+	ok(String(s.orbit_ascend_pack(["stone"])["reason"]) == "dead", "a dead hero cannot ascend")
 
 
 func _t_source_hygiene() -> void:

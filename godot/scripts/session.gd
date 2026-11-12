@@ -275,6 +275,12 @@ func orbit_ascend() -> Dictionary:
 		return {"ok": false, "reason": &"no_orbit"}
 	return OrbitStub.send_to_safe_zone(sim, orbit["safe_stock"])
 
+# spec 0011 REQ-0011-8: з рюкзака (обрані id) → safe_stock, лише біля капсули. {ok, moved} | {ok:false, reason}.
+func orbit_ascend_pack(picks: Array) -> Dictionary:
+	if orbit == null or sim == null:
+		return {"ok": false, "reason": &"no_orbit"}
+	return OrbitStub.ascend_from_pack(sim, orbit["safe_stock"], picks)
+
 # ---------------- research pipeline (kernel/progression.gd driven from research benches) ----------------
 
 # Research-points per game-day produced by all standing research benches (data.gd `research_rate`).

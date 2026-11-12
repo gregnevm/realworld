@@ -17,6 +17,11 @@
 # Resources moved into the safe stock leave `s.stock`, so neither resolve_raid (it only touches `invested`) nor the death bag reaches them.
 extends RefCounted
 
+const Inventory = preload("res://scripts/sim/inventory.gd")
+
+# REQ-0011-8 (OD-153, число з дорученого власником): «біля якоря респавну» = не далі за 6 клітинок від капсули.
+const ASCEND_REACH := 6.0
+
 
 # The body a respawn brings: a fresh starter pawn standing on the map spawn (landing moves it next to the capsule).
 static func respawn_source(s) -> Dictionary:
@@ -67,3 +72,32 @@ static func call_reinforcement(_s: Variant, _safe_stock: Variant = null) -> Dict
 # REQ-0010-86: does the panel offer «Підкріплення»? Not on the stub (the window/payload are unknown) — the panel shows no unavailable action.
 static func reinforcement_offered(_s: Variant, _safe_stock: Variant = null) -> bool:
 	return false
+
+
+# REQ-0011-7/8: «піднятись на орбіту» — обрані стеки з РЮКЗАКА в safe_stock, лише коли герой біля якоря респавну (капсули). Єдиний
+# другий шлях входу в safe_stock (перший — send_to_safe_zone зі складу капсули). Частковий перенос (OD-58): скільки вмістилось.
+# {ok:true, moved:{res:n}} | {ok:false, reason: no_capsule|dead|no_orbit|far|empty}.
+static func ascend_from_pack(s, safe_stock: Variant, picks: Array) -> Dictionary:
+	if s.get("use_main_capsule") != true or (s.main_capsule as Dictionary).is_empty():
+		return {"ok": false, "reason": &"no_capsule"}
+	if s.dead:
+		return {"ok": false, "reason": &"dead"}
+	if safe_stock == null:
+		return {"ok": false, "reason": &"no_orbit"}
+	var t: Array = (s.main_capsule as Dictionary).tile
+	var d: float = Vector2(float(s.player.px), float(s.player.py)).distance_to(Vector2(float(t[0]) + 0.5, float(t[1]) + 0.5))
+	if d > ASCEND_REACH:
+		return {"ok": false, "reason": &"far"}
+	var ids: Array = picks.duplicate()
+	ids.sort()
+	var moved: Dictionary = {}
+	for id in ids:
+		var have: int = Inventory.count(s, String(id))
+		if have <= 0:
+			continue
+		var took: int = clampi(int(safe_stock.deposit(String(id), have)), 0, have)
+		if took > 0 and Inventory.take(s, String(id), took):
+			moved[String(id)] = took
+	if moved.is_empty():
+		return {"ok": false, "reason": &"empty"}
+	return {"ok": true, "moved": moved}
