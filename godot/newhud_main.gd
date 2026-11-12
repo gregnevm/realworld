@@ -173,11 +173,20 @@ func _ready() -> void:
 	spawn_screen.spawn_chosen.connect(_start_game)
 	spawn_screen.continue_chosen.connect(_continue_game)
 	life.add_child(spawn_screen)
+	if "orbit" in OS.get_cmdline_user_args() and not shot_mode:   # spec 0011 REQ-0011-5/66: Орбіта — перший екран; «Висадка» відкриває вибір місця
+		var intro := Lifecycle.OrbitIntro.new()
+		intro.theme = ui_theme
+		intro.rows = SessionScript.save_orbit_rows()
+		intro.landing_chosen.connect(func() -> void: intro.visible = false)
+		life.add_child(intro)
 	death_screen = Lifecycle.DeathScreen.new()
 	death_screen.theme = ui_theme
 	death_screen.visible = false
 	death_screen.respawn_chosen.connect(func() -> void:
 		router.dispatch(&"respawn", {}, session)
+		_autosave())
+	death_screen.clone_chosen.connect(func(cid: String) -> void:   # spec 0011: вибір клона на екрані Орбіти → verb respawn (R9: екран лише емітить)
+		router.dispatch(&"respawn", {"clone_id": cid}, session)
 		_autosave())
 	life.add_child(death_screen)
 
@@ -195,6 +204,7 @@ func _start_game(lat: float, lon: float, place_name: String) -> void:
 		session.use_catalog = true        # капсула вимагає відкритого складу (REQ-0010-59)
 		session.use_main_capsule = true
 	session.use_realtime = _realtime_enabled()   # spec 0012: реальний час 1:1 — УВІМК у збірках (OD-138/145); «Продовжити» бере прапор із сейву (REQ-62)
+	session.use_orbit = "orbit" in OS.get_cmdline_user_args()   # spec 0011: Орбіта лише за dev-перемикачем, поки нема екрана Орбіти (OD-151)
 	session.autosave = not shot_mode
 	if not session.start(lat, lon, place_name, _clock.now_ms()):
 		push_error("Старт світу відхилено: %s" % String(session.last_error))
@@ -410,6 +420,8 @@ func _process(dt: float) -> void:
 	death_screen.visible = session.sim.dead
 	if session.sim.dead:
 		death_screen.bind(hud_root.last_snap.get("death", {}))
+		if session.orbit != null:
+			death_screen.bind_orbit(session.orbit_rows(), session.orbit_base_wait_s(), (session.orbit.get("last_death", {}) as Dictionary))
 	_autosave_t += dt
 	if _autosave_t >= AUTOSAVE_EVERY or int(session.sim.time.day) != _saved_day:
 		_autosave()

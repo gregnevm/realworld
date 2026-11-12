@@ -17,6 +17,11 @@
 # Resources moved into the safe stock leave `s.stock`, so neither resolve_raid (it only touches `invested`) nor the death bag reaches them.
 extends RefCounted
 
+const Inventory = preload("res://scripts/sim/inventory.gd")
+
+# REQ-0011-8 (OD-153, число з дорученого власником): «біля якоря респавну» = не далі за 6 клітинок від капсули.
+const ASCEND_REACH := 6.0
+
 
 # The body a respawn brings: a fresh starter pawn standing on the map spawn (landing moves it next to the capsule).
 static func respawn_source(s) -> Dictionary:
@@ -59,11 +64,107 @@ static func send_to_safe_zone(s, safe_stock: Variant = null) -> Dictionary:
 	return {"ok": true, "moved": moved, "left": left}
 
 
-# REQ-0010-28 (stub): the reinforcement needs the Orbit (price source Q-9, payload OD-67) -> refused until 0011.
-static func call_reinforcement(_s: Variant, _safe_stock: Variant = null) -> Dictionary:
-	return {"ok": false, "reason": &"no_orbit"}
+# REQ-0010-28 / REQ-0011-72 (OD-154): reinforcement from the Orbit — the «resource set» variant of OD-67. Only inside the 24 h window after a
+# breach (immune_until > now), once per window (reinforcement_used), for a solo owner. PRICE = 10% (rounded up) of what is invested in the
+# CURRENT level, taken from the base stock (atomic: all or nothing). PAYLOAD = up to REINFORCE_PAYLOAD of each resource the safe stock holds,
+# delivered into the base stock. A container without `count/take` (a test double) offers nothing -> {ok:false, reason: orbit_empty}, no side effect.
+const REINFORCE_PAYLOAD := {"planks": 10, "scrap": 5, "stone": 10, "wood": 20}
+const REINFORCE_PRICE_PERMILLE := 100   # OD-102: 10 %
 
 
-# REQ-0010-86: does the panel offer «Підкріплення»? Not on the stub (the window/payload are unknown) — the panel shows no unavailable action.
-static func reinforcement_offered(_s: Variant, _safe_stock: Variant = null) -> bool:
-	return false
+static func _payload(safe_stock: Variant) -> Dictionary:
+	var out: Dictionary = {}
+	if safe_stock == null or not safe_stock.has_method("count") or not safe_stock.has_method("take"):
+		return out
+	for res in REINFORCE_PAYLOAD:
+		var have: int = mini(int(safe_stock.count(String(res))), int(REINFORCE_PAYLOAD[res]))
+		if have > 0:
+			out[String(res)] = have
+	return out
+
+
+@warning_ignore("integer_division")
+static func _price(s) -> Dictionary:
+	var c: Dictionary = s.main_capsule
+	var inv: Dictionary = c.get("invested", {})
+	var lvl: int = int(c.get("level", 0))
+	var row: Variant = inv.get(str(lvl), inv.get(lvl, {}))
+	var out: Dictionary = {}
+	if row is Dictionary:
+		for res in (row as Dictionary):
+			var n: int = int((row as Dictionary)[res])
+			if n > 0:
+				out[String(res)] = maxi(1, (n * REINFORCE_PRICE_PERMILLE + 999) / 1000)
+	return out
+
+
+static func _window_open(s) -> bool:
+	return s.get("use_main_capsule") == true and not (s.main_capsule as Dictionary).is_empty() \
+		and int(s.main_capsule.get("immune_until", 0)) > int(s.now_ms) and int(s.main_capsule.get("reinforcement_used", 0)) == 0
+
+
+@warning_ignore("integer_division")
+static func call_reinforcement(s: Variant, safe_stock: Variant = null) -> Dictionary:
+	if s.get("use_main_capsule") != true or (s.main_capsule as Dictionary).is_empty():
+		return {"ok": false, "reason": &"no_capsule"}
+	if s.dead:
+		return {"ok": false, "reason": &"dead"}
+	if safe_stock == null:
+		return {"ok": false, "reason": &"no_orbit"}
+	if not _window_open(s):
+		return {"ok": false, "reason": &"no_window"}
+	var payload: Dictionary = _payload(safe_stock)
+	if payload.is_empty():
+		return {"ok": false, "reason": &"orbit_empty"}
+	var price: Dictionary = _price(s)
+	for res in price:
+		if int(s.res_amount(String(res))) < int(price[res]):
+			return {"ok": false, "reason": &"no_funds"}
+	for res in price:
+		s._stock_take(String(res), int(price[res]))
+	var got: Dictionary = {}
+	var keys: Array = payload.keys()
+	keys.sort()
+	for res in keys:
+		var took: int = int(safe_stock.take(String(res), int(payload[res])))
+		if took > 0:
+			s._stock_add(String(res), took)
+			got[String(res)] = took
+	s.main_capsule.reinforcement_used = 1
+	s._log("🛰 Підкріплення з орбіти прибуло на склад капсули.", "good")
+	return {"ok": true, "paid": price, "delivered": got}
+
+
+# REQ-0010-86: does the panel offer «Підкріплення»? Only when the call could succeed on the Orbit side (window open, unused, the safe stock holds
+# a payload) — the panel shows no unavailable action. Funds are checked by the call itself (a refusal with a reason).
+static func reinforcement_offered(s: Variant, safe_stock: Variant = null) -> bool:
+	return safe_stock != null and not s.dead and _window_open(s) and not _payload(safe_stock).is_empty()
+
+
+# REQ-0011-7/8: «піднятись на орбіту» — обрані стеки з РЮКЗАКА в safe_stock, лише коли герой біля якоря респавну (капсули). Єдиний
+# другий шлях входу в safe_stock (перший — send_to_safe_zone зі складу капсули). Частковий перенос (OD-58): скільки вмістилось.
+# {ok:true, moved:{res:n}} | {ok:false, reason: no_capsule|dead|no_orbit|far|empty}.
+static func ascend_from_pack(s, safe_stock: Variant, picks: Array) -> Dictionary:
+	if s.get("use_main_capsule") != true or (s.main_capsule as Dictionary).is_empty():
+		return {"ok": false, "reason": &"no_capsule"}
+	if s.dead:
+		return {"ok": false, "reason": &"dead"}
+	if safe_stock == null:
+		return {"ok": false, "reason": &"no_orbit"}
+	var t: Array = (s.main_capsule as Dictionary).tile
+	var d: float = Vector2(float(s.player.px), float(s.player.py)).distance_to(Vector2(float(t[0]) + 0.5, float(t[1]) + 0.5))
+	if d > ASCEND_REACH:
+		return {"ok": false, "reason": &"far"}
+	var ids: Array = picks.duplicate()
+	ids.sort()
+	var moved: Dictionary = {}
+	for id in ids:
+		var have: int = Inventory.count(s, String(id))
+		if have <= 0:
+			continue
+		var took: int = clampi(int(safe_stock.deposit(String(id), have)), 0, have)
+		if took > 0 and Inventory.take(s, String(id), took):
+			moved[String(id)] = took
+	if moved.is_empty():
+		return {"ok": false, "reason": &"empty"}
+	return {"ok": true, "moved": moved}

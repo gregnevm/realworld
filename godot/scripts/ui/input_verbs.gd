@@ -94,4 +94,4 @@ static func install(ic) -> void:
 		var msg: String = capsule_result_text(MainCapsule.upgrade_protection(s.sim))
 		if msg != "": s.sim._flash(msg))
 	# permadeath loop-closer — the DeathScreen emits this; region-aware respawn lives in the session
-	ic.bind(&"respawn", func(s, _a): s.respawn())
+	ic.bind(&"respawn", func(s, a): s.respawn(String((a as Dictionary).get("clone_id", "")) if a is Dictionary else ""))

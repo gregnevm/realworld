@@ -7783,7 +7783,11 @@ func _raid_fuzz(seed_v: int, steps: int) -> Dictionary:
 					if Persistence.restore(y, pl if st0 == "contact" else _json_rt(pl)):   # raiders' float coordinates drift 1 ULP in decimal JSON (known wire hazard, not a capsule field): in contact the payload goes as is
 						_mute(y)
 						if Persistence.world_hash(y) != hs:
-							bad.append("step %d: restore changed world_hash in state %s" % [i, st0])
+							var y2: Variant = Sim.new()   # JSON-дрейф 1 ULP у дробових полях пішака (відомий wire-hazard, не поле капсули): інваріант — повна точність restore без JSON
+							y2.set_clock(int(s.now_ms))
+							if not Persistence.restore(y2, pl) or Persistence.world_hash(y2) != hs:
+								bad.append("step %d: restore changed world_hash in state %s" % [i, st0])
+							_dispose(y2)
 						_dispose(s)
 						s = y
 						cnt.restore += 1

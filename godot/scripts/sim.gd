@@ -65,6 +65,8 @@ var regions: Array = []
 var convoy_seq := 0
 var craft_timer := 0.0
 var dead := false
+var bag_ttl_ms: int = 0           # spec 0011 REQ-0011-33: TTL торби смерті (мс); 0 = OFF (торба вічна, як до спеки). Ставить Session за Орбіти; не сейв
+var active_clone_id: String = ""   # spec 0011: мітка походження торби (`owner_clone_id`); ставить Session; не сейв, не хеш
 # The last death's value-data epitaph {cause, day, born} for the death screen (view memory like
 # health_alerts — not save/hash state; overwritten by the next death).
 var last_death: Dictionary = {}
@@ -1291,6 +1293,7 @@ func _inv_drop_bag() -> void:
 	Inventory.drop_bag(self)
 func _inv_empty() -> Array:
 	return Inventory.empty_slots()
+func _stock_add(res: String, k: int) -> void: stock[res_key(res)] = int(stock.get(res_key(res), 0)) + k   # seam: spec 0011 reinforcement delivery
 # stock withdrawal THROUGH the seam (spec 0008 tripwire: no stock[...] outside sim.gd's seam)
 func _stock_take(res: String, k: int) -> void:
 	var key: String = res_key(res)

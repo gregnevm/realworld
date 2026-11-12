@@ -312,9 +312,62 @@ class SpawnScreen extends Control:
 			return
 		_status.text = String(fix.msg)
 
+# --- spec 0011 REQ-0011-5/41/66: Орбіта — ПЕРШИЙ екран за use_orbit; далі вибір місця (перша посадка) і посадка -----------------
+class OrbitIntro extends Control:
+	signal landing_chosen   # екран лише емітить (R9); перехід до вибору місця/«Продовжити» робить entry-сцена
+
+	# rows: [{id, state, genome}] — клони акаунта (порожньо = новий акаунт: стартовий ростер 1 активний + 1 сплячий, REQ-0011-63)
+	var rows: Array = []
+
+	func _ready() -> void:
+		set_anchors_preset(Control.PRESET_TOP_LEFT)
+		_fit_viewport()
+		get_viewport().size_changed.connect(_fit_viewport)
+		var bg := ColorRect.new()
+		bg.color = Tokens.BG
+		bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+		add_child(bg)
+		var center := CenterContainer.new()
+		center.set_anchors_preset(Control.PRESET_FULL_RECT)
+		add_child(center)
+		var vb := VBoxContainer.new()
+		vb.alignment = BoxContainer.ALIGNMENT_CENTER
+		vb.add_theme_constant_override("separation", 12)
+		center.add_child(vb)
+		var t := Label.new()
+		t.text = "ОРБІТА"
+		t.add_theme_font_override("font", UITheme.display_font())
+		t.add_theme_font_size_override("font_size", 48)
+		t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		vb.add_child(t)
+		var shown: Array = rows if not rows.is_empty() else [{"id": "c1", "state": "active", "genome": ""}, {"id": "c2", "state": "sleeping", "genome": ""}]
+		for r in shown:
+			var d: Dictionary = r
+			var l := Label.new()
+			var mark: String = "▶ " if String(d.get("state", "")) == "active" else ("⚠ " if String(d.get("state", "")) == "degrading" else "😴 ")
+			var gen: String = String(d.get("genome", ""))
+			l.text = "%s%s%s" % [mark, String(d.get("id", "")), (" · " + gen) if gen != "" else ""]
+			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			vb.add_child(l)
+		var b := Button.new()   # REQ-0011-41: одна головна кнопка, без тексту-пояснення
+		b.text = "Висадка"
+		b.custom_minimum_size = Vector2(260, 56)
+		b.theme_type_variation = UITheme.V_PRIMARY
+		b.pressed.connect(func() -> void: landing_chosen.emit())
+		Chrome.pop_button(b)
+		vb.add_child(b)
+
+	func _fit_viewport() -> void:
+		WidgetBase.Widget.fit_viewport(self)
+
+
 # --- death: the permadeath loop-closer ----------------------------------------------------------
 class DeathScreen extends Control:
 	signal respawn_chosen
+	signal clone_chosen(clone_id: String)   # spec 0011 REQ-0011-6: екран лише емітить вибір; зміну стану робить Session/verb
+
+	var _orbit_box: VBoxContainer
+	var _orbit_sig: String = ""
 
 	var _epitaph: Label
 	var _what: Label
@@ -338,6 +391,49 @@ class DeathScreen extends Control:
 		_epitaph.text = _lesson(cause, on)
 		if _btn != null:
 			_btn.text = CapsuleTexts.t("death_button") if on else "Новий виживальник"   # текст — у bind, не в _ready: екран живе між сесіями
+
+	# spec 0011 REQ-0011-13/41/42/51: за Орбіти респавн = вибір клона. rows: [{id, state, genome}] (мертвого немає), base_wait_s: секунди
+	# до безкоштовного базового клона (0 = доступний). Ідемпотентно: кнопки перебудовуються лише при зміні даних (bind() іде щокадру).
+	@warning_ignore("integer_division")
+	func bind_orbit(rows: Array, base_wait_s: int, last_death: Dictionary = {}) -> void:
+		if _orbit_box == null:
+			return
+		var sig: String = JSON.stringify([rows, base_wait_s, last_death])
+		_btn.visible = false
+		var lived_s: int = int(last_death.get("lived_real_sec", 0))   # REQ-0011-51: скільки клон прожив — у РЕАЛЬНИХ одиницях (OD-35)
+		var lived: String = ""
+		if lived_s >= 3600:
+			lived = "Прожито: %d год\n" % (lived_s / 3600)
+		elif lived_s >= 60:
+			lived = "Прожито: %d хв\n" % (lived_s / 60)
+		_what.text = ("Причина: %s\n" % cause if cause != "" else "") + lived + "Клона втрачено назавжди. Торба лишилась на місці загибелі — її можна забрати."
+		_epitaph.text = "Обери, хто прокинеться."
+		if sig == _orbit_sig:
+			return
+		_orbit_sig = sig
+		for c in _orbit_box.get_children():
+			_orbit_box.remove_child(c)   # одразу, а не лише queue_free: нові кнопки не мають стати після старих
+			c.queue_free()
+		_orbit_box.visible = true
+		for r in rows:
+			var d: Dictionary = r
+			var cb := Button.new()
+			var mark: String = "⚠ " if String(d.get("state", "")) == "degrading" else "😴 "
+			var gen: String = String(d.get("genome", ""))
+			cb.text = "%s%s%s" % [mark, String(d.get("id", "")), (" · " + gen) if gen != "" else ""]
+			cb.custom_minimum_size = Vector2(260, 48)
+			cb.theme_type_variation = UITheme.V_PRIMARY
+			var cid: String = String(d.get("id", ""))
+			cb.pressed.connect(func() -> void: clone_chosen.emit(cid))
+			Chrome.pop_button(cb)
+			_orbit_box.add_child(cb)
+		var bb := Button.new()
+		bb.text = "🧬 Безкоштовний клон" if base_wait_s <= 0 else "🧬 Безкоштовний клон · %d с" % base_wait_s
+		bb.disabled = base_wait_s > 0
+		bb.custom_minimum_size = Vector2(260, 48)
+		bb.pressed.connect(func() -> void: clone_chosen.emit(""))
+		Chrome.pop_button(bb)
+		_orbit_box.add_child(bb)
 
 	# What survives the death — the truth per world rules (spec 0009 bag vs the classic "all carried is lost").
 	static func _fate(vm: Dictionary) -> String:
@@ -426,6 +522,10 @@ class DeathScreen extends Control:
 		b.pressed.connect(func() -> void: respawn_chosen.emit())
 		Chrome.pop_button(b)
 		vb.add_child(b)
+		_orbit_box = VBoxContainer.new()   # spec 0011: Орбіта — вибір клона замість «Новий виживальник» (порожній, поки нема rows)
+		_orbit_box.add_theme_constant_override("separation", 8)
+		_orbit_box.visible = false
+		vb.add_child(_orbit_box)
 		# slow, heavy arrival: the screen fades up over 1.2 s, the title lands last-first (silence before the words)
 		modulate = Tokens.with_alpha(Tokens.WHITE, 0.0)
 		create_tween().tween_property(self, "modulate", Tokens.WHITE, 1.2).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)

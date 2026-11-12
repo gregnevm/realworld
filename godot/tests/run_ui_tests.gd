@@ -97,6 +97,7 @@ func _init() -> void:
 	_t_touch_frame()
 	await _t_capsule_ui()
 	_t_capsule_budget()
+	_t_orbit_hud_unchanged()
 	await _t_capsule_adv()
 	_t_capsule_adv_pure()
 	await _t_capsule_texts()
@@ -279,6 +280,23 @@ func _t_comprehension() -> void:
 	vit_p.bind(vit_vm)
 	ok(vit_p._warm.modulate == Tokens.WHITE, "REQ-0014-11: …and is back to normal when the pointer is gone")
 	vit_p.free()
+	# REQ-0014-5: the ring is a world-layer drawing (Node2D → it intercepts no touches) and its OUTER diameter stays within one cell
+	var wv_src: String = FileAccess.get_file_as_string("res://scripts/world_view.gd")
+	var rx: RegEx = RegEx.new()
+	rx.compile("draw_arc\\(c, TILE \\* \\(([0-9.]+) \\+ ([0-9.]+) \\* k\\)")
+	var rm: RegExMatch = rx.search(wv_src)
+	ok(rm != null and (float(rm.get_string(1)) + float(rm.get_string(2))) * 2.0 <= 1.0, "REQ-0014-5: the breathing ring's outer diameter is ≤ 1 cell")
+	ok(wv_src.contains("extends Node2D") and not wv_src.contains("mouse_filter"), "REQ-0014-5: the marker lives in the Node2D world layer — it intercepts no touches")
+	# REQ-0014-8: even with two live sources (a goal that wants a bed AND the cold) exactly ONE pointer comes out, and the cold wins
+	var gboth: Dictionary = GP.compute(gs, {"goals": {"current": {"build": "bed", "id": "bed"}}, "vitals": {"comfort": &"cold"}, "clock": {"day": 1}}, false)
+	ok(gboth.has("cell") and String(gboth.get("kind", "")) == "need" and String(gboth.get("build", "")) == "campfire", "REQ-0014-8: two sources (goal + cold) → ONE pointer, the cold's remedy")
+	# REQ-0014-9: a done goal (no current build) → no pointer; a blocked anchor cell → the next valid one (recomputed every frame, no timer)
+	ok(GP.compute(gs, {"goals": {"current": {}}, "vitals": {"comfort": &"ok"}, "clock": {"day": 1}}, false).is_empty(), "REQ-0014-9: the goal is done → the pointer is gone")
+	var blocked: int = int(gcell.y) * int(gs.n) + int(gcell.x)
+	gs.map.nodes[blocked] = {"kind": "tree", "amount": 5}
+	var g_re: Dictionary = GP.compute(gs, gvm, false)
+	ok(g_re.is_empty() or (g_re.cell as Vector2i) != gcell, "REQ-0014-9: a cell that became invalid is not pointed at any more (recomputed to the next valid one)")
+	gs.map.nodes.erase(blocked)
 	var h0: String = String(PersistenceMod.world_hash(gs))
 	GP.compute(gs, gvm, false)
 	ok(h0 == String(PersistenceMod.world_hash(gs)), "REQ-0014-15: computing the pointer leaves world_hash untouched")
@@ -1457,6 +1475,23 @@ func _holds_object(v: Variant) -> bool:
 	return false
 
 # REQ-0010-37/90 (P9): the permanent-element set is the same at OFF and ON and within the design-system budget.
+# spec 0011 REQ-0011-40: with the Orbit ON the world HUD gains NO new permanent element — the snapshot has exactly the keys of the Orbit-OFF one.
+func _t_orbit_hud_unchanged() -> void:
+	var off: Variant = _capsule_session(true)
+	var on: Variant = SessionScript.new()
+	on.autosave = false
+	on.use_inventory = true
+	on.use_catalog = true
+	on.use_main_capsule = true
+	on.use_orbit = true
+	ok(bool(on.start(50.4501, 30.5234, "Київ", CAPSULE_NOW_MS)) and on.orbit != null, "orbit hud: the Orbit-ON capsule session starts")
+	var k_off: Array = _cap_snap(off).keys()
+	var k_on: Array = _cap_snap(on).keys()
+	k_off.sort()
+	k_on.sort()
+	ok(k_off == k_on, "REQ-0011-40: the HUD snapshot has the same keys with the Orbit ON and OFF (no new permanent element)")
+
+
 func _t_capsule_budget() -> void:
 	var preg := PanelReg.PanelRegistry.new()
 	var oreg := OverlayReg.OverlayRegistry.new()

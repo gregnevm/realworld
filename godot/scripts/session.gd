@@ -20,6 +20,8 @@ const MAP_N := 56
 const STORE_PATH := "user://world.json"
 const SAVE_PATH := "user://save.json"   # the whole session (continue): store + live region + account
 const Clock = preload("res://scripts/clock.gd")
+const Orbit = preload("res://scripts/sim/orbit.gd")   # spec 0011: Орбіта — акаунт-рівень (клони, safe_stock)
+const OrbitStub = preload("res://scripts/sim/orbit_stub.gd")   # шви 0010↔0011: safe zone / respawn_source
 const Hints = preload("res://scripts/hints.gd")   # spec 0012 §3.8: м'які підказки FTUE за ON (OD-146)
 const Location = preload("res://scripts/location.gd")   # spec 0012 §3.7: валідація місця, провайдери, «вільне поруч»
 const SAVE_VERSION := 1
@@ -48,6 +50,8 @@ var use_inventory := false        # spec 0009: set by the entry scene BEFORE sta
 var use_catalog := false          # spec 0008: відкритий склад; ON-капсула його вимагає (REQ-0010-59). ДО start()
 var use_realtime := false         # spec 0012: реальний час 1:1; ставиться ДО start(), далі замкнений (dev-перемикач `-- realtime`)
 var use_main_capsule := false     # spec 0010: Основна капсула; ставиться ДО start(), далі замкнений (dev-перемикач `-- capsule`)
+var use_orbit := false             # spec 0011: Орбіта й клони; ставиться ДО start(), потребує use_inventory (REQ-0011-3); dev-перемикач `-- orbit`
+var orbit: Variant = null         # spec 0011: акаунт-запис Орбіти (Dictionary, sim/orbit.gd) за use_orbit; інакше null — не в сейві
 var hint_active: Dictionary = {}    # spec 0012 (ON): {id, since_ms} — видима підказка (≤ 1); не сейв, не хеш
 var hint_cooldowns: Dictionary = {} # spec 0012 (ON): id -> until_ms; sticky у сейві поза world_hash (REQ-0012-49/51)
 var last_catch_up: Dictionary = {}
@@ -61,6 +65,9 @@ var _goal_t := 0.0
 func start(lat: float, lon: float, place_name: String, now_ms: int = 0) -> bool:
 	last_error = &""
 	realm_net = null
+	if use_orbit and not use_inventory:   # spec 0011 REQ-0011-3: орбіта без особистого інвентаря заборонена — явна відмова ДО побудови світу
+		last_error = &"orbit_needs_inventory"
+		return false
 	var loc: Dictionary = Location.validate({"lat": lat, "lon": lon})   # spec 0012 REQ-75: невалідне місце не створює регіон
 	if not bool(loc.ok):
 		last_error = StringName(loc.reason)
@@ -79,6 +86,8 @@ func start(lat: float, lon: float, place_name: String, now_ms: int = 0) -> bool:
 		_clear_world()
 		return false
 	var on: bool = bool(sim.use_main_capsule)
+	orbit = Orbit.new_account(WorldGen.hash_seed(lat, lon), maxi(0, now_ms)) if use_orbit else null   # REQ-0011-4/63: 1 active + 1 sleeping
+	_sync_orbit_to_sim()
 	progression = Progression.new(Catalog.load_json())
 	store = Persistence.store_new()
 	social = Social.new_graph("Ти", WorldGen.hash_seed(lat, lon), lat, lon)
@@ -188,7 +197,9 @@ func travel_to(lat: float, lon: float, place_name: String) -> void:
 
 # Permadeath: a fresh pawn at the clan home. If you died away, fly home first (region identity,
 # NOT presence of any storage — you may have built one at a remote outpost).
-func respawn() -> void:
+func respawn(clone_id: String = "") -> void:
+	if orbit != null and not orbit_respawn(clone_id):   # spec 0011 REQ-0011-13: за ON респавн = вибір клона; без клона світ не оживає
+		return
 	if sim.get("use_main_capsule") == true:   # ON: місце задає шов respawn_anchor, посадку робить landing (REQ-0010-07/09/98)
 		sim.respawn_new_pawn(MainCapsule.respawn_anchor(self))
 		return
@@ -197,6 +208,78 @@ func respawn() -> void:
 	if has_home and cur_key != home_key:
 		travel_to(home.lat, home.lon, home.name)
 	sim.respawn_new_pawn()
+
+# Орбіта → sim: TTL торби (OD-59/90: 24 год) і id активного клона. OFF — нуль/порожньо (торби як до спеки).
+func _sync_orbit_to_sim() -> void:
+	if sim == null:
+		return
+	sim.bag_ttl_ms = 86400000 if (orbit != null or bool(sim.use_main_capsule)) else 0   # OD-158 (Q-10(а)=A): TTL торби — і за капсулою без Орбіти (робочий режим К1)
+	sim.active_clone_id = String(Orbit.active_clone(orbit).get("id", "")) if orbit != null else ""
+
+# spec 0011: value data для екрана смерті/Орбіти (лише читання): сплячі клони + секунди до безкоштовного базового.
+func orbit_rows() -> Array:
+	var out: Array = []
+	if orbit == null:
+		return out
+	for c in orbit["clones"]:
+		var d: Dictionary = c
+		if String(d["state"]) == Orbit.ACTIVE and sim != null and sim.dead:
+			continue   # мертвий активний клон не пропонується
+		if String(d["state"]) == Orbit.ACTIVE:
+			continue
+		out.append({"id": String(d["id"]), "state": String(d["state"]), "genome": String((Orbit.GENOME_NAMES.get(String(d["genome_type"]), "")))})
+	return out
+
+@warning_ignore("integer_division")
+func orbit_base_wait_s() -> int:
+	if orbit == null or sim == null:
+		return 0
+	return maxi(0, (int(orbit["base_ready_at"]) - int(sim.now_ms)) / 1000)
+
+# spec 0011 REQ-0011-12/13/14: смерть активного клона вилучає його (ідемпотентно за id) і пише last_death; тіло приходить від сплячого
+# клона (явний `clone_id` або перший за id), а коли ростер порожній — від безкоштовного базового (кулдаун 5 хв, REQ-0011-60).
+# false + last_error (&"orbit_cooldown" / &"orbit_no_clone") — світ лишається мертвим, UI показує Орбіту.
+func orbit_respawn(clone_id: String = "") -> bool:
+	if orbit == null:
+		return true
+	var now: int = int(sim.now_ms) if sim != null else 0
+	var act: Dictionary = Orbit.active_clone(orbit)
+	if not act.is_empty() and sim != null and sim.dead:
+		var cause: String = String((sim.last_death as Dictionary).get("cause", "unknown"))
+		Orbit.on_death(orbit, String(act["id"]), cause, now)
+	else:
+		Orbit.to_orbit(orbit)
+	var pick: String = clone_id
+	if pick == "":
+		for c in orbit["clones"]:
+			if String((c as Dictionary)["state"]) == Orbit.SLEEPING:
+				pick = String((c as Dictionary)["id"])
+				break
+	if pick == "":
+		var b: Dictionary = Orbit.claim_base_clone(orbit, now)
+		if not bool(b["ok"]):
+			last_error = &"orbit_cooldown" if String(b["reason"]) == "cooldown" else &"orbit_no_clone"
+			return false
+		pick = String(b["id"])
+	var r: Dictionary = Orbit.choose(orbit, pick)
+	if not bool(r["ok"]):
+		last_error = &"orbit_no_clone"
+		return false
+	_sync_orbit_to_sim()
+	return true
+
+# spec 0011 REQ-0011-7/8: «піднятись на орбіту» — склад капсули → safe_stock (частковий перенос, OD-58). Єдиний шлях поповнення
+# safe_stock із світу; потребує капсули (use_main_capsule) і Орбіти. Повертає {ok, moved, left} | {ok:false, reason}.
+func orbit_ascend() -> Dictionary:
+	if orbit == null or sim == null:
+		return {"ok": false, "reason": &"no_orbit"}
+	return OrbitStub.send_to_safe_zone(sim, orbit["safe_stock"])
+
+# spec 0011 REQ-0011-8: з рюкзака (обрані id) → safe_stock, лише біля капсули. {ok, moved} | {ok:false, reason}.
+func orbit_ascend_pack(picks: Array) -> Dictionary:
+	if orbit == null or sim == null:
+		return {"ok": false, "reason": &"no_orbit"}
+	return OrbitStub.ascend_from_pack(sim, orbit["safe_stock"], picks)
 
 # ---------------- research pipeline (kernel/progression.gd driven from research benches) ----------------
 
@@ -366,6 +449,10 @@ func save_game(path: String = SAVE_PATH) -> bool:
 		data["pacing_version"] = Sim.Realtime.Pacing.VERSION
 	if sim.use_realtime:   # spec 0012 REQ-31: мітка збереження — годинник пристрою (UTC-мс, рядком); OFF-сейв без нового ключа (REQ-2)
 		data["saved_at"] = Clock.to_wire(int(sim.now_ms))
+	if orbit != null:   # REQ-0011-57: ОДИН saved_at — Орбіта наздоганяє до моменту збереження, як і світ (догін при вході рахує лише проміжок після нього)
+		orbit = Orbit.settle(orbit, int(sim.now_ms))
+	if orbit != null:   # spec 0011 REQ-0011-36: акаунт-запис Орбіти (OFF-сейв без ключа — байт-у-байт, REQ-0011-2)
+		data["orbit"] = Orbit.to_dict(orbit)
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f == null:
 		return false
@@ -379,6 +466,18 @@ func save_game(path: String = SAVE_PATH) -> bool:
 static func save_meta(path: String = SAVE_PATH) -> Dictionary:
 	var d := _read_save(path)
 	return (d.get("meta", {}) as Dictionary) if not d.is_empty() else {}
+
+# spec 0011 REQ-0011-5: клони збереженого акаунта для першого екрана Орбіти ([] — нема збереження/Орбіти: новий акаунт).
+static func save_orbit_rows(path: String = SAVE_PATH) -> Array:
+	var out: Array = []
+	var d: Dictionary = _read_save(path)
+	var o: Variant = d.get("orbit", null)
+	if not (o is Dictionary):
+		return out
+	for c in ((o as Dictionary).get("clones", []) as Array):
+		var cd: Dictionary = c
+		out.append({"id": String(cd.get("id", "")), "state": String(cd.get("state", "")), "genome": String(Orbit.GENOME_NAMES.get(String(cd.get("genome_type", "")), ""))})
+	return out
 
 static func _read_save(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
@@ -444,6 +543,19 @@ func restore_game(path: String = SAVE_PATH, now_ms: int = 0) -> bool:
 		goals_done[str(id)] = true
 	auto_research = bool(d.get("auto_research", true))
 	bench_announced = bool(d.get("bench_announced", false))
+	var want_orbit: bool = use_orbit and bool(sim.use_inventory)   # прапор збірки; сейв без `orbit` + ON ⇒ міграція (REQ-0011-37)
+	orbit = null
+	use_orbit = false
+	var orbit_ok: bool = Orbit.valid(d.get("orbit", null))   # REQ-0011-36: пошкоджений запис = «нема запису» (безпечний дефолт/міграція), без падіння
+	if not orbit_ok and want_orbit:
+		orbit = Orbit.migrate_from_pawn(WorldGen.hash_seed(float(home.lat), float(home.lon)), maxi(0, now_ms), (sim.player.get("skills", {}) as Dictionary))
+		use_orbit = true
+	elif orbit_ok:   # spec 0011: Орбіта наздоганяє відсутність одним settle (REQ-0011-19/57), без нападів
+		orbit = Orbit.from_dict(d["orbit"])
+		use_orbit = true
+		if now_ms > 0:
+			orbit = Orbit.settle(orbit, now_ms)
+	_sync_orbit_to_sim()
 	sim.research_unlocked = progression.research.unlocked   # the gates are live before the first tick
 	sim._log("▶ Продовжено: %s · день %d." % [str(sim.map.get("place_name", "")), int(sim.time.day)], "good")
 	return true
