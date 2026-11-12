@@ -1293,6 +1293,10 @@ func _inv_drop_bag() -> void:
 	Inventory.drop_bag(self)
 func _inv_empty() -> Array:
 	return Inventory.empty_slots()
+# stock deposit THROUGH the seam (spec 0011 REQ-0011-72: the reinforcement delivers resources into the base stock)
+func _stock_add(res: String, k: int) -> void:
+	var key: String = res_key(res)
+	stock[key] = int(stock.get(key, 0)) + k
 # stock withdrawal THROUGH the seam (spec 0008 tripwire: no stock[...] outside sim.gd's seam)
 func _stock_take(res: String, k: int) -> void:
 	var key: String = res_key(res)

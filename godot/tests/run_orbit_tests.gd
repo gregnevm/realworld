@@ -40,6 +40,7 @@ func _init() -> void:
 	_t_session_ascend()
 	_t_bag_ttl()
 	_t_ascend_pack()
+	_t_reinforcement()
 	_t_genome_loot_and_synthesis()
 	_t_tuning_and_base_rules()
 	_t_determinism_scenario()
@@ -453,6 +454,42 @@ func _t_ascend_pack() -> void:
 	ok(String(s.orbit_ascend_pack(["iron_ore"])["reason"]) == "empty", "an id the backpack does not hold moves nothing")
 	s.sim.dead = true
 	ok(String(s.orbit_ascend_pack(["stone"])["reason"]) == "dead", "a dead hero cannot ascend")
+
+
+# REQ-0011-72 / REQ-0010-28 (OD-154): reinforcement from the Orbit — window, once, price 10 % of the current level's investment, payload from the safe stock.
+func _t_reinforcement() -> void:
+	var s: Variant = _new_session(true)
+	s.use_main_capsule = true
+	s.use_catalog = true
+	s.start(50.45, 30.52, "Київ", T0)
+	if s.sim == null or (s.sim.main_capsule as Dictionary).is_empty():
+		ok(false, "REQ-0011-72: precondition — a capsule world (%s)" % String(s.last_error))
+		return
+	var sim: Variant = s.sim
+	var Stub: Variant = load("res://scripts/sim/orbit_stub.gd")
+	var ss: Variant = s.orbit["safe_stock"]
+	ss.deposit("wood", 50)
+	sim.main_capsule["level"] = 1
+	sim.main_capsule["invested"] = {"1": {"wood": 45}}
+	sim._stock_add("wood", 100)
+	ok(String(Stub.call_reinforcement(sim, ss)["reason"]) == "no_window", "REQ-0011-72: outside the post-breach window the call is refused")
+	ok(not Stub.reinforcement_offered(sim, ss), "…and the panel does not offer it")
+	sim.main_capsule["immune_until"] = int(sim.now_ms) + 86400000
+	ok(Stub.reinforcement_offered(sim, ss), "inside the window, with a payload in the safe stock — offered")
+	var before: int = int(sim.res_amount("wood"))
+	var r: Dictionary = Stub.call_reinforcement(sim, ss)
+	ok(bool(r["ok"]), "REQ-0011-72: the call succeeds inside the window")
+	ok(int(r["paid"]["wood"]) == 5, "price = 10%% of the current level's investment, rounded up (45 -> 5), got %s" % str(r["paid"]))
+	ok(int(r["delivered"]["wood"]) == 20, "payload = up to 20 wood from the Orbit")
+	ok(int(sim.res_amount("wood")) == before - 5 + 20 and int(ss.count("wood")) == 30, "base stock: -price +payload; safe stock: -payload")
+	ok(int(sim.main_capsule.reinforcement_used) == 1 and String(Stub.call_reinforcement(sim, ss)["reason"]) == "no_window", "REQ-0010-113: once per window")
+	ok(not Stub.reinforcement_offered(sim, ss), "…and no longer offered")
+	sim.main_capsule["reinforcement_used"] = 0
+	sim.main_capsule["invested"] = {"1": {"wood": 99999}}
+	var h0: String = var_to_str(sim.stock)
+	ok(String(Stub.call_reinforcement(sim, ss)["reason"]) == "no_funds" and var_to_str(sim.stock) == h0 and int(sim.main_capsule.reinforcement_used) == 0, "an unaffordable price is refused atomically (no charge, no flag)")
+	var empty: Variant = load("res://scripts/sim/safe_stock.gd").new()
+	ok(String(Stub.call_reinforcement(sim, empty)["reason"]) == "orbit_empty", "an empty Orbit offers nothing")
 
 
 func _t_source_hygiene() -> void:
