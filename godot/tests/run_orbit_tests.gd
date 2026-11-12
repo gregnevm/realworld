@@ -45,6 +45,7 @@ func _init() -> void:
 	_t_bag_kit_returns()
 	_t_bag_ttl_capsule_only()
 	_t_respawn_anchor_default()
+	_t_tech_branch_and_sources()
 	_t_reinforcement()
 	_t_record_shape_and_survival()
 	_t_genome_loot_and_synthesis()
@@ -510,6 +511,59 @@ func _t_respawn_anchor_default() -> void:
 	var cap: Array = s.sim.main_capsule.tile
 	var d: float = Vector2(float(s.sim.player.px), float(s.sim.player.py)).distance_to(Vector2(float(cap[0]) + 0.5, float(cap[1]) + 0.5))
 	ok(d < 6.0, "REQ-0011-55: the clone lands next to the capsule's anchor (%.1f tiles)" % d)
+
+
+# REQ-0011-9/27/30/65/7: the Orbit's own upgrade branch; genome producers; the 4 genome sources; catch-up harms nobody; the safe-stock tripwire.
+func _t_tech_branch_and_sources() -> void:
+	var o: Dictionary = Orbit.new_account(4, T0)
+	ok(Orbit.slots(o) == 4 and Orbit.create_ms(o) == 43200000, "REQ-0011-9: base — 4 clone slots, ~12 h creation (OD-94)")
+	o["safe_stock"].deposit("food", 100)
+	var u1: Dictionary = Orbit.upgrade_tech(o, "clone_slots")
+	ok(bool(u1["ok"]) and Orbit.slots(o) == 5 and int(u1["paid"]) == 20, "REQ-0011-9: «clone_slots» L1 costs 20 bio and adds a slot")
+	ok(bool(Orbit.upgrade_tech(o, "clone_slots")["ok"]) and int(o["safe_stock"].count("food")) == 40, "…L2 costs 40 bio (taken from the safe stock)")
+	ok(String(Orbit.upgrade_tech(o, "clone_slots")["reason"]) == "no_bio", "…L3 (60 bio) is refused with 40 left")
+	ok(String(Orbit.upgrade_tech(o, "nope")["reason"]) == "bad_node", "an unknown node is refused")
+	var q: Dictionary = Orbit.new_account(4, T0)
+	q["safe_stock"].deposit("food", 100)
+	Orbit.upgrade_tech(q, "create_speed")
+	ok(Orbit.create_ms(q) == 38880000, "REQ-0011-9: «create_speed» L1 — 10 % faster creation")
+	var base: Dictionary = Orbit.new_account(4, T0)
+	base["safe_stock"].deposit("food", 100)
+	var cheap: Dictionary = Orbit.new_account(4, T0)
+	cheap["safe_stock"].deposit("food", 100)
+	(cheap["tech"] as Dictionary)["sleeper_upkeep"] = 3
+	var eaten_base: int = 100 - int(Orbit.settle(base, T0 + 20 * H)["safe_stock"].count("food"))
+	var eaten_cheap: int = 100 - int(Orbit.settle(cheap, T0 + 20 * H)["safe_stock"].count("food"))
+	ok(eaten_cheap < eaten_base, "REQ-0011-9: «sleeper_upkeep» lowers the sleeper's bio consumption (%d < %d)" % [eaten_cheap, eaten_base])
+	# REQ-0011-27: genome has exactly two producers in code — the synthesis (collect_synthesis) and, by the loot function's id, nobody writes it elsewhere
+	var offenders: Array = []
+	var dirs: Array = ["res://scripts"]
+	while not dirs.is_empty():
+		var d: String = String(dirs.pop_back())
+		for sub in DirAccess.get_directories_at(d):
+			dirs.append(d + "/" + String(sub))
+		for f in DirAccess.get_files_at(d):
+			if String(f).ends_with(".gd") and String(f) != "orbit.gd":
+				if FileAccess.get_file_as_string(d + "/" + String(f)).contains("add_genome("):
+					offenders.append(String(f))
+	ok(offenders.is_empty(), "REQ-0011-27: nothing outside orbit.gd writes the genome counter (%s)" % str(offenders))
+	# REQ-0011-30: the 4 genome sources of OD-34, two of them deferred
+	var deferred: int = 0
+	for k in Tuning.GENOME_SOURCES:
+		if String(Tuning.GENOME_SOURCES[k]) == "deferred":
+			deferred += 1
+	ok(Tuning.GENOME_SOURCES.size() == 4 and deferred == 2, "REQ-0011-30: the 4 OD-34 sources are listed, 2 are `deferred`")
+	# REQ-0011-65: a catch-up changes only the Orbit — the hero and the world are untouched
+	var s: Variant = _new_session(true)
+	s.start(50.45, 30.52, "Київ", T0)
+	var path: String = "user://orbit_catchup_test.json"
+	s.save_game(path)
+	var hp: float = float(s.sim.player.hp)
+	var h0: String = Persistence.world_hash(s.sim)
+	var r: Variant = SessionScript.new()
+	r.restore_game(path, T0 + 20 * H)
+	ok(float(r.sim.player.hp) == hp and Persistence.world_hash(r.sim) == h0, "REQ-0011-65: the login catch-up leaves the hero's HP and the world hash untouched")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
 func _t_ascend_pack() -> void:

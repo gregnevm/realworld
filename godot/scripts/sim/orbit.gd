@@ -44,6 +44,34 @@ static func migrate_from_pawn(account_seed: int, now: int, skills: Dictionary) -
 	return o
 
 
+# REQ-0011-9: the Orbit's upgrade branch. Effects: +1 clone slot / level; -10 % sleeper upkeep / level; -10 % creation time / level; start stats via tech_bonus.
+static func tech_level(o: Dictionary, node: String) -> int:
+	return int((o["tech"] as Dictionary).get(node, 0))
+
+
+static func slots(o: Dictionary) -> int:
+	return Tuning.value("roster_slots") + tech_level(o, "clone_slots")
+
+
+@warning_ignore("integer_division")
+static func create_ms(o: Dictionary) -> int:
+	return Tuning.value("create_ms") * (100 - 10 * tech_level(o, "create_speed")) / 100
+
+
+static func upgrade_tech(o: Dictionary, node: String) -> Dictionary:
+	if not Tuning.TECH_NODES.has(node):
+		return {"ok": false, "reason": &"bad_node"}
+	var lvl: int = tech_level(o, node)
+	if lvl >= Tuning.TECH_MAX_LEVEL:
+		return {"ok": false, "reason": &"max"}
+	var cost: int = Tuning.TECH_COST_BIO_PER_LEVEL * (lvl + 1)
+	if _bio_total(o["safe_stock"]) < cost:
+		return {"ok": false, "reason": &"no_bio"}
+	_take_bio(o["safe_stock"], cost)
+	(o["tech"] as Dictionary)[node] = lvl + 1
+	return {"ok": true, "level": lvl + 1, "paid": cost}
+
+
 # REQ-0011-16: start stats = f(account_seed, counter, tech, genome_type) in permille; no RNG. The free base clone is flat 1000.
 static func derive_stats(account_seed: int, counter: int, tech: Dictionary, genome_type: String, is_base: bool) -> Dictionary:
 	var out: Dictionary = {}
@@ -102,7 +130,7 @@ static func check_invariants(o: Dictionary) -> Array:
 		seen[String(d["id"])] = true
 	if actives > 1:
 		errs.append("many_active")
-	if (o["clones"] as Array).size() > Tuning.value("roster_slots") + 1:   # +1: the free base clone may exceed the slots only on an empty roster path
+	if (o["clones"] as Array).size() > slots(o) + 1:   # +1: the free base clone may exceed the slots only on an empty roster path
 		errs.append("roster_over")
 	return errs
 
@@ -133,7 +161,7 @@ static func claim_base_clone(o: Dictionary, now: int) -> Dictionary:
 	if now < int(o["base_ready_at"]):
 		return {"ok": false, "reason": &"cooldown", "ready_at": int(o["base_ready_at"])}
 	var cl: Array = o["clones"]
-	if cl.size() >= Tuning.value("roster_slots") and not cl.is_empty():
+	if cl.size() >= slots(o) and not cl.is_empty():
 		return {"ok": false, "reason": &"roster_full"}
 	var c: Dictionary = _make_clone(o, "", now, true)
 	cl.append(c)
@@ -158,7 +186,7 @@ static func begin_creation(o: Dictionary, genome_type: String, now: int) -> Dict
 	if not Tuning.GENOMES.has(genome_type):
 		return {"ok": false, "reason": &"bad_genome"}
 	var slots_used: int = (o["clones"] as Array).size() + (o["creating"] as Array).size()
-	if slots_used >= Tuning.value("roster_slots"):
+	if slots_used >= slots(o):
 		return {"ok": false, "reason": &"roster_full"}
 	var ss: Variant = o["safe_stock"]
 	if genome_count(o, genome_type) < Tuning.value("create_genome"):
@@ -167,7 +195,7 @@ static func begin_creation(o: Dictionary, genome_type: String, now: int) -> Dict
 		return {"ok": false, "reason": &"no_bio"}
 	add_genome(o, genome_type, -Tuning.value("create_genome"))
 	_take_bio(ss, Tuning.value("create_bio"))
-	(o["creating"] as Array).append({"started_at": now, "ready_at": now + Tuning.value("create_ms"), "genome_type": genome_type})
+	(o["creating"] as Array).append({"started_at": now, "ready_at": now + create_ms(o), "genome_type": genome_type})
 	return {"ok": true}
 
 
@@ -293,7 +321,7 @@ static func settle(o: Dictionary, now: int) -> Dictionary:
 		delta = cap
 	var n0: int = base / q   # REQ-0011-57/REQ-0012-80: ABSOLUTE grid (як у догоні світу, CHUNK_MS) — споживання на кожній межі кванта між saved_at і saved_at+Δ
 	var steps: int = (base + delta) / q - n0
-	var rate_q: int = Tuning.value("bio_per_hour") * Tuning.MICRO * q / 3600000
+	var rate_q: int = Tuning.value("bio_per_hour") * Tuning.MICRO * q / 3600000 * (100 - 10 * tech_level(r, "sleeper_upkeep")) / 100   # REQ-0011-9: апгрейд зменшує утримання
 	var ss: Variant = r["safe_stock"]
 	for k in steps:
 		var tq: int = (n0 + k) * q   # початок кванта, що закінчується на межі (n0+k+1)*q

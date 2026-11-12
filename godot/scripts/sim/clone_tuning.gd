@@ -55,3 +55,13 @@ const GENOMES := {
 	"rider": {"name": "Райдер", "axis": "ride"},
 }
 const AXES := ["gather", "build", "ride"]
+
+
+# REQ-0011-9: the Orbit's OWN upgrade branch (independent of the capsule's). Four K1 nodes, each up to MAX_LEVEL; cost of the next level =
+# COST_BIO_PER_LEVEL × level bio from the safe stock. `genome upgrade` is `deferred` (REQ-0011-58). Effects are ADDITIVE on top of the table above.
+const TECH_NODES := ["clone_slots", "sleeper_upkeep", "create_speed", "start_stats"]
+const TECH_MAX_LEVEL := 3
+const TECH_COST_BIO_PER_LEVEL := 20
+
+# REQ-0011-30: the genome sources of OD-34 — 2 live in step 1, 2 are `deferred` stubs (no fauna/NPC in Phase 0).
+const GENOME_SOURCES := {"ruin_loot": "active", "bio_synthesis": "active", "strong_bio_npc": "deferred", "trade": "deferred"}
