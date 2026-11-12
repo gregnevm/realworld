@@ -47,6 +47,7 @@ func _init() -> void:
 	_t_respawn_anchor_default()
 	_t_tech_branch_and_sources()
 	_t_no_account_reset()
+	_t_spawn_guard()
 	_t_reinforcement()
 	_t_record_shape_and_survival()
 	_t_genome_loot_and_synthesis()
@@ -572,6 +573,41 @@ func _t_no_account_reset() -> void:
 	var src: String = FileAccess.get_file_as_string("res://scripts/session.gd")
 	for bad in ["func reset_account", "func delete_account", "func regenerate_region", "func wipe_account"]:
 		ok(not (bad in src), "REQ-0010-89: Session has no `%s` in step 1" % bad.trim_prefix("func "))
+
+
+# REQ-0010-64 (OD-163): a respawn in the middle of a raid contact grants 30 real seconds without damage to the hero; outside a contact there is no guard.
+func _t_spawn_guard() -> void:
+	var HH: Variant = load("res://scripts/sim/hero_health.gd")
+	var s: Variant = SessionScript.new()
+	s.use_inventory = true
+	s.use_catalog = true
+	s.use_main_capsule = true
+	s.autosave = false
+	s.start(50.45, 30.52, "Київ", T0)
+	if s.sim == null:
+		ok(false, "REQ-0010-64: precondition — a capsule world (%s)" % String(s.last_error))
+		return
+	s.sim.capsule_raid["state"] = "contact"
+	s.sim.dead = true
+	s.sim.last_death = {"cause": "raid", "day": 1, "born": 1}
+	s.respawn()
+	ok(int(s.sim.player.get("spawn_guard_until", 0)) == T0 + 30000, "REQ-0010-64: a respawn during a raid contact sets a 30 s guard")
+	var hp0: float = float(s.sim.player.hp)
+	HH.damage(s.sim, 50.0, "рейдер")
+	ok(not s.sim.dead and float(s.sim.player.hp) == hp0, "REQ-0010-64: inside the guard the raider's blow does nothing — the hero lives")
+	s.sim.set_clock(T0 + 30001)
+	HH.damage(s.sim, 5.0, "рейдер")
+	ok(float(s.sim.player.hp) < hp0, "REQ-0010-64: after the guard the damage works again")
+	var calm: Variant = SessionScript.new()
+	calm.use_inventory = true
+	calm.use_catalog = true
+	calm.use_main_capsule = true
+	calm.autosave = false
+	calm.start(50.45, 30.52, "Київ", T0)
+	calm.sim.dead = true
+	calm.sim.last_death = {"cause": "cold", "day": 1, "born": 1}
+	calm.respawn()
+	ok(not calm.sim.player.has("spawn_guard_until"), "REQ-0010-64: no raid contact → no guard (the player dict is byte-for-byte as before)")
 
 
 func _t_ascend_pack() -> void:

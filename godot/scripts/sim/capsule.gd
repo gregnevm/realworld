@@ -349,6 +349,8 @@ static func respawn(s, anchor: Dictionary = {}) -> bool:
 	landing(s, key, anchor.get("pos", tile(s)))
 	HeroHealth.reset(s)   # тіло без шрамів
 	s.dead = false
+	if String((s.capsule_raid as Dictionary).get("state", "")) == ST_CONTACT and int(s.now_ms) > 0:   # REQ-0010-64 (OD-163): 30 с реального часу без шкоди героєві — не вмирає в той самий тік
+		s.player["spawn_guard_until"] = int(s.now_ms) + SPAWN_GUARD_MS
 	s._log(MSG_RESPAWN, "warn")
 	return true
 
@@ -723,6 +725,7 @@ const STREAM_SALT := 0xCA5D1E   # окремий seeded-потік рейдів:
 const ST_NONE := "none"
 const ST_PLANNED := "planned"       # заплановано: warn_at у майбутньому (або щойно армовано)
 const ST_WARNING := "warning"       # попередження оголошено; рейдерів ще нема
+const SPAWN_GUARD_MS := 30000      # OD-163 (Q-14): захист від спавнкілу — 30 с реального часу після респавну посеред контакту рейду
 const ST_CONTACT := "contact"       # рейдери на мапі, HP ядра тратиться
 const RAID_STATES := [ST_NONE, ST_PLANNED, ST_WARNING, ST_CONTACT]
 const EVENTS_KEEP := 24             # довжина журналу подій (view-пам'ять, не хеш)

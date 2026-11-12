@@ -117,6 +117,8 @@ static func update(s, dt: float) -> void:
 static func damage(s, amt: float, label: String = "удар") -> void:
 	if amt <= 0.0:
 		return
+	if int(s.player.get("spawn_guard_until", 0)) > int(s.now_ms):
+		return   # REQ-0010-64: захист від спавнкілу (виставляє MainCapsule.respawn посеред контакту рейду)
 	ensure(s)
 	var roll: float = s.threat_rng.randf()
 	var part: StringName = PART_WEIGHTS[PART_WEIGHTS.size() - 1][0]
