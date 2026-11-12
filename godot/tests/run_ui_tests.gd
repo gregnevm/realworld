@@ -97,6 +97,7 @@ func _init() -> void:
 	_t_touch_frame()
 	await _t_capsule_ui()
 	_t_capsule_budget()
+	_t_orbit_hud_unchanged()
 	await _t_capsule_adv()
 	_t_capsule_adv_pure()
 	await _t_capsule_texts()
@@ -1457,6 +1458,23 @@ func _holds_object(v: Variant) -> bool:
 	return false
 
 # REQ-0010-37/90 (P9): the permanent-element set is the same at OFF and ON and within the design-system budget.
+# spec 0011 REQ-0011-40: with the Orbit ON the world HUD gains NO new permanent element — the snapshot has exactly the keys of the Orbit-OFF one.
+func _t_orbit_hud_unchanged() -> void:
+	var off: Variant = _capsule_session(true)
+	var on: Variant = SessionScript.new()
+	on.autosave = false
+	on.use_inventory = true
+	on.use_catalog = true
+	on.use_main_capsule = true
+	on.use_orbit = true
+	ok(bool(on.start(50.4501, 30.5234, "Київ", CAPSULE_NOW_MS)) and on.orbit != null, "orbit hud: the Orbit-ON capsule session starts")
+	var k_off: Array = _cap_snap(off).keys()
+	var k_on: Array = _cap_snap(on).keys()
+	k_off.sort()
+	k_on.sort()
+	ok(k_off == k_on, "REQ-0011-40: the HUD snapshot has the same keys with the Orbit ON and OFF (no new permanent element)")
+
+
 func _t_capsule_budget() -> void:
 	var preg := PanelReg.PanelRegistry.new()
 	var oreg := OverlayReg.OverlayRegistry.new()
