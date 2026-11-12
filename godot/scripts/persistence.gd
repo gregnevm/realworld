@@ -204,9 +204,10 @@ static func serialize_runtime(sim) -> Dictionary:
 			"eat_cd": float(sim.player.get("eat_cd", 0.0)),
 			"atk_cd": float(sim.player.get("atk_cd", 0.0)),
 			"dep_cd": float(sim.player.get("dep_cd", 0.0)),
-			"spawn_guard_until": int(sim.player.get("spawn_guard_until", 0)),   # REQ-0010-64: щит після висадки — частина живої половини
 		},
 	}
+	if int(sim.player.get("spawn_guard_until", 0)) > 0:   # REQ-0010-64: щит після висадки; ключ лише коли є — OFF-хеші не зсуваються
+		rt["player_live"]["spawn_guard_until"] = int(sim.player.spawn_guard_until)
 	# spec 0010 W3a: runtime-автомат рейду на капсулу (стан, UTC-мс таймери, core_hp, черга) — лише при ON; OFF-runtime без нового ключа (REQ-0010-01)
 	if sim.get("use_main_capsule") == true:
 		rt["capsule_raid"] = MainCapsule.serialize_raid(sim)
