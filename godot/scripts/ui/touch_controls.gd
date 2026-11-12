@@ -7,6 +7,7 @@
 # Terraria/Minecraft mobile (5–6 slot hotbar + inventory button).
 extends RefCounted
 
+const Settings = preload("res://scripts/settings.gd")
 const Tokens = preload("res://scripts/ui/tokens.gd")
 const UITheme = preload("res://scripts/ui/theme.gd")
 const WidgetBase = preload("res://scripts/ui/widget.gd")
@@ -230,7 +231,7 @@ class TouchControls extends Control:
 				b.position = p
 				b.scale = Vector2(0.6, 0.6)
 				b.pivot_offset = bs * 0.5
-				b.create_tween().tween_property(b, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+				b.create_tween().tween_property(b, "scale", Vector2.ONE, 0.12 * Settings.motion_scale()).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 			else:
 				b.visible = false
 		_radial.visible = true

@@ -31,6 +31,8 @@ const AM = preload("res://scripts/ui/action_model.gd")
 const InventoryMod = preload("res://scripts/sim/inventory.gd")
 const BuildInfo = preload("res://scripts/build_info.gd")
 const Clock = preload("res://scripts/clock.gd")
+const SettingsScript = preload("res://scripts/settings.gd")
+const SettingsUI = preload("res://scripts/ui/settings_panel.gd")
 const TILE := ViewGeom.TILE
 
 var session: SessionScript
@@ -50,6 +52,13 @@ var winput: WorldInputScript.WorldInput
 var spawn_screen: Lifecycle.SpawnScreen
 var death_screen: Lifecycle.DeathScreen
 var panel_menu: Widgets.PanelMenu
+var settings: SettingsScript = SettingsScript.new()   # налаштування пристрою (user://settings.json); не в сейві світу
+var settings_panel: SettingsUI.SettingsPanel
+var _auto_scale := 1.0             # масштаб «Авто»: 1.0 на десктопі, від DPI на телефоні
+var _fps_label: Label
+var _last_hp := -1.0
+var _was_dead := false
+var _raid_active := false
 # Touch frame (phones): Android/iOS builds, or `-- touch [scale=1.7]` to drive it on a desktop. The
 # canvas grows by a DPI-derived content scale so text/targets keep a physical size, the HUD goes
 # compact, and the keyboard/right-button/wheel get on-screen stand-ins (top-bar tools + ☰ menu).
@@ -71,13 +80,14 @@ var _t := 0.0
 var _built := false
 var _shot := false
 var _shot_acted := false
-# Autosave (continue): every AUTOSAVE_EVERY real seconds, at each new game day and on quit. Cheap —
+# Autosave (continue): every settings.autosave_s real seconds (default 30), at each new game day and on quit. Cheap —
 # one JSON write of the session; the store already holds every visited region.
-const AUTOSAVE_EVERY := 30.0
 var _autosave_t := 0.0
 var _saved_day := -1
 
 func _ready() -> void:
+	if not ("newhud" in OS.get_cmdline_user_args() and "shot" in OS.get_cmdline_user_args()):
+		settings.load_file()           # кадри `shot` — на дефолтах (детерміновані); гра — на налаштуваннях гравця
 	UITheme.install_emoji_fallback()       # web has no system emoji font — icons were boxes without it
 	var ui_theme := UITheme.build()        # ONE Theme resource from Tokens (§2.4)
 	_setup_touch()
@@ -151,6 +161,7 @@ func _ready() -> void:
 	for p in preg.panels:
 		p.intent.connect(_route_intent)
 	_build_menu(ui_theme)
+	_build_settings(ui_theme)
 
 	# --- world input adapter (clicks/keys -> verbs; inert until session exists) ---
 	winput = WorldInputScript.WorldInput.new()
@@ -170,6 +181,7 @@ func _ready() -> void:
 	spawn_screen.theme = ui_theme
 	if not shot_mode:
 		spawn_screen.continue_meta = SessionScript.save_meta()
+	spawn_screen.settings_requested.connect(func() -> void: _set_settings(true))
 	spawn_screen.spawn_chosen.connect(_start_game)
 	spawn_screen.continue_chosen.connect(_continue_game)
 	life.add_child(spawn_screen)
@@ -264,7 +276,9 @@ func _notification(what: int) -> void:
 
 # Android «back»: peel one layer — the menu, then an armed tool, then the game (saved) itself.
 func _on_back() -> void:
-	if panel_menu != null and panel_menu.visible:
+	if settings_panel != null and settings_panel.visible:
+		_set_settings(false)
+	elif panel_menu != null and panel_menu.visible:
 		_set_menu(false)
 	elif view != null and String(view.selected_build) != "":
 		view.selected_build = ""
@@ -277,12 +291,15 @@ func _setup_touch() -> void:
 	var args := OS.get_cmdline_user_args()
 	touch_ui = OS.has_feature("mobile") or "touch" in args
 	if not touch_ui:
+		_auto_scale = 1.0
+		get_window().content_scale_factor = settings.effective_scale(_auto_scale)   # десктоп: «Авто» = 1.0
 		return
 	var sf: float = WorldInputScript.WorldInput.ui_scale(float(DisplayServer.screen_get_dpi()), Vector2(get_window().size))
 	for a in args:
 		if String(a).begins_with("scale="):
 			sf = clampf(float(String(a).substr(6)), 1.0, 3.0)
-	get_window().content_scale_factor = sf
+	_auto_scale = sf
+	get_window().content_scale_factor = settings.effective_scale(sf)
 
 # The ☰ menu: one toggle per registered panel/overlay that carries a menu_label (generic — the
 # registries' own metadata, R4 spirit), flipping the SAME registry state the hotkeys flip.
@@ -307,6 +324,85 @@ func _build_menu(ui_theme: Theme) -> void:
 			preg.toggle(id)
 		_refresh_menu())
 	panel_menu.closed.connect(func() -> void: _set_menu(false))
+	panel_menu.settings_requested.connect(func() -> void: _set_settings(true))
+
+# ---- ⚙ Налаштування: модаль над усім (власний CanvasLayer 30), доступна зі старту й з ☰ ----
+func _build_settings(ui_theme: Theme) -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 30
+	add_child(layer)
+	settings_panel = SettingsUI.SettingsPanel.new()
+	settings_panel.theme = ui_theme
+	settings_panel.is_mobile = OS.has_feature("mobile") or "touch" in OS.get_cmdline_user_args()
+	Widgets.WidgetBase.Widget.pin_center(settings_panel)
+	settings_panel.visible = false
+	layer.add_child(settings_panel)
+	settings_panel.changed.connect(_on_setting_changed)
+	settings_panel.action.connect(_on_settings_action)
+	settings_panel.closed.connect(func() -> void: _set_settings(false))
+	_fps_label = Label.new()
+	_fps_label.visible = false
+	_fps_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fps_label.add_theme_font_size_override("font_size", 13)
+	Widgets.WidgetBase.Widget.pin_top_right(_fps_label, 8.0, 4.0)
+	layer.add_child(_fps_label)
+	_apply_settings()
+
+func _set_settings(on: bool) -> void:
+	if on:
+		settings_panel.in_game = session != null
+		panel_menu.visible = false
+		_refresh_settings()
+	settings_panel.visible = on
+
+func _refresh_settings(note: String = "") -> void:
+	settings_panel.bind({"values": settings.values, "info": ("%s\n%s" % [note, _build_line()]) if note != "" else _build_line()})
+
+func _on_setting_changed(id: String, value: Variant) -> void:
+	if settings.set_value(id, value):
+		settings.save()
+		_apply_settings()
+	_refresh_settings()
+
+func _on_settings_action(id: String) -> void:
+	match id:
+		"save_now":
+			_autosave()
+			_refresh_settings("Збережено ✓")
+		"reset_settings":
+			settings.reset()
+			settings.save()
+			_apply_settings()
+			_refresh_settings("Налаштування скинуто")
+		"to_menu":
+			_autosave()
+			get_tree().reload_current_scene()   # свіжий стартовий екран; «Продовжити» бере щойно збережений світ
+		"new_game":
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(SessionScript.SAVE_PATH))
+			get_tree().reload_current_scene()
+
+# Застосовує те, що не читається «на льоту» (решта — reduce_motion/hints/goal_pointer/haptics/autosave — читаються за місцем).
+func _apply_settings() -> void:
+	get_window().content_scale_factor = settings.effective_scale(_auto_scale)
+	DisplayServer.screen_set_keep_on(bool(settings.get_value("keep_awake")))
+	if _fps_label != null:
+		_fps_label.visible = bool(settings.get_value("show_fps"))
+
+# Вібрація (лише телефон, лише якщо ввімкнено): шкода героєві, смерть, початок рейду.
+func _haptics_step() -> void:
+	var hp: float = float(session.sim.player.get("hp", 0.0))
+	var dead: bool = bool(session.sim.dead)
+	var raid: bool = String((session.sim.get("capsule_raid") as Dictionary).get("state", "")) == MainCapsule.ST_CONTACT if session.sim.get("use_main_capsule") == true else false
+	if bool(settings.get_value("haptics")) and (OS.has_feature("mobile") or "touch" in OS.get_cmdline_user_args()):
+		if dead and not _was_dead:
+			Input.vibrate_handheld(300)
+		elif _last_hp >= 0.0 and hp < _last_hp - 0.5 and not dead:
+			Input.vibrate_handheld(45)
+		elif raid and not _raid_active:
+			Input.vibrate_handheld(150)
+	_last_hp = hp
+	_was_dead = dead
+	_raid_active = raid
 
 func _set_menu(on: bool) -> void:
 	panel_menu.visible = on
@@ -368,6 +464,8 @@ func _route_intent(verb: StringName, args: Dictionary) -> void:
 	router.dispatch(verb, args, session)
 
 func _process(dt: float) -> void:
+	if _fps_label != null and _fps_label.visible:
+		_fps_label.text = "%d FPS" % int(Engine.get_frames_per_second())
 	if demo_mode:
 		_demo_step(dt)
 	if session == null:
@@ -408,8 +506,8 @@ func _process(dt: float) -> void:
 		if bool(pn.visible):
 			open_panels.append(String(pn.panel_id))
 	hud_root.view_ctx = {"open_panels": open_panels, "hover": view.hover, "hover_world": winput.hover_world(),
-		"in_world": winput.tooltip_wanted(touch_ui) and not session.sim.dead and not panel_menu.visible,
-		"selected_build": String(view.selected_build), "action_build": String(view.action_build), "goal_pointer": true, "speed": winput.speed,
+		"in_world": bool(settings.get_value("hints")) and winput.tooltip_wanted(touch_ui) and not session.sim.dead and not panel_menu.visible,
+		"selected_build": String(view.selected_build), "action_build": String(view.action_build), "goal_pointer": bool(settings.get_value("goal_pointer")), "speed": winput.speed,
 		"touch": touch_ui, "menu_open": panel_menu.visible,
 		"pointer": winput.pointer_screen if winput.pointer_is_touch else get_viewport().get_mouse_position(),
 		"hero_screen": view.get_global_transform_with_canvas() * Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE - TILE * 1.1)}
@@ -422,8 +520,9 @@ func _process(dt: float) -> void:
 		death_screen.bind(hud_root.last_snap.get("death", {}))
 		if session.orbit != null:
 			death_screen.bind_orbit(session.orbit_rows(), session.orbit_base_wait_s(), (session.orbit.get("last_death", {}) as Dictionary))
+	_haptics_step()
 	_autosave_t += dt
-	if _autosave_t >= AUTOSAVE_EVERY or int(session.sim.time.day) != _saved_day:
+	if _autosave_t >= float(settings.get_value("autosave_s")) or int(session.sim.time.day) != _saved_day:
 		_autosave()
 	if shot_mode:
 		_shot_step(dt)
@@ -542,6 +641,8 @@ func _shot_step(dt: float) -> void:
 		var hp := Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE - TILE * 1.3)   # `shot fx`: show the floating texts
 		view.fx_add("+3", hp, Color(1.0, 0.95, 0.8), "res_wood")
 		view.fx_add("-7", hp + Vector2(TILE * 2.5, TILE * 0.3), Color(1.0, 0.85, 0.4))
+	if "settings" in OS.get_cmdline_user_args() and _t > 1.0 and not settings_panel.visible:   # `shot settings`: вікно налаштувань над грою
+		_set_settings(true)
 	if tc != null and _t > 1.2 and not _shot_acted:
 		_shot_acted = true
 		if "radial" in OS.get_cmdline_user_args():   # `shot radial`: the hold menu on the current target

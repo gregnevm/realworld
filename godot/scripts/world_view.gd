@@ -3,6 +3,7 @@ extends Node2D
 
 const WorldGen = preload("res://scripts/world_gen.gd")
 const GameData = preload("res://scripts/data.gd")
+const Settings = preload("res://scripts/settings.gd")
 const InventoryMod = preload("res://scripts/sim/inventory.gd")
 const MainCapsule = preload("res://scripts/sim/capsule.gd")   # лише читання рівнів/імунітету для знаків на корпусі
 const ViewGeom = preload("res://scripts/ui/view_geom.gd")
@@ -310,7 +311,7 @@ func _draw() -> void:
 		var tc := Vector2((cell % n + 0.5) * TILE, (int(cell / n) + 0.5) * TILE)
 		var path: Array = sim.player.action.get("path", []) if sim.player.action.get("path") is Array else []
 		var prev := Vector2(sim.player.px * TILE, sim.player.py * TILE)
-		var march: float = fmod(_now() * 1.6, 1.0)
+		var march: float = fmod(_now() * 1.6, 1.0) * Settings.motion_scale()
 		var di := 0
 		for wp in path:
 			var wpos := Vector2((float(wp.x) + 0.5) * TILE, (float(wp.y) + 0.5) * TILE) if wp is Vector2i or wp is Vector2 else tc
@@ -321,7 +322,7 @@ func _draw() -> void:
 				draw_circle(q, TILE * 0.085, Color(1, 0.81, 0.36, 0.85 if di % 2 == 0 else 0.45))
 				di += 1
 			prev = wpos
-		var pulse: float = 0.5 + 0.5 * sin(_now() * 5.0)
+		var pulse: float = (0.5 + 0.5 * sin(_now() * 5.0)) * Settings.motion_scale()
 		draw_arc(tc, TILE * (0.30 + 0.06 * pulse), 0, TAU, 28, Color(1, 0.81, 0.36, 0.95), 2.0)
 		draw_arc(tc, TILE * (0.44 + 0.10 * pulse), 0, TAU, 28, Color(1, 0.81, 0.36, 0.35 * (1.0 - pulse)), 2.0)
 	if selected_build == REMOVE_TOOL and sim._in(hover.x, hover.y):
@@ -404,7 +405,7 @@ func _draw_node(node, x: int, y: int) -> void:
 		var sway := 0.0
 		if kind_s == "tree" or kind_s == "bush":   # wind: slow, per-cell phase so a forest ripples instead of marching
 			var ph: float = float(x * 7 + y * 13)
-			sway = sin(_now() * (1.3 if tall else 1.8) + ph * 0.6) * (0.022 if tall else 0.03)
+			sway = sin(_now() * (1.3 if tall else 1.8) + ph * 0.6) * (0.022 if tall else 0.03) * Settings.motion_scale()
 		var a: Variant = sim.player.action
 		if a is Dictionary and String(a.get("type", "")) == "gather" and int(a.get("cell", -1)) == y * sim.n + x and float(a.get("dur", 0.0)) > 0.0:
 			sway += sin(_now() * 22.0) * 0.05   # the tool bites: the node jolts in time with the swing
@@ -452,7 +453,7 @@ func _draw_building(b) -> void:
 			draw_contact_shadow(Vector2(c.x, p.y + TILE * 0.92), TILE * 0.40)
 			var bt := Color.WHITE
 			if LIGHT_KINDS.has(String(b.kind)):   # fire/lamp: layered-sine flicker (not a clean sine) + warm halo
-				var fk: float = 0.5 + 0.5 * sin(_now() * 9.0 + b.x * 3.1 + b.y * 1.7) * sin(_now() * 5.3 + b.y)
+				var fk: float = (0.5 + 0.5 * sin(_now() * 9.0 + b.x * 3.1 + b.y * 1.7) * sin(_now() * 5.3 + b.y)) * Settings.motion_scale() + 0.5 * (1.0 - Settings.motion_scale())
 				bt = Color(1.0 + 0.18 * fk, 1.0 + 0.08 * fk, 1.0)
 				draw_circle(c + Vector2(0, -TILE * 0.1), TILE * (0.62 + 0.10 * fk), Color(1.0, 0.62, 0.2, 0.10 + 0.07 * fk))
 			draw_sprite_fit(btex, Rect2(p.x + inset, p.y - TILE * 0.12, TILE - 2 * inset, TILE * 1.08), bt, false, true, 0.0, Vector2(pop, pop))
@@ -509,7 +510,7 @@ func _draw_wall_links(b, c: Vector2) -> void:
 func _draw_goal_pointer() -> void:
 	var cell: Vector2i = goal_pointer.cell
 	var c := Vector2((cell.x + 0.5) * TILE, (cell.y + 0.5) * TILE)
-	var k: float = 0.5 + 0.5 * sin(_now() * 4.0)
+	var k: float = (0.5 + 0.5 * sin(_now() * 4.0)) * Settings.motion_scale()
 	var amber := Color(1.0, 0.81, 0.36)
 	draw_arc(c, TILE * (0.34 + 0.05 * k), 0.0, TAU, 28, Color(amber.r, amber.g, amber.b, 0.95), 2.5)
 	draw_arc(c, TILE * 0.20, 0.0, TAU, 20, Color(amber.r, amber.g, amber.b, 0.55), 1.5)
@@ -669,7 +670,7 @@ func _draw_action_target() -> void:
 	var p := Vector2(float(action_target.x), float(action_target.y)) * TILE
 	if StringName(action_target.get("kind", &"")) == &"enemy" and action_target.ref is Dictionary:
 		p = Vector2(action_target.ref.px - 0.5, action_target.ref.py - 0.5) * TILE
-	var k: float = 0.5 + 0.5 * sin(_now() * 5.0)
+	var k: float = (0.5 + 0.5 * sin(_now() * 5.0)) * Settings.motion_scale()
 	var pad: float = TILE * (0.02 + 0.06 * k)
 	var r := Rect2(p - Vector2(pad, pad), Vector2(TILE + 2 * pad, TILE + 2 * pad))
 	if action_mode == &"build" and action_build != "":   # empty brackets did not say WHAT lands there (3rd read)

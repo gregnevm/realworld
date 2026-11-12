@@ -6,6 +6,7 @@
 # calls / router verbs (R9: no sim mutator is named here). Styling goes through Tokens/Theme only (R3).
 extends RefCounted
 
+const Settings = preload("res://scripts/settings.gd")
 const Tokens = preload("res://scripts/ui/tokens.gd")
 const UITheme = preload("res://scripts/ui/theme.gd")
 const LatLon = preload("res://scripts/ui/latlon.gd")
@@ -34,6 +35,8 @@ class Chrome extends RefCounted:
 		tr.set_anchors_preset(Control.PRESET_FULL_RECT)
 		tr.resized.connect(func() -> void: tr.pivot_offset = tr.size * 0.5)
 		host.add_child(tr)
+		if Settings.reduce_motion:
+			return tr   # «Менше руху»: фон нерухомий
 		tr.scale = Vector2(1.08, 1.08)
 		var tw := tr.create_tween().set_loops()
 		tw.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
@@ -92,8 +95,8 @@ class Chrome extends RefCounted:
 			var c: Control = it
 			c.modulate = Tokens.with_alpha(Tokens.WHITE, 0.0)
 			var tw := c.create_tween()
-			tw.tween_interval(0.07 * i)
-			tw.tween_property(c, "modulate", Tokens.WHITE, 0.45).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+			tw.tween_interval(0.07 * i * Settings.motion_scale())
+			tw.tween_property(c, "modulate", Tokens.WHITE, 0.45 * Settings.motion_scale()).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 			i += 1
 
 	# Hover/press pop shared by every menu button (the build bar uses the same feel).
@@ -107,12 +110,13 @@ class Chrome extends RefCounted:
 	static func _pop(btn: Button, to: float, dur: float) -> void:
 		if not btn.is_inside_tree():
 			return
-		btn.create_tween().tween_property(btn, "scale", Vector2(to, to), dur).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		btn.create_tween().tween_property(btn, "scale", Vector2(to, to), dur * Settings.motion_scale()).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 # --- spawn: the world-address picker -----------------------------------------------------------
 class SpawnScreen extends Control:
 	signal spawn_chosen(lat: float, lon: float, place_name: String)
 	signal continue_chosen
+	signal settings_requested
 
 	# {place, day, dead} of a save on disk (set by the entry scene BEFORE the screen enters the tree);
 	# non-empty -> a «▶ Продовжити» button heads the screen. Empty -> the screen is unchanged.
@@ -263,6 +267,15 @@ class SpawnScreen extends Control:
 		demo.pressed.connect(_choose.bind(50.5109, 30.7909, "Інвайт: Бровари"))
 		btns.add_child(demo)
 		_more.add_child(btns)
+
+		var gear := Button.new()
+		gear.text = "⚙ Налаштування"
+		gear.flat = true
+		gear.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		gear.custom_minimum_size = Vector2(0, 40)
+		gear.pressed.connect(func() -> void: settings_requested.emit())
+		box.add_child(gear)
+		arrivals.append(gear)
 
 		var hint := Label.new()
 		hint.text = "ЛКМ — іти й добувати · WASD · колесо — зум · 1–8 — хотбар · Tab — рюкзак · Space — пауза"
