@@ -204,6 +204,7 @@ static func serialize_runtime(sim) -> Dictionary:
 			"eat_cd": float(sim.player.get("eat_cd", 0.0)),
 			"atk_cd": float(sim.player.get("atk_cd", 0.0)),
 			"dep_cd": float(sim.player.get("dep_cd", 0.0)),
+			"spawn_guard_until": int(sim.player.get("spawn_guard_until", 0)),   # REQ-0010-64: щит після висадки — частина живої половини
 		},
 	}
 	# spec 0010 W3a: runtime-автомат рейду на капсулу (стан, UTC-мс таймери, core_hp, черга) — лише при ON; OFF-runtime без нового ключа (REQ-0010-01)
@@ -294,6 +295,8 @@ static func apply_runtime(sim, rec: Dictionary) -> void:
 	sim.player["action"] = _unpack_action(sim, live.get("action"))
 	for f in ["eat_cd", "atk_cd", "dep_cd"]:
 		sim.player[f] = float(live.get(f, 0.0))
+	if int(live.get("spawn_guard_until", 0)) > 0:
+		sim.player["spawn_guard_until"] = int(live.get("spawn_guard_until", 0))
 
 
 # A cursor written as a decimal string (see serialize_runtime); tolerate a raw int from an

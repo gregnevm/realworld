@@ -7783,7 +7783,18 @@ func _raid_fuzz(seed_v: int, steps: int) -> Dictionary:
 					if Persistence.restore(y, pl if st0 == "contact" else _json_rt(pl)):   # raiders' float coordinates drift 1 ULP in decimal JSON (known wire hazard, not a capsule field): in contact the payload goes as is
 						_mute(y)
 						if Persistence.world_hash(y) != hs:
-							bad.append("step %d: restore changed world_hash in state %s" % [i, st0])
+							var da: Dictionary = Persistence.serialize_runtime(s)
+							var db: Dictionary = Persistence.serialize_runtime(y)
+							var dk: Array = []
+							for k in da.keys():
+								if str(da[k]) != str(db.get(k)):
+									dk.append(k)
+							var ra: Dictionary = Persistence.serialize_region(s)
+							var rb: Dictionary = Persistence.serialize_region(y)
+							for k in ra.keys():
+								if str(ra[k]) != str(rb.get(k)):
+									dk.append("region." + str(k))
+							bad.append("step %d: restore changed world_hash in state %s keys=%s" % [i, st0, str(dk)])
 						_dispose(s)
 						s = y
 						cnt.restore += 1
