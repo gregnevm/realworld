@@ -44,6 +44,7 @@ func _init() -> void:
 	_t_ascend_pack()
 	_t_bag_kit_returns()
 	_t_bag_ttl_capsule_only()
+	_t_respawn_anchor_default()
 	_t_reinforcement()
 	_t_record_shape_and_survival()
 	_t_genome_loot_and_synthesis()
@@ -487,6 +488,28 @@ func _t_bag_ttl_capsule_only() -> void:
 	off.autosave = false
 	off.start(50.45, 30.52, "Київ", T0)
 	ok(int(off.sim.bag_ttl_ms) == 0, "REQ-0010-116: capsule OFF and Orbit OFF — no TTL, the bag is byte-for-byte as before")
+
+
+# REQ-0011-55: the landing goes to the CAPSULE's anchor (any region); without a home (`has_home=false`) there is an explicit default, not a crash.
+func _t_respawn_anchor_default() -> void:
+	var s: Variant = SessionScript.new()
+	s.use_inventory = true
+	s.use_catalog = true
+	s.use_main_capsule = true
+	s.use_orbit = true
+	s.autosave = false
+	s.start(50.45, 30.52, "Київ", T0)
+	if s.sim == null:
+		ok(false, "REQ-0011-55: precondition — a capsule + Orbit world (%s)" % String(s.last_error))
+		return
+	s.has_home = false
+	s.sim.dead = true
+	s.sim.last_death = {"cause": "cold", "day": 1, "born": 1}
+	s.respawn()
+	ok(not s.sim.dead, "REQ-0011-55: with has_home=false the respawn still lands (explicit default, no crash)")
+	var cap: Array = s.sim.main_capsule.tile
+	var d: float = Vector2(float(s.sim.player.px), float(s.sim.player.py)).distance_to(Vector2(float(cap[0]) + 0.5, float(cap[1]) + 0.5))
+	ok(d < 6.0, "REQ-0011-55: the clone lands next to the capsule's anchor (%.1f tiles)" % d)
 
 
 func _t_ascend_pack() -> void:
