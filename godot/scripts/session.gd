@@ -503,9 +503,13 @@ func restore_game(path: String = SAVE_PATH, now_ms: int = 0) -> bool:
 		goals_done[str(id)] = true
 	auto_research = bool(d.get("auto_research", true))
 	bench_announced = bool(d.get("bench_announced", false))
+	var want_orbit: bool = use_orbit and bool(sim.use_inventory)   # прапор збірки; сейв без `orbit` + ON ⇒ міграція (REQ-0011-37)
 	orbit = null
 	use_orbit = false
-	if d.get("orbit", null) is Dictionary:   # spec 0011: Орбіта наздоганяє відсутність одним settle (REQ-0011-19/57), без нападів
+	if not (d.get("orbit", null) is Dictionary) and want_orbit:
+		orbit = Orbit.migrate_from_pawn(WorldGen.hash_seed(float(home.lat), float(home.lon)), maxi(0, now_ms), (sim.player.get("skills", {}) as Dictionary))
+		use_orbit = true
+	elif d.get("orbit", null) is Dictionary:   # spec 0011: Орбіта наздоганяє відсутність одним settle (REQ-0011-19/57), без нападів
 		orbit = Orbit.from_dict(d["orbit"])
 		use_orbit = true
 		if now_ms > 0:

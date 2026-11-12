@@ -28,6 +28,21 @@ static func new_account(account_seed: int, now: int) -> Dictionary:
 	return o
 
 
+# REQ-0011-37: an old save has no Orbit → ONE active clone built from the existing pawn (its skills), not the free base clone and not
+# the 2-clone start of a new account. Idempotent by the caller: it runs only while the save has no `orbit` key.
+static func migrate_from_pawn(account_seed: int, now: int, skills: Dictionary) -> Dictionary:
+	var o: Dictionary = {
+		"clones": [], "creating": [], "base_ready_at": 0, "safe_stock": SafeStock.new(), "tech": {},
+		"account_seed": account_seed, "clone_counter": 0, "last_death": {}, "bio_pool": 0,
+		"saved_at": now, "last_seen_now": now,
+	}
+	var c: Dictionary = _make_clone(o, "", now, false)
+	c["state"] = ACTIVE
+	(c["pawn"] as Dictionary)["skills"] = skills.duplicate(true)
+	(o["clones"] as Array).append(c)
+	return o
+
+
 # REQ-0011-16: start stats = f(account_seed, counter, tech, genome_type) in permille; no RNG. The free base clone is flat 1000.
 static func derive_stats(account_seed: int, counter: int, tech: Dictionary, genome_type: String, is_base: bool) -> Dictionary:
 	var out: Dictionary = {}

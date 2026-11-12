@@ -276,9 +276,17 @@ func _t_session_save_restore() -> void:
 	off.save_game(path)
 	ok(FileAccess.get_file_as_string(path).find('"orbit"') < 0, "REQ-0011-2: OFF save has no orbit key")
 	var r2: Variant = SessionScript.new()
-	r2.use_orbit = true
 	r2.restore_game(path, T0)
-	ok(not r2.use_orbit and r2.orbit == null, "an OFF save restores OFF (the save wins over the default)")
+	ok(not r2.use_orbit and r2.orbit == null, "an OFF save restores OFF when the build flag is off too")
+	var r3: Variant = SessionScript.new()
+	r3.use_orbit = true
+	ok(r3.restore_game(path, T0) and r3.orbit != null, "REQ-0011-37: an old save + build flag ON migrates into an Orbit")
+	var cl: Array = r3.orbit["clones"]
+	ok(cl.size() == 1 and String(cl[0]["state"]) == "active" and int(r3.orbit["clone_counter"]) == 1, "REQ-0011-37: exactly ONE active clone (not the base clone, not the 2-clone start)")
+	r3.save_game(path)
+	var r4: Variant = SessionScript.new()
+	r4.restore_game(path, T0)
+	ok(r4.orbit != null and (r4.orbit["clones"] as Array).size() == 1 and Orbit.account_hash(r4.orbit) == Orbit.account_hash(r3.orbit), "REQ-0011-37: migration is idempotent (second load keeps the same Orbit)")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
