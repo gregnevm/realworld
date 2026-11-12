@@ -38,6 +38,7 @@ func _init() -> void:
 	_t_session_death_respawn()
 	_t_session_save_restore()
 	_t_session_ascend()
+	_t_single_saved_at()
 	_t_bag_ttl()
 	_t_ascend_pack()
 	_t_bag_kit_returns()
@@ -171,7 +172,9 @@ func _t_settle_idempotent() -> void:
 			var chain: Dictionary = Orbit.settle(Orbit.settle(o, T0 + t1), T0 + t2)
 			ok(Orbit.account_hash(direct) == Orbit.account_hash(chain), "REQ-0011-20: settle(settle(o,%d),%d) == settle(o,%d)" % [t1, t2, t2])
 	var odd: Dictionary = Orbit.settle(o, T0 + 90000)
-	ok(int(odd["saved_at"]) == T0 + Q, "the sub-quantum remainder stays in saved_at")
+	ok(int(odd["saved_at"]) == T0 + 90000, "REQ-0011-57: saved_at is the real moment (the quantum grid is absolute, no remainder to carry)")
+	var odd2: Dictionary = Orbit.settle(Orbit.settle(o, T0 + 90000), T0 + 400000)
+	ok(Orbit.account_hash(odd2) == Orbit.account_hash(Orbit.settle(o, T0 + 400000)), "REQ-0011-20/57: composition holds for ANY times on the absolute grid, not only aligned ones")
 	ok(not _has_float(Orbit.to_dict(Orbit.settle(o, T0 + 5 * H))), "REQ-0011-20: no float in the account record")
 
 
@@ -571,6 +574,26 @@ func _t_record_shape_and_survival() -> void:
 	ok(o2.orbit_base_wait_s() == 300, "REQ-0011-64: right after the claim, 300 s of cooldown")
 	o2.sim.set_clock(T0 + 100000)
 	ok(o2.orbit_base_wait_s() == 200, "REQ-0011-64: the countdown follows the absolute clock only")
+
+
+# REQ-0011-57 / REQ-0012-80: one saved_at — the Orbit is caught up to the SAVE moment, and a login settles only the gap after it.
+func _t_single_saved_at() -> void:
+	var s: Variant = _new_session(true)
+	s.start(50.45, 30.52, "Київ", T0)
+	s.orbit["safe_stock"].deposit("food", 50)
+	s.orbit["safe_stock"].deposit("food", 50)
+	s.orbit["safe_stock"].deposit("food", 50)
+	s.orbit["safe_stock"].deposit("food", 50)
+	var path: String = "user://orbit_saved_at_test.json"
+	s.sim.set_clock(T0 + 30 * H)
+	s.save_game(path)
+	var left_at_save: int = int(s.orbit["safe_stock"].count("food"))
+	ok(left_at_save <= 200 - 70 and left_at_save >= 200 - 74, "save settles up to the 24 h cap: ~72 rations eaten (left %d)" % left_at_save)
+	var r: Variant = SessionScript.new()
+	r.restore_game(path, T0 + 31 * H)
+	var left_after: int = int(r.orbit["safe_stock"].count("food"))
+	ok(left_at_save - left_after >= 2 and left_at_save - left_after <= 4, "login settles only the 1 h after the save (~3 rations), got %d" % (left_at_save - left_after))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
 func _t_source_hygiene() -> void:

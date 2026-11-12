@@ -449,6 +449,8 @@ func save_game(path: String = SAVE_PATH) -> bool:
 		data["pacing_version"] = Sim.Realtime.Pacing.VERSION
 	if sim.use_realtime:   # spec 0012 REQ-31: мітка збереження — годинник пристрою (UTC-мс, рядком); OFF-сейв без нового ключа (REQ-2)
 		data["saved_at"] = Clock.to_wire(int(sim.now_ms))
+	if orbit != null:   # REQ-0011-57: ОДИН saved_at — Орбіта наздоганяє до моменту збереження, як і світ (догін при вході рахує лише проміжок після нього)
+		orbit = Orbit.settle(orbit, int(sim.now_ms))
 	if orbit != null:   # spec 0011 REQ-0011-36: акаунт-запис Орбіти (OFF-сейв без ключа — байт-у-байт, REQ-0011-2)
 		data["orbit"] = Orbit.to_dict(orbit)
 	var f := FileAccess.open(path, FileAccess.WRITE)

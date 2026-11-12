@@ -291,11 +291,12 @@ static func settle(o: Dictionary, now: int) -> Dictionary:
 	var capped: bool = delta > cap
 	if capped:
 		delta = cap
-	var steps: int = delta / q
+	var n0: int = base / q   # REQ-0011-57/REQ-0012-80: ABSOLUTE grid (як у догоні світу, CHUNK_MS) — споживання на кожній межі кванта між saved_at і saved_at+Δ
+	var steps: int = (base + delta) / q - n0
 	var rate_q: int = Tuning.value("bio_per_hour") * Tuning.MICRO * q / 3600000
 	var ss: Variant = r["safe_stock"]
 	for k in steps:
-		var tq: int = base + k * q
+		var tq: int = (n0 + k) * q   # початок кванта, що закінчується на межі (n0+k+1)*q
 		var cl: Array = r["clones"]
 		var dead_ids: Array = []
 		for c in cl:   # roster stays ordered by ascending id (n): clones are only appended, ids are monotone
@@ -322,7 +323,7 @@ static func settle(o: Dictionary, now: int) -> Dictionary:
 					d["state"] = DEGRADING
 		for id in dead_ids:
 			on_death(r, String(id), "bio_starvation", tq + q)
-	r["saved_at"] = now if capped else base + steps * q
+	r["saved_at"] = now if capped else base + delta
 	return r
 
 
