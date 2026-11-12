@@ -9,6 +9,7 @@ const SafeStock = preload("res://scripts/sim/safe_stock.gd")
 const Tuning = preload("res://scripts/sim/clone_tuning.gd")
 const Stub = preload("res://scripts/sim/orbit_stub.gd")
 const SessionScript = preload("res://scripts/session.gd")
+const LifecycleScript = preload("res://scripts/ui/lifecycle.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
 
 const T0 := 1800000000000
@@ -37,6 +38,7 @@ func _init() -> void:
 	_t_session_save_restore()
 	_t_session_ascend()
 	_t_bag_ttl()
+	await _t_death_screen()
 	_t_source_hygiene()
 	finish()
 
@@ -318,6 +320,33 @@ func _t_bag_ttl() -> void:
 	s.sim.set_clock(T0 + D)
 	InvMod.pickup_bags(s.sim, {"px": -50.0, "py": -50.0})
 	ok(s.sim.bags.is_empty(), "REQ-0011-33/OD-59: the bag expires at 24 h of real time")
+
+
+# REQ-0011-6/13/41/42/51: the death screen under the Orbit — a clone choice, signals only, no «new survivor» texts.
+func _t_death_screen() -> void:
+	var ds: Variant = LifecycleScript.DeathScreen.new()
+	get_root().add_child(ds)
+	await process_frame
+	ds.bind({"cause": "переохолодження", "lived": 1, "inventory": true, "bag_items": 3})
+	var rows: Array = [{"id": "c2", "state": "sleeping", "genome": ""}, {"id": "c5", "state": "degrading", "genome": "Будівельник"}]
+	ds.bind_orbit(rows, 0)
+	ds.bind_orbit(rows, 0)   # idempotent: bind() runs every frame
+	var box: Variant = ds._orbit_box
+	ok(box.visible and box.get_child_count() == 3, "REQ-0011-13: one button per sleeping clone + the free base clone (no duplicates after a re-bind)")
+	ok(not ds._btn.visible, "REQ-0011-42: the old single «Новий виживальник» button is hidden")
+	var txt: String = ""
+	for ch in box.get_children():
+		txt += String((ch as Button).text) + " "
+	ok("⚠" in txt and "😴" in txt, "REQ-0011-23: stage is shown by an icon, not by colour only")
+	ok(not ("Новий виживальник" in String(ds._what.text)) and not ("лишаються" in String(ds._what.text)), "REQ-0011-42: no old «Новий виживальник»/«Поселення й склад лишаються» texts")
+	var got: Array = []
+	ds.clone_chosen.connect(func(cid: String) -> void: got.append(cid))
+	(box.get_child(1) as Button).pressed.emit()
+	(box.get_child(2) as Button).pressed.emit()
+	ok(got == ["c5", ""], "REQ-0011-6: the screen only emits the choice (clone id / empty = base clone)")
+	ds.bind_orbit(rows, 120)
+	ok((box.get_child(2) as Button).disabled and "120" in (box.get_child(2) as Button).text, "REQ-0011-60: base clone shows the cooldown seconds and is disabled")
+	ds.queue_free()
 
 
 func _t_source_hygiene() -> void:

@@ -11,6 +11,7 @@ const SafeStock = preload("res://scripts/sim/safe_stock.gd")
 const ACTIVE := "active"
 const SLEEPING := "sleeping"
 const DEGRADING := "degrading"
+const GENOME_NAMES := {"gatherer": "Добувач", "builder": "Будівельник", "rider": "Райдер"}   # = Tuning.GENOMES[*].name (для view без залежності від таблиці)
 
 
 # REQ-0011-63: a new account = exactly 2 clones (1 active + 1 sleeping, OD-62); the free base clone is a separate action.

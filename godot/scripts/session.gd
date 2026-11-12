@@ -197,8 +197,8 @@ func travel_to(lat: float, lon: float, place_name: String) -> void:
 
 # Permadeath: a fresh pawn at the clan home. If you died away, fly home first (region identity,
 # NOT presence of any storage — you may have built one at a remote outpost).
-func respawn() -> void:
-	if orbit != null and not orbit_respawn():   # spec 0011 REQ-0011-13: за ON респавн = вибір клона; без клона світ не оживає
+func respawn(clone_id: String = "") -> void:
+	if orbit != null and not orbit_respawn(clone_id):   # spec 0011 REQ-0011-13: за ON респавн = вибір клона; без клона світ не оживає
 		return
 	if sim.get("use_main_capsule") == true:   # ON: місце задає шов respawn_anchor, посадку робить landing (REQ-0010-07/09/98)
 		sim.respawn_new_pawn(MainCapsule.respawn_anchor(self))
@@ -215,6 +215,26 @@ func _sync_orbit_to_sim() -> void:
 		return
 	sim.bag_ttl_ms = 86400000 if orbit != null else 0
 	sim.active_clone_id = String(Orbit.active_clone(orbit).get("id", "")) if orbit != null else ""
+
+# spec 0011: value data для екрана смерті/Орбіти (лише читання): сплячі клони + секунди до безкоштовного базового.
+func orbit_rows() -> Array:
+	var out: Array = []
+	if orbit == null:
+		return out
+	for c in orbit["clones"]:
+		var d: Dictionary = c
+		if String(d["state"]) == Orbit.ACTIVE and sim != null and sim.dead:
+			continue   # мертвий активний клон не пропонується
+		if String(d["state"]) == Orbit.ACTIVE:
+			continue
+		out.append({"id": String(d["id"]), "state": String(d["state"]), "genome": String((Orbit.GENOME_NAMES.get(String(d["genome_type"]), "")))})
+	return out
+
+@warning_ignore("integer_division")
+func orbit_base_wait_s() -> int:
+	if orbit == null or sim == null:
+		return 0
+	return maxi(0, (int(orbit["base_ready_at"]) - int(sim.now_ms)) / 1000)
 
 # spec 0011 REQ-0011-12/13/14: смерть активного клона вилучає його (ідемпотентно за id) і пише last_death; тіло приходить від сплячого
 # клона (явний `clone_id` або перший за id), а коли ростер порожній — від безкоштовного базового (кулдаун 5 хв, REQ-0011-60).

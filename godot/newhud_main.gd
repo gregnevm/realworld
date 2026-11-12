@@ -179,6 +179,9 @@ func _ready() -> void:
 	death_screen.respawn_chosen.connect(func() -> void:
 		router.dispatch(&"respawn", {}, session)
 		_autosave())
+	death_screen.clone_chosen.connect(func(cid: String) -> void:   # spec 0011: вибір клона на екрані Орбіти → verb respawn (R9: екран лише емітить)
+		router.dispatch(&"respawn", {"clone_id": cid}, session)
+		_autosave())
 	life.add_child(death_screen)
 
 	demo_mode = "newhud" in OS.get_cmdline_user_args() and "demo" in OS.get_cmdline_user_args()
@@ -411,6 +414,8 @@ func _process(dt: float) -> void:
 	death_screen.visible = session.sim.dead
 	if session.sim.dead:
 		death_screen.bind(hud_root.last_snap.get("death", {}))
+		if session.orbit != null:
+			death_screen.bind_orbit(session.orbit_rows(), session.orbit_base_wait_s())
 	_autosave_t += dt
 	if _autosave_t >= AUTOSAVE_EVERY or int(session.sim.time.day) != _saved_day:
 		_autosave()
