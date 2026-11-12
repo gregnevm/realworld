@@ -193,6 +193,7 @@ static func on_death(o: Dictionary, clone_id: String, cause: String, now: int, b
 
 # REQ-0011-28: genome loot from a rare location/ruin — a pure function of (coord, tile, salt), no RNG; "" = nothing.
 # Frequency from the tuning table; the genome type is spread evenly over the three types by the same hash.
+@warning_ignore("integer_division")
 static func genome_loot(coord_key: String, tile_x: int, tile_y: int, salt: int) -> String:
 	var h: int = _fnv("%s|%d|%d|%d" % [coord_key, tile_x, tile_y, salt])
 	if h % 1000 >= Tuning.value("genome_loot_permille"):
