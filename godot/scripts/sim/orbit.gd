@@ -213,7 +213,7 @@ static func genome_loot(coord_key: String, tile_x: int, tile_y: int, salt: int) 
 	return "genome:" + String(kinds[(h / 1000) % kinds.size()])
 
 
-# REQ-0011-29: the bio workshop turns bio into a genome over real time from `now` (one job at a time per account).
+# REQ-0011-29: the bio synthesis bench turns bio into a genome over real time from `now` (one job at a time per account).
 # The type is picked deterministically from (account_seed, clone_counter, job count). Returns {ok} | {ok:false, reason}.
 static func begin_synthesis(o: Dictionary, now: int) -> Dictionary:
 	if o.has("synth") and not (o["synth"] as Dictionary).is_empty():
