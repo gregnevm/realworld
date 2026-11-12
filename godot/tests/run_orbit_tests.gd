@@ -8,6 +8,8 @@ const Orbit = preload("res://scripts/sim/orbit.gd")
 const SafeStock = preload("res://scripts/sim/safe_stock.gd")
 const Tuning = preload("res://scripts/sim/clone_tuning.gd")
 const Stub = preload("res://scripts/sim/orbit_stub.gd")
+const SessionScript = preload("res://scripts/session.gd")
+const WorldGen = preload("res://scripts/world_gen.gd")
 
 const T0 := 1800000000000
 const Q := 60000
@@ -30,6 +32,9 @@ func _init() -> void:
 	_t_settle_clock_back()
 	_t_roundtrip_and_hash()
 	_t_stub_seam()
+	_t_session_flags()
+	_t_session_death_respawn()
+	_t_session_save_restore()
 	_t_source_hygiene()
 	finish()
 
@@ -203,6 +208,76 @@ func _t_roundtrip_and_hash() -> void:
 func _t_stub_seam() -> void:
 	var o: Dictionary = Orbit.new_account(7, T0)
 	ok(int((o["safe_stock"] as RefCounted).call("deposit", "wood", 10)) == 10, "orbit_stub duck-typing: SafeStock.deposit(res, n) -> accepted")
+
+
+func _new_session(orbit_on: bool) -> Variant:
+	var s: Variant = SessionScript.new()
+	s.use_inventory = true
+	s.use_orbit = orbit_on
+	s.autosave = false
+	return s
+
+
+func _t_session_flags() -> void:
+	var bad: Variant = SessionScript.new()
+	bad.use_orbit = true   # use_inventory stays false
+	ok(not bool(bad.start(50.45, 30.52, "Київ", T0)) and String(bad.last_error) == "orbit_needs_inventory", "REQ-0011-3: use_orbit without use_inventory is refused with a reason")
+	ok(bad.sim == null, "…and no world is left behind")
+	var off: Variant = _new_session(false)
+	ok(bool(off.start(50.45, 30.52, "Київ", T0)) and off.orbit == null, "REQ-0011-1: OFF — no orbit record at all")
+	var on: Variant = _new_session(true)
+	ok(bool(on.start(50.45, 30.52, "Київ", T0)) and on.orbit != null, "ON — account record is created with the session")
+	ok((on.orbit["clones"] as Array).size() == 2, "REQ-0011-63 through Session: 2 clones")
+	ok(int(on.orbit["account_seed"]) == int(WorldGen.hash_seed(50.45, 30.52)), "REQ-0011-53: account_seed comes from outside (the coordinate hash), not from an Orbit RNG")
+
+
+func _t_session_death_respawn() -> void:
+	var s: Variant = _new_session(true)
+	s.start(50.45, 30.52, "Київ", T0)
+	var first: String = String(Orbit.active_clone(s.orbit)["id"])
+	s.sim.dead = true
+	s.sim.last_death = {"cause": "cold", "day": 1, "born": 1}
+	s.respawn()
+	ok(Orbit.find(s.orbit, first) < 0, "REQ-0011-12: the dead clone left the roster")
+	ok(String((s.orbit["last_death"] as Dictionary)["cause"]) == "cold", "REQ-0011-52: last_death is in the account record")
+	ok(String(Orbit.active_clone(s.orbit)["id"]) != first and not s.sim.dead, "REQ-0011-13: the sleeper took over, the world lives again")
+	# second death: the roster is empty → the free base clone; third right away → cooldown, world stays dead
+	var second: String = String(Orbit.active_clone(s.orbit)["id"])
+	s.sim.dead = true
+	s.sim.last_death = {"cause": "raid", "day": 1, "born": 1}
+	s.respawn()
+	ok(String(Orbit.active_clone(s.orbit)["id"]) != second, "REQ-0011-14: empty roster → the free base clone")
+	var base: String = String(Orbit.active_clone(s.orbit)["id"])
+	s.sim.dead = true
+	s.sim.last_death = {"cause": "raid", "day": 1, "born": 1}
+	s.respawn()
+	ok(Orbit.find(s.orbit, base) < 0 and String(s.last_error) == "orbit_cooldown" and s.sim.dead, "REQ-0011-60: inside the 5-min cooldown the world stays dead, with a reason")
+	s.sim.set_clock(T0 + 301000)
+	s.respawn()
+	ok(not s.sim.dead and not Orbit.active_clone(s.orbit).is_empty(), "after the cooldown the base clone returns")
+	ok(Orbit.check_invariants(s.orbit).is_empty(), "REQ-0011-11: invariants after the chain of deaths")
+
+
+func _t_session_save_restore() -> void:
+	var path: String = "user://orbit_test_save.json"
+	var s: Variant = _new_session(true)
+	s.start(50.45, 30.52, "Київ", T0)
+	s.orbit["safe_stock"].deposit("food", 12)
+	ok(s.save_game(path), "save with orbit ON")
+	var txt: String = FileAccess.get_file_as_string(path)
+	ok(txt.find('"orbit"') >= 0, "REQ-0011-36: the orbit record is in the account layer of the save")
+	var r: Variant = SessionScript.new()
+	ok(r.restore_game(path, T0 + 2 * H) and r.use_orbit and r.orbit != null, "restore brings the orbit back and flips use_orbit")
+	ok(int(r.orbit["safe_stock"].count("food")) < 12, "REQ-0011-19/57: login settles the sleeper's rations")
+	var off: Variant = _new_session(false)
+	off.start(50.45, 30.52, "Київ", T0)
+	off.save_game(path)
+	ok(FileAccess.get_file_as_string(path).find('"orbit"') < 0, "REQ-0011-2: OFF save has no orbit key")
+	var r2: Variant = SessionScript.new()
+	r2.use_orbit = true
+	r2.restore_game(path, T0)
+	ok(not r2.use_orbit and r2.orbit == null, "an OFF save restores OFF (the save wins over the default)")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
 func _t_source_hygiene() -> void:

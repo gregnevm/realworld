@@ -195,6 +195,7 @@ func _start_game(lat: float, lon: float, place_name: String) -> void:
 		session.use_catalog = true        # капсула вимагає відкритого складу (REQ-0010-59)
 		session.use_main_capsule = true
 	session.use_realtime = _realtime_enabled()   # spec 0012: реальний час 1:1 — УВІМК у збірках (OD-138/145); «Продовжити» бере прапор із сейву (REQ-62)
+	session.use_orbit = "orbit" in OS.get_cmdline_user_args()   # spec 0011: Орбіта лише за dev-перемикачем, поки нема екрана Орбіти (OD-151)
 	session.autosave = not shot_mode
 	if not session.start(lat, lon, place_name, _clock.now_ms()):
 		push_error("Старт світу відхилено: %s" % String(session.last_error))
