@@ -10,6 +10,7 @@ const Tuning = preload("res://scripts/sim/clone_tuning.gd")
 const Stub = preload("res://scripts/sim/orbit_stub.gd")
 const SessionScript = preload("res://scripts/session.gd")
 const LifecycleScript = preload("res://scripts/ui/lifecycle.gd")
+const Persistence = preload("res://scripts/persistence.gd")
 const WorldGen = preload("res://scripts/world_gen.gd")
 
 const T0 := 1800000000000
@@ -38,6 +39,7 @@ func _init() -> void:
 	_t_session_save_restore()
 	_t_session_ascend()
 	_t_bag_ttl()
+	_t_determinism_scenario()
 	await _t_death_screen()
 	_t_source_hygiene()
 	finish()
@@ -320,6 +322,30 @@ func _t_bag_ttl() -> void:
 	s.sim.set_clock(T0 + D)
 	InvMod.pickup_bags(s.sim, {"px": -50.0, "py": -50.0})
 	ok(s.sim.bags.is_empty(), "REQ-0011-33/OD-59: the bag expires at 24 h of real time")
+
+
+# REQ-0011-38/1: «орбіта ON, N тіків, смерть, респавн» — twin runs agree on world_hash AND account_hash; the Orbit does not leak into world_hash.
+func _run_scenario(orbit_on: bool) -> Array:
+	var s: Variant = _new_session(orbit_on)
+	s.start(50.45, 30.52, "Київ", T0)
+	for i in 120:
+		s.sim.update(0.1)
+	var mid: String = Persistence.world_hash(s.sim)
+	if orbit_on:
+		s.sim.dead = true
+		s.sim.last_death = {"cause": "cold", "day": 1, "born": 1}
+		s.respawn()
+		for i in 60:
+			s.sim.update(0.1)
+	return [mid, Persistence.world_hash(s.sim), Orbit.account_hash(s.orbit) if orbit_on else ""]
+
+
+func _t_determinism_scenario() -> void:
+	var a: Array = _run_scenario(true)
+	var b: Array = _run_scenario(true)
+	ok(a == b, "REQ-0011-38: twin orbit runs (ticks → death → respawn → ticks) agree on world_hash and account_hash")
+	var off: Array = _run_scenario(false)
+	ok(String(a[0]) == String(off[0]), "REQ-0011-1/38: before any death an Orbit session has the SAME world_hash as an OFF session (the Orbit is outside world_hash)")
 
 
 # REQ-0011-6/13/41/42/51: the death screen under the Orbit — a clone choice, signals only, no «new survivor» texts.
