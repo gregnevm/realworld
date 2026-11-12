@@ -356,6 +356,7 @@ class DeathScreen extends Control:
 			return
 		_orbit_sig = sig
 		for c in _orbit_box.get_children():
+			_orbit_box.remove_child(c)   # одразу, а не лише queue_free: нові кнопки не мають стати після старих
 			c.queue_free()
 		_orbit_box.visible = true
 		for r in rows:
