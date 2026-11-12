@@ -36,6 +36,7 @@ func _init() -> void:
 	_t_session_death_respawn()
 	_t_session_save_restore()
 	_t_session_ascend()
+	_t_bag_ttl()
 	_t_source_hygiene()
 	finish()
 
@@ -289,6 +290,26 @@ func _t_session_ascend() -> void:
 	s.start(50.45, 30.52, "Київ", T0)
 	var r: Dictionary = s.orbit_ascend()
 	ok(not bool(r["ok"]), "REQ-0011-8: without a capsule (use_main_capsule OFF) the ascend is refused (%s)" % String(r.get("reason", "")))
+
+
+func _t_bag_ttl() -> void:
+	var InvMod: Variant = load("res://scripts/sim/inventory.gd")
+	var off: Variant = _new_session(false)
+	off.start(50.45, 30.52, "Київ", T0)
+	InvMod.drop_bag(off.sim)
+	ok(off.sim.bags.size() == 1 and not (off.sim.bags[0] as Dictionary).has("expires_at") and not (off.sim.bags[0] as Dictionary).has("owner_clone_id"), "REQ-0011-56: OFF bag has no TTL keys (byte-for-byte)")
+	var s: Variant = _new_session(true)
+	s.start(50.45, 30.52, "Київ", T0)
+	var cid: String = String(Orbit.active_clone(s.orbit)["id"])
+	InvMod.drop_bag(s.sim)
+	var bag: Dictionary = s.sim.bags[0]
+	ok(int(bag["expires_at"]) == T0 + D and String(bag["owner_clone_id"]) == cid, "REQ-0011-33: expires_at = now + 24 h, owner_clone_id is a mere label")
+	s.sim.set_clock(T0 + D - 1000)
+	InvMod.pickup_bags(s.sim, {"px": -50.0, "py": -50.0})
+	ok(s.sim.bags.size() == 1, "REQ-0011-34: the bag lives until its TTL (actor argument accepted, far away)")
+	s.sim.set_clock(T0 + D)
+	InvMod.pickup_bags(s.sim, {"px": -50.0, "py": -50.0})
+	ok(s.sim.bags.is_empty(), "REQ-0011-33/OD-59: the bag expires at 24 h of real time")
 
 
 func _t_source_hygiene() -> void:

@@ -290,16 +290,27 @@ static func drop_bag(s) -> void:
 			slots.append({"id": String(sl.id), "n": int(sl.n)})
 	if slots.is_empty():
 		return
-	s.bags.append({"x": int(s.player.px), "y": int(s.player.py), "slots": slots, "day": int(s.time.day)})
+	var bag: Dictionary = {"x": int(s.player.px), "y": int(s.player.py), "slots": slots, "day": int(s.time.day)}
+	if int(s.get("bag_ttl_ms")) > 0 and int(s.now_ms) > 0:   # spec 0011 REQ-0011-33/56: лише за Орбіти — TTL і мітка походження; OFF-торба байт-у-байт
+		bag["expires_at"] = int(s.now_ms) + int(s.bag_ttl_ms)
+		bag["owner_clone_id"] = String(s.get("active_clone_id"))
+	s.bags.append(bag)
 	s.player.inv = empty_slots()
 
 # Walk-over pickup (called every tick): whatever fits comes back, the rest stays in the bag. A bag you just
 # DROPPED is unarmed until you step away from it (otherwise it would jump straight back into your hands).
-static func pickup_bags(s) -> void:
+# REQ-0011-34: `actor` — той, хто підбирає (будь-який, OD-91: торба не прив'язана до власника); за замовчуванням герой. REQ-0011-33:
+# торба з `expires_at` (UTC-мс) зникає, щойно годинник сима її досяг (OD-59/90).
+static func pickup_bags(s, actor: Variant = null) -> void:
 	if s.bags.is_empty():
 		return
-	var at := Vector2(s.player.px, s.player.py)
+	var who: Variant = actor if actor != null else s.player
+	var at := Vector2(who.px, who.py)
 	for bag in s.bags.duplicate():
+		if bag.has("expires_at") and int(s.now_ms) >= int(bag.expires_at):
+			s.bags.erase(bag)
+			s._log("🎒 Торба зникла — минуло 24 год.")
+			continue
 		var d: float = at.distance_to(Vector2(int(bag.x) + 0.5, int(bag.y) + 0.5))
 		if not bool(bag.get("armed", true)):
 			if d > BAG_REACH + 1.0:

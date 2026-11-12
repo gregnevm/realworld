@@ -87,6 +87,7 @@ func start(lat: float, lon: float, place_name: String, now_ms: int = 0) -> bool:
 		return false
 	var on: bool = bool(sim.use_main_capsule)
 	orbit = Orbit.new_account(WorldGen.hash_seed(lat, lon), maxi(0, now_ms)) if use_orbit else null   # REQ-0011-4/63: 1 active + 1 sleeping
+	_sync_orbit_to_sim()
 	progression = Progression.new(Catalog.load_json())
 	store = Persistence.store_new()
 	social = Social.new_graph("Ти", WorldGen.hash_seed(lat, lon), lat, lon)
@@ -208,6 +209,13 @@ func respawn() -> void:
 		travel_to(home.lat, home.lon, home.name)
 	sim.respawn_new_pawn()
 
+# Орбіта → sim: TTL торби (OD-59/90: 24 год) і id активного клона. OFF — нуль/порожньо (торби як до спеки).
+func _sync_orbit_to_sim() -> void:
+	if sim == null:
+		return
+	sim.bag_ttl_ms = 86400000 if orbit != null else 0
+	sim.active_clone_id = String(Orbit.active_clone(orbit).get("id", "")) if orbit != null else ""
+
 # spec 0011 REQ-0011-12/13/14: смерть активного клона вилучає його (ідемпотентно за id) і пише last_death; тіло приходить від сплячого
 # клона (явний `clone_id` або перший за id), а коли ростер порожній — від безкоштовного базового (кулдаун 5 хв, REQ-0011-60).
 # false + last_error (&"orbit_cooldown" / &"orbit_no_clone") — світ лишається мертвим, UI показує Орбіту.
@@ -237,6 +245,7 @@ func orbit_respawn(clone_id: String = "") -> bool:
 	if not bool(r["ok"]):
 		last_error = &"orbit_no_clone"
 		return false
+	_sync_orbit_to_sim()
 	return true
 
 # spec 0011 REQ-0011-7/8: «піднятись на орбіту» — склад капсули → safe_stock (частковий перенос, OD-58). Єдиний шлях поповнення
@@ -501,6 +510,7 @@ func restore_game(path: String = SAVE_PATH, now_ms: int = 0) -> bool:
 		use_orbit = true
 		if now_ms > 0:
 			orbit = Orbit.settle(orbit, now_ms)
+	_sync_orbit_to_sim()
 	sim.research_unlocked = progression.research.unlocked   # the gates are live before the first tick
 	sim._log("▶ Продовжено: %s · день %d." % [str(sim.map.get("place_name", "")), int(sim.time.day)], "good")
 	return true

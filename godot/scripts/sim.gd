@@ -65,6 +65,8 @@ var regions: Array = []
 var convoy_seq := 0
 var craft_timer := 0.0
 var dead := false
+var bag_ttl_ms: int = 0           # spec 0011 REQ-0011-33: TTL торби смерті (мс); 0 = OFF (торба вічна, як до спеки). Ставить Session за Орбіти; не сейв
+var active_clone_id: String = ""   # spec 0011: мітка походження торби (`owner_clone_id`); ставить Session; не сейв, не хеш
 # The last death's value-data epitaph {cause, day, born} for the death screen (view memory like
 # health_alerts — not save/hash state; overwritten by the next death).
 var last_death: Dictionary = {}
