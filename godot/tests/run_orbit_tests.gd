@@ -40,6 +40,7 @@ func _init() -> void:
 	_t_session_ascend()
 	_t_bag_ttl()
 	_t_genome_loot_and_synthesis()
+	_t_tuning_and_base_rules()
 	_t_determinism_scenario()
 	await _t_death_screen()
 	_t_source_hygiene()
@@ -346,6 +347,32 @@ func _t_genome_loot_and_synthesis() -> void:
 	var rt: Dictionary = Orbit.from_dict(JSON.parse_string(JSON.stringify(Orbit.to_dict(o))))
 	var done: Dictionary = Orbit.collect_synthesis(rt, T0 + 6 * H)
 	ok(bool(done["ok"]) and int(rt["safe_stock"].count(String(done["genome"]))) == 1, "REQ-0011-29: genome arrives in the safe stock (job survives save/load)")
+
+
+# REQ-0011-43/59/62/73: tuning provider is swappable; the base clone is offered in every roster state and inherits nothing; no grants.
+func _t_tuning_and_base_rules() -> void:
+	ok(Tuning.value("roster_slots") == 4, "REQ-0011-43: default provider = local table")
+	Tuning.provider = func(key: String) -> Variant: return 6 if key == "roster_slots" else null
+	ok(Tuning.value("roster_slots") == 6 and Tuning.value("base_cooldown_ms") == 300000, "REQ-0011-43: a provider overrides single keys, the rest falls back")
+	Tuning.provider = null
+	ok(Tuning.value("roster_slots") == 4, "REQ-0011-43: provider removed → default again")
+	var txt: String = FileAccess.get_file_as_string("res://scripts/sim/clone_tuning.gd")
+	ok(not ("deposit" in txt) and not ("safe_stock" in txt), "REQ-0011-73: the tuning interface has no way to hand out resources")
+	# REQ-0011-59: base clone in every roster state (empty / all degrading / no bio)
+	var o: Dictionary = Orbit.new_account(3, T0)
+	for c in o["clones"]:
+		(c as Dictionary)["state"] = "degrading"
+	Orbit.to_orbit(o)
+	o["clones"] = (o["clones"] as Array).slice(0, 1)   # one degrading clone left, room for the base clone
+	ok(bool(Orbit.claim_base_clone(o, T0)["ok"]), "REQ-0011-59: offered with degrading clones, no bio, no safe_stock")
+	ok(int(o["safe_stock"].used_slots()) == 0, "REQ-0011-59: costs no bio/genome")
+	# REQ-0011-62: the dead clone's skills do not pass on
+	var p: Dictionary = Orbit.new_account(3, T0)
+	((p["clones"] as Array)[0]["pawn"] as Dictionary)["skills"] = {"gather": 9}
+	Orbit.on_death(p, "c1", "cold", T0 + H)
+	Orbit.claim_base_clone(p, T0 + H)
+	var base: Dictionary = (p["clones"] as Array)[(p["clones"] as Array).size() - 1]
+	ok((base["pawn"]["skills"] as Dictionary).is_empty(), "REQ-0011-62: skills of the dead clone do not transfer to the base clone")
 
 
 # REQ-0011-38/1: «орбіта ON, N тіків, смерть, респавн» — twin runs agree on world_hash AND account_hash; the Orbit does not leak into world_hash.
