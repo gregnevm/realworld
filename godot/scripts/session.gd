@@ -19,7 +19,9 @@ const LocalRealm = preload("res://scripts/net/local_realm.gd")   # spec 0013: th
 const MAP_N := 56
 const STORE_PATH := "user://world.json"
 const SAVE_PATH := "user://save.json"   # the whole session (continue): store + live region + account
-const Clock = preload("res://scripts/clock.gd")   # spec 0012: saved_at у сейві — int64 рядком (to_wire/from_wire)
+const Clock = preload("res://scripts/clock.gd")
+const Hints = preload("res://scripts/hints.gd")   # spec 0012 §3.8: м'які підказки FTUE за ON (OD-146)
+const Location = preload("res://scripts/location.gd")   # spec 0012 §3.7: валідація місця, провайдери, «вільне поруч»
 const SAVE_VERSION := 1
 
 var sim: Variant = null   # Sim (scripts/sim.gd); Variant, бо тести підставляють легкі фейки
@@ -46,7 +48,10 @@ var use_inventory := false        # spec 0009: set by the entry scene BEFORE sta
 var use_catalog := false          # spec 0008: відкритий склад; ON-капсула його вимагає (REQ-0010-59). ДО start()
 var use_realtime := false         # spec 0012: реальний час 1:1; ставиться ДО start(), далі замкнений (dev-перемикач `-- realtime`)
 var use_main_capsule := false     # spec 0010: Основна капсула; ставиться ДО start(), далі замкнений (dev-перемикач `-- capsule`)
-var last_catch_up: Dictionary = {}   # spec 0012: звіт останнього догону (для картки «поки тебе не було»); не сейв
+var hint_active: Dictionary = {}    # spec 0012 (ON): {id, since_ms} — видима підказка (≤ 1); не сейв, не хеш
+var hint_cooldowns: Dictionary = {} # spec 0012 (ON): id -> until_ms; sticky у сейві поза world_hash (REQ-0012-49/51)
+var last_catch_up: Dictionary = {}
+var _frame_now: int = 0             # spec 0012 REQ-38: годинник попереднього кадру (розрив ⇒ догін); не сейв   # spec 0012: звіт останнього догону (для картки «поки тебе не було»); не сейв
 var last_error: StringName = &""  # чому start()/restore_game()/travel_to() відмовили (&"" — усе гаразд); для UI/тестів
 var _goal_t := 0.0
 
@@ -56,6 +61,10 @@ var _goal_t := 0.0
 func start(lat: float, lon: float, place_name: String, now_ms: int = 0) -> bool:
 	last_error = &""
 	realm_net = null
+	var loc: Dictionary = Location.validate({"lat": lat, "lon": lon})   # spec 0012 REQ-75: невалідне місце не створює регіон
+	if not bool(loc.ok):
+		last_error = StringName(loc.reason)
+		return false
 	var m := WorldGen.generate_map(lat, lon, MAP_N)
 	m["place_name"] = place_name
 	sim = Sim.new()
@@ -216,7 +225,7 @@ func tick_research(dt: float) -> void:
 	if not bench_announced:
 		bench_announced = true
 		sim._log("🔬 Дослідницький стіл працює — обери проєкт у панелі «Дослідження».", "good")
-	var dday: float = dt / maxf(1.0, float(sim.time.day_len))
+	var dday: float = Sim.Realtime.work_dday(sim, dt)   # OD-140: дослідження за ON — робочий темп (REQ-25)
 	var newly: Array = progression.add_points(rate * dday, auto_research)
 	for id in newly:
 		sim._log("🔬 Досліджено: %s (рівень %d)." % [progression.label_of(id), progression.tech_level()], "good")
@@ -252,6 +261,8 @@ func tick_goals(dt: float) -> void:
 	if _goal_t > 0.0:
 		return
 	_goal_t = 0.5
+	if sim.use_realtime:
+		_tick_hints()   # spec 0012 REQ-47/48: за ON — ситуативні підказки замість ланцюга (цілі далі тихо липнуть для журналу)
 	var titles: Array = []
 	for g in Goals.GOALS:
 		var id := String(g.id)
@@ -260,8 +271,8 @@ func tick_goals(dt: float) -> void:
 		if Goals.progress(id, sim, self) >= 1.0:
 			goals_done[id] = true
 			titles.append(String(g.title))
-	if titles.is_empty():
-		return
+	if titles.is_empty() or sim.use_realtime:
+		return   # за ON — без тостів «далі — …»: порядку цілей нема (REQ-0012-47)
 	# several goals can close in one check (a loaded base, a big build): ONE toast, not a stack of repeats
 	var nxt: Dictionary = _current_goal()
 	var tail: String = (" · далі — %s" % String(nxt.title)) if not nxt.is_empty() else " · усі цілі виконано!"
@@ -275,8 +286,37 @@ func _current_goal() -> Dictionary:
 			return g
 	return {}
 
+# spec 0012 REQ-48/49: одна підказка за раз; гасне, коли ситуація минула або за SHOW_MS, і йде на cooldown.
+func _tick_hints() -> void:
+	var now: int = int(sim.now_ms)
+	var view: Dictionary = Hints.view_of(sim)
+	if not hint_active.is_empty():
+		var id := String(hint_active.id)
+		if Hints.applies(id, view) and now - int(hint_active.since_ms) < Hints.SHOW_MS:
+			return
+		hint_cooldowns[id] = now + Hints.COOLDOWN_MS
+		hint_active = {}
+	var nxt: String = Hints.evaluate(view, hint_cooldowns, now)
+	if nxt != "":
+		hint_active = {"id": nxt, "since_ms": now}
+
+func _hints_to_wire() -> Dictionary:
+	var out := {}
+	for k in hint_cooldowns:
+		out[k] = Clock.to_wire(int(hint_cooldowns[k]))
+	return out
+
+func _hint_view() -> Dictionary:
+	if hint_active.is_empty():
+		return {"available": false, "hints": true}
+	var h: Dictionary = Hints.def_of(String(hint_active.id))
+	return {"available": true, "hints": true, "done": 0, "total": 0, "all_done": false, "next": "",
+		"current": {"id": String(h.id), "title": String(h.title), "hint": String(h.hint), "build": String(h.build), "pct": 0.0}}
+
 # Value data for the HUD GoalsPanel (R8): the first open goal + its live progress + what follows.
 func goals_view() -> Dictionary:
+	if sim != null and sim.use_realtime:
+		return _hint_view()   # spec 0012 REQ-53: за ON постійного чипа «Цілі» нема — лише ефемерна підказка (≤ 1)
 	var cur: Dictionary = _current_goal()
 	var view := {"available": true, "done": goals_done.size(), "total": Goals.count(), "all_done": cur.is_empty()}
 	if cur.is_empty():
@@ -320,6 +360,10 @@ func save_game(path: String = SAVE_PATH) -> bool:
 		"bench_announced": bench_announced,
 		"meta": {"place": String(sim.map.get("place_name", "")), "day": int(sim.time.day), "dead": bool(sim.dead)},
 	}
+	if sim.use_realtime:   # spec 0012 REQ-49: cooldown-и підказок — sticky, у сейві (поза world_hash); REQ-73: схема й версія темпу
+		data["hints"] = _hints_to_wire()
+		data["schema"] = "realtime"
+		data["pacing_version"] = Sim.Realtime.Pacing.VERSION
 	if sim.use_realtime:   # spec 0012 REQ-31: мітка збереження — годинник пристрою (UTC-мс, рядком); OFF-сейв без нового ключа (REQ-2)
 		data["saved_at"] = Clock.to_wire(int(sim.now_ms))
 	var f := FileAccess.open(path, FileAccess.WRITE)
@@ -356,6 +400,9 @@ func restore_game(path: String = SAVE_PATH, now_ms: int = 0) -> bool:
 	var d := _read_save(path)
 	if d.is_empty():
 		return false
+	if int(d.get("pacing_version", 0)) > Sim.Realtime.Pacing.VERSION:
+		last_error = &"pacing_newer"   # spec 0012 REQ-73: сейв новішої збірки (інша таблиця темпу) — відмова з причиною, не мовчазне OFF
+		return false
 	var restored: Variant = Sim.new()
 	if not Persistence.restore(restored, d.active):
 		last_error = restored.load_error
@@ -363,8 +410,14 @@ func restore_game(path: String = SAVE_PATH, now_ms: int = 0) -> bool:
 	sim = restored
 	use_realtime = bool(sim.use_realtime)   # spec 0012 REQ-62: значення з сейву перемагає дефолт збірки (і в обидва боки)
 	# spec 0012 REQ-31/84: догін при вході — чиста функція (стан, saved_at, now), без атак; потім годинник -> frac
+	hint_cooldowns = {}
+	var hc: Variant = d.get("hints", {})
+	if hc is Dictionary:
+		for k in hc:
+			hint_cooldowns[String(k)] = Clock.from_wire(hc[k], 0)
 	last_catch_up = Sim.Realtime.catch_up(sim, Clock.from_wire(d.get("saved_at", "0"), 0), now_ms)
-	push_clock(maxi(now_ms, Clock.from_wire(d.get("saved_at", "0"), 0)))   # монотонно: відкат годинника нижче saved_at не відкочує світ (REQ-68)
+	push_clock(maxi(now_ms, Clock.from_wire(d.get("saved_at", "0"), 0)))
+	_log_catch_up(last_catch_up)   # монотонно: відкат годинника нижче saved_at не відкочує світ (REQ-68)
 	var h: Dictionary = d.get("home", {})
 	home = {"lat": float(h.get("lat", 0.0)), "lon": float(h.get("lon", 0.0)), "name": str(h.get("name", ""))}
 	has_home = bool(d.get("has_home", true))
@@ -394,6 +447,44 @@ func restore_game(path: String = SAVE_PATH, now_ms: int = 0) -> bool:
 	sim.research_unlocked = progression.research.unlocked   # the gates are live before the first tick
 	sim._log("▶ Продовжено: %s · день %d." % [str(sim.map.get("place_name", "")), int(sim.time.day)], "good")
 	return true
+
+# spec 0012 REQ-38 (OD-149): dt кадру для сима. OFF — як є. ON — розрив кадрів ≥ 5 с (застосунок у фоні) іде через догін
+# (без нападів, REQ-84) і цей кадр сим не тікає; коротший розрив — dt обрізається до 0.25 с. Викликати ДО push_clock.
+func frame_dt(dt: float, now_ms: int) -> float:
+	if sim == null or not sim.use_realtime:
+		return dt
+	var prev: int = _frame_now
+	_frame_now = maxi(_frame_now, now_ms)
+	if prev > 0 and now_ms - prev >= Sim.Realtime.MICRO_PAUSE_MS:
+		last_catch_up = Sim.Realtime.catch_up(sim, prev, now_ms)
+		_log_catch_up(last_catch_up)
+		return 0.0
+	return minf(dt, Sim.Realtime.MAX_FRAME_DT)
+
+# spec 0012 REQ-37/72 (OD-148): один рядок-підсумок у стрічці після догону ≥ 1 хв — що змінилось, без абзаців; «обрізано», якщо Δ > ліміту.
+func _log_catch_up(r: Dictionary) -> void:
+	var off_ms: int = int(r.get("offline_ms", 0))
+	if off_ms < 60000:
+		return
+	var parts: Array = ["⏳ Поки тебе не було: %s" % _dur_words(off_ms)]
+	if float(r.get("hunger_lost", 0.0)) >= 1.0:
+		parts.append("🍖 −%d" % int(round(float(r.hunger_lost))))
+	if float(r.get("rest_lost", 0.0)) >= 1.0:
+		parts.append("💤 −%d" % int(round(float(r.rest_lost))))
+	if int(r.get("days", 0)) > 0:
+		parts.append("🌅 +%d дн." % int(r.days))
+	if off_ms > int(r.get("applied_ms", 0)):
+		parts.append("✂ враховано %s" % _dur_words(int(r.applied_ms)))
+	parts.append("🛡 нападів не було")
+	sim._log(" · ".join(parts), "warn")
+
+static func _dur_words(ms: int) -> String:
+	var mins: int = ms / 60000
+	if mins < 60:
+		return "%d хв" % mins
+	if mins < 48 * 60:
+		return "%d год" % (mins / 60)
+	return "%d дн." % (mins / 1440)
 
 func stored_region_count() -> int:
 	return (store.get("regions", {}) as Dictionary).size()

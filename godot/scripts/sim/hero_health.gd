@@ -69,7 +69,7 @@ static func update(s, dt: float) -> void:
 	else:
 		Gear.update_comfort(tracker, s.hero_temp_c(), s.hero_insulation_c(), dday, gain, rec)
 	# 3) injuries heal/bleed/fester, blood moves, downed recomputes
-	tracker.tick({"dday": dday})
+	tracker.tick({"dday": Realtime.work_dday(s, dt)})   # OD-141: рани (кровотеча/загоєння/інфекція) за ON — робочий темп (REQ-19)
 	Gear.resolve_to_scar(tracker)
 	# 4) sleeping in a bed tends wounds (stops bleeding, fights infection) — the bed's medical role.
 	# The TEND EVENT (fresh hediffs just flagged) also consumes ONE medicine when the open stock has

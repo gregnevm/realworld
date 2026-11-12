@@ -994,7 +994,7 @@ func _update_player(dt: float) -> void:
 	p.dep_cd = max(0.0, p.dep_cd - dt)
 	p.hunger = clampf(p.hunger - Realtime.hunger_rate(self) * dt, 0, 100)   # spec 0012: OFF 0.42 як було; ON — з Pacing
 	var rest0: float = p.rest   # spec 0010 (REQ-0010-107): множник відновлення сну застосовується до приросту OFF-рядка нижче
-	p.rest = clampf(p.rest - (-14.0 if p.sleeping else Realtime.tire_rate(self)) * dt, 0, 100)   # сон +14/с — і за ON: sleep_full TBD (OD-R26, REQ-16 blocked)
+	p.rest = clampf(p.rest - (-Realtime.sleep_rate(self) if p.sleeping else Realtime.tire_rate(self)) * dt, 0, 100)   # сон: OFF +14/с; ON — повний за sleep_full (OD-143)
 	if use_main_capsule and p.sleeping:   # сон у зоні капсули відновлює швидше (need_recovery_mult); наростання втоми (0.30) і межі не чіпаємо
 		p.rest = clampf(rest0 + (p.rest - rest0) * _capsule_recovery(), 0, 100)
 	# located health (sim/hero_health.gd): empty needs and the real climate grow condition hediffs,

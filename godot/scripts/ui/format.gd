@@ -212,8 +212,15 @@ const TOUCH_WORDS := [
 	["Space — пауза, +/− — швидкість", "⏸ ×1 ×2 ×3 угорі"], ["Стрілка часу: ", ""],
 ]
 
-static func touchify(text: String) -> String:
+# spec 0012 REQ-30: за реального часу швидкості й паузи нема (OD-53) — фраза про них зникає, а не перекладається на чіпи.
+const REALTIME_DROP := ["Стрілка часу: Space — пауза, +/− — швидкість.", "Space — пауза, +/− — швидкість", " · Space — пауза"]
+
+static func touchify(text: String, realtime: bool = false) -> String:
 	var out := text
+	if realtime:
+		for phrase in REALTIME_DROP:
+			out = out.replace(String(phrase), "")
+		out = out.strip_edges()
 	for pair in TOUCH_WORDS:
 		out = out.replace(String(pair[0]), String(pair[1]))
 	return out

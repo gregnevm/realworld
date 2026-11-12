@@ -17,6 +17,7 @@
 # cycles are owned here — rebuild detaches the old fleet; tests call s.dispose_farm().
 extends RefCounted
 
+const Realtime = preload("res://scripts/sim/realtime.gd")   # spec 0012: робочий темп за ON (OD-140)
 const Things = preload("res://scripts/kernel/things.gd")
 const CatalogDefs = preload("res://scripts/catalog_defs.gd")
 
@@ -51,7 +52,7 @@ static func update(s, dt: float) -> void:
 		rebuild(s)
 	if s.farm_things.is_empty():
 		return   # the shipped slice: no data.gd def grows -> zero cost, byte-identical
-	var dday: float = dt / maxf(1.0, float(s.time.day_len))
+	var dday: float = Realtime.work_dday(s, dt)   # OD-140: ферми за ON — робочий темп
 	var cells: Array = s.farm_things.keys()
 	cells.sort()   # deterministic harvest order
 	for cell in cells:

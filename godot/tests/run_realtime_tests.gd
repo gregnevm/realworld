@@ -82,6 +82,28 @@ func _init() -> void:
 	_t_catch_up_additive()
 	_t_catch_up_no_attacks()
 	_t_catch_up_session_roundtrip()
+	# --- WAVE 0012-W5: рішення за делегуванням OD-140…143 — робочий темп, сон, потреби офлайн ---
+	_t_work_pace_matches_off()
+	_t_sleep_full_one_hour()
+	_t_offline_needs_floor()
+	_t_hints_touch_first_at_on()
+	# --- WAVE 0012-W6: м'які підказки FTUE (OD-146) ---
+	_t_hints_pure_priority_cooldown()
+	_t_hints_session_lifecycle()
+	_t_hints_five_biomes()
+	_t_hints_saved_outside_hash()
+	# --- WAVE 0012-W7: локація — провайдери, валідація, «вільне поруч» (OD-147) ---
+	_t_location_validate()
+	_t_location_providers_same_world()
+	_t_location_nearest_free()
+	# --- WAVE 0012-W8: хвіст К1 — картка повернення, версія темпу, клімат/режисер/матриця прапорів ---
+	_t_return_summary_line()
+	_t_pacing_version_in_save()
+	_t_diurnal_from_local_clock()
+	_t_director_ignores_daylight()
+	_t_flag_matrix_daily_capsule()
+	_t_app_pause_goes_through_catch_up()
+	_t_start_warm_window()
 	chk.skip_banner()
 	finish()
 
@@ -1076,11 +1098,11 @@ func _t_pacing_table() -> void:
 		var v: float = float(row.s)
 		if v > 0.0 and (v < float(row.lo) or v > float(row.hi)):
 			bad.append(k)
-		if v <= 0.0 and not String(row.src).begins_with("TBD"):
+		if v <= 0.0 and not (String(row.src).begins_with("TBD") or String(row.src).begins_with("OD-14")):
 			bad.append(k)
 		if String(row.src).is_empty():
 			bad.append(k)
-	ok(bad.is_empty(), "REQ-0012-22: кожен рядок Pacing має підставу; задані — у sanity-діапазоні; незадані позначені TBD (%s)" % str(bad))
+	ok(bad.is_empty(), "REQ-0012-22: кожен рядок Pacing має підставу; задані — у sanity-діапазоні; незадані — TBD або рішення OD-14x (%s)" % str(bad))
 	ok(not Pacing.TABLE.has("thirst") and not Pacing.TABLE.has("water"), "REQ-0012-86: спраги в Pacing нема (OD-71)")
 
 
@@ -1310,6 +1332,8 @@ func _t_catch_up_additive() -> void:
 		var t0: int = T_NOV10_23_KYIV + rng.randi_range(0, 48) * MS_H + rng.randi_range(0, 3599999)
 		var t1: int = t0 + rng.randi_range(0, 20) * MS_H + rng.randi_range(0, 3599999)
 		var t2: int = t1 + rng.randi_range(0, 20) * MS_H + rng.randi_range(0, 3599999)
+		t2 = mini(t2, t0 + Realtime.CATCH_UP_LIMIT_MS)   # адитивність вимагається лише в межах ліміту (REQ-34)
+		t1 = mini(t1, t2)
 		var one: Variant = _rt_sim(t0)
 		Realtime.catch_up(one, t0, t2)
 		var two: Variant = _rt_sim(t0)
@@ -1363,3 +1387,376 @@ func _t_catch_up_session_roundtrip() -> void:
 	r4.restore_game(path, T_NOV10_23_KYIV)   # годинник відкочено нижче saved_at
 	ok(int(r4.sim.time.day) == int(r1.sim.time.day) and int(r4.sim.now_ms) >= later, "REQ-0012-68: відкат годинника нижче saved_at не відкочує день і годинник світу")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+
+# =====================================================================================================
+# WAVE 0012-W5 — OD-140 (робочий темп), OD-141 (рани/депривація), OD-142 (потреби офлайн), OD-143 (сон, чанк)
+# =====================================================================================================
+
+# REQ-0012-22/25 (OD-140), REQ-0012-19 (OD-141): дослідження/ферми/пальне/рани за ON — той самий темп, що за OFF
+func _t_work_pace_matches_off() -> void:
+	var on: Variant = _rt_sim(T_JUL1_12UTC)
+	var off: Variant = _rt_sim(T_JUL1_12UTC, KYIV, false)
+	ok(Realtime.work_dday(on, 0.1) == Realtime.work_dday(off, 0.1) and Realtime.work_dday(off, 0.1) == 0.1 / 150.0,
+		"REQ-0012-25 (OD-140): робочий dday за ON = за OFF (доба роботи 150 с) — перші дослідження досяжні як раніше")
+	var ses_on: Variant = SessionScript.new()
+	ses_on.use_realtime = true
+	ses_on.start(KYIV.x, KYIV.y, "Київ", T_JUL1_12UTC)
+	var ses_off: Variant = SessionScript.new()
+	ses_off.start(KYIV.x, KYIV.y, "Київ", T_JUL1_12UTC)
+	for ses in [ses_on, ses_off]:
+		ses.sim._place_building("research_bench", int(ses.sim.player.px) + 2, int(ses.sim.player.py) + 2, -1)
+		for i in 300:
+			ses.tick_research(0.1)
+	ok(ses_on.research_rate() > 0.0 and str(ses_on.progression.to_dict()) != str(SessionScript.new().progression), "REQ-0012-25: стіл справді дає дослідницькі очки (тест не порожній)")
+	ok(ses_on.progression.to_dict() == ses_off.progression.to_dict(), "REQ-0012-25 (OD-140): 30 с біля дослідницького столу — однаковий прогрес за ON і OFF")
+	ok(Pacing.seconds("starve_to_death") == 192000.0, "REQ-0012-20 (OD-141): від нуля шкали до смерті від голоду ~2.2 доби — записано в Pacing")
+
+
+# REQ-0012-16 (OD-143): за ON сон у ліжку відновлює 0 -> 100 за 1 год; за OFF +14/с
+func _t_sleep_full_one_hour() -> void:
+	var s: Variant = _rt_sim(T_JUL1_12UTC)
+	s.player.rest = 0.0
+	s.player.sleeping = true
+	s._update_player(60.0)
+	var gain: float = float(s.player.rest)
+	ok(absf(100.0 / gain * 60.0 - 3600.0) < 30.0, "REQ-0012-16: повний сон за ON — %.0f с (ціль 3 600, OD-143; баф капсули може скоротити)" % (100.0 / gain * 60.0))
+	ok(Realtime.sleep_rate(_rt_sim(T_JUL1_12UTC, KYIV, false)) == 14.0, "REQ-0012-3: за OFF сон +14/с, як до спеки")
+
+
+# REQ-0012-35 (OD-142): потреби офлайн — реальний темп за зарахований час, підлога 15; нижче підлоги — не чіпаємо
+func _t_offline_needs_floor() -> void:
+	var s: Variant = _rt_sim(T_NOV10_23_KYIV)
+	s.player.hunger = 100.0
+	s.player.rest = 100.0
+	var r: Dictionary = Realtime.catch_up(s, T_NOV10_23_KYIV, T_NOV10_23_KYIV + 2 * MS_H)
+	ok(absf(float(s.player.hunger) - (100.0 - 20.0)) < 1e-6 and absf(float(s.player.rest) - (100.0 - 12.5)) < 1e-6,
+		"REQ-0012-35: 2 год офлайн — голод −20, втома −12.5 (реальний темп; %d чанків по 1 хв)" % int(r.chunks))
+	var t: Variant = _rt_sim(T_NOV10_23_KYIV)
+	t.player.hunger = 100.0
+	t.player.rest = 100.0
+	Realtime.catch_up(t, T_NOV10_23_KYIV, T_NOV10_23_KYIV + 30 * MS_H)
+	ok(float(t.player.hunger) == Realtime.OFFLINE_NEED_FLOOR and float(t.player.rest) == Realtime.OFFLINE_NEED_FLOOR and float(t.player.hp) > 0.0,
+		"REQ-0012-35: 30 год офлайн — голод і втома на підлозі 15, герой живий (офлайн не вбиває)")
+	var u: Variant = _rt_sim(T_NOV10_23_KYIV)
+	u.player.hunger = 5.0
+	Realtime.catch_up(u, T_NOV10_23_KYIV, T_NOV10_23_KYIV + 5 * MS_H)
+	ok(float(u.player.hunger) == 5.0, "REQ-0012-35: потреба нижче підлоги офлайн не падає й не піднімається")
+
+
+
+const Fmt = preload("res://scripts/ui/format.gd")
+const Goals = preload("res://scripts/goals.gd")
+
+# REQ-0012-30: за ON підказки керування лише touch-first — без Space/WASD/ЛКМ і без неіснуючих чіпів швидкості
+func _t_hints_touch_first_at_on() -> void:
+	var bad: Array = []
+	for id in Goals.GOALS.size():
+		var g: Dictionary = Goals.GOALS[id]
+		var t: String = Fmt.touchify(String(g.get("hint", "")), true)
+		for w in ["Space", "WASD", "ЛКМ", "ПКМ", "+/−", "⏸", "×2"]:
+			if t.contains(w):
+				bad.append("%s:%s" % [String(g.get("id", "")), w])
+	ok(bad.is_empty(), "REQ-0012-30: усі підказки цілей за ON — без клавіш/миші/чіпів швидкості (%s)" % str(bad))
+	var survive: String = ""
+	for g in Goals.GOALS:
+		if String(g.id) == "survive":
+			survive = String(g.hint)
+	ok(Fmt.touchify(survive, false).contains("⏸ ×1 ×2 ×3"), "REQ-0012-3: за OFF на телефоні підказка, як раніше, веде до чіпів ⏸ ×1 ×2 ×3")
+	for on in [true, false]:
+		var ses: Variant = SessionScript.new()
+		ses.use_realtime = on
+		ses.start(KYIV.x, KYIV.y, "Київ", T_JUL1_12UTC)
+		var snap: Dictionary = HudModel.snapshot(ses, {"buildings": [], "stock": ses.sim.stock, "items": []}, {"day": 1}, Balance.Balance.new())
+		ok(bool(snap.ui.get("realtime", false)) == on and (snap.ui.has("realtime") == on), "REQ-0012-30: ui.realtime є лише за ON (OFF-знімок без нового ключа) — %s" % ("ON" if on else "OFF"))
+	var panel: Variant = Panels.GoalsPanel.new()
+	panel.bind({"goals": {"available": true, "done": 9, "total": 10, "current": {"id": "survive", "title": "x", "hint": survive, "pct": 0.1}}, "ui": {"realtime": true, "touch": false}})
+	ok(not panel._hint.text.contains("Space") and not panel._hint.text.contains("⏸"), "REQ-0012-30: панель цілей за ON на десктопі теж touch-first (%s)" % panel._hint.text)
+	panel.free()
+
+
+
+# =====================================================================================================
+# WAVE 0012-W6 — м'які підказки FTUE відкритого світу (spec 0012 §3.8, OD-146)
+# =====================================================================================================
+const Hints = preload("res://scripts/hints.gd")
+
+
+# REQ-0012-48: чиста функція; пріоритет ситуацій; cooldown вимикає лише свою підказку
+func _t_hints_pure_priority_cooldown() -> void:
+	ok(Hints.MAIN_CAPSULE_KIND == MainCapsule.KIND, "REQ-0012-48: дзеркало KIND капсули в hints.gd = MainCapsule.KIND")
+	var all := {"threat": true, "cold": true, "heat_near": false, "hunger": 10.0, "night_soon": true, "hotbar_empty": true, "built": false}
+	ok(Hints.evaluate(all, {}, 1000) == "threat" and Hints.evaluate(all, {}, 1000) == Hints.evaluate(all.duplicate(), {}, 1000), "REQ-0012-48: той самий вхід ⇒ той самий id; загроза — найвищий пріоритет")
+	ok(Hints.evaluate(all, {"threat": 5000}, 1000) == "cold", "REQ-0012-49: підказка на cooldown пропускається — наступна за пріоритетом")
+	ok(Hints.evaluate(all, {"threat": 5000}, 5000) == "threat", "REQ-0012-49: cooldown закінчився — підказка повертається")
+	var warm := all.duplicate()
+	warm.threat = false
+	warm.heat_near = true
+	ok(Hints.evaluate(warm, {}, 0) == "hunger", "REQ-0012-48: холод біля джерела тепла — не підказка (тепло вже є)")
+	ok(Hints.evaluate({"built": true}, {}, 0) == "", "REQ-0012-49: нема ситуації — нема підказки")
+	ok(Hints.def_of("cold").build == "campfire" and Hints.def_of("threat").build == "wall", "REQ-0012-50: слот, що дихає, — від ситуації (холод → багаття, машина → стіна), а не від номера кроку")
+	var bad: Array = []
+	for h in Hints.HINTS:
+		for w in ["Space", "WASD", "ЛКМ", "ПКМ", "клікни", "5-го дня", "Крок"]:
+			if String(h.hint).contains(w) or String(h.title).contains(w):
+				bad.append(String(h.id))
+	ok(bad.is_empty(), "REQ-0012-30/55: тексти підказок — touch-first, без «днів 1–5» і кроків (%s)" % str(bad))
+
+
+# REQ-0012-47/49/53: за ON у сесії — ≤ 1 підказка; гасне з ситуацією або за 60 с; cooldown 10 хв; чипа «Цілі» без підказки нема
+func _t_hints_session_lifecycle() -> void:
+	var ses: Variant = SessionScript.new()
+	ses.use_realtime = true
+	ses.use_inventory = true
+	ses.start(KYIV.x, KYIV.y, "Київ", T_JUL1_12UTC)
+	ses.tick_goals(1.0)
+	var v: Dictionary = ses.goals_view()
+	ok(bool(v.hints) and bool(v.available) and String(v.current.id) == "gather", "REQ-0012-46: перша підказка нового світу — «розвідай околиці», а не «розпали багаття» (%s)" % str(v.get("current", {}).get("id", "")))
+	ok(not str(v).contains("Крок") and int(v.total) == 0, "REQ-0012-47: жодного «крок N з M» у підказці")
+	ses.sim.set_clock(T_JUL1_12UTC + Hints.SHOW_MS)
+	ses.tick_goals(1.0)
+	ok(not bool(ses.goals_view().available), "REQ-0012-49: за 60 с підказка гасне сама; чипа «Цілі» без підказки нема (REQ-53)")
+	ok(int(ses.hint_cooldowns.get("gather", 0)) == T_JUL1_12UTC + Hints.SHOW_MS + Hints.COOLDOWN_MS, "REQ-0012-49: після згасання — cooldown 10 хв")
+	ses.sim.set_clock(T_JUL1_12UTC + Hints.SHOW_MS + 60000)
+	ses.sim.player.hunger = 20.0
+	ses.tick_goals(1.0)
+	ok(String(ses.goals_view().current.id) == "hunger", "REQ-0012-48: нова ситуація (голод) — нова підказка, поки «розвідай» на cooldown")
+	ses.sim.player.hunger = 90.0
+	ses.sim.set_clock(T_JUL1_12UTC + Hints.SHOW_MS + 61000)
+	ses.tick_goals(1.0)
+	ok(not bool(ses.goals_view().available) and ses.hint_cooldowns.has("hunger"), "REQ-0012-49: ситуація минула — підказка гасне одразу й іде на cooldown")
+	var h0: String = Persistence.world_hash(ses.sim)
+	ses.tick_goals(1.0)
+	ok(Persistence.world_hash(ses.sim) == h0, "REQ-0012-51: підказки лише спостерігають — world_hash не змінюється")
+
+
+# REQ-0012-46: у 5 біомах перший набір підказок непорожній і не прив'язаний до біому
+func _t_hints_five_biomes() -> void:
+	var spots: Array = [["сніг", 69.35, 88.20], ["ліс", 48.40, 24.50], ["пустеля", 23.40, 13.00], ["місто", 50.4501, 30.5234], ["узбережжя", 46.48, 30.73]]
+	for sp in spots:
+		var ses: Variant = SessionScript.new()
+		ses.use_realtime = true
+		ses.use_inventory = true
+		ses.start(float(sp[1]), float(sp[2]), String(sp[0]), T_JAN15_12UTC)
+		ses.tick_goals(1.0)
+		var v: Dictionary = ses.goals_view()
+		ok(bool(v.available) and String(v.current.id) != "fire", "REQ-0012-46: %s — перша підказка «%s»" % [String(sp[0]), String(v.get("current", {}).get("title", "—"))])
+
+
+# REQ-0012-49/51: cooldown-и — у сейві (поза world_hash), переживають «Продовжити»; за OFF ключа нема
+func _t_hints_saved_outside_hash() -> void:
+	var path := "user://rt_w6_test.json"
+	var ses: Variant = SessionScript.new()
+	ses.use_realtime = true
+	ses.start(KYIV.x, KYIV.y, "Київ", T_JUL1_12UTC)
+	ses.hint_cooldowns = {"cold": T_JUL1_12UTC + 123456}
+	ses.save_game(path)
+	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))
+	ok(raw.has("hints") and String(raw.hints.cold) == str(T_JUL1_12UTC + 123456), "REQ-0012-49: cooldown-и в сейві (UTC-мс рядком)")
+	var r: Variant = SessionScript.new()
+	r.restore_game(path, T_JUL1_12UTC)
+	ok(int(r.hint_cooldowns.get("cold", 0)) == T_JUL1_12UTC + 123456, "REQ-0012-51: cooldown-и переживають «Продовжити»")
+	var off: Variant = SessionScript.new()
+	off.start(KYIV.x, KYIV.y, "Київ", T_JUL1_12UTC)
+	off.save_game(path)
+	ok(not (JSON.parse_string(FileAccess.get_file_as_string(path)) as Dictionary).has("hints"), "REQ-0012-2: за OFF у сейві ключа hints нема")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+
+# =====================================================================================================
+# WAVE 0012-W7 — локація (spec 0012 §3.7, OD-147)
+# =====================================================================================================
+const Location = preload("res://scripts/location.gd")
+
+
+# REQ-0012-75: кожен невалідний вхід — явний стан, регіон не створюється
+func _t_location_validate() -> void:
+	var cases: Array = [
+		[{"lat": NAN, "lon": 30.0}, Location.R_NAN], [{"lat": 50.0, "lon": INF}, Location.R_NAN], [{"lat": "50", "lon": 30.0}, Location.R_NAN],
+		[{"lat": 90.5, "lon": 0.5}, Location.R_RANGE], [{"lat": 10.0, "lon": -180.01}, Location.R_RANGE],
+		[{"lat": 0.0, "lon": 0.0}, Location.R_NULL_ISLAND], [{"denied": true}, Location.R_DENIED], [{"unavailable": true}, Location.R_UNAVAILABLE],
+		[{"lat": 50.0, "lon": 30.0, "age_ms": Location.MAX_FIX_AGE_MS + 1}, Location.R_STALE],
+		[{"lat": 50.0, "lon": 30.0, "accuracy_m": Location.MAX_ACCURACY_M + 1.0}, Location.R_INACCURATE],
+	]
+	for c in cases:
+		var v: Dictionary = Location.validate(c[0])
+		ok(not bool(v.ok) and v.reason == c[1] and String(v.msg) != "", "REQ-0012-75: %s ⇒ %s («%s»)" % [str(c[0]), String(c[1]), String(v.get("msg", ""))])
+	ok(bool(Location.validate({"lat": 90.0, "lon": -180.0}).ok) and bool(Location.validate({"lat": 0.0, "lon": 0.001}).ok), "REQ-0012-75: межі ±90/±180 і точка біля (0,0) — валідні")
+	for bad in [[NAN, 30.0], [0.0, 0.0], [95.0, 30.0]]:
+		var ses: Variant = SessionScript.new()
+		ok(not ses.start(float(bad[0]), float(bad[1]), "x", T_JUL1_12UTC) and ses.sim == null and ses.last_error != &"",
+			"REQ-0012-75: Session.start(%s) відмовляє (%s) і не створює регіон" % [str(bad), String(ses.last_error)])
+	ok(Location.fake_allowed(false, false) and Location.fake_allowed(true, true) and not Location.fake_allowed(true, false),
+		"REQ-0012-40: фейк-GPS — у ПК/dev-збірці, у мобільному релізі — ні")
+
+
+# REQ-0012-39/41: підміна провайдера не міняє код sim; однакові канонізовані координати ⇒ той самий світ
+func _t_location_providers_same_world() -> void:
+	var fake: Location.LocationProvider = Location.FakeProvider.new(KYIV.x, KYIV.y)
+	var dev := Location.DeviceProvider.new()
+	ok(not bool(Location.validate(dev.current()).ok) and Location.validate(dev.current()).reason == Location.R_UNAVAILABLE, "REQ-0012-39: GPS телефону без фіксу — явне «недоступно», не тихий фолбек")
+	dev.feed({"lat": KYIV.x + 0.00001, "lon": KYIV.y - 0.00001, "age_ms": 1000, "accuracy_m": 12.0})   # той самий canon_coord (4 знаки)
+	var a: Dictionary = Location.validate(fake.current())
+	var b: Dictionary = Location.validate(dev.current())
+	var sa: Variant = _rt_sim(T_JUL1_12UTC, Vector2(float(a.lat), float(a.lon)))
+	var sb: Variant = _rt_sim(T_JUL1_12UTC, Vector2(float(b.lat), float(b.lon)))
+	ok(WorldGen.canon_coord(float(a.lat), float(a.lon)) == WorldGen.canon_coord(float(b.lat), float(b.lon)) and sa.region_seed() == sb.region_seed(),
+		"REQ-0012-41: фейк і GPS телефону з тими самими канонізованими координатами ⇒ той самий seed регіону")
+	ok(fake.kind() != dev.kind(), "REQ-0012-39: провайдери підмінювані (fake / device) без зміни sim")
+
+
+# REQ-0012-43/44/76: детерміновано; заглушка зайнятості — «вільно»; межі кулі; явна помилка за радіусом
+func _t_location_nearest_free() -> void:
+	var occ := Location.OccupancyProvider.new()
+	var r0: Dictionary = Location.nearest_free(KYIV.x, KYIV.y, occ.snapshot())
+	ok(bool(r0.ok) and int(r0.ring) == 0 and r0.lat == KYIV.x, "REQ-0012-44: без сервера все вільне — місце = саме місце")
+	occ.occupied[WorldGen.canon_coord(KYIV.x, KYIV.y)] = true
+	var r1: Dictionary = Location.nearest_free(KYIV.x, KYIV.y, occ.snapshot())
+	var r1b: Dictionary = Location.nearest_free(KYIV.x, KYIV.y, occ.snapshot())
+	ok(bool(r1.ok) and int(r1.ring) == 1 and r1 == r1b, "REQ-0012-43: зайнято ⇒ найближче вільне на кільці 1, однаково за однакових входів")
+	var pole: Dictionary = Location.nearest_free(89.995, 179.995, {WorldGen.canon_coord(89.995, 179.995): true})
+	ok(bool(pole.ok) and absf(float(pole.lat)) <= 90.0 and absf(float(pole.lon)) <= 180.0, "REQ-0012-76: біля полюса й ±180 — визначений результат у межах кулі")
+	var all := {}
+	for dy in range(-Location.FREE_MAX_RING, Location.FREE_MAX_RING + 1):
+		for dx in range(-Location.FREE_MAX_RING, Location.FREE_MAX_RING + 1):
+			all[WorldGen.canon_coord(10.0 + dy * Location.FREE_STEP_DEG, 10.0 + dx * Location.FREE_STEP_DEG)] = true
+	var none: Dictionary = Location.nearest_free(10.0, 10.0, all)
+	ok(not bool(none.ok) and none.reason == Location.R_NO_FREE, "REQ-0012-76: усе в радіусі зайнято ⇒ явна помилка, пошук завершується")
+
+
+
+# =====================================================================================================
+# WAVE 0012-W8 — хвіст кроку 1
+# =====================================================================================================
+
+func _last_logs(ses: Variant, n: int) -> String:
+	var lines: Array = []
+	var msgs: Array = ses.sim.messages
+	for e in msgs.slice(maxi(0, msgs.size() - n)):
+		lines.append(String((e as Dictionary).get("text", "")))
+	return "\n".join(lines)
+
+
+# REQ-0012-37/72 (OD-148): після догону — один рядок-підсумок; «обрізано», коли офлайн довший за ліміт
+func _t_return_summary_line() -> void:
+	var path := "user://rt_w8_test.json"
+	var ses: Variant = SessionScript.new()
+	ses.use_realtime = true
+	ses.start(KYIV.x, KYIV.y, "Київ", T_NOV10_23_KYIV)
+	ses.sim.player.hunger = 100.0
+	ses.save_game(path)
+	var r: Variant = SessionScript.new()
+	r.restore_game(path, T_NOV10_23_KYIV + 30 * MS_H)
+	var tail: String = _last_logs(r, 3)
+	ok(tail.contains("Поки тебе не було: 30 год") and tail.contains("🍖 −") and tail.contains("✂ враховано 24 год") and tail.contains("нападів не було"),
+		"REQ-0012-37/72: картка повернення — тривалість, втрати, «обрізано до 24 год», без нападів")
+	var q: Variant = SessionScript.new()
+	q.restore_game(path, T_NOV10_23_KYIV + 30000)
+	ok(not _last_logs(q, 3).contains("Поки тебе не було"), "REQ-0012-37: повернення за 30 с — без картки (шуму нема)")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+# REQ-0012-73: ON-сейв несе schema + pacing_version; новіша версія темпу — відмова з причиною
+func _t_pacing_version_in_save() -> void:
+	var path := "user://rt_w8b_test.json"
+	var ses: Variant = SessionScript.new()
+	ses.use_realtime = true
+	ses.start(KYIV.x, KYIV.y, "Київ", T_JUL1_12UTC)
+	ses.save_game(path)
+	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))
+	ok(String(raw.get("schema", "")) == "realtime" and int(raw.get("pacing_version", 0)) == Pacing.VERSION, "REQ-0012-73: ON-сейв — schema=realtime, pacing_version=%d" % Pacing.VERSION)
+	raw["pacing_version"] = Pacing.VERSION + 1
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string(JSON.stringify(raw, "", true, true))
+	f.close()
+	var r: Variant = SessionScript.new()
+	ok(not r.restore_game(path, T_JUL1_12UTC) and r.last_error == &"pacing_newer" and r.sim == null, "REQ-0012-73: сейв новішої таблиці темпу — відмова (pacing_newer), не мовчазне OFF")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+# REQ-0012-87: добовий хід температури за ON — від місцевого годинника: уночі холодніше, ніж удень, у той самий день
+func _t_diurnal_from_local_clock() -> void:
+	var s: Variant = _rt_sim(1782975600000)   # 02.07 10:00 Київ... далі 14:00 і 04:00
+	s.set_clock(1782990000000)   # 02.07 14:00 за Києвом
+	s.update(0.1)
+	var day_t: float = float(s.ambient_temp_c()) - float(s.temp_offset)
+	s.set_clock(1783040400000)   # 03.07 04:00 за Києвом
+	s.update(0.1)
+	var night_t: float = float(s.ambient_temp_c()) - float(s.temp_offset)
+	ok(night_t < day_t, "REQ-0012-87: 04:00 холодніше за 14:00 того ж сезону (%.1f < %.1f °C) — фаза доби з місцевого годинника" % [night_t, day_t])
+
+
+# REQ-0012-88: режисер і загрози не читають daylight/час доби
+func _t_director_ignores_daylight() -> void:
+	var bad: Array = []
+	for f in ["res://scripts/sim/director.gd", "res://scripts/sim/threats.gd"]:
+		var src: String = FileAccess.get_file_as_string(f)
+		for w in ["daylight", "light_at", "time.frac", "phase_name"]:
+			if src.contains(w):
+				bad.append("%s:%s" % [f.get_file(), w])
+	ok(bad.is_empty(), "REQ-0012-88: director/threats не читають daylight, light_at, frac (%s)" % str(bad))
+
+
+# REQ-0012-26/66: матриця use_realtime × use_main_capsule для щоденного заряду капсули (spec 0002)
+func _t_flag_matrix_daily_capsule() -> void:
+	# (ON, капсула OFF): заряд — на реальній опівночі регіону, не від лічильника тіків
+	var s: Variant = _rt_sim(1794347999000 - MS_H)
+	s.capsule.charges = 0
+	for i in 20:
+		s.update(1.0)
+	ok(int(s.capsule.charges) == 0, "REQ-0012-26: ON без капсули — тіки без опівночі заряду не дають")
+	s.set_clock(1794348000000)
+	s.update(0.1)
+	ok(int(s.capsule.charges) > 0, "REQ-0012-26/66: ON без капсули — опівніч за Києвом дає щоденний заряд (за now)")
+	# (ON, капсула ON): заряд не нараховується (REQ-0010-41)
+	var c: Variant = Sim.new()
+	c.use_realtime = true
+	c.use_inventory = true
+	c.use_catalog = true
+	c.use_main_capsule = true
+	c.set_clock(1794347999000 - MS_H)
+	c.new_game(WorldGen.generate_map(KYIV.x, KYIV.y, 56), false)
+	var ch0: int = int(c.capsule.charges)
+	c.set_clock(1794348000000 + MS_H)
+	c.update(0.1)
+	ok(int(c.capsule.charges) == ch0, "REQ-0012-66: ON + капсула — щоденний заряд не нараховується (REQ-0010-41)")
+
+
+
+# REQ-0012-38 (OD-149): згорнутий застосунок не тікає; розрив ≥ 5 с — догін (дні рахуються один раз), коротший — dt обрізано
+func _t_app_pause_goes_through_catch_up() -> void:
+	var ses: Variant = SessionScript.new()
+	ses.use_realtime = true
+	var t0: int = T_NOV10_23_KYIV + 59 * 60000   # 23:59 за Києвом
+	ses.start(KYIV.x, KYIV.y, "Київ", t0)
+	ok(is_equal_approx(ses.frame_dt(0.016, t0), 0.016), "REQ-0012-38: звичайний кадр — dt як є")
+	ok(is_equal_approx(ses.frame_dt(3.0, t0 + 3000), Realtime.MAX_FRAME_DT), "REQ-0012-38: мікро-пауза 3 с — dt обрізано до 0.25 с")
+	var d0: int = int(ses.sim.time.day)
+	var h0: float = float(ses.sim.player.hunger)
+	var t1: int = t0 + 2 * MS_H   # через опівніч
+	ok(ses.frame_dt(7200.0, t1) == 0.0, "REQ-0012-38: розрив 2 год — кадр сим не тікає (dt = 0), час іде через догін")
+	ses.push_clock(t1)
+	ses.sim.update(0.1)
+	ok(int(ses.sim.time.day) == d0 + 1, "REQ-0012-38: опівніч у розриві пораховано рівно один раз (догін + sync)")
+	ok(float(ses.sim.player.hunger) < h0 and int(ses.last_catch_up.attacks) == 0, "REQ-0012-38/84: потреби впали за догоном, нападів нема")
+	var off: Variant = SessionScript.new()
+	off.start(KYIV.x, KYIV.y, "Київ", t0)
+	ok(off.frame_dt(7200.0, t1) == 7200.0, "REQ-0012-3: за OFF dt кадру не змінюється")
+
+
+# REQ-0012-54 (OD-150): перші 15 хв після першої посадки капсули холод не накопичується
+func _t_start_warm_window() -> void:
+	var c: Variant = Sim.new()
+	c.use_realtime = true
+	c.use_inventory = true
+	c.use_catalog = true
+	c.use_main_capsule = true
+	c.set_clock(T_JAN15_12UTC)
+	c.new_game(WorldGen.generate_map(KYIV.x, KYIV.y, 56), false)
+	ok(Realtime.frost_gain_scale(c, HeroHealth.EXPOSURE_PACE) == 0.0, "REQ-0012-54: щойно після посадки взимку — холод не накопичується")
+	c.set_clock(T_JAN15_12UTC + Realtime.START_WARM_MS - 1)
+	ok(Realtime.in_start_window(c), "REQ-0012-54: на 14:59 вікно ще діє")
+	c.set_clock(T_JAN15_12UTC + Realtime.START_WARM_MS)
+	ok(not Realtime.in_start_window(c) and Realtime.frost_gain_scale(c, HeroHealth.EXPOSURE_PACE) > 0.0, "REQ-0012-54: з 15-ї хвилини холод діє як завжди")

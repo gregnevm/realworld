@@ -194,7 +194,7 @@ func _start_game(lat: float, lon: float, place_name: String) -> void:
 	if _capsule_enabled():   # Основна капсула (spec 0010) УВІМК за замовчуванням у збірках (OD-114); опт-аут `-- nocapsule` / web `?nocapsule` = старий шлях
 		session.use_catalog = true        # капсула вимагає відкритого складу (REQ-0010-59)
 		session.use_main_capsule = true
-	session.use_realtime = "realtime" in OS.get_cmdline_user_args()   # spec 0012: реальний час 1:1 — поки лише dev-перемикач `-- realtime` (дефолт збірки — рішення власника)
+	session.use_realtime = _realtime_enabled()   # spec 0012: реальний час 1:1 — УВІМК у збірках (OD-138/145); «Продовжити» бере прапор із сейву (REQ-62)
 	session.autosave = not shot_mode
 	if not session.start(lat, lon, place_name, _clock.now_ms()):
 		push_error("Старт світу відхилено: %s" % String(session.last_error))
@@ -305,6 +305,16 @@ func _set_menu(on: bool) -> void:
 		_refresh_menu()
 
 # Основна капсула УВІМК за замовчуванням (OD-114, 2026-11-08; змінює дефолт OD-7 для збірок).
+# Реальний час (spec 0012, OD-145): УВІМК за замовчуванням; опт-аут `-- norealtime`. Кадри `shot` лишаються на OFF (детерміновані:
+# годинник пристрою інакше міняв би кожен кадр), якщо явно не попросити `-- realtime`.
+func _realtime_enabled() -> bool:
+	var args := OS.get_cmdline_user_args()
+	if "norealtime" in args:
+		return false
+	if "realtime" in args:
+		return true
+	return not shot_mode
+
 # spec 0012 REQ-28/83: за реального часу множник часу завжди 1 — швидкості ×2/×3 і пауза лише за debug-прапором
 # `-- devtime` у debug-збірці (dev_time_scale: не пишеться в сейв, не в world_hash; годинник `now` від нього не прискорюється).
 # За OFF — байт-у-байт як було (чіпи ×1–×3 і пауза, REQ-0012-3).
@@ -355,9 +365,11 @@ func _process(dt: float) -> void:
 			_shot_step(dt)   # `shot spawn`: the spawn screen itself is the subject
 		return
 	view.sim = session.sim            # travel/respawn swap the sim under the session — track it
-	session.push_clock(_clock.now_ms())   # годинник пристрою -> sim (монотонно); сам sim час не читає
-	session.tick_realm(_clock.now_ms())   # spec 0013: RealGPS присутність (власний тротлінг 1 с)
-	var sdt := dt * _time_scale()
+	var now_ms: int = _clock.now_ms()
+	var fdt: float = session.frame_dt(dt, now_ms)   # spec 0012 REQ-38: за ON розрив кадрів ≥ 5 с — догін, не величезний dt (ДО push_clock)
+	session.push_clock(now_ms)   # годинник пристрою -> sim (монотонно); сам sim час не читає
+	session.tick_realm(now_ms)   # spec 0013: RealGPS присутність (власний тротлінг 1 с)
+	var sdt := fdt * _time_scale()
 	if sdt > 0.0 and not session.sim.dead:
 		session.sim.update(sdt)
 		session.tick_research(sdt)    # research benches fund the tech pipeline each frame
