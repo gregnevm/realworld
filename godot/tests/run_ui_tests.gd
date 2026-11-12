@@ -280,6 +280,16 @@ func _t_comprehension() -> void:
 	vit_p.bind(vit_vm)
 	ok(vit_p._warm.modulate == Tokens.WHITE, "REQ-0014-11: …and is back to normal when the pointer is gone")
 	vit_p.free()
+	# REQ-0014-8: even with two live sources (a goal that wants a bed AND the cold) exactly ONE pointer comes out, and the cold wins
+	var gboth: Dictionary = GP.compute(gs, {"goals": {"current": {"build": "bed", "id": "bed"}}, "vitals": {"comfort": &"cold"}, "clock": {"day": 1}}, false)
+	ok(gboth.has("cell") and String(gboth.get("kind", "")) == "need" and String(gboth.get("build", "")) == "campfire", "REQ-0014-8: two sources (goal + cold) → ONE pointer, the cold's remedy")
+	# REQ-0014-9: a done goal (no current build) → no pointer; a blocked anchor cell → the next valid one (recomputed every frame, no timer)
+	ok(GP.compute(gs, {"goals": {"current": {}}, "vitals": {"comfort": &"ok"}, "clock": {"day": 1}}, false).is_empty(), "REQ-0014-9: the goal is done → the pointer is gone")
+	var blocked: int = int(gcell.y) * int(gs.n) + int(gcell.x)
+	gs.map.nodes[blocked] = {"kind": "tree", "amount": 5}
+	var g_re: Dictionary = GP.compute(gs, gvm, false)
+	ok(g_re.is_empty() or (g_re.cell as Vector2i) != gcell, "REQ-0014-9: a cell that became invalid is not pointed at any more (recomputed to the next valid one)")
+	gs.map.nodes.erase(blocked)
 	var h0: String = String(PersistenceMod.world_hash(gs))
 	GP.compute(gs, gvm, false)
 	ok(h0 == String(PersistenceMod.world_hash(gs)), "REQ-0014-15: computing the pointer leaves world_hash untouched")
