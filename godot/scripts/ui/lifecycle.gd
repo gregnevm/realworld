@@ -394,12 +394,19 @@ class DeathScreen extends Control:
 
 	# spec 0011 REQ-0011-13/41/42/51: за Орбіти респавн = вибір клона. rows: [{id, state, genome}] (мертвого немає), base_wait_s: секунди
 	# до безкоштовного базового клона (0 = доступний). Ідемпотентно: кнопки перебудовуються лише при зміні даних (bind() іде щокадру).
-	func bind_orbit(rows: Array, base_wait_s: int) -> void:
+	@warning_ignore("integer_division")
+	func bind_orbit(rows: Array, base_wait_s: int, last_death: Dictionary = {}) -> void:
 		if _orbit_box == null:
 			return
-		var sig: String = JSON.stringify([rows, base_wait_s])
+		var sig: String = JSON.stringify([rows, base_wait_s, last_death])
 		_btn.visible = false
-		_what.text = ("Причина: %s\n" % cause if cause != "" else "") + "Клона втрачено назавжди. Торба лишилась на місці загибелі — її можна забрати."
+		var lived_s: int = int(last_death.get("lived_real_sec", 0))   # REQ-0011-51: скільки клон прожив — у РЕАЛЬНИХ одиницях (OD-35)
+		var lived: String = ""
+		if lived_s >= 3600:
+			lived = "Прожито: %d год\n" % (lived_s / 3600)
+		elif lived_s >= 60:
+			lived = "Прожито: %d хв\n" % (lived_s / 60)
+		_what.text = ("Причина: %s\n" % cause if cause != "" else "") + lived + "Клона втрачено назавжди. Торба лишилась на місці загибелі — її можна забрати."
 		_epitaph.text = "Обери, хто прокинеться."
 		if sig == _orbit_sig:
 			return

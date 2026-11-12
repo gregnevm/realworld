@@ -425,6 +425,8 @@ func _t_death_screen() -> void:
 	(box.get_child(1) as Button).pressed.emit()
 	(box.get_child(2) as Button).pressed.emit()
 	ok(got == ["c5", ""], "REQ-0011-6: the screen only emits the choice (clone id / empty = base clone)")
+	ds.bind_orbit(rows, 0, {"lived_real_sec": 7300, "cause": "cold"})
+	ok("Прожито: 2 год" in String(ds._what.text) and "Причина" in String(ds._what.text) and "втрачено назавжди" in String(ds._what.text), "REQ-0011-51: the first Orbit frame after a death shows cause, how long the clone lived (real units) and what is lost")
 	ds.bind_orbit(rows, 120)
 	ok((box.get_child(2) as Button).disabled and "120" in (box.get_child(2) as Button).text, "REQ-0011-60: base clone shows the cooldown seconds and is disabled")
 	ds.queue_free()

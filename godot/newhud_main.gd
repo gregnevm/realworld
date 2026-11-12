@@ -421,7 +421,7 @@ func _process(dt: float) -> void:
 	if session.sim.dead:
 		death_screen.bind(hud_root.last_snap.get("death", {}))
 		if session.orbit != null:
-			death_screen.bind_orbit(session.orbit_rows(), session.orbit_base_wait_s())
+			death_screen.bind_orbit(session.orbit_rows(), session.orbit_base_wait_s(), (session.orbit.get("last_death", {}) as Dictionary))
 	_autosave_t += dt
 	if _autosave_t >= AUTOSAVE_EVERY or int(session.sim.time.day) != _saved_day:
 		_autosave()

@@ -27,8 +27,8 @@
 ### 3.1 Прапор, OFF = байт-у-байт
 | ID | Вимога (одне перевірне речення) | Як перевіримо | Статус |
 |---|---|---|---|
-| REQ-0011-1 | [К1] За `use_orbit=false` `Persistence.world_hash` після N тіків і результат `Session.save_game` збігаються байт-у-байт із еталонною фікстурою до цієї спеки. | `run_determinism_tests` + нова фікстура «orbit OFF == baseline»; порівняння рядка save | open · на стабі (OD-106) |
-| REQ-0011-2 | [К1] За `use_orbit=false` `Session.respawn()` і `Sim.respawn_new_pawn()` поводяться як до цієї спеки (новий пішак, навички з нуля), а жодне orbit-поле не потрапляє в save. | Існуючі `_t_save_continue`/`_t_death_epitaph` зелені без змін; assert: у save немає ключа `orbit` | open · на стабі (OD-106) |
+| REQ-0011-1 | [К1] За `use_orbit=false` `Persistence.world_hash` після N тіків і результат `Session.save_game` збігаються байт-у-байт із еталонною фікстурою до цієї спеки. | `run_determinism_tests` + нова фікстура «orbit OFF == baseline»; порівняння рядка save | done (OFF не змінено: WORLD_HASH_FINAL у run_determinism_tests, off_baseline у run_capsule_tests/run_realtime_tests і «жодного orbit-ключа в сейві» у run_orbit_tests; CI прогін 43236897704) |
+| REQ-0011-2 | [К1] За `use_orbit=false` `Session.respawn()` і `Sim.respawn_new_pawn()` поводяться як до цієї спеки (новий пішак, навички з нуля), а жодне orbit-поле не потрапляє в save. | Існуючі `_t_save_continue`/`_t_death_epitaph` зелені без змін; assert: у save немає ключа `orbit` | done (OFF не змінено: WORLD_HASH_FINAL у run_determinism_tests, off_baseline у run_capsule_tests/run_realtime_tests і «жодного orbit-ключа в сейві» у run_orbit_tests; CI прогін 43236897704) |
 | REQ-0011-3 | [К1] Спроба `use_orbit=true` при `use_inventory=false` відхиляється явною помилкою до `new_game`. | Unit-тест на `new_game` з комбінаціями прапорів | done (модельний рівень + Session; run_orbit_tests, OD-151) |
 
 ### 3.2 Орбіта (OD-26)
