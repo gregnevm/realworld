@@ -19,6 +19,9 @@ const DEFAULT := {
 	"genome_start_permille": 100,      # OD-82/100: +10 % to the start stat of the genome axis
 	"genome_growth_permille": 50,      # +5 % average growth on the axis
 	"tech_bonus_permille": 10,         # per tech level, all axes
+	"genome_loot_permille": 30,        # OD-C7/OD-101: «рідкісний дроп» — 3 % рідкісних клітинок/руїн несуть геном
+	"synth_bio": 30,                   # OD-C7: біо-цех — 30 bio → 1 геном
+	"synth_ms": 21600000,              # 6 год реального часу
 }
 
 static var provider: Variant = null

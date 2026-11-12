@@ -191,6 +191,46 @@ static func on_death(o: Dictionary, clone_id: String, cause: String, now: int, b
 	return {"ok": true}
 
 
+# REQ-0011-28: genome loot from a rare location/ruin — a pure function of (coord, tile, salt), no RNG; "" = nothing.
+# Frequency from the tuning table; the genome type is spread evenly over the three types by the same hash.
+static func genome_loot(coord_key: String, tile_x: int, tile_y: int, salt: int) -> String:
+	var h: int = _fnv("%s|%d|%d|%d" % [coord_key, tile_x, tile_y, salt])
+	if h % 1000 >= Tuning.value("genome_loot_permille"):
+		return ""
+	var kinds: Array = Tuning.GENOMES.keys()
+	kinds.sort()
+	return "genome:" + String(kinds[(h / 1000) % kinds.size()])
+
+
+# REQ-0011-29: the bio workshop turns bio into a genome over real time from `now` (one job at a time per account).
+# The type is picked deterministically from (account_seed, clone_counter, job count). Returns {ok} | {ok:false, reason}.
+static func begin_synthesis(o: Dictionary, now: int) -> Dictionary:
+	if o.has("synth") and not (o["synth"] as Dictionary).is_empty():
+		return {"ok": false, "reason": &"busy"}
+	var ss: Variant = o["safe_stock"]
+	if _bio_total(ss) < Tuning.value("synth_bio"):
+		return {"ok": false, "reason": &"no_bio"}
+	_take_bio(ss, Tuning.value("synth_bio"))
+	var kinds: Array = Tuning.GENOMES.keys()
+	kinds.sort()
+	var pick: int = _fnv("%d|%d|%d" % [int(o["account_seed"]), int(o["clone_counter"]), now]) % kinds.size()
+	o["synth"] = {"ready_at": now + Tuning.value("synth_ms"), "genome": "genome:" + String(kinds[pick])}
+	return {"ok": true}
+
+
+# Delivers a finished synthesis into the safe stock (partial-fit safe: stays pending if the stock is full).
+static func collect_synthesis(o: Dictionary, now: int) -> Dictionary:
+	if not o.has("synth") or (o["synth"] as Dictionary).is_empty():
+		return {"ok": false, "reason": &"none"}
+	var j: Dictionary = o["synth"]
+	if now < int(j["ready_at"]):
+		return {"ok": false, "reason": &"not_ready"}
+	if int(o["safe_stock"].deposit(String(j["genome"]), 1)) < 1:
+		return {"ok": false, "reason": &"full"}
+	o["synth"] = {}
+	return {"ok": true, "genome": String(j["genome"])}
+
+
 # --- REQ-0011-18…22: lazy settle of the sleepers ---------------------------------------------------------------------------
 
 static func _bio_total(ss: Variant) -> int:
@@ -315,6 +355,9 @@ static func from_dict(d: Dictionary) -> Dictionary:
 		(o["creating"] as Array).append({"started_at": int(m["started_at"]), "ready_at": int(m["ready_at"]), "genome_type": String(m["genome_type"])})
 	for k in (d.get("tech", {}) as Dictionary):
 		(o["tech"] as Dictionary)[String(k)] = int(d["tech"][k])
+	var sj: Dictionary = d.get("synth", {})
+	if not sj.is_empty():
+		o["synth"] = {"ready_at": int(sj["ready_at"]), "genome": String(sj["genome"])}
 	var ld: Dictionary = d.get("last_death", {})
 	if not ld.is_empty():
 		var ldo: Dictionary = ld.duplicate(true)

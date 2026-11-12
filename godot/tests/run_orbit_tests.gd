@@ -39,6 +39,7 @@ func _init() -> void:
 	_t_session_save_restore()
 	_t_session_ascend()
 	_t_bag_ttl()
+	_t_genome_loot_and_synthesis()
 	_t_determinism_scenario()
 	await _t_death_screen()
 	_t_source_hygiene()
@@ -322,6 +323,29 @@ func _t_bag_ttl() -> void:
 	s.sim.set_clock(T0 + D)
 	InvMod.pickup_bags(s.sim, {"px": -50.0, "py": -50.0})
 	ok(s.sim.bags.is_empty(), "REQ-0011-33/OD-59: the bag expires at 24 h of real time")
+
+
+func _t_genome_loot_and_synthesis() -> void:
+	var hits: int = 0
+	var kinds: Dictionary = {}
+	for x in 100:
+		for y in 40:
+			var g: String = Orbit.genome_loot("50.45,30.52", x, y, 7)
+			if g != "":
+				hits += 1
+				kinds[g] = true
+	ok(hits > 40 and hits < 220, "REQ-0011-28: loot is rare (~3%% of 4000 cells, got %d)" % hits)
+	ok(kinds.size() == 3, "REQ-0011-28/69: all three genome types occur")
+	ok(Orbit.genome_loot("a", 3, 4, 1) == Orbit.genome_loot("a", 3, 4, 1), "REQ-0011-28: pure function of (coord, tile, salt)")
+	var o: Dictionary = Orbit.new_account(7, T0)
+	ok(String(Orbit.begin_synthesis(o, T0)["reason"]) == "no_bio", "REQ-0011-29: synthesis needs bio")
+	o["safe_stock"].deposit("food", 35)
+	ok(bool(Orbit.begin_synthesis(o, T0)["ok"]) and int(o["safe_stock"].count("food")) == 5, "synthesis takes 30 bio")
+	ok(String(Orbit.begin_synthesis(o, T0)["reason"]) == "busy", "one job at a time")
+	ok(String(Orbit.collect_synthesis(o, T0 + H)["reason"]) == "not_ready", "not ready before 6 h of real time")
+	var rt: Dictionary = Orbit.from_dict(JSON.parse_string(JSON.stringify(Orbit.to_dict(o))))
+	var done: Dictionary = Orbit.collect_synthesis(rt, T0 + 6 * H)
+	ok(bool(done["ok"]) and int(rt["safe_stock"].count(String(done["genome"]))) == 1, "REQ-0011-29: genome arrives in the safe stock (job survives save/load)")
 
 
 # REQ-0011-38/1: «орбіта ON, N тіків, смерть, респавн» — twin runs agree on world_hash AND account_hash; the Orbit does not leak into world_hash.
