@@ -35,6 +35,7 @@ func _init() -> void:
 	_t_session_flags()
 	_t_session_death_respawn()
 	_t_session_save_restore()
+	_t_session_ascend()
 	_t_source_hygiene()
 	finish()
 
@@ -278,6 +279,16 @@ func _t_session_save_restore() -> void:
 	r2.restore_game(path, T0)
 	ok(not r2.use_orbit and r2.orbit == null, "an OFF save restores OFF (the save wins over the default)")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func _t_session_ascend() -> void:
+	var off: Variant = _new_session(false)
+	off.start(50.45, 30.52, "Київ", T0)
+	ok(String(off.orbit_ascend()["reason"]) == "no_orbit", "REQ-0011-8: no Orbit → no ascend")
+	var s: Variant = _new_session(true)
+	s.start(50.45, 30.52, "Київ", T0)
+	var r: Dictionary = s.orbit_ascend()
+	ok(not bool(r["ok"]), "REQ-0011-8: without a capsule (use_main_capsule OFF) the ascend is refused (%s)" % String(r.get("reason", "")))
 
 
 func _t_source_hygiene() -> void:

@@ -21,6 +21,7 @@ const STORE_PATH := "user://world.json"
 const SAVE_PATH := "user://save.json"   # the whole session (continue): store + live region + account
 const Clock = preload("res://scripts/clock.gd")
 const Orbit = preload("res://scripts/sim/orbit.gd")   # spec 0011: Орбіта — акаунт-рівень (клони, safe_stock)
+const OrbitStub = preload("res://scripts/sim/orbit_stub.gd")   # шви 0010↔0011: safe zone / respawn_source
 const Hints = preload("res://scripts/hints.gd")   # spec 0012 §3.8: м'які підказки FTUE за ON (OD-146)
 const Location = preload("res://scripts/location.gd")   # spec 0012 §3.7: валідація місця, провайдери, «вільне поруч»
 const SAVE_VERSION := 1
@@ -237,6 +238,13 @@ func orbit_respawn(clone_id: String = "") -> bool:
 		last_error = &"orbit_no_clone"
 		return false
 	return true
+
+# spec 0011 REQ-0011-7/8: «піднятись на орбіту» — склад капсули → safe_stock (частковий перенос, OD-58). Єдиний шлях поповнення
+# safe_stock із світу; потребує капсули (use_main_capsule) і Орбіти. Повертає {ok, moved, left} | {ok:false, reason}.
+func orbit_ascend() -> Dictionary:
+	if orbit == null or sim == null:
+		return {"ok": false, "reason": &"no_orbit"}
+	return OrbitStub.send_to_safe_zone(sim, orbit["safe_stock"])
 
 # ---------------- research pipeline (kernel/progression.gd driven from research benches) ----------------
 
