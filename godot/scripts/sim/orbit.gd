@@ -18,7 +18,7 @@ const GENOME_NAMES := {"gatherer": "Добувач", "builder": "Будівел�
 static func new_account(account_seed: int, now: int) -> Dictionary:
 	var o: Dictionary = {
 		"clones": [], "creating": [], "base_ready_at": 0, "safe_stock": SafeStock.new(), "tech": {},
-		"account_seed": account_seed, "clone_counter": 0, "last_death": {}, "bio_pool": 0,
+		"account_seed": account_seed, "clone_counter": 0, "last_death": {}, "bio_pool": 0, "genome": {},
 		"saved_at": now, "last_seen_now": now,
 	}
 	var a: Dictionary = _make_clone(o, "", now, false)
@@ -34,7 +34,7 @@ static func new_account(account_seed: int, now: int) -> Dictionary:
 static func migrate_from_pawn(account_seed: int, now: int, skills: Dictionary) -> Dictionary:
 	var o: Dictionary = {
 		"clones": [], "creating": [], "base_ready_at": 0, "safe_stock": SafeStock.new(), "tech": {},
-		"account_seed": account_seed, "clone_counter": 0, "last_death": {}, "bio_pool": 0,
+		"account_seed": account_seed, "clone_counter": 0, "last_death": {}, "bio_pool": 0, "genome": {},
 		"saved_at": now, "last_seen_now": now,
 	}
 	var c: Dictionary = _make_clone(o, "", now, false)
@@ -142,6 +142,17 @@ static func claim_base_clone(o: Dictionary, now: int) -> Dictionary:
 	return {"ok": true, "id": String(c["id"])}
 
 
+# OD-152: genome is a rare non-stack ACCOUNT resource (a counter per type), not a safe_stock item — safe_stock keeps its two entry
+# paths (REQ-0011-7) and holds bio only. Loot, synthesis and creation go through these two functions.
+static func genome_count(o: Dictionary, genome_type: String) -> int:
+	return int((o["genome"] as Dictionary).get(genome_type, 0))
+
+
+static func add_genome(o: Dictionary, genome_type: String, n: int) -> void:
+	var g: Dictionary = o["genome"]
+	g[genome_type] = maxi(0, int(g.get(genome_type, 0)) + n)
+
+
 # REQ-0011-15: a levelled clone costs 1 genome + bio from the safe stock and takes ~12 real hours (OD-94).
 static func begin_creation(o: Dictionary, genome_type: String, now: int) -> Dictionary:
 	if not Tuning.GENOMES.has(genome_type):
@@ -150,12 +161,11 @@ static func begin_creation(o: Dictionary, genome_type: String, now: int) -> Dict
 	if slots_used >= Tuning.value("roster_slots"):
 		return {"ok": false, "reason": &"roster_full"}
 	var ss: Variant = o["safe_stock"]
-	var gid: String = "genome:" + genome_type
-	if int(ss.count(gid)) < Tuning.value("create_genome"):
+	if genome_count(o, genome_type) < Tuning.value("create_genome"):
 		return {"ok": false, "reason": &"no_genome"}
 	if _bio_total(ss) < Tuning.value("create_bio"):
 		return {"ok": false, "reason": &"no_bio"}
-	ss.take(gid, Tuning.value("create_genome"))
+	add_genome(o, genome_type, -Tuning.value("create_genome"))
 	_take_bio(ss, Tuning.value("create_bio"))
 	(o["creating"] as Array).append({"started_at": now, "ready_at": now + Tuning.value("create_ms"), "genome_type": genome_type})
 	return {"ok": true}
@@ -219,15 +229,14 @@ static func begin_synthesis(o: Dictionary, now: int) -> Dictionary:
 	return {"ok": true}
 
 
-# Delivers a finished synthesis into the safe stock (partial-fit safe: stays pending if the stock is full).
+# Delivers a finished synthesis into the account's genome counter (OD-152).
 static func collect_synthesis(o: Dictionary, now: int) -> Dictionary:
 	if not o.has("synth") or (o["synth"] as Dictionary).is_empty():
 		return {"ok": false, "reason": &"none"}
 	var j: Dictionary = o["synth"]
 	if now < int(j["ready_at"]):
 		return {"ok": false, "reason": &"not_ready"}
-	if int(o["safe_stock"].deposit(String(j["genome"]), 1)) < 1:
-		return {"ok": false, "reason": &"full"}
+	add_genome(o, String(j["genome"]).trim_prefix("genome:"), 1)
 	o["synth"] = {}
 	return {"ok": true, "genome": String(j["genome"])}
 
@@ -337,7 +346,7 @@ static func from_dict(d: Dictionary) -> Dictionary:
 	var o: Dictionary = {
 		"clones": [], "creating": [], "tech": {}, "last_death": {},
 		"base_ready_at": int(d.get("base_ready_at", 0)), "account_seed": int(d.get("account_seed", 0)),
-		"clone_counter": int(d.get("clone_counter", 0)), "bio_pool": int(d.get("bio_pool", 0)),
+		"clone_counter": int(d.get("clone_counter", 0)), "bio_pool": int(d.get("bio_pool", 0)), "genome": {},
 		"saved_at": int(d.get("saved_at", 0)), "last_seen_now": int(d.get("last_seen_now", 0)),
 		"safe_stock": SafeStock.from_dict(d.get("safe_stock", {})),
 	}
@@ -356,6 +365,8 @@ static func from_dict(d: Dictionary) -> Dictionary:
 		(o["creating"] as Array).append({"started_at": int(m["started_at"]), "ready_at": int(m["ready_at"]), "genome_type": String(m["genome_type"])})
 	for k in (d.get("tech", {}) as Dictionary):
 		(o["tech"] as Dictionary)[String(k)] = int(d["tech"][k])
+	for k in (d.get("genome", {}) as Dictionary):
+		(o["genome"] as Dictionary)[String(k)] = int(d["genome"][k])
 	var sj: Dictionary = d.get("synth", {})
 	if not sj.is_empty():
 		o["synth"] = {"ready_at": int(sj["ready_at"]), "genome": String(sj["genome"])}

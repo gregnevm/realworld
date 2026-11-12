@@ -131,12 +131,12 @@ func _t_stats_determinism() -> void:
 func _t_creation() -> void:
 	var o: Dictionary = Orbit.new_account(7, T0)
 	ok(String(Orbit.begin_creation(o, "builder", T0)["reason"]) == "no_genome", "creation needs a genome")
-	o["safe_stock"].deposit("genome:builder", 1)
+	Orbit.add_genome(o, "builder", 1)
 	ok(String(Orbit.begin_creation(o, "builder", T0)["reason"]) == "no_bio", "…and bio")
 	o["safe_stock"].deposit("food", 12)
 	var r: Dictionary = Orbit.begin_creation(o, "builder", T0)
 	ok(bool(r["ok"]), "REQ-0011-15: creation starts")
-	ok(int(o["safe_stock"].count("genome:builder")) == 0 and int(o["safe_stock"].count("food")) == 2, "genome + 10 bio spent from the safe stock")
+	ok(Orbit.genome_count(o, "builder") == 0 and int(o["safe_stock"].count("food")) == 2, "genome (account counter, OD-152) + 10 bio (safe stock) spent")
 	ok(Orbit.collect_ready(o, T0 + 11 * H) == 0, "not ready before ~12 h")
 	ok(Orbit.collect_ready(o, T0 + 12 * H) == 1, "ready at 12 h real time")
 	var made: Dictionary = (o["clones"] as Array)[(o["clones"] as Array).size() - 1]
@@ -346,7 +346,7 @@ func _t_genome_loot_and_synthesis() -> void:
 	ok(String(Orbit.collect_synthesis(o, T0 + H)["reason"]) == "not_ready", "not ready before 6 h of real time")
 	var rt: Dictionary = Orbit.from_dict(JSON.parse_string(JSON.stringify(Orbit.to_dict(o))))
 	var done: Dictionary = Orbit.collect_synthesis(rt, T0 + 6 * H)
-	ok(bool(done["ok"]) and int(rt["safe_stock"].count(String(done["genome"]))) == 1, "REQ-0011-29: genome arrives in the safe stock (job survives save/load)")
+	ok(bool(done["ok"]) and Orbit.genome_count(rt, String(done["genome"]).trim_prefix("genome:")) == 1, "REQ-0011-29: genome arrives in the account counter (job survives save/load)")
 
 
 # REQ-0011-43/59/62/73: tuning provider is swappable; the base clone is offered in every roster state and inherits nothing; no grants.
