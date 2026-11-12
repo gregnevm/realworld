@@ -19,6 +19,7 @@ const LocalRealm = preload("res://scripts/net/local_realm.gd")   # spec 0013: th
 const MAP_N := 56
 const STORE_PATH := "user://world.json"
 const SAVE_PATH := "user://save.json"   # the whole session (continue): store + live region + account
+const Clock = preload("res://scripts/clock.gd")   # spec 0012: saved_at у сейві — int64 рядком (to_wire/from_wire)
 const SAVE_VERSION := 1
 
 var sim: Variant = null   # Sim (scripts/sim.gd); Variant, бо тести підставляють легкі фейки
@@ -45,6 +46,7 @@ var use_inventory := false        # spec 0009: set by the entry scene BEFORE sta
 var use_catalog := false          # spec 0008: відкритий склад; ON-капсула його вимагає (REQ-0010-59). ДО start()
 var use_realtime := false         # spec 0012: реальний час 1:1; ставиться ДО start(), далі замкнений (dev-перемикач `-- realtime`)
 var use_main_capsule := false     # spec 0010: Основна капсула; ставиться ДО start(), далі замкнений (dev-перемикач `-- capsule`)
+var last_catch_up: Dictionary = {}   # spec 0012: звіт останнього догону (для картки «поки тебе не було»); не сейв
 var last_error: StringName = &""  # чому start()/restore_game()/travel_to() відмовили (&"" — усе гаразд); для UI/тестів
 var _goal_t := 0.0
 
@@ -318,6 +320,8 @@ func save_game(path: String = SAVE_PATH) -> bool:
 		"bench_announced": bench_announced,
 		"meta": {"place": String(sim.map.get("place_name", "")), "day": int(sim.time.day), "dead": bool(sim.dead)},
 	}
+	if sim.use_realtime:   # spec 0012 REQ-31: мітка збереження — годинник пристрою (UTC-мс, рядком); OFF-сейв без нового ключа (REQ-2)
+		data["saved_at"] = Clock.to_wire(int(sim.now_ms))
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f == null:
 		return false
@@ -347,7 +351,7 @@ static func _read_save(path: String) -> Dictionary:
 # Rebuild THIS session from a save; false (and untouched) when there is none / it is unreadable / the world record is
 # refused (an ON save without its capsule, a newer record version… — sim.load_error -> last_error, REQ-0010-60/83).
 # The sim is restored into a LOCAL instance first: a refusal leaves this session exactly as it was (no half-alive world).
-func restore_game(path: String = SAVE_PATH) -> bool:
+func restore_game(path: String = SAVE_PATH, now_ms: int = 0) -> bool:
 	last_error = &""
 	var d := _read_save(path)
 	if d.is_empty():
@@ -358,6 +362,9 @@ func restore_game(path: String = SAVE_PATH) -> bool:
 		return false
 	sim = restored
 	use_realtime = bool(sim.use_realtime)   # spec 0012 REQ-62: значення з сейву перемагає дефолт збірки (і в обидва боки)
+	# spec 0012 REQ-31/84: догін при вході — чиста функція (стан, saved_at, now), без атак; потім годинник -> frac
+	last_catch_up = Sim.Realtime.catch_up(sim, Clock.from_wire(d.get("saved_at", "0"), 0), now_ms)
+	push_clock(maxi(now_ms, Clock.from_wire(d.get("saved_at", "0"), 0)))   # монотонно: відкат годинника нижче saved_at не відкочує світ (REQ-68)
 	var h: Dictionary = d.get("home", {})
 	home = {"lat": float(h.get("lat", 0.0)), "lon": float(h.get("lon", 0.0)), "name": str(h.get("name", ""))}
 	has_home = bool(d.get("has_home", true))

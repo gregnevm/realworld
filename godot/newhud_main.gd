@@ -211,7 +211,7 @@ func _continue_game() -> void:
 	if session != null:
 		return
 	var s := SessionScript.new()
-	if not s.restore_game():
+	if not s.restore_game(SessionScript.SAVE_PATH, _clock.now_ms()):
 		if s.last_error != &"":
 			push_error("Збереження відхилено: %s" % String(s.last_error))   # ON-сейв без капсули / новіша версія запису (REQ-0010-60/83)
 		return   # unreadable save: the screen stays (presets still work)
