@@ -41,6 +41,7 @@ func _init() -> void:
 	_t_bag_ttl()
 	_t_ascend_pack()
 	_t_reinforcement()
+	_t_record_shape_and_survival()
 	_t_genome_loot_and_synthesis()
 	_t_tuning_and_base_rules()
 	_t_determinism_scenario()
@@ -520,6 +521,36 @@ func _t_orbit_intro() -> void:
 	ok(SessionScript.save_orbit_rows("user://no_such_save.json").is_empty(), "no save -> new account preview")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	oi.queue_free()
+
+
+# REQ-0011-4/10/35/64: the account record shape, the clone record shape, the safe stock surviving a death, the cooldown clock.
+func _t_record_shape_and_survival() -> void:
+	var s: Variant = _new_session(true)
+	s.start(50.45, 30.52, "Київ", T0)
+	for k in ["clones", "safe_stock", "tech", "account_seed", "clone_counter", "creating", "base_ready_at", "last_death"]:
+		ok((s.orbit as Dictionary).has(k), "REQ-0011-4: the account record has `%s`" % k)
+	var region: String = JSON.stringify(Persistence.resume_payload(s.sim))
+	ok(region.find('"clones"') < 0 and region.find('"safe_stock"') < 0, "REQ-0011-4: the Orbit is account-level, NOT part of the region record")
+	var c: Dictionary = (s.orbit["clones"] as Array)[0]
+	for k in ["id", "state", "born_at", "pawn", "genome_type"]:
+		ok(c.has(k), "REQ-0011-10: the clone record has `%s`" % k)
+	for k in ["skills", "items", "equipped", "inv", "hand"]:
+		ok((c["pawn"] as Dictionary).has(k), "REQ-0011-10: the clone pawn carries `%s` (PLAYER_FIELDS shape)" % k)
+	ok(typeof(c["born_at"]) == TYPE_INT and String(c["state"]) in ["active", "sleeping", "degrading"], "REQ-0011-10: born_at is an int (UTC ms), state is one of the three stages")
+	# REQ-0011-35: the safe stock is untouched by a death
+	s.orbit["safe_stock"].deposit("wood", 30)
+	s.sim.dead = true
+	s.sim.last_death = {"cause": "cold", "day": 1, "born": 1}
+	s.respawn()
+	ok(int(s.orbit["safe_stock"].count("wood")) == 30, "REQ-0011-35: the safe stock is untouched after a death")
+	# REQ-0011-64: the cooldown reads only the absolute `now` (the sim clock input), counting down in real seconds
+	var o2: Variant = _new_session(true)
+	o2.start(50.45, 30.52, "Київ", T0)
+	Orbit.to_orbit(o2.orbit)
+	Orbit.claim_base_clone(o2.orbit, T0)
+	ok(o2.orbit_base_wait_s() == 300, "REQ-0011-64: right after the claim, 300 s of cooldown")
+	o2.sim.set_clock(T0 + 100000)
+	ok(o2.orbit_base_wait_s() == 200, "REQ-0011-64: the countdown follows the absolute clock only")
 
 
 func _t_source_hygiene() -> void:
