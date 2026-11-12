@@ -21,13 +21,13 @@ const TABLE := {
 	"raid_mtb":           {"s": 259200.0, "lo": 259200.0, "hi": 345600.0, "src": "OD-86 (~1 рейд на 3–4 доби)"},
 	"raid_warn":          {"s": 600.0,   "lo": 600.0,   "hi": 1800.0,  "src": "OD-88 (10–30 хв до контакту)"},
 	"tool_wear_t1":       {"s": 18000.0, "lo": 10800.0, "hi": 28800.0, "src": "OD-92 (~5 год активної роботи; blocked by OD-R27 — споживача нема)"},
-	"sleep_full":         {"s": -1.0, "src": "TBD (OD-R26)"},
-	"starve_to_death":    {"s": -1.0, "src": "TBD (OD-R2, OD-R26)"},
-	"bleed_to_downed":    {"s": -1.0, "src": "TBD (OD-R13)"},
-	"infection_course":   {"s": -1.0, "src": "TBD (OD-R13)"},
-	"patrol_interval":    {"s": -1.0, "src": "TBD (OD-R26)"},
-	"research_t1":        {"s": -1.0, "src": "TBD (OD-R11)"},
-	"farm_grow":          {"s": -1.0, "src": "TBD (OD-R11)"},
+	"sleep_full":         {"s": 3600.0,  "lo": 1800.0,  "hi": 28800.0, "src": "OD-143 (1 год у ліжку до повного; агент за делегуванням 2026-11-12)"},
+	"starve_to_death":    {"s": 192000.0, "lo": 86400.0, "hi": 345600.0, "src": "OD-141 (~2.2 доби від нуля шкали: MALNUTRITION_GAIN 0.45/добу на реальній добі)"},
+	"bleed_to_downed":    {"s": -1.0, "src": "OD-141: робочий темп (як OFF) — числа в kernel/health.gd, не тут"},
+	"infection_course":   {"s": -1.0, "src": "OD-141: робочий темп (як OFF) — числа в kernel/health.gd, не тут"},
+	"patrol_interval":    {"s": -1.0, "src": "OD-143: як OFF (амбієнт у секундах sim; sdt = dt за ON)"},
+	"research_t1":        {"s": -1.0, "src": "OD-140: робочий темп (WORK_DAY_S 150 с, як OFF)"},
+	"farm_grow":          {"s": -1.0, "src": "OD-140: робочий темп (WORK_DAY_S 150 с, як OFF)"},
 }
 
 # Тривалість рядка в секундах; -1.0 — не задано (TBD) або ключа нема.

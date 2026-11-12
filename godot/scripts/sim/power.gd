@@ -18,6 +18,7 @@
 # dispose() releases the last one (tests must call s.dispose_power() before dropping a sim).
 extends RefCounted
 
+const Realtime = preload("res://scripts/sim/realtime.gd")   # spec 0012: робочий темп за ON (OD-140)
 const Power = preload("res://scripts/kernel/power.gd")
 const CatalogDefs = preload("res://scripts/catalog_defs.gd")
 
@@ -114,7 +115,7 @@ static func update(s, dt: float) -> void:
 		rebuild(s)
 	if s.power_things.is_empty():
 		return   # the shipped slice: data.gd defs declare no power -> zero cost, byte-identical
-	var dday: float = dt / maxf(1.0, float(s.time.day_len))
+	var dday: float = Realtime.work_dday(s, dt)   # OD-140: пальне/енергія за ON — робочий темп
 	var ctx := {
 		"light": float(s.daylight_level()),
 		"wind_factor": float(WIND_FACTOR.get(s.weather, 1.0)),

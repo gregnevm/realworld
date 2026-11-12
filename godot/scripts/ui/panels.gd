@@ -791,8 +791,9 @@ class GoalsPanel extends PanelBase.Base:
 			return
 		var cur: Dictionary = g.get("current", {})
 		_title.text = String(cur.get("title", ""))
-		var touch := bool((vm.get("ui", {}) as Dictionary).get("touch", false))
-		_hint.text = Fmt.touchify(String(cur.get("hint", ""))) if touch else String(cur.get("hint", ""))
+		var rt: bool = bool((vm.get("ui", {}) as Dictionary).get("realtime", false))   # spec 0012 REQ-30: за ON підказки лише touch-first
+		var touch: bool = bool((vm.get("ui", {}) as Dictionary).get("touch", false)) or rt
+		_hint.text = Fmt.touchify(String(cur.get("hint", "")), rt) if touch else String(cur.get("hint", ""))
 		# objective CHIP: one line (title · n/N); the how-to lives in the tooltip and the pulsing build slot
 		_count.visible = false
 		_hint.visible = String(cur.get("id", "")) == "fire"
@@ -804,7 +805,7 @@ class GoalsPanel extends PanelBase.Base:
 		var nxt := String(g.get("next", ""))
 		# the chip shows THIS goal's own progress; the chain step lives in the tooltip — «5/10» beside
 		# «Розпали багаття» read as «5 of 10 logs» in the first independent read (gamedev §5)
-		var tip: String = "Крок %d з %d · %s" % [int(g.get("done", 0)) + 1, int(g.get("total", 0)), (Fmt.touchify(String(cur.get("hint", ""))) if touch else String(cur.get("hint", "")))]
+		var tip: String = "Крок %d з %d · %s" % [int(g.get("done", 0)) + 1, int(g.get("total", 0)), (Fmt.touchify(String(cur.get("hint", "")), rt) if touch else String(cur.get("hint", "")))]
 		if nxt != "":
 			tip += "\nДалі: " + nxt
 		tooltip_text = tip

@@ -82,6 +82,11 @@ func _init() -> void:
 	_t_catch_up_additive()
 	_t_catch_up_no_attacks()
 	_t_catch_up_session_roundtrip()
+	# --- WAVE 0012-W5: рішення за делегуванням OD-140…143 — робочий темп, сон, потреби офлайн ---
+	_t_work_pace_matches_off()
+	_t_sleep_full_one_hour()
+	_t_offline_needs_floor()
+	_t_hints_touch_first_at_on()
 	chk.skip_banner()
 	finish()
 
@@ -1076,11 +1081,11 @@ func _t_pacing_table() -> void:
 		var v: float = float(row.s)
 		if v > 0.0 and (v < float(row.lo) or v > float(row.hi)):
 			bad.append(k)
-		if v <= 0.0 and not String(row.src).begins_with("TBD"):
+		if v <= 0.0 and not (String(row.src).begins_with("TBD") or String(row.src).begins_with("OD-14")):
 			bad.append(k)
 		if String(row.src).is_empty():
 			bad.append(k)
-	ok(bad.is_empty(), "REQ-0012-22: кожен рядок Pacing має підставу; задані — у sanity-діапазоні; незадані позначені TBD (%s)" % str(bad))
+	ok(bad.is_empty(), "REQ-0012-22: кожен рядок Pacing має підставу; задані — у sanity-діапазоні; незадані — TBD або рішення OD-14x (%s)" % str(bad))
 	ok(not Pacing.TABLE.has("thirst") and not Pacing.TABLE.has("water"), "REQ-0012-86: спраги в Pacing нема (OD-71)")
 
 
@@ -1310,6 +1315,8 @@ func _t_catch_up_additive() -> void:
 		var t0: int = T_NOV10_23_KYIV + rng.randi_range(0, 48) * MS_H + rng.randi_range(0, 3599999)
 		var t1: int = t0 + rng.randi_range(0, 20) * MS_H + rng.randi_range(0, 3599999)
 		var t2: int = t1 + rng.randi_range(0, 20) * MS_H + rng.randi_range(0, 3599999)
+		t2 = mini(t2, t0 + Realtime.CATCH_UP_LIMIT_MS)   # адитивність вимагається лише в межах ліміту (REQ-34)
+		t1 = mini(t1, t2)
 		var one: Variant = _rt_sim(t0)
 		Realtime.catch_up(one, t0, t2)
 		var two: Variant = _rt_sim(t0)
@@ -1363,3 +1370,90 @@ func _t_catch_up_session_roundtrip() -> void:
 	r4.restore_game(path, T_NOV10_23_KYIV)   # годинник відкочено нижче saved_at
 	ok(int(r4.sim.time.day) == int(r1.sim.time.day) and int(r4.sim.now_ms) >= later, "REQ-0012-68: відкат годинника нижче saved_at не відкочує день і годинник світу")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+
+# =====================================================================================================
+# WAVE 0012-W5 — OD-140 (робочий темп), OD-141 (рани/депривація), OD-142 (потреби офлайн), OD-143 (сон, чанк)
+# =====================================================================================================
+
+# REQ-0012-22/25 (OD-140), REQ-0012-19 (OD-141): дослідження/ферми/пальне/рани за ON — той самий темп, що за OFF
+func _t_work_pace_matches_off() -> void:
+	var on: Variant = _rt_sim(T_JUL1_12UTC)
+	var off: Variant = _rt_sim(T_JUL1_12UTC, KYIV, false)
+	ok(Realtime.work_dday(on, 0.1) == Realtime.work_dday(off, 0.1) and Realtime.work_dday(off, 0.1) == 0.1 / 150.0,
+		"REQ-0012-25 (OD-140): робочий dday за ON = за OFF (доба роботи 150 с) — перші дослідження досяжні як раніше")
+	var ses_on: Variant = SessionScript.new()
+	ses_on.use_realtime = true
+	ses_on.start(KYIV.x, KYIV.y, "Київ", T_JUL1_12UTC)
+	var ses_off: Variant = SessionScript.new()
+	ses_off.start(KYIV.x, KYIV.y, "Київ", T_JUL1_12UTC)
+	for ses in [ses_on, ses_off]:
+		ses.sim._place_building("research_bench", int(ses.sim.player.px) + 2, int(ses.sim.player.py) + 2, -1)
+		for i in 300:
+			ses.tick_research(0.1)
+	ok(ses_on.research_rate() > 0.0 and str(ses_on.progression.to_dict()) != str(SessionScript.new().progression), "REQ-0012-25: стіл справді дає дослідницькі очки (тест не порожній)")
+	ok(ses_on.progression.to_dict() == ses_off.progression.to_dict(), "REQ-0012-25 (OD-140): 30 с біля дослідницького столу — однаковий прогрес за ON і OFF")
+	ok(Pacing.seconds("starve_to_death") == 192000.0, "REQ-0012-20 (OD-141): від нуля шкали до смерті від голоду ~2.2 доби — записано в Pacing")
+
+
+# REQ-0012-16 (OD-143): за ON сон у ліжку відновлює 0 -> 100 за 1 год; за OFF +14/с
+func _t_sleep_full_one_hour() -> void:
+	var s: Variant = _rt_sim(T_JUL1_12UTC)
+	s.player.rest = 0.0
+	s.player.sleeping = true
+	s._update_player(60.0)
+	var gain: float = float(s.player.rest)
+	ok(absf(100.0 / gain * 60.0 - 3600.0) < 30.0, "REQ-0012-16: повний сон за ON — %.0f с (ціль 3 600, OD-143; баф капсули може скоротити)" % (100.0 / gain * 60.0))
+	ok(Realtime.sleep_rate(_rt_sim(T_JUL1_12UTC, KYIV, false)) == 14.0, "REQ-0012-3: за OFF сон +14/с, як до спеки")
+
+
+# REQ-0012-35 (OD-142): потреби офлайн — реальний темп за зарахований час, підлога 15; нижче підлоги — не чіпаємо
+func _t_offline_needs_floor() -> void:
+	var s: Variant = _rt_sim(T_NOV10_23_KYIV)
+	s.player.hunger = 100.0
+	s.player.rest = 100.0
+	var r: Dictionary = Realtime.catch_up(s, T_NOV10_23_KYIV, T_NOV10_23_KYIV + 2 * MS_H)
+	ok(absf(float(s.player.hunger) - (100.0 - 20.0)) < 1e-6 and absf(float(s.player.rest) - (100.0 - 12.5)) < 1e-6,
+		"REQ-0012-35: 2 год офлайн — голод −20, втома −12.5 (реальний темп; %d чанків по 1 хв)" % int(r.chunks))
+	var t: Variant = _rt_sim(T_NOV10_23_KYIV)
+	t.player.hunger = 100.0
+	t.player.rest = 100.0
+	Realtime.catch_up(t, T_NOV10_23_KYIV, T_NOV10_23_KYIV + 30 * MS_H)
+	ok(float(t.player.hunger) == Realtime.OFFLINE_NEED_FLOOR and float(t.player.rest) == Realtime.OFFLINE_NEED_FLOOR and float(t.player.hp) > 0.0,
+		"REQ-0012-35: 30 год офлайн — голод і втома на підлозі 15, герой живий (офлайн не вбиває)")
+	var u: Variant = _rt_sim(T_NOV10_23_KYIV)
+	u.player.hunger = 5.0
+	Realtime.catch_up(u, T_NOV10_23_KYIV, T_NOV10_23_KYIV + 5 * MS_H)
+	ok(float(u.player.hunger) == 5.0, "REQ-0012-35: потреба нижче підлоги офлайн не падає й не піднімається")
+
+
+
+const Fmt = preload("res://scripts/ui/format.gd")
+const Goals = preload("res://scripts/goals.gd")
+
+# REQ-0012-30: за ON підказки керування лише touch-first — без Space/WASD/ЛКМ і без неіснуючих чіпів швидкості
+func _t_hints_touch_first_at_on() -> void:
+	var bad: Array = []
+	for id in Goals.GOALS.size():
+		var g: Dictionary = Goals.GOALS[id]
+		var t: String = Fmt.touchify(String(g.get("hint", "")), true)
+		for w in ["Space", "WASD", "ЛКМ", "ПКМ", "+/−", "⏸", "×2"]:
+			if t.contains(w):
+				bad.append("%s:%s" % [String(g.get("id", "")), w])
+	ok(bad.is_empty(), "REQ-0012-30: усі підказки цілей за ON — без клавіш/миші/чіпів швидкості (%s)" % str(bad))
+	var survive: String = ""
+	for g in Goals.GOALS:
+		if String(g.id) == "survive":
+			survive = String(g.hint)
+	ok(Fmt.touchify(survive, false).contains("⏸ ×1 ×2 ×3"), "REQ-0012-3: за OFF на телефоні підказка, як раніше, веде до чіпів ⏸ ×1 ×2 ×3")
+	for on in [true, false]:
+		var ses: Variant = SessionScript.new()
+		ses.use_realtime = on
+		ses.start(KYIV.x, KYIV.y, "Київ", T_JUL1_12UTC)
+		var snap: Dictionary = HudModel.snapshot(ses, {"buildings": [], "stock": ses.sim.stock, "items": []}, {"day": 1}, Balance.Balance.new())
+		ok(bool(snap.ui.get("realtime", false)) == on and (snap.ui.has("realtime") == on), "REQ-0012-30: ui.realtime є лише за ON (OFF-знімок без нового ключа) — %s" % ("ON" if on else "OFF"))
+	var panel: Variant = Panels.GoalsPanel.new()
+	panel.bind({"goals": {"available": true, "done": 9, "total": 10, "current": {"id": "survive", "title": "x", "hint": survive, "pct": 0.1}}, "ui": {"realtime": true, "touch": false}})
+	ok(not panel._hint.text.contains("Space") and not panel._hint.text.contains("⏸"), "REQ-0012-30: панель цілей за ON на десктопі теж touch-first (%s)" % panel._hint.text)
+	panel.free()

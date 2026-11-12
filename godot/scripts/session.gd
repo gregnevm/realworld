@@ -216,7 +216,7 @@ func tick_research(dt: float) -> void:
 	if not bench_announced:
 		bench_announced = true
 		sim._log("🔬 Дослідницький стіл працює — обери проєкт у панелі «Дослідження».", "good")
-	var dday: float = dt / maxf(1.0, float(sim.time.day_len))
+	var dday: float = Sim.Realtime.work_dday(sim, dt)   # OD-140: дослідження за ON — робочий темп (REQ-25)
 	var newly: Array = progression.add_points(rate * dday, auto_research)
 	for id in newly:
 		sim._log("🔬 Досліджено: %s (рівень %d)." % [progression.label_of(id), progression.tech_level()], "good")

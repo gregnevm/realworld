@@ -30,7 +30,7 @@ realworld/
   godot/               порт у Godot 4.7 — форвардний рушій (деталі в розділі «Godot-порт»)
     scripts/kernel/       механічний кернел (spec 0003) + дерево контенту (catalog.gd)
     scripts/calendar.gd   spec 0012: реальна дата, цивільний час із DST, геометрія сонця (чисті функції від now)
-    scripts/pacing.gd     spec 0012 §5.3: таблиця темпу реального часу (лише за use_realtime=ON; dev `-- realtime`)
+    scripts/pacing.gd     spec 0012 §5.3: таблиця темпу реального часу (лише за use_realtime=ON); `sim/realtime.gd` — годинник/догін/робочий темп
     scripts/goals.gd      онбординг-ланцюг «Цілі» (чисті перевірки стану; липке виконання в session)
     content/catalog.json  335 def; валідовано catalog.gd ↔ tests/catalog.test.js (`catalog_data.js`/JS-дзеркало видалено)
     tests/                headless-сьюти Godot (run_*.gd)
@@ -72,7 +72,7 @@ realworld/
 - **Запуск GDD:** `python "C:\Users\gregn\.claude\skills\gdd_build\scripts\serve.py" "O:\realworld\GDD_BOOK"`
 - **Тести:** `npm test` (Node `node --test` — детерміноване sim-ядро + валідація `catalog.json`/пайплайну прогресії + чиста половина арт-пайплайну `tests/art.test.js`); `npm run lint` (tools/lint.mjs: secret-scan, без Godot-3 API у `.gd`, без годинника/системного RNG у sim-корпусі `.gd` — spec 0012 REQ-10); `npm run smoke` (tools/smoke.mjs: Playwright + Chromium — спавн → drag-build → вибір/демонтаж → модалки → дослідження → рейд → смерть → reload/continue; падає на будь-якому console.error; у CI — job `browser-smoke` з артефактом скриншотів); headless-сьюти Godot — `test.cmd` у корені (перелік — у розділі «Godot-порт» вище). Обидва набори ганяються в CI (`.github/workflows/ci.yml` + `godot.yml`).
 - **Білд/деплой:** Android APK через CI (`godot.yml` → `publish.yml`); веб-хостингу немає.
-- **Версії збірок (Godot APK):** штамп `godot/scripts/build_info.gd` ставить CI; видно в ☰-меню. main публікується у prerelease `main-latest` (`.github/workflows/publish.yml`). Капсула в збірках УВІМК за замовчуванням (OD-114, опт-аут `nocapsule`). Деталі — `docs/agents/godot-ui-tests-build.md`.
+- **Версії збірок (Godot APK):** штамп `godot/scripts/build_info.gd` ставить CI; видно в ☰-меню. main публікується у prerelease `main-latest` (`.github/workflows/publish.yml`). Капсула в збірках УВІМК за замовчуванням (OD-114, опт-аут `nocapsule`). Реальний час 1:1 (spec 0012) — теж УВІМК (OD-145, опт-аут `norealtime`; кадри `shot` — OFF). Деталі — `docs/agents/godot-ui-tests-build.md`.
 
 ## Ключові рішення (ADR-лайт)
 - **Vanilla JS, no-build** — миттєва ітерація, працює будь-де, ноль тулчейн-боргу на стадії прототипу. Альтернативу (Vite/TS) відкинули як передчасну.

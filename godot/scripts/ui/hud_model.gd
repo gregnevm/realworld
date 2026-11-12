@@ -59,6 +59,8 @@ static func snapshot(session, world: Dictionary, ctx: Dictionary, balance) -> Di
 	}
 	if not bool(sim.get("use_realtime") == true):   # spec 0012 REQ-27: за реального часу швидкості нема — ні поля, ні чіпів
 		snap["speed"] = float(ctx.get("speed", 1.0))
+	else:
+		snap.ui["realtime"] = true   # spec 0012 REQ-30: панелі показують підказки touch-first (ключ лише за ON — OFF-знімок незмінний)
 	# spec 0013: the key exists ONLY while the presence layer is live — a world without it (flags OFF, no
 	# tick yet) keeps the byte-identical baseline snapshot (REQ-0012-3 / REQ-0010-85 pins).
 	var nearby := _nearby_slice(session)
@@ -680,12 +682,13 @@ const INSPECT_HIDDEN := {"shown": false}
 
 static func _inspect_slice(sim, ctx: Dictionary) -> Dictionary:
 	var vm: Dictionary = _inspect_raw(sim, ctx)
-	if bool(ctx.get("touch", false)) and bool(vm.get("shown", false)):
+	var rt: bool = sim.get("use_realtime") == true   # spec 0012 REQ-30: за ON підказки лише touch-first
+	if (bool(ctx.get("touch", false)) or rt) and bool(vm.get("shown", false)):
 		vm = vm.duplicate()
-		vm["hint"] = Fmt.touchify(String(vm.get("hint", "")))
+		vm["hint"] = Fmt.touchify(String(vm.get("hint", "")), rt)
 		var lines: Array = []
 		for l in vm.get("lines", []):
-			lines.append(Fmt.touchify(String(l)))
+			lines.append(Fmt.touchify(String(l), rt))
 		vm["lines"] = lines
 	return vm
 
