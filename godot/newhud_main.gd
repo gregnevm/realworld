@@ -173,6 +173,12 @@ func _ready() -> void:
 	spawn_screen.spawn_chosen.connect(_start_game)
 	spawn_screen.continue_chosen.connect(_continue_game)
 	life.add_child(spawn_screen)
+	if "orbit" in OS.get_cmdline_user_args() and not shot_mode:   # spec 0011 REQ-0011-5/66: Орбіта — перший екран; «Висадка» відкриває вибір місця
+		var intro := Lifecycle.OrbitIntro.new()
+		intro.theme = ui_theme
+		intro.rows = SessionScript.save_orbit_rows()
+		intro.landing_chosen.connect(func() -> void: intro.visible = false)
+		life.add_child(intro)
 	death_screen = Lifecycle.DeathScreen.new()
 	death_screen.theme = ui_theme
 	death_screen.visible = false

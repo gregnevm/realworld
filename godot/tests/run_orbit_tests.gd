@@ -45,6 +45,7 @@ func _init() -> void:
 	_t_tuning_and_base_rules()
 	_t_determinism_scenario()
 	await _t_death_screen()
+	await _t_orbit_intro()
 	_t_source_hygiene()
 	finish()
 
@@ -490,6 +491,35 @@ func _t_reinforcement() -> void:
 	ok(String(Stub.call_reinforcement(sim, ss)["reason"]) == "no_funds" and var_to_str(sim.stock) == h0 and int(sim.main_capsule.reinforcement_used) == 0, "an unaffordable price is refused atomically (no charge, no flag)")
 	var empty: Variant = load("res://scripts/sim/safe_stock.gd").new()
 	ok(String(Stub.call_reinforcement(sim, empty)["reason"]) == "orbit_empty", "an empty Orbit offers nothing")
+
+
+# REQ-0011-5/41/66: the Orbit is the FIRST screen; one main button, no explanation wall; the screen only emits.
+func _t_orbit_intro() -> void:
+	var oi: Variant = LifecycleScript.OrbitIntro.new()
+	get_root().add_child(oi)
+	await process_frame
+	var buttons: Array = []
+	var stack: Array = [oi]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		for c in n.get_children():
+			stack.append(c)
+		if n is Button:
+			buttons.append(n)
+	ok(buttons.size() == 1 and String((buttons[0] as Button).text) == "Висадка", "REQ-0011-41: a new account sees exactly ONE main button")
+	var fired: Array = []
+	oi.landing_chosen.connect(func() -> void: fired.append(1))
+	(buttons[0] as Button).pressed.emit()
+	ok(fired.size() == 1, "REQ-0011-6: the screen emits a signal, it mutates nothing")
+	var s: Variant = _new_session(true)
+	s.start(50.45, 30.52, "Київ", T0)
+	var path: String = "user://orbit_intro_save.json"
+	s.save_game(path)
+	var rows: Array = SessionScript.save_orbit_rows(path)
+	ok(rows.size() == 2 and String(rows[0]["state"]) == "active", "REQ-0011-5: a continued session shows the saved roster (2 clones)")
+	ok(SessionScript.save_orbit_rows("user://no_such_save.json").is_empty(), "no save -> new account preview")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	oi.queue_free()
 
 
 func _t_source_hygiene() -> void:

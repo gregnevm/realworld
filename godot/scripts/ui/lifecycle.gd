@@ -312,6 +312,55 @@ class SpawnScreen extends Control:
 			return
 		_status.text = String(fix.msg)
 
+# --- spec 0011 REQ-0011-5/41/66: Орбіта — ПЕРШИЙ екран за use_orbit; далі вибір місця (перша посадка) і посадка -----------------
+class OrbitIntro extends Control:
+	signal landing_chosen   # екран лише емітить (R9); перехід до вибору місця/«Продовжити» робить entry-сцена
+
+	# rows: [{id, state, genome}] — клони акаунта (порожньо = новий акаунт: стартовий ростер 1 активний + 1 сплячий, REQ-0011-63)
+	var rows: Array = []
+
+	func _ready() -> void:
+		set_anchors_preset(Control.PRESET_TOP_LEFT)
+		_fit_viewport()
+		get_viewport().size_changed.connect(_fit_viewport)
+		var bg := ColorRect.new()
+		bg.color = Tokens.BG
+		bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+		add_child(bg)
+		var center := CenterContainer.new()
+		center.set_anchors_preset(Control.PRESET_FULL_RECT)
+		add_child(center)
+		var vb := VBoxContainer.new()
+		vb.alignment = BoxContainer.ALIGNMENT_CENTER
+		vb.add_theme_constant_override("separation", 12)
+		center.add_child(vb)
+		var t := Label.new()
+		t.text = "ОРБІТА"
+		t.add_theme_font_override("font", UITheme.display_font())
+		t.add_theme_font_size_override("font_size", 48)
+		t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		vb.add_child(t)
+		var shown: Array = rows if not rows.is_empty() else [{"id": "c1", "state": "active", "genome": ""}, {"id": "c2", "state": "sleeping", "genome": ""}]
+		for r in shown:
+			var d: Dictionary = r
+			var l := Label.new()
+			var mark: String = "▶ " if String(d.get("state", "")) == "active" else ("⚠ " if String(d.get("state", "")) == "degrading" else "😴 ")
+			var gen: String = String(d.get("genome", ""))
+			l.text = "%s%s%s" % [mark, String(d.get("id", "")), (" · " + gen) if gen != "" else ""]
+			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			vb.add_child(l)
+		var b := Button.new()   # REQ-0011-41: одна головна кнопка, без тексту-пояснення
+		b.text = "Висадка"
+		b.custom_minimum_size = Vector2(260, 56)
+		b.theme_type_variation = UITheme.V_PRIMARY
+		b.pressed.connect(func() -> void: landing_chosen.emit())
+		Chrome.pop_button(b)
+		vb.add_child(b)
+
+	func _fit_viewport() -> void:
+		WidgetBase.Widget.fit_viewport(self)
+
+
 # --- death: the permadeath loop-closer ----------------------------------------------------------
 class DeathScreen extends Control:
 	signal respawn_chosen

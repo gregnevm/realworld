@@ -465,6 +465,18 @@ static func save_meta(path: String = SAVE_PATH) -> Dictionary:
 	var d := _read_save(path)
 	return (d.get("meta", {}) as Dictionary) if not d.is_empty() else {}
 
+# spec 0011 REQ-0011-5: клони збереженого акаунта для першого екрана Орбіти ([] — нема збереження/Орбіти: новий акаунт).
+static func save_orbit_rows(path: String = SAVE_PATH) -> Array:
+	var out: Array = []
+	var d: Dictionary = _read_save(path)
+	var o: Variant = d.get("orbit", null)
+	if not (o is Dictionary):
+		return out
+	for c in ((o as Dictionary).get("clones", []) as Array):
+		var cd: Dictionary = c
+		out.append({"id": String(cd.get("id", "")), "state": String(cd.get("state", "")), "genome": String(Orbit.GENOME_NAMES.get(String(cd.get("genome_type", "")), ""))})
+	return out
+
 static func _read_save(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
 		return {}
