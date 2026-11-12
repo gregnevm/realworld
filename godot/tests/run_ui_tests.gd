@@ -280,6 +280,13 @@ func _t_comprehension() -> void:
 	vit_p.bind(vit_vm)
 	ok(vit_p._warm.modulate == Tokens.WHITE, "REQ-0014-11: …and is back to normal when the pointer is gone")
 	vit_p.free()
+	# REQ-0014-5: the ring is a world-layer drawing (Node2D → it intercepts no touches) and its OUTER diameter stays within one cell
+	var wv_src: String = FileAccess.get_file_as_string("res://scripts/world_view.gd")
+	var rx: RegEx = RegEx.new()
+	rx.compile("draw_arc\\(c, TILE \\* \\(([0-9.]+) \\+ ([0-9.]+) \\* k\\)")
+	var rm: RegExMatch = rx.search(wv_src)
+	ok(rm != null and (float(rm.get_string(1)) + float(rm.get_string(2))) * 2.0 <= 1.0, "REQ-0014-5: the breathing ring's outer diameter is ≤ 1 cell")
+	ok(wv_src.contains("extends Node2D") and not wv_src.contains("mouse_filter"), "REQ-0014-5: the marker lives in the Node2D world layer — it intercepts no touches")
 	# REQ-0014-8: even with two live sources (a goal that wants a bed AND the cold) exactly ONE pointer comes out, and the cold wins
 	var gboth: Dictionary = GP.compute(gs, {"goals": {"current": {"build": "bed", "id": "bed"}}, "vitals": {"comfort": &"cold"}, "clock": {"day": 1}}, false)
 	ok(gboth.has("cell") and String(gboth.get("kind", "")) == "need" and String(gboth.get("build", "")) == "campfire", "REQ-0014-8: two sources (goal + cold) → ONE pointer, the cold's remedy")
