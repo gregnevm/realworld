@@ -546,10 +546,11 @@ func restore_game(path: String = SAVE_PATH, now_ms: int = 0) -> bool:
 	var want_orbit: bool = use_orbit and bool(sim.use_inventory)   # прапор збірки; сейв без `orbit` + ON ⇒ міграція (REQ-0011-37)
 	orbit = null
 	use_orbit = false
-	if not (d.get("orbit", null) is Dictionary) and want_orbit:
+	var orbit_ok: bool = Orbit.valid(d.get("orbit", null))   # REQ-0011-36: пошкоджений запис = «нема запису» (безпечний дефолт/міграція), без падіння
+	if not orbit_ok and want_orbit:
 		orbit = Orbit.migrate_from_pawn(WorldGen.hash_seed(float(home.lat), float(home.lon)), maxi(0, now_ms), (sim.player.get("skills", {}) as Dictionary))
 		use_orbit = true
-	elif d.get("orbit", null) is Dictionary:   # spec 0011: Орбіта наздоганяє відсутність одним settle (REQ-0011-19/57), без нападів
+	elif orbit_ok:   # spec 0011: Орбіта наздоганяє відсутність одним settle (REQ-0011-19/57), без нападів
 		orbit = Orbit.from_dict(d["orbit"])
 		use_orbit = true
 		if now_ms > 0:

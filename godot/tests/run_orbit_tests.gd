@@ -39,6 +39,7 @@ func _init() -> void:
 	_t_session_save_restore()
 	_t_session_ascend()
 	_t_single_saved_at()
+	_t_damaged_record_and_bio_table()
 	_t_bag_ttl()
 	_t_ascend_pack()
 	_t_bag_kit_returns()
@@ -594,6 +595,29 @@ func _t_single_saved_at() -> void:
 	var left_after: int = int(r.orbit["safe_stock"].count("food"))
 	ok(left_at_save - left_after >= 2 and left_at_save - left_after <= 4, "login settles only the 1 h after the save (~3 rations), got %d" % (left_at_save - left_after))
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+# REQ-0011-36: a damaged orbit record never crashes a load (and migrates when the flag is ON); REQ-0011-24: the bio table is data.
+func _t_damaged_record_and_bio_table() -> void:
+	var path: String = "user://orbit_damaged_test.json"
+	var s: Variant = _new_session(true)
+	s.start(50.45, 30.52, "Київ", T0)
+	s.save_game(path)
+	var txt: String = FileAccess.get_file_as_string(path)
+	var parsed: Variant = JSON.parse_string(txt)
+	for bad in ["garbage", {"clones": "nope"}, {"clones": [{"id": "c1", "state": "active"}, {"id": "c1", "state": "sleeping"}]}]:
+		(parsed as Dictionary)["orbit"] = bad
+		var f: FileAccess = FileAccess.open(path, FileAccess.WRITE)
+		f.store_string(JSON.stringify(parsed))
+		f.close()
+		var r: Variant = SessionScript.new()
+		r.use_orbit = true
+		ok(r.restore_game(path, T0) and r.orbit != null and (r.orbit["clones"] as Array).size() == 1, "REQ-0011-36: a damaged orbit record (%s) -> safe default (one active clone), no crash" % str(bad).left(24))
+		var r2: Variant = SessionScript.new()
+		ok(r2.restore_game(path, T0) and r2.orbit == null, "…and with the flag OFF the save still loads, without an Orbit")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	ok(Tuning.is_bio("food") and Tuning.is_bio("wood") and Tuning.is_bio("water"), "REQ-0011-24: edible and renewable materials are bio")
+	ok(not Tuning.is_bio("stone") and not Tuning.is_bio("scrap"), "REQ-0011-24/OD-84: stone/ore stay finite, not bio")
 
 
 func _t_source_hygiene() -> void:

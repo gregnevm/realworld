@@ -342,6 +342,20 @@ static func to_dict(o: Dictionary) -> Dictionary:
 	return d
 
 
+# REQ-0011-36: a damaged/foreign orbit record is never trusted — non-array `clones`, non-dictionary clone entries, duplicate ids -> false.
+static func valid(d: Variant) -> bool:
+	if not (d is Dictionary) or not ((d as Dictionary).get("clones", null) is Array):
+		return false
+	var seen: Dictionary = {}
+	for c in ((d as Dictionary)["clones"] as Array):
+		if not (c is Dictionary) or not (c as Dictionary).has("id") or not (c as Dictionary).has("state"):
+			return false
+		if seen.has(String((c as Dictionary)["id"])):
+			return false
+		seen[String((c as Dictionary)["id"])] = true
+	return true
+
+
 # JSON round-trip tolerant (int -> float): every number is coerced back to int.
 static func from_dict(d: Dictionary) -> Dictionary:
 	var o: Dictionary = {
