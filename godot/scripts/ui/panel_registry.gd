@@ -4,6 +4,9 @@
 # reviewer who knows the kernel reads the view instantly. bind_visible() is the view's tick_all().
 extends RefCounted
 
+const Settings = preload("res://scripts/settings.gd")
+
+
 class PanelRegistry extends RefCounted:
 	var panels: Array = []
 
@@ -43,7 +46,7 @@ class PanelRegistry extends RefCounted:
 				# open landed on top of the dock's first panel (the stock strip) instead of under it.
 				p.modulate.a = 0.0
 				var tw: Tween = p.create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-				tw.tween_property(p, "modulate:a", 1.0, 0.16)
+				tw.tween_property(p, "modulate:a", 1.0, 0.16 * Settings.motion_scale())
 
 	func close_all() -> void:
 		for p in panels:

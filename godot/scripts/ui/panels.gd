@@ -5,6 +5,7 @@
 # on children it built ONCE (R2); it never touches sim and never calls a sim mutator (R9 — it emits intents).
 extends RefCounted
 
+const Settings = preload("res://scripts/settings.gd")
 const PanelBase = preload("res://scripts/ui/panel.gd")
 const Widgets = preload("res://scripts/ui/widgets.gd")
 const ArtIcons = preload("res://scripts/ui/art_icons.gd")
@@ -482,7 +483,7 @@ class BuildBarPanel extends PanelBase.Base:
 		if btn.disabled:
 			return
 		var tw := btn.create_tween()
-		tw.tween_property(btn, "scale", Vector2(to, to), dur).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.tween_property(btn, "scale", Vector2(to, to), dur * Settings.motion_scale()).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	# The SAME intent the digit keys fire — the router toggles view.selected_build (the one truth),
 	# and the next bind() re-reads it from vm.build.slots[].selected, so mouse and keyboard can't drift.
 	func _on_slot(i: int) -> void:

@@ -40,7 +40,7 @@ jobs:
       - name: Headless suites (leak-gated)
         run: |
           set -o pipefail
-          for suite in run_tests run_kernel_tests run_catalog_tests run_progression_tests run_ui_tests run_determinism_tests run_snapshot_tests run_command_tests run_rejoin_tests run_capsule_tests run_orbit_tests run_realtime_tests run_realm_tests run_realm_server_tests run_smoke; do
+          for suite in run_tests run_kernel_tests run_catalog_tests run_progression_tests run_ui_tests run_determinism_tests run_snapshot_tests run_command_tests run_rejoin_tests run_capsule_tests run_orbit_tests run_settings_tests run_realtime_tests run_realm_tests run_realm_server_tests run_smoke; do
             echo "=== $suite ==="
             ./godot-bin --headless --path godot -s "res://tests/$suite.gd" 2>&1 | tee suite.log
             ! grep -q "ObjectDB instances were leaked" suite.log
@@ -110,6 +110,13 @@ jobs:
           ./godot-bin --headless --path godot --import || true
           xvfb-run -a --server-args="-screen 0 1280x720x24" \
             ./godot-bin --path godot --resolution 1280x720 res://newhud.tscn -- newhud shot light
+      - name: Render settings window frame
+        run: |
+          cp godot/newhud_shot.png godot/newhud_shot_main.png
+          xvfb-run -a --server-args="-screen 0 1280x720x24" \
+            ./godot-bin --path godot --resolution 1280x720 res://newhud.tscn -- newhud shot settings
+          cp godot/newhud_shot.png godot/newhud_shot_settings.png
+          cp godot/newhud_shot_main.png godot/newhud_shot.png
       - name: Show result
         run: ls -la godot/newhud_shot.png godot/newhud_thumb.png && file godot/newhud_shot.png
       - name: Emit thumb as base64 (log readback channel)
@@ -123,6 +130,7 @@ jobs:
           name: newhud-screenshot
           path: |
             godot/newhud_shot.png
+            godot/newhud_shot_settings.png
             godot/newhud_thumb.png
           if-no-files-found: error
 

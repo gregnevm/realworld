@@ -6,6 +6,7 @@
 # (8-slot hotbar row inside a 32-slot grid), Terraria (craft list filtered to what you can make).
 extends RefCounted
 
+const Settings = preload("res://scripts/settings.gd")
 const PanelBase = preload("res://scripts/ui/panel.gd")
 const Widgets = preload("res://scripts/ui/widgets.gd")
 const Tokens = preload("res://scripts/ui/tokens.gd")
@@ -69,7 +70,7 @@ class SlotKit extends RefCounted:
 		if b == null:
 			return
 		if on:
-			var k: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
+			var k: float = (0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)) * Settings.motion_scale()
 			b.modulate = b.modulate.lerp(Tokens.AMBER, 0.45 * k)
 			b.pivot_offset = b.size * 0.5
 			b.scale = Vector2.ONE * (1.0 + 0.05 * k)

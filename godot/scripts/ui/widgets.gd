@@ -12,6 +12,7 @@ const UITheme = preload("res://scripts/ui/theme.gd")
 const GameData = preload("res://scripts/data.gd")
 const Fmt = preload("res://scripts/ui/format.gd")
 const ArtIcons = preload("res://scripts/ui/art_icons.gd")
+const Settings = preload("res://scripts/settings.gd")
 
 
 # ---- StatRow (.stock .r): glyph · label · right-aligned mono value (Stock / Equipment / Agents) ----
@@ -145,7 +146,7 @@ class NeedBar extends WidgetBase.Widget:
 		if moving:
 			_shown = lerpf(_shown, _pct, 1.0 - exp(-12.0 * delta))
 		if state == &"crit":
-			_pulse = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
+			_pulse = (0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)) * Settings.motion_scale()
 			if _art != null and _art.visible:
 				var sc: float = 1.0 + 0.08 * _pulse
 				_art.scale = Vector2(sc, sc)
@@ -707,6 +708,7 @@ class HoverTip extends WidgetBase.Widget:
 class PanelMenu extends WidgetBase.Widget:
 	signal chosen(kind: StringName, id: StringName)
 	signal closed
+	signal settings_requested
 	var _grid: GridContainer
 	var _btns: Dictionary = {}   # "kind:id" -> Button
 	var _footer: Label
@@ -728,6 +730,12 @@ class PanelMenu extends WidgetBase.Widget:
 		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		title.add_theme_color_override("font_color", Tokens.AMBER)
 		head.add_child(title)
+		var gear := Button.new()
+		gear.text = "⚙ Налаштування"
+		gear.custom_minimum_size = Vector2(150, 38)
+		gear.focus_mode = Control.FOCUS_NONE
+		gear.pressed.connect(func() -> void: settings_requested.emit())
+		head.add_child(gear)
 		var x := Button.new()
 		x.text = "✖"
 		x.custom_minimum_size = Vector2(44, 38)
@@ -822,7 +830,7 @@ class Medallion extends WidgetBase.Widget:
 		queue_redraw()
 	func _process(_dt: float) -> void:
 		if state == &"crit":
-			_pulse = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008)
+			_pulse = (0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008)) * Settings.motion_scale()
 			queue_redraw()
 		elif _pulse != 0.0:
 			_pulse = 0.0
