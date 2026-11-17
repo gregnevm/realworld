@@ -56,6 +56,7 @@ var settings: SettingsScript = SettingsScript.new()   # налаштування
 var settings_panel: SettingsUI.SettingsPanel
 var _auto_scale := 1.0             # масштаб «Авто»: 1.0 на десктопі, від DPI на телефоні
 var _fps_label: Label
+var _gear_btn: Button
 var _last_hp := -1.0
 var _was_dead := false
 var _raid_active := false
@@ -185,7 +186,7 @@ func _ready() -> void:
 	spawn_screen.spawn_chosen.connect(_start_game)
 	spawn_screen.continue_chosen.connect(_continue_game)
 	life.add_child(spawn_screen)
-	if "orbit" in OS.get_cmdline_user_args() and not shot_mode:   # spec 0011 REQ-0011-5/66: Орбіта — перший екран; «Висадка» відкриває вибір місця
+	if _orbit_enabled() and not shot_mode:   # spec 0011 REQ-0011-5/66: Орбіта — перший екран; «Висадка» відкриває вибір місця
 		var intro := Lifecycle.OrbitIntro.new()
 		intro.theme = ui_theme
 		intro.rows = SessionScript.save_orbit_rows()
@@ -216,7 +217,7 @@ func _start_game(lat: float, lon: float, place_name: String) -> void:
 		session.use_catalog = true        # капсула вимагає відкритого складу (REQ-0010-59)
 		session.use_main_capsule = true
 	session.use_realtime = _realtime_enabled()   # spec 0012: реальний час 1:1 — УВІМК у збірках (OD-138/145); «Продовжити» бере прапор із сейву (REQ-62)
-	session.use_orbit = "orbit" in OS.get_cmdline_user_args()   # spec 0011: Орбіта лише за dev-перемикачем, поки нема екрана Орбіти (OD-151)
+	session.use_orbit = _orbit_enabled()   # spec 0011: Орбіта УВІМК за замовчуванням (OD-165); опт-аут `-- noorbit`
 	session.autosave = not shot_mode
 	if not session.start(lat, lon, place_name, _clock.now_ms()):
 		push_error("Старт світу відхилено: %s" % String(session.last_error))
@@ -247,6 +248,7 @@ func _enter_session() -> void:
 	hud_root.set_compact(touch_ui)        # BEFORE mount: compact panels pick their phone defaults
 	hud_root.mount()
 	spawn_screen.visible = false
+	_sync_gear()
 	hud_layer.visible = true
 	_saved_day = int(session.sim.time.day)
 	if touch_ui and tc == null:
@@ -346,6 +348,14 @@ func _build_settings(ui_theme: Theme) -> void:
 	_fps_label.add_theme_font_size_override("font_size", 13)
 	Widgets.WidgetBase.Widget.pin_top_right(_fps_label, 8.0, 4.0)
 	layer.add_child(_fps_label)
+	_gear_btn = Button.new()   # на екранах Орбіти/старту (поки нема сесії) шестерня доступна завжди; у грі вхід — ☰
+	_gear_btn.text = "⚙"
+	_gear_btn.custom_minimum_size = Vector2(48, 44)
+	_gear_btn.focus_mode = Control.FOCUS_NONE
+	_gear_btn.theme = ui_theme
+	Widgets.WidgetBase.Widget.pin_top_left(_gear_btn, 12.0, 10.0)
+	_gear_btn.pressed.connect(func() -> void: _set_settings(true))
+	layer.add_child(_gear_btn)
 	_apply_settings()
 
 func _set_settings(on: bool) -> void:
@@ -354,6 +364,11 @@ func _set_settings(on: bool) -> void:
 		panel_menu.visible = false
 		_refresh_settings()
 	settings_panel.visible = on
+	_sync_gear()
+
+func _sync_gear() -> void:
+	if _gear_btn != null:
+		_gear_btn.visible = session == null and not settings_panel.visible
 
 func _refresh_settings(note: String = "") -> void:
 	settings_panel.bind({"values": settings.values, "info": ("%s\n%s" % [note, _build_line()]) if note != "" else _build_line()})
@@ -409,6 +424,16 @@ func _set_menu(on: bool) -> void:
 	if on:
 		panel_menu.set_footer(_build_line())
 		_refresh_menu()
+
+# Орбіта (spec 0011) УВІМК за замовчуванням (OD-165, 2026-11-13); опт-аут `-- noorbit`. Кадри `shot` лишаються на OFF (детерміновані),
+# якщо явно не попросити `-- orbit`. Орбіта вимагає відкритого складу й інвентаря (REQ-0011-3) — обидва в збірці ON.
+func _orbit_enabled() -> bool:
+	var args := OS.get_cmdline_user_args()
+	if "noorbit" in args:
+		return false
+	if "orbit" in args:
+		return true
+	return not shot_mode
 
 # Основна капсула УВІМК за замовчуванням (OD-114, 2026-11-08; змінює дефолт OD-7 для збірок).
 # Реальний час (spec 0012, OD-145): УВІМК за замовчуванням; опт-аут `-- norealtime`. Кадри `shot` лишаються на OFF (детерміновані:
