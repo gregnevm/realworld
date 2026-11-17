@@ -95,7 +95,7 @@ func _t_death_bag() -> void:
 	var a: Variant = _restore(T0 + 25 * H)
 	ok(a != null and not (a.sim.bags as Array).is_empty(), "bag: після відновлення торба ще лежить (протерміновується на тіку, не в догоні)")
 	if a != null:
-		a.sim.tick(0.1)
+		a.sim.update(0.1)
 		InvMod.pickup_bags(a.sim, {"px": -50.0, "py": -50.0})
 		InvMod.pickup_bags(a.sim, {"px": -50.0, "py": -50.0})
 	InvMod.expired_sink = Callable()
