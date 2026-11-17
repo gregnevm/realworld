@@ -259,12 +259,14 @@ class SpawnScreen extends Control:
 		gps.text = "📍 Моя GPS-локація"
 		gps.custom_minimum_size = Vector2(0, 40)
 		gps.pressed.connect(_use_real_gps)
+		gps.visible = not bool(_device.current().get("unavailable", false))   # 1.01 (чесність): кнопка GPS лише коли пристрій справді дає фікс; без нативного плагіна її нема
 		btns.add_child(gps)
 		var demo := Button.new()
 		demo.text = "✉ До друга: Бровари"
 		demo.tooltip_text = "Демо-інвайт: висадка поруч із базою друга"
 		demo.custom_minimum_size = Vector2(0, 40)
 		demo.pressed.connect(_choose.bind(50.5109, 30.7909, "Інвайт: Бровари"))
+		demo.visible = OS.has_feature("debug")   # 1.01 (чесність): «друг» — вигаданий; демо-інвайт лише в debug-збірці, у релізі його нема
 		btns.add_child(demo)
 		_more.add_child(btns)
 

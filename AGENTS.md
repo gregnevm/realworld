@@ -47,6 +47,7 @@ realworld/
   specs/               специфікації фіч (0001…0009) + _TEMPLATE.md (REQ-ID)
   docs/                довідники: catalog.md, mechanics-status.md, rimworld-reference.md, ux/
   docs/process/        процес розробки: README (принципи P1–P10, цикл, ролі, ритми) · game-design (метод, реєстр D/M) · automation (драбина доказів, радар, LLM Week) · playtest · rework-log · ai-use-log
+  docs/release/        реліз-маніфести (1.01.md: що працює, що свідомо не входить, відкриті гейти) — читай перед заявою «готово»
   docs/design/         стан дизайну — рішення ВЛАСНИКА: pillars.md · scope.md · decisions.md (OD-n)
   .github/workflows/   CI: ci.yml (Node) + godot.yml (Godot headless) + process.yml (PR-гейт + звіт процесу) + mutation.yml (gdmutant, trial, не блокує)
   .github/pull_request_template.md  контракт PR-гейта (інтент · тип · стовп · підстава · докази · що прибрано)

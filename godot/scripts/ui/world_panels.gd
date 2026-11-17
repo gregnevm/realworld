@@ -365,6 +365,12 @@ class SocialPanel extends PanelBase.Base:
 		add_child(vb)
 		var head := Widgets.H2Header.new()
 		vb.add_child(head); head.set_header("Соціальне", "web")
+		var sim_note := Label.new()   # 1.01 (чесність): клани й друзі — вигадані грою, а не живі гравці
+		sim_note.text = "Клани й друзі згенеровані грою (одиночний режим). Живі гравці — наступний крок."
+		sim_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		sim_note.add_theme_font_size_override("font_size", 12)
+		sim_note.add_theme_color_override("font_color", Tokens.DIM)
+		vb.add_child(sim_note)
 		for i in 5:
 			var lbl := Label.new()
 			lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -430,6 +436,52 @@ class SocialPanel extends PanelBase.Base:
 			else:
 				_friend_rows[i].visible = false   # hidden POOL SLOT (R2)
 				_friend_args[i] = {}
+
+# ---- JournalPanel (RIGHT dock, K) — spec 0012 REQ-82: орієнтири без порядку, «кроків» і гейтів; відкривається лише на запит ----
+class JournalPanel extends PanelBase.Base:
+	var _rows: Array = []            # Labels: один рядок на орієнтир (пул збудовано раз — R2)
+	const POOL := 12                # орієнтирів не більше (зараз 10); пул збудовано раз у _build — bind лише міняє текст (R2)
+	var _vb: VBoxContainer
+	func _init() -> void:
+		panel_id = &"journal"; dock = PanelBase.DOCK_RIGHT; priority = 85; hotkey = KEY_K; default_open = false
+		menu_label = "🧭 Орієнтири"; compact_open = 0
+	func _build() -> void:
+		rebuild_count += 1
+		_vb = VBoxContainer.new()
+		_vb.add_theme_constant_override("separation", 4)
+		add_child(_vb)
+		var head := Widgets.H2Header.new()
+		_vb.add_child(head); head.set_header("Орієнтири", "")
+		var note := Label.new()
+		note.text = "Підказки, що можна зробити. Без порядку — роби що хочеш."
+		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		note.add_theme_font_size_override("font_size", 12)
+		note.add_theme_color_override("font_color", Tokens.DIM)
+		_vb.add_child(note)
+		for i in POOL:
+			var lbl := Label.new()
+			lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			lbl.custom_minimum_size = Vector2(220, 0)
+			lbl.visible = false
+			_vb.add_child(lbl)
+			_rows.append(lbl)
+	func bind(vm) -> void:
+		rebind_count += 1
+		build_once()
+		if not (vm is Dictionary) or not vm.has("journal"):
+			return
+		var items: Array = (vm.journal as Dictionary).get("items", [])
+		for i in _rows.size():
+			var lbl: Label = _rows[i]
+			if i >= items.size():
+				lbl.visible = false
+				continue
+			var it: Dictionary = items[i]
+			var done: bool = bool(it.get("done", false))
+			var pct: int = int(round(float(it.get("pct", 0.0)) * 100.0))
+			lbl.visible = true
+			lbl.text = "%s %s%s" % ["✔" if done else "○", String(it.get("title", "")), "" if done or pct <= 0 else "  · %d%%" % pct]
+			lbl.add_theme_color_override("font_color", Tokens.GOOD if done else Tokens.INK)
 
 # ---- HelpPanel (RIGHT dock, H) — the static controls sheet; bind() has nothing to mutate ----
 class HelpPanel extends PanelBase.Base:

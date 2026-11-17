@@ -39,6 +39,8 @@ echo.
 echo === Realtime OFF baseline (spec 0012 - same fixture; numeric pins skip LOUDLY off the capture platform) ===
 "%GODOT%" --headless --path "%~dp0godot" -s res://tests/run_settings_tests.gd
 echo.
+"%GODOT%" --headless --path "%~dp0godot" -s res://tests/run_release_tests.gd
+echo.
 "%GODOT%" --headless --path "%~dp0godot" -s res://tests/run_realtime_tests.gd
 echo.
 echo === Net transport spike (spec 0006 - server + 3 clients, one joining mid-run) ===
