@@ -437,13 +437,13 @@ class SocialPanel extends PanelBase.Base:
 				_friend_rows[i].visible = false   # hidden POOL SLOT (R2)
 				_friend_args[i] = {}
 
-# ---- JournalPanel (RIGHT dock, K) — spec 0012 REQ-82: орієнтири без порядку, «кроків» і гейтів; відкривається лише на запит ----
+# ---- JournalPanel (RIGHT dock, ☰) — spec 0012 REQ-82: орієнтири без порядку, «кроків» і гейтів; відкривається лише на запит ----
 class JournalPanel extends PanelBase.Base:
 	var _rows: Array = []            # Labels: один рядок на орієнтир (пул збудовано раз — R2)
 	const POOL := 12                # орієнтирів не більше (зараз 10); пул збудовано раз у _build — bind лише міняє текст (R2)
 	var _vb: VBoxContainer
 	func _init() -> void:
-		panel_id = &"journal"; dock = PanelBase.DOCK_RIGHT; priority = 85; hotkey = KEY_K; default_open = false
+		panel_id = &"journal"; dock = PanelBase.DOCK_RIGHT; priority = 85; default_open = false   # без хоткея: K — замкнений ключ оверлея (design-system §3); вхід лише ☰
 		menu_label = "🧭 Орієнтири"; compact_open = 0
 	func _build() -> void:
 		rebuild_count += 1
