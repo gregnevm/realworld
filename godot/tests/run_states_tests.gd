@@ -25,6 +25,7 @@ func _init() -> void:
 	_t_death_bag()
 	_t_tool_wear_unit()
 	_t_tool_wear_in_gather()
+	_t_ftue_first_action()
 	finish()
 
 
@@ -167,3 +168,24 @@ func _t_tool_wear_in_gather() -> void:
 	var Realtime = load("res://scripts/sim/realtime.gd")
 	Realtime.catch_up(s, T0, T0 + 20 * H)
 	ok(is_equal_approx(ToolWear.wear_fraction(s, "axe"), before), "gather-wear: офлайн-догін 20 год не зношує інструмент")
+
+
+# REQ-0012-52 (машинна частина G4): після посадки перша осмислена дія — одна й доступна одразу (≤ 30 с sim-часу, 1 дія):
+# у руці стартове багаття, поруч є вільна клітинка, `build` ставить вогонь; без модального туторіалу (герой не заблокований).
+# Людський вимір «від старту застосунку на телефоні» (REQ-0010-42, 0012-52) це НЕ замінює.
+func _t_ftue_first_action() -> void:
+	var s: Variant = _session()
+	var sim: Variant = s.sim
+	ok(not bool(sim.dead) and sim.player.get("action") == null, "ftue: після посадки герой живий і не заблокований (нема модального туторіалу)")
+	ok(InvMod.count(sim, InvMod.BLD + "campfire") >= 1, "ftue: стартовий набір має багаття для першої дії")
+	var placed := false
+	var px: int = int(sim.player.px)
+	var py: int = int(sim.player.py)
+	for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(-1, -1)]:
+		if sim.build_valid(px + d.x, py + d.y):
+			var t0: float = float(sim.time.day) + float(sim.time.frac)
+			sim.try_build("campfire", px + d.x, py + d.y)
+			placed = sim.has_building("campfire")
+			ok(float(sim.time.day) + float(sim.time.frac) - t0 < 30.0 / 86400.0, "ftue: перша дія виконується в тому ж тіку (≤ 30 с)")
+			break
+	ok(placed, "ftue: одна дія `build` ставить багаття поруч із героєм")
