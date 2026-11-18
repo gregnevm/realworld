@@ -66,7 +66,7 @@ static func _body_hash(record: Dictionary) -> String:
 	return content_hash(body)
 
 # ---------------- serialize a live region (diff + save) ----------------
-const PLAYER_FIELDS := ["px", "py", "face", "hp", "hunger", "rest", "carry", "carry_cap", "sleeping", "skills", "equipped", "items", "born", "inv", "hand", "tool_wear"]
+const PLAYER_FIELDS := ["px", "py", "face", "hp", "hunger", "rest", "carry", "carry_cap", "sleeping", "skills", "equipped", "items", "born", "inv", "hand"]
 
 static func serialize_region(sim) -> Dictionary:
 	var m: Dictionary = sim.map
@@ -79,7 +79,7 @@ static func serialize_region(sim) -> Dictionary:
 		"source": str(m.get("source", "proc")),
 		"place_name": str(m.get("place_name", "Регіон")),
 		"day": int(sim.time.day), "frac": float(sim.time.frac),
-		"player": _pick(sim.player, PLAYER_FIELDS),
+		"player": _player_record(sim),
 		# located health (sim/hero_health.gd): the tracker IS the body, so it saves with the pawn;
 		# records predating the field migrate from the player.hp float on load.
 		"health": sim.health_dict(),
@@ -125,6 +125,14 @@ static func serialize_region(sim) -> Dictionary:
 	if sim.get("use_realtime") == true:
 		rec["use_realtime"] = true
 		rec.erase("frac")
+	return rec
+
+# PLAYER_FIELDS + необов'язкові ключі, що з'являються лише за певної механіки (знос інструмента, REQ-0012-89): без них запис і хеш
+# байт-у-байт як були (PLAYER_FIELDS сама — закріплений контракт схеми, REQ-0010-01/02).
+static func _player_record(sim) -> Dictionary:
+	var rec: Dictionary = _pick(sim.player, PLAYER_FIELDS)
+	if (sim.player as Dictionary).has("tool_wear"):
+		rec["tool_wear"] = (sim.player.tool_wear as Dictionary).duplicate(true)
 	return rec
 
 static func _pick(src: Dictionary, fields: Array) -> Dictionary:
