@@ -8,6 +8,10 @@ const SessionScript = preload("res://scripts/session.gd")
 const InvMod = preload("res://scripts/sim/inventory.gd")
 const HeroHealth = preload("res://scripts/sim/hero_health.gd")
 const Persistence = preload("res://scripts/persistence.gd")
+const ToolWear = preload("res://scripts/sim/tool_wear.gd")
+const Pacing = preload("res://scripts/pacing.gd")
+const Sim = preload("res://scripts/sim.gd")
+const WorldGen = preload("res://scripts/world_gen.gd")
 
 const T0 := 1800000000000   # 2027-01-15 (UTC-мс)
 const H := 3600000
@@ -19,6 +23,8 @@ func _init() -> void:
 	_t_downed()
 	_t_bleeding()
 	_t_death_bag()
+	_t_tool_wear_unit()
+	_t_tool_wear_in_gather()
 	finish()
 
 
@@ -101,3 +107,63 @@ func _t_death_bag() -> void:
 	InvMod.expired_sink = Callable()
 	ok(calls.size() == 1 and a != null and (a.sim.bags as Array).is_empty(), "bag: +25 год ⇒ торба зникла, bag_expired викликано рівно один раз (%d)" % calls.size())
 	_cleanup()
+
+
+func _wear_sim(on: bool) -> Variant:
+	var s: Variant = Sim.new()
+	s.use_realtime = on
+	s.set_clock(T0)
+	s.new_game(WorldGen.generate_map(50.4501, 30.5234, 56), false)
+	s.player.items.append("axe")
+	s.player.equipped["tool"] = "axe"
+	return s
+
+
+# REQ-0012-89: темп — Pacing.tool_wear_t1 секунд активної роботи; зламаний інструмент зникає; ключ зносу з'являється лише ON
+func _t_tool_wear_unit() -> void:
+	var limit: float = Pacing.seconds("tool_wear_t1")
+	ok(is_equal_approx(limit, 18000.0), "REQ-0012-89: ліміт зносу — 18 000 с активної роботи (~5 год)")
+	ok(ToolWear.is_tier1("axe") and ToolWear.is_tier1("pick") and not ToolWear.is_tier1("sledge") and not ToolWear.is_tier1("club"), "REQ-0012-89: перший тір — сокира й кайло; кувалда (дослідження) і зброя не зношуються")
+	var s: Variant = _wear_sim(true)
+	ok(not ToolWear.tick(s, limit * 0.5) and is_equal_approx(ToolWear.wear_fraction(s, "axe"), 0.5), "REQ-0012-89: половина часу — половина зносу, інструмент цілий")
+	ok(not ToolWear.tick(s, limit * 0.45) and s.player.items.has("axe"), "REQ-0012-89: 95 % — ще цілий (попередження в логу)")
+	ok(ToolWear.tick(s, limit * 0.05 + 1.0), "REQ-0012-89: >= ліміту — інструмент ламається")
+	ok(not s.player.items.has("axe") and String(s.player.equipped.get("tool", "")) == "" and not (s.player.get("tool_wear", {}) as Dictionary).has("axe"), "REQ-0012-89: зламана сокира зникла зі спорядження, знос скинуто")
+	var off: Variant = _wear_sim(false)
+	ToolWear.tick(off, limit * 2.0)
+	ok(off.player.items.has("axe") and not off.player.has("tool_wear"), "REQ-0012-89: за OFF знос не діє й ключа в player нема (байт-у-байт як було)")
+	var sled: Variant = _wear_sim(true)
+	sled.player.items.append("sledge")
+	sled.player.equipped["tool"] = "sledge"
+	ToolWear.tick(sled, limit * 2.0)
+	ok(sled.player.items.has("sledge"), "REQ-0012-89: інструмент вищого тіру не зношується")
+	var rec: Dictionary = Persistence.serialize_region(_wear_sim(true))
+	var w: Variant = _wear_sim(true)
+	ToolWear.tick(w, 1234.0)
+	var rec2: Dictionary = Persistence.serialize_region(w)
+	ok(not (rec.player as Dictionary).has("tool_wear") and (rec2.player as Dictionary).has("tool_wear"), "REQ-0012-89: знос потрапляє в сейв лише коли є (OFF-сейви незмінні)")
+
+
+# Інтеграція: справжній цикл добування (order_gather → update) зношує інструмент; офлайн-догін — ні
+func _t_tool_wear_in_gather() -> void:
+	var s: Variant = _wear_sim(true)
+	var cell: int = -1
+	for c in s.map.nodes:
+		if String(s.map.nodes[c].kind) == "tree":
+			cell = int(c)
+			break
+	ok(cell >= 0, "gather-wear: на мапі є дерево")
+	if cell < 0:
+		return
+	s.player.px = float(cell % int(s.n)) + 0.5
+	s.player.py = float(cell / int(s.n)) + 1.5
+	s.order_gather(cell % int(s.n), cell / int(s.n))
+	for i in 200:
+		s.update(0.1)
+	var f: float = ToolWear.wear_fraction(s, "axe")
+	ok(f > 0.0, "gather-wear: 20 с добування сокирою зношують її (%.5f)" % f)
+	ok(f < 0.01, "gather-wear: знос іде у секундах активної роботи, не стрибком (%.5f)" % f)
+	var before: float = f
+	var Realtime = load("res://scripts/sim/realtime.gd")
+	Realtime.catch_up(s, T0, T0 + 20 * H)
+	ok(is_equal_approx(ToolWear.wear_fraction(s, "axe"), before), "gather-wear: офлайн-догін 20 год не зношує інструмент")

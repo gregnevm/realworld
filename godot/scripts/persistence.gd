@@ -66,7 +66,7 @@ static func _body_hash(record: Dictionary) -> String:
 	return content_hash(body)
 
 # ---------------- serialize a live region (diff + save) ----------------
-const PLAYER_FIELDS := ["px", "py", "face", "hp", "hunger", "rest", "carry", "carry_cap", "sleeping", "skills", "equipped", "items", "born", "inv", "hand"]
+const PLAYER_FIELDS := ["px", "py", "face", "hp", "hunger", "rest", "carry", "carry_cap", "sleeping", "skills", "equipped", "items", "born", "inv", "hand", "tool_wear"]
 
 static func serialize_region(sim) -> Dictionary:
 	var m: Dictionary = sim.map
