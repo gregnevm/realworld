@@ -223,7 +223,7 @@ jobs:
         run: |
           SHA="$(echo "${{ github.event.pull_request.head.sha || github.sha }}" | cut -c1-7)"
           printf '%s\n' 'extends RefCounted' '' \
-            'const VERSION := "1.01"' \
+            'const VERSION := "1.01-rc1"' \
             "const SHA := \"$SHA\"" \
             "const RUN := \"$GITHUB_RUN_NUMBER\"" \
             "const BUILT := \"$(date -u +%Y-%m-%d)\"" '' \
@@ -231,10 +231,10 @@ jobs:
             '	if SHA == "dev":' '		return "v%s · dev (локальна збірка)" % VERSION' \
             '	return "v%s · #%s · %s · %s" % [VERSION, RUN, SHA, BUILT]' > godot/scripts/build_info.gd
           cat godot/scripts/build_info.gd
-      # versionCode росте з номером запуску CI: новіший APK ставиться поверх старішого (у репозиторії лишається 1 / 1.01)
+      # versionCode росте з номером запуску CI: новіший APK ставиться поверх старішого (у репозиторії лишається 1 / 1.01-rc1)
       - name: Android version from CI run
         run: |
-          sed -i "s/^version\/code=.*/version\/code=$GITHUB_RUN_NUMBER/; s/^version\/name=.*/version\/name=\"1.01.$GITHUB_RUN_NUMBER\"/" godot/export_presets.cfg
+          sed -i "s/^version\/code=.*/version\/code=$GITHUB_RUN_NUMBER/; s/^version\/name=.*/version\/name=\"1.01-rc1.$GITHUB_RUN_NUMBER\"/" godot/export_presets.cfg
           grep -n "^version/" godot/export_presets.cfg
       - name: Export Android APK
         run: |
