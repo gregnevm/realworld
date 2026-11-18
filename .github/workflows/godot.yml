@@ -124,6 +124,9 @@ jobs:
             xvfb-run -a --server-args="-screen 0 1280x720x24" \
               ./godot-bin --path godot --resolution 1280x720 res://newhud.tscn -- newhud shot touch scale=1.7 $args
             cp godot/newhud_shot.png "godot/g3/$name.png"
+            echo "G3_FRAME_BEGIN $name"
+            base64 -w 120 godot/newhud_thumb.png
+            echo "G3_FRAME_END $name"
           done <<'EOF'
           g3_landing
           g3_capsule_lvl2 capsule lvl=2 cpanel
