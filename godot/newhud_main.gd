@@ -682,7 +682,10 @@ func _shot_step(dt: float) -> void:
 	if capsule_shot and "tap" in OS.get_cmdline_user_args() and _t > 5.4 and not _shot_tapped:
 		_shot_tapped = true   # exactly what the filled button's intent dispatches; the flash lives 2.2 s, the frame is taken at 6.0 s
 		router.dispatch(&"capsule_upgrade", {}, session)
-	if _t > (6.0 if capsule_shot else 1.6) and not _shot:   # capsule frames wait out the goal toasts of the demo base
+	var shot_at: float = 6.0 if capsule_shot else 1.6   # capsule frames wait out the goal toasts of the demo base
+	if capsule_shot and "early" in OS.get_cmdline_user_args():
+		shot_at = 2.5   # `early`: кадр до того, як турелі демо-бази добʼють рейд (кадр контакту)
+	if _t > shot_at and not _shot:
 		_shot = true
 		await RenderingServer.frame_post_draw
 		var img := get_viewport().get_texture().get_image()

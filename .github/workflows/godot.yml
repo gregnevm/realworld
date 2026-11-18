@@ -131,7 +131,7 @@ jobs:
           g3_landing
           g3_capsule_lvl2 capsule lvl=2 cpanel
           g3_raid_warn capsule warn
-          g3_raid_contact capsule contact
+          g3_raid_contact capsule contact early
           g3_death capsule death
           EOF
           cp godot/newhud_shot_main.png godot/newhud_shot.png
