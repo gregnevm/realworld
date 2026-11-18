@@ -96,6 +96,16 @@ static func progress(id: String, sim, session) -> float:
 			return clampf(float(int(sim.time.day) - 1) / float(SURVIVE_DAY - 1), 0.0, 1.0)
 	return 0.0
 
+# spec 0012 REQ-82: журнал-орієнтир — ті самі цілі й предикати, але БЕЗ порядку, нумерації й гейтів. Чиста функція від стану:
+# нічого не пише в sim/сейв/хеш. done — липке виконання сесії (goals_done) АБО живий прогрес ≥ 1.
+static func journal(sim, session, done: Dictionary) -> Dictionary:
+	var items: Array = []
+	for g in GOALS:
+		var id := String(g.id)
+		var pct: float = progress(id, sim, session)
+		items.append({"id": id, "title": String(g.title), "done": done.has(id) or pct >= 1.0, "pct": pct})
+	return {"available": true, "items": items}
+
 # Partial credit for a room in progress: each wall/door counts toward the 4 sides of a 1-cell room.
 static func _walls_progress(sim) -> float:
 	var n := 0

@@ -396,6 +396,10 @@ func _hint_view() -> Dictionary:
 	return {"available": true, "hints": true, "done": 0, "total": 0, "all_done": false, "next": "",
 		"current": {"id": String(h.id), "title": String(h.title), "hint": String(h.hint), "build": String(h.build), "pct": 0.0}}
 
+# spec 0012 REQ-82: журнал-орієнтир (орієнтири без порядку); лише читання
+func journal_view() -> Dictionary:
+	return Goals.journal(sim, self, goals_done) if sim != null else {"available": false}
+
 # Value data for the HUD GoalsPanel (R8): the first open goal + its live progress + what follows.
 func goals_view() -> Dictionary:
 	if sim != null and sim.use_realtime:

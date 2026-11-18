@@ -66,6 +66,9 @@ static func snapshot(session, world: Dictionary, ctx: Dictionary, balance) -> Di
 	var nearby := _nearby_slice(session)
 	if bool(nearby.get("available", false)):
 		snap["nearby"] = nearby
+	# spec 0012 REQ-82: журнал-орієнтир — ключ лише поки панель відкрита (закрита ⇒ знімок байт-у-байт як було)
+	if (ctx.get("open_panels", []) as Array).has("journal") and session.has_method("journal_view"):
+		snap["journal"] = session.journal_view()
 	# spec 0014 (B+C): the key exists only while there IS something to point at (a world without it keeps the baseline snapshot)
 	# the hover ghost / touch brackets already frame the target → the marker steps aside (REQ-0014-6)
 	var ghost_on: bool = (String(ctx.get("selected_build", "")) != "" and _hover_in_map(sim, ctx)) \

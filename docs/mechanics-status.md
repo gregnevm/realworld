@@ -1,6 +1,6 @@
 # Mechanics catalogue — status tracker
 
-> Snapshot: **2026-07-05**, last verified against code **2026-11-03**. Purpose: make the
+> Snapshot: **2026-07-05**, last verified against code **2026-11-17** (реліз 1.01 — див. `docs/release/1.01.md`: що працює, що свідомо не входить, відкриті гейти). Purpose: make the
 > *infrastructure-vs-content* gap visible — the kernel is deep (~880 headless asserts across the
 > Godot suites + 56 Node) but not every designed mechanic is yet wired into a playable slice. This
 > is the at-a-glance «what is real vs only designed» view that complements `GDD_BOOK/gdd.json`
@@ -28,8 +28,8 @@
 | `balance_director` | ✅ | ✅ | ✅ | ✅ | **live** (2026-07-29): `sim/director.gd` runs `Balance.tick()` on its own seeded stream — raids, disease (→ the health tracker), cold snaps (→ `apply_temp_anomaly`), cargo drops. `decide()` stays the AI seam; fauna/quest incidents wait for their substrate |
 | `convoy_logistics` | ✅ | ✅ | ✅ | ✅ | real hubs (Kyiv/Lviv/Odesa/…); trade offers |
 | `offline_persistence` | ✅ | ✅ | ✅ | ✅ | `persistence.gd` seed+diff+hash-chain; travel/permadeath |
-| `social` | ✅ | ✅ | ✅ | ✅ | `social.gd` clans/stances; `new_graph()` = Phase 1 wire-shape |
-| `capsules` | ✅ | ✅ | 🟡 | ✅ | `sim.gd` ≤100 km / 1-per-day; invites |
+| `social` | ✅ | ✅ | 🟡 | ✅ | `social.gd` clans/stances; `new_graph()` = Phase 1 wire-shape. **У 1.01 клани й друзі згенеровані грою (соло)** — панель «Соціальне» так і каже; живі гравці — крок 2 |
+| `capsules` | ✅ | ✅ | ✅ | ✅ | **Основна капсула live (spec 0010, OD-114)**: рівень і захист, рейд на ядро, щит після респавну; Орбіта/клони (spec 0011, OD-165) УВІМК у 1.01. Легасі-запуск «≤100 km / 1-per-day» і інвайти — старий шлях (OFF за капсули) |
 | `territory_control` | ✅ | 🟡 | ⬜ | 🟡 | clan stances feed threat; full territory meta = later |
 | `economy` | ✅ | 🟡 | ⬜ | 🟡 | sinks exist (raids/convoy/upkeep); full player economy = Phase 1+ |
 

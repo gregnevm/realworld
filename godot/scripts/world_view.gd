@@ -554,6 +554,11 @@ func _draw_capsule_marks(p: Vector2, c: Vector2) -> void:
 		return
 	var rows: int = 4 if imm else 3
 	var box := Rect2(c.x - w * 0.5, p.y + TILE + 4.0, w, 13.0 * float(rows) + 3.0)
+	var xf: Transform2D = get_global_transform_with_canvas()   # G3 (fresh-eyes 2026-11-18): ліві чіпи HUD закривали початок підпису — табличку зсуваємо правіше за лівий док
+	var left_screen: float = (xf * box.position).x
+	var min_left: float = get_viewport_rect().size.x * 0.34
+	if left_screen < min_left and xf.get_scale().x > 0.0:
+		box.position.x += (min_left - left_screen) / xf.get_scale().x
 	draw_rect(Rect2(p, Vector2(TILE, TILE)), amber, false, 1.5)
 	draw_line(Vector2(c.x, p.y + TILE), Vector2(c.x, box.position.y), amber, 1.0)
 	draw_rect(box, Color(0.04, 0.05, 0.06, 0.92))

@@ -40,7 +40,7 @@ jobs:
       - name: Headless suites (leak-gated)
         run: |
           set -o pipefail
-          for suite in run_tests run_kernel_tests run_catalog_tests run_progression_tests run_ui_tests run_determinism_tests run_snapshot_tests run_command_tests run_rejoin_tests run_capsule_tests run_orbit_tests run_settings_tests run_realtime_tests run_realm_tests run_realm_server_tests run_smoke; do
+          for suite in run_tests run_kernel_tests run_catalog_tests run_progression_tests run_ui_tests run_determinism_tests run_snapshot_tests run_command_tests run_rejoin_tests run_capsule_tests run_orbit_tests run_settings_tests run_release_tests run_states_tests run_realtime_tests run_realm_tests run_realm_server_tests run_smoke; do
             echo "=== $suite ==="
             ./godot-bin --headless --path godot -s "res://tests/$suite.gd" 2>&1 | tee suite.log
             ! grep -q "ObjectDB instances were leaked" suite.log
@@ -117,6 +117,24 @@ jobs:
             ./godot-bin --path godot --resolution 1280x720 res://newhud.tscn -- newhud shot settings
           cp godot/newhud_shot.png godot/newhud_shot_settings.png
           cp godot/newhud_shot_main.png godot/newhud_shot.png
+      - name: Render G3 frames (fresh-eyes set, touch layout)
+        run: |
+          mkdir -p godot/g3
+          while read -r name args; do
+            xvfb-run -a --server-args="-screen 0 1280x720x24" \
+              ./godot-bin --path godot --resolution 1280x720 res://newhud.tscn -- newhud shot touch scale=1.7 realtime $args
+            cp godot/newhud_shot.png "godot/g3/$name.png"
+            echo "G3_FRAME_BEGIN $name"
+            base64 -w 120 godot/newhud_thumb.png
+            echo "G3_FRAME_END $name"
+          done <<'EOF'
+          g3_landing
+          g3_capsule_lvl2 capsule lvl=2 cpanel
+          g3_raid_warn capsule warn
+          g3_raid_contact capsule contact early
+          g3_death capsule death
+          EOF
+          cp godot/newhud_shot_main.png godot/newhud_shot.png
       - name: Show result
         run: ls -la godot/newhud_shot.png godot/newhud_thumb.png && file godot/newhud_shot.png
       - name: Emit thumb as base64 (log readback channel)
@@ -132,6 +150,12 @@ jobs:
             godot/newhud_shot.png
             godot/newhud_shot_settings.png
             godot/newhud_thumb.png
+          if-no-files-found: error
+      - name: Upload G3 frames
+        uses: actions/upload-artifact@v4
+        with:
+          name: g3-frames
+          path: godot/g3/*.png
           if-no-files-found: error
 
   # Phone build: the same game as an installable APK (arm64, landscape, touch frame — see
@@ -223,17 +247,18 @@ jobs:
         run: |
           SHA="$(echo "${{ github.event.pull_request.head.sha || github.sha }}" | cut -c1-7)"
           printf '%s\n' 'extends RefCounted' '' \
+            'const VERSION := "1.01-rc1"' \
             "const SHA := \"$SHA\"" \
             "const RUN := \"$GITHUB_RUN_NUMBER\"" \
             "const BUILT := \"$(date -u +%Y-%m-%d)\"" '' \
             'static func label() -> String:' \
-            '	if SHA == "dev":' '		return "dev (локальна збірка)"' \
-            '	return "#%s · %s · %s" % [RUN, SHA, BUILT]' > godot/scripts/build_info.gd
+            '	if SHA == "dev":' '		return "v%s · dev (локальна збірка)" % VERSION' \
+            '	return "v%s · #%s · %s · %s" % [VERSION, RUN, SHA, BUILT]' > godot/scripts/build_info.gd
           cat godot/scripts/build_info.gd
-      # versionCode росте з номером запуску CI: новіший APK ставиться поверх старішого (у репозиторії лишається 1 / 0.1.0)
+      # versionCode росте з номером запуску CI: новіший APK ставиться поверх старішого (у репозиторії лишається 1 / 1.01-rc1)
       - name: Android version from CI run
         run: |
-          sed -i "s/^version\/code=.*/version\/code=$GITHUB_RUN_NUMBER/; s/^version\/name=.*/version\/name=\"0.1.$GITHUB_RUN_NUMBER\"/" godot/export_presets.cfg
+          sed -i "s/^version\/code=.*/version\/code=$GITHUB_RUN_NUMBER/; s/^version\/name=.*/version\/name=\"1.01-rc1.$GITHUB_RUN_NUMBER\"/" godot/export_presets.cfg
           grep -n "^version/" godot/export_presets.cfg
       - name: Export Android APK
         run: |

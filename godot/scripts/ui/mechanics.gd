@@ -35,6 +35,7 @@ static func register_all(panel_registry, overlay_registry) -> void:
 	panel_registry.register(WorldPanels.CapsulePanel.new())
 	panel_registry.register(WorldPanels.SocialPanel.new())
 	panel_registry.register(RealmPanels.NearbyPanel.new())   # Q — радар присутності
+	panel_registry.register(WorldPanels.JournalPanel.new())   # ☰ — журнал-орієнтир (spec 0012 REQ-82)
 	panel_registry.register(WorldPanels.HelpPanel.new())
 	# BAR dock — the placement bar (digits 1..0 mirror it)
 	panel_registry.register(Panels.BuildBarPanel.new())

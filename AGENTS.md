@@ -31,7 +31,7 @@ realworld/
     scripts/kernel/       механічний кернел (spec 0003) + дерево контенту (catalog.gd)
     scripts/calendar.gd   spec 0012: реальна дата, цивільний час із DST, геометрія сонця (чисті функції від now)
     scripts/pacing.gd     spec 0012 §5.3: таблиця темпу реального часу (лише за use_realtime=ON); `sim/realtime.gd` — годинник/догін/робочий темп
-    scripts/sim/orbit.gd  spec 0011 (W1–W6, OD-151): акаунт-запис Орбіти — ростер клонів, safe_stock (32 слоти), settle сплячих, кулдаун базового клона; `use_orbit` OFF за замовчуванням (dev `-- orbit`); `clone_tuning.gd` — усі числа таблицею
+    scripts/sim/orbit.gd  spec 0011 (W1–W6, OD-151): акаунт-запис Орбіти — ростер клонів, safe_stock (32 слоти), settle сплячих, кулдаун базового клона; `use_orbit` УВІМК у збірках (OD-165, опт-аут `-- noorbit`; кадри `shot` — OFF); версія продукту — `build_info.gd` VERSION (1.01); `clone_tuning.gd` — усі числа таблицею
     scripts/settings.gd   spec 0015 (OD-164): налаштування пристрою (user://settings.json, поза сейвом/world_hash); таблиця DEFS — кожен пункт має реальну дію (тест `run_settings_tests` ловить заглушки); вікно — `ui/settings_panel.gd`, вхід: ☰ і стартовий екран
     scripts/goals.gd      онбординг-ланцюг «Цілі» (чисті перевірки стану; липке виконання в session)
     content/catalog.json  335 def; валідовано catalog.gd ↔ tests/catalog.test.js (`catalog_data.js`/JS-дзеркало видалено)
@@ -47,6 +47,7 @@ realworld/
   specs/               специфікації фіч (0001…0009) + _TEMPLATE.md (REQ-ID)
   docs/                довідники: catalog.md, mechanics-status.md, rimworld-reference.md, ux/
   docs/process/        процес розробки: README (принципи P1–P10, цикл, ролі, ритми) · game-design (метод, реєстр D/M) · automation (драбина доказів, радар, LLM Week) · playtest · rework-log · ai-use-log
+  docs/release/        реліз-маніфести (1.01.md: що працює, що свідомо не входить, відкриті гейти) — читай перед заявою «готово»
   docs/design/         стан дизайну — рішення ВЛАСНИКА: pillars.md · scope.md · decisions.md (OD-n)
   .github/workflows/   CI: ci.yml (Node) + godot.yml (Godot headless) + process.yml (PR-гейт + звіт процесу) + mutation.yml (gdmutant, trial, не блокує)
   .github/pull_request_template.md  контракт PR-гейта (інтент · тип · стовп · підстава · докази · що прибрано)

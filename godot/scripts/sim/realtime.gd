@@ -6,6 +6,11 @@ extends RefCounted
 
 const Calendar = preload("res://scripts/calendar.gd")
 const Pacing = preload("res://scripts/pacing.gd")
+const ToolWear = preload("res://scripts/sim/tool_wear.gd")
+
+# REQ-0012-89: знос інструмента першого тіру за секунди активної роботи (лише ON; sim.gd викликає зі кроку добування)
+static func wear_tool(s, dt: float) -> void:
+	ToolWear.tick(s, dt)
 
 # Прапор ставиться ДО new_game; посеред сесії зміна відхиляється явною помилкою (REQ-0012-5).
 static func set_flag(s, v: bool) -> bool:

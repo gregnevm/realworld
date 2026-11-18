@@ -1079,7 +1079,7 @@ func _do_gather(dt: float, step: float) -> void:
 		return
 	var info: Dictionary = GameData.NODEINFO[node.kind]
 	a.dur = gather_time(node)
-	a.t += dt
+	a.t += dt; Realtime.wear_tool(self, dt)   # REQ-0012-89
 	if a.t >= a.dur:
 		a.t = 0.0
 		if not use_inventory and carry_total() >= p.carry_cap:

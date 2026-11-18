@@ -49,6 +49,7 @@ const WorldPanels = preload("res://scripts/ui/world_panels.gd")
 const RealmPanels = preload("res://scripts/ui/realm_panels.gd")
 const LocalRealm = preload("res://scripts/net/local_realm.gd")
 const PersistenceMod = preload("res://scripts/persistence.gd")
+const GoalsMod = preload("res://scripts/goals.gd")
 
 
 func _init() -> void:
@@ -98,6 +99,7 @@ func _init() -> void:
 	await _t_capsule_ui()
 	_t_capsule_budget()
 	_t_orbit_hud_unchanged()
+	_t_journal()
 	await _t_capsule_adv()
 	_t_capsule_adv_pure()
 	await _t_capsule_texts()
@@ -1490,6 +1492,40 @@ func _t_orbit_hud_unchanged() -> void:
 	k_off.sort()
 	k_on.sort()
 	ok(k_off == k_on, "REQ-0011-40: the HUD snapshot has the same keys with the Orbit ON and OFF (no new permanent element)")
+
+
+# spec 0012 REQ-82: журнал-орієнтир — не в HUD за замовчуванням, відкриття не міняє sim/world_hash, без порядку/«кроку N з M»/гейтів.
+func _t_journal() -> void:
+	var s: Variant = _capsule_session(true)
+	var closed: Dictionary = _cap_snap(s)
+	ok(not closed.has("journal"), "REQ-0012-82: журналу нема в знімку HUD, поки панель закрита (не постійний елемент)")
+	var h0: String = PersistenceMod.world_hash(s.sim)
+	var open_snap: Dictionary = _cap_snap(s, {"open_panels": ["journal"]})
+	ok(open_snap.has("journal") and bool(open_snap.journal.available), "REQ-0012-82: відкрита панель отримує зріз журналу")
+	ok(PersistenceMod.world_hash(s.sim) == h0, "REQ-0012-82: відкриття журналу не міняє world_hash")
+	var items: Array = open_snap.journal.items
+	ok(items.size() == GoalsMod.count(), "журнал показує всі орієнтири з goals.gd (ті самі предикати)")
+	var ordered := false
+	for it in items:
+		for k in (it as Dictionary).keys():
+			if String(k) in ["step", "index", "locked", "gate", "order"]:
+				ordered = true
+	ok(not ordered, "REQ-0012-82: у записах журналу нема порядку, кроку чи гейта")
+	var jp = WorldPanels.JournalPanel.new()
+	jp.build_once()
+	var kids: int = jp._vb.get_child_count()
+	jp.bind(open_snap)
+	jp.bind(open_snap)
+	ok(jp._vb.get_child_count() == kids and jp.rebuild_count == 1, "R2: журнал збудовано раз, bind лише міняє текст")
+	var shown: int = 0
+	var text_all := ""
+	for l in jp._rows:
+		if (l as Label).visible:
+			shown += 1
+			text_all += (l as Label).text + "\n"
+	ok(shown == items.size() and not ("з 10" in text_all) and not ("Крок" in text_all), "журнал: рядок на орієнтир, без «крок N з M»")
+	ok(String(jp.menu_label) != "" and not bool(jp.default_open), "журнал: вхід у ☰, за замовчуванням закритий")
+	jp.free()
 
 
 func _t_capsule_budget() -> void:
