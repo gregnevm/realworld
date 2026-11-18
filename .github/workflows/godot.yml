@@ -117,6 +117,21 @@ jobs:
             ./godot-bin --path godot --resolution 1280x720 res://newhud.tscn -- newhud shot settings
           cp godot/newhud_shot.png godot/newhud_shot_settings.png
           cp godot/newhud_shot_main.png godot/newhud_shot.png
+      - name: Render G3 frames (fresh-eyes set, touch layout)
+        run: |
+          mkdir -p godot/g3
+          while read -r name args; do
+            xvfb-run -a --server-args="-screen 0 1280x720x24" \
+              ./godot-bin --path godot --resolution 1280x720 res://newhud.tscn -- newhud shot touch scale=1.7 $args
+            cp godot/newhud_shot.png "godot/g3/$name.png"
+          done <<'EOF'
+          g3_landing
+          g3_capsule_lvl2 capsule lvl=2 cpanel
+          g3_raid_warn capsule warn
+          g3_raid_contact capsule contact
+          g3_death capsule death
+          EOF
+          cp godot/newhud_shot_main.png godot/newhud_shot.png
       - name: Show result
         run: ls -la godot/newhud_shot.png godot/newhud_thumb.png && file godot/newhud_shot.png
       - name: Emit thumb as base64 (log readback channel)
@@ -132,6 +147,12 @@ jobs:
             godot/newhud_shot.png
             godot/newhud_shot_settings.png
             godot/newhud_thumb.png
+          if-no-files-found: error
+      - name: Upload G3 frames
+        uses: actions/upload-artifact@v4
+        with:
+          name: g3-frames
+          path: godot/g3/*.png
           if-no-files-found: error
 
   # Phone build: the same game as an installable APK (arm64, landscape, touch frame — see
