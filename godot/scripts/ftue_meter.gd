@@ -72,7 +72,7 @@ func lines(limit: int = 1) -> PackedStringArray:
 	var i: int = runs.size() - 1
 	while i >= 0 and out.size() < limit:
 		var r: Dictionary = runs[i]
-		out.append("⏱ %s%s" % [row_text(r), (" · %s" % String(r.at)) if limit > 1 and String(r.get("at", "")) != "" else ""])
+		out.append("⏱ Плейтест-вимір: %s%s" % [row_text(r), (" · %s" % String(r.at)) if limit > 1 and String(r.get("at", "")) != "" else ""])
 		i -= 1
 	return out
 

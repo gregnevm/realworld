@@ -698,6 +698,8 @@ func _shot_step(dt: float) -> void:
 		_set_menu(true)
 	if "settings" in OS.get_cmdline_user_args() and _t > 1.0 and not settings_panel.visible:   # `shot settings`: вікно налаштувань над грою
 		_set_settings(true)
+	if "settings" in OS.get_cmdline_user_args() and "ftue" in OS.get_cmdline_user_args() and _t > 1.3:
+		settings_panel.scroll_to_end()   # рядок збірки й виміри G4 — у кінці прокрутки
 	if tc != null and _t > 1.2 and not _shot_acted:
 		_shot_acted = true
 		if "radial" in OS.get_cmdline_user_args():   # `shot radial`: the hold menu on the current target

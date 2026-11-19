@@ -21,6 +21,12 @@ class SettingsPanel extends WidgetBase.Widget:
 	var _confirm_btn: Button
 	var _confirm_armed := false
 	var _info: Label
+	var _scroll: ScrollContainer
+	const SCROLL_H := 320.0
+	const CHROME_H := 150.0   # заголовок + кнопка «Скинути» + поля модалі
+	# Висота прокрутки: 320 на великому екрані; на телефоні — скільки лишає екран, щоб заголовок і низ вікна не зрізались.
+	static func scroll_height(viewport_h: float) -> float:
+		return clampf(viewport_h - CHROME_H, 140.0, SCROLL_H)
 
 	func _build() -> void:
 		mouse_filter = Control.MOUSE_FILTER_STOP
@@ -48,8 +54,9 @@ class SettingsPanel extends WidgetBase.Widget:
 		x.pressed.connect(func() -> void: closed.emit())
 		head.add_child(x)
 		var scroll := ScrollContainer.new()
+		_scroll = scroll
 		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-		scroll.custom_minimum_size = Vector2(0, 320)
+		scroll.custom_minimum_size = Vector2(0, SCROLL_H)
 		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		vb.add_child(scroll)
 		var col := VBoxContainer.new()
@@ -80,14 +87,15 @@ class SettingsPanel extends WidgetBase.Widget:
 		_add_action("to_menu", "↩ У головне меню")
 		_confirm_btn = _add_action("new_game", "🗑 Нова гра…")
 		_actions.visible = in_game
-		var foot := HBoxContainer.new()
-		vb.add_child(foot)
-		_info = Label.new()
+		_info = Label.new()   # рядок збірки + плейтест-виміри: у кінці прокрутки, а не в підвалі — кілька рядків не виштовхують вікно за екран
 		_info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_info.add_theme_color_override("font_color", Tokens.DIM)
 		_info.add_theme_font_size_override("font_size", 13)
 		_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		foot.add_child(_info)
+		col.add_child(_info)
+		var foot := HBoxContainer.new()
+		foot.alignment = BoxContainer.ALIGNMENT_END
+		vb.add_child(foot)
 		var rst := Button.new()
 		rst.text = "↺ Скинути"
 		rst.custom_minimum_size = Vector2(110, 38)
@@ -179,8 +187,15 @@ class SettingsPanel extends WidgetBase.Widget:
 				for e in rec.buttons:
 					(e.btn as Button).set_pressed_no_signal(is_equal_approx(float(e.val), float(v)))
 		_info.text = String(vm.get("info", ""))
+		if is_inside_tree():
+			_scroll.custom_minimum_size.y = scroll_height(get_viewport_rect().size.y)
 		_actions.visible = in_game
 		_disarm()
+
+	# Прогорнути до рядка збірки й плейтест-вимірів (кадр `shot ftue settings`).
+	func scroll_to_end() -> void:
+		build_once()
+		_scroll.scroll_vertical = int(_scroll.get_v_scroll_bar().max_value)
 
 	func row_ids() -> Array:
 		build_once()
