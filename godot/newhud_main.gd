@@ -30,6 +30,7 @@ const TouchCtl = preload("res://scripts/ui/touch_controls.gd")
 const AM = preload("res://scripts/ui/action_model.gd")
 const InventoryMod = preload("res://scripts/sim/inventory.gd")
 const BuildInfo = preload("res://scripts/build_info.gd")
+const FtueMeter = preload("res://scripts/ftue_meter.gd")   # хронометраж G4 (REQ-0010-42 / REQ-0012-52): старт -> посадка -> перша дія
 const Clock = preload("res://scripts/clock.gd")
 const SettingsScript = preload("res://scripts/settings.gd")
 const SettingsUI = preload("res://scripts/ui/settings_panel.gd")
@@ -84,11 +85,21 @@ var _shot_acted := false
 # Autosave (continue): every settings.autosave_s real seconds (default 30), at each new game day and on quit. Cheap —
 # one JSON write of the session; the store already holds every visited region.
 var _autosave_t := 0.0
+# Хронометраж G4: view/пристрій, поза сейвом. Тривалості — монотонний Time.get_ticks_msec (стінний годинник може стрибнути).
+var ftue: RefCounted = FtueMeter.new()
+var _ftue_origin := "app"          # "app" — перший екран після старту застосунку; "menu" — після повернення в меню
+var _ftue_screen_ms := 0           # коли показано стартовий екран (для "app" — 0 = старт застосунку)
+var _ftue_land_ms := 0
 var _saved_day := -1
 
 func _ready() -> void:
 	if not ("newhud" in OS.get_cmdline_user_args() and "shot" in OS.get_cmdline_user_args()):
 		settings.load_file()           # кадри `shot` — на дефолтах (детерміновані); гра — на налаштуваннях гравця
+		ftue.load_file()
+	if Engine.has_meta("rw_booted"):       # сцену перезавантажено («У меню» / «Нова гра»): відлік від появи меню, а не від старту процесу
+		_ftue_origin = "menu"
+		_ftue_screen_ms = Time.get_ticks_msec()
+	Engine.set_meta("rw_booted", true)
 	UITheme.install_emoji_fallback()       # web has no system emoji font — icons were boxes without it
 	var ui_theme := UITheme.build()        # ONE Theme resource from Tokens (§2.4)
 	_setup_touch()
@@ -225,6 +236,10 @@ func _start_game(lat: float, lon: float, place_name: String) -> void:
 		return
 	print("RealWorld ", _build_line())   # консоль/web-console: яка збірка і чи ввімкнена капсула
 	_enter_session()
+	if (not shot_mode or "ftue" in OS.get_cmdline_user_args()) and not demo_mode:   # G4: посадка відбулась — перший вимір записано, другий (до першої дії) пішов
+		_ftue_land_ms = Time.get_ticks_msec()
+		ftue.begin(_ftue_origin, _ftue_land_ms - _ftue_screen_ms, FtueMeter.probe(session.sim), BuildInfo.SHA, Time.get_datetime_string_from_system(false, true).substr(0, 16))
+		_ftue_save()
 	if _capsule_enabled() and "forceraid" in OS.get_cmdline_user_args():   # dev-хук G5 (REQ-0010-120): рейд без 3 діб очікування; релізна збірка відмовить
 		MainCapsule.force_raid(session.sim, OS.has_feature("debug"))
 	_autosave()   # a new landing claims the save slot at once (the spawn screen warned about it)
@@ -371,7 +386,7 @@ func _sync_gear() -> void:
 		_gear_btn.visible = session == null and not settings_panel.visible
 
 func _refresh_settings(note: String = "") -> void:
-	settings_panel.bind({"values": settings.values, "info": ("%s\n%s" % [note, _build_line()]) if note != "" else _build_line()})
+	settings_panel.bind({"values": settings.values, "info": ("%s\n%s" % [note, _info_text(5)]) if note != "" else _info_text(5)})
 
 func _on_setting_changed(id: String, value: Variant) -> void:
 	if settings.set_value(id, value):
@@ -422,7 +437,7 @@ func _haptics_step() -> void:
 func _set_menu(on: bool) -> void:
 	panel_menu.visible = on
 	if on:
-		panel_menu.set_footer(_build_line())
+		panel_menu.set_footer(_info_text(1))
 		_refresh_menu()
 
 # Орбіта (spec 0011) УВІМК за замовчуванням (OD-165, 2026-11-13); опт-аут `-- noorbit`. Кадри `shot` лишаються на OFF (детерміновані),
@@ -472,6 +487,15 @@ func _build_line() -> String:
 		cap = "УВІМК"
 	return "Збірка %s · капсула: %s" % [BuildInfo.label(), cap]
 
+func _ftue_save() -> void:
+	if not shot_mode:   # кадр `shot ftue` міряє в пам'яті й журнал гравця не чіпає
+		ftue.save()
+
+# Рядок збірки + виміри G4 (☰ — останній; налаштування — до 5 останніх, щоб після сесії плейтесту прочитати всіх гравців).
+func _info_text(limit: int) -> String:
+	var rows: PackedStringArray = ftue.lines(limit)
+	return _build_line() if rows.is_empty() else "%s\n%s" % [_build_line(), "\n".join(rows)]
+
 func _refresh_menu_if_open() -> void:
 	if panel_menu != null and panel_menu.visible:
 		_refresh_menu()
@@ -506,6 +530,10 @@ func _process(dt: float) -> void:
 	if sdt > 0.0 and not session.sim.dead:
 		session.sim.update(sdt)
 		session.tick_research(sdt)    # research benches fund the tech pipeline each frame
+	if ftue.is_open() and ftue.observe(Time.get_ticks_msec() - _ftue_land_ms, FtueMeter.probe(session.sim)):
+		_ftue_save()                  # G4: зловлено першу дію гравця після посадки
+		if panel_menu != null and panel_menu.visible:
+			panel_menu.set_footer(_info_text(1))
 	session.tick_goals(dt)            # onboarding goals observe the world (real time, ~2×/s)
 	CatalogSim.shared().tick(sdt)     # advance the forward-engine catalogue model
 	# camera eases after the hero (exp. smoothing, frame-rate independent) instead of hard-locking to it;
@@ -666,6 +694,8 @@ func _shot_step(dt: float) -> void:
 		var hp := Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE - TILE * 1.3)   # `shot fx`: show the floating texts
 		view.fx_add("+3", hp, Color(1.0, 0.95, 0.8), "res_wood")
 		view.fx_add("-7", hp + Vector2(TILE * 2.5, TILE * 0.3), Color(1.0, 0.85, 0.4))
+	if "ftue" in OS.get_cmdline_user_args() and _t > 1.0 and not panel_menu.visible:   # `shot ftue`: ☰ із рядком хронометражу G4 (вимір цього ж запуску; демо-база рахується як перша дія)
+		_set_menu(true)
 	if "settings" in OS.get_cmdline_user_args() and _t > 1.0 and not settings_panel.visible:   # `shot settings`: вікно налаштувань над грою
 		_set_settings(true)
 	if tc != null and _t > 1.2 and not _shot_acted:

@@ -33,6 +33,7 @@ realworld/
     scripts/pacing.gd     spec 0012 §5.3: таблиця темпу реального часу (лише за use_realtime=ON); `sim/realtime.gd` — годинник/догін/робочий темп
     scripts/sim/orbit.gd  spec 0011 (W1–W6, OD-151): акаунт-запис Орбіти — ростер клонів, safe_stock (32 слоти), settle сплячих, кулдаун базового клона; `use_orbit` УВІМК у збірках (OD-165, опт-аут `-- noorbit`; кадри `shot` — OFF); версія продукту — `build_info.gd` VERSION (1.01); `clone_tuning.gd` — усі числа таблицею
     scripts/settings.gd   spec 0015 (OD-164): налаштування пристрою (user://settings.json, поза сейвом/world_hash); таблиця DEFS — кожен пункт має реальну дію (тест `run_settings_tests` ловить заглушки); вікно — `ui/settings_panel.gd`, вхід: ☰ і стартовий екран
+    scripts/ftue_meter.gd хронометраж G4 (REQ-0010-42 / 0012-52): старт → посадка → перша дія; user://ftue.json поза сейвом; лише читає sim; рядок у ☰ і ⚙; кадр — `shot ftue`
     scripts/goals.gd      онбординг-ланцюг «Цілі» (чисті перевірки стану; липке виконання в session)
     content/catalog.json  335 def; валідовано catalog.gd ↔ tests/catalog.test.js (`catalog_data.js`/JS-дзеркало видалено)
     tests/                headless-сьюти Godot (run_*.gd)

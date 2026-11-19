@@ -719,6 +719,14 @@ class PanelMenu extends WidgetBase.Widget:
 	var _grid: GridContainer
 	var _btns: Dictionary = {}   # "kind:id" -> Button
 	var _footer: Label
+	var _scroll: ScrollContainer
+	const CHROME_H := 224.0   # заголовок + рядок збірки + поля модалі + нижня смуга хотбара, яку модаль не має перекривати
+	# Висота сітки: уся, якщо влазить; інакше — скільки лишає екран (решта гортається).
+	static func grid_height(content_h: float, viewport_h: float) -> float:
+		return minf(content_h, maxf(96.0, viewport_h - CHROME_H))
+	func _fit() -> void:
+		if _scroll != null and is_inside_tree():
+			_scroll.custom_minimum_size.y = grid_height(_grid.get_combined_minimum_size().y, get_viewport_rect().size.y)
 	func _build() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var pc := PanelContainer.new()
@@ -753,7 +761,11 @@ class PanelMenu extends WidgetBase.Widget:
 		_grid.columns = 3
 		_grid.add_theme_constant_override("h_separation", 6)
 		_grid.add_theme_constant_override("v_separation", 6)
-		vb.add_child(_grid)
+		_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_scroll = ScrollContainer.new()   # на телефоні сітка вища за екран: гортається вона, а заголовок і рядок збірки лишаються видимими
+		_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		vb.add_child(_scroll)
+		_scroll.add_child(_grid)
 		_footer = Label.new()   # рядок збірки (sha · дата · прапори) — щоб було видно, яку версію відкрито
 		_footer.add_theme_color_override("font_color", Tokens.DIM)
 		_footer.add_theme_font_size_override("font_size", 13)
@@ -762,6 +774,7 @@ class PanelMenu extends WidgetBase.Widget:
 	func set_footer(text: String) -> void:
 		build_once()
 		_footer.text = text
+		_fit()
 	# entries: [{kind: &"panel"|&"overlay", id, label}] — called once by the entry scene
 	func setup(entries: Array) -> void:
 		build_once()
@@ -777,6 +790,7 @@ class PanelMenu extends WidgetBase.Widget:
 	# states: "kind:id" -> bool (is that panel/overlay showing right now)
 	func bind(states) -> void:
 		build_once()
+		_fit()
 		if not (states is Dictionary):
 			return
 		for k in _btns:

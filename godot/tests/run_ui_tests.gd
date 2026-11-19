@@ -1264,6 +1264,9 @@ func _t_touch_frame() -> void:
 		entries.append({"kind": &"overlay", "id": o.overlay_id, "label": String(o.menu_label)})
 	menu.setup(entries)
 	ok(labelled >= 15 and menu.entry_count() == entries.size(), "the ☰ menu offers every labelled panel + both overlays (%d)" % menu.entry_count())
+	# телефон (логічна висота ~423 px за scale 1.7): сітка ☰ гортається, а заголовок і рядок збірки лишаються на екрані над хотбаром
+	ok(Widgets.PanelMenu.grid_height(330.0, 423.0) + Widgets.PanelMenu.CHROME_H <= 423.0 and is_equal_approx(Widgets.PanelMenu.grid_height(330.0, 720.0), 330.0),
+		"☰ на телефоні не вища за екран (сітка гортається); на великому екрані — уся без прокрутки")
 	var snap: Dictionary = HudModel.snapshot(sess, HudModel.world_of(sess.sim), {"day": 1, "touch": true, "selected_build": String(WorldInput.WorldInput.REMOVE_TOOL)}, null)
 	ok(bool(snap.ui.touch) and bool(snap.ui.remove), "the ui slice carries the touch flag and the armed remove tool")
 	var top = preg.get_panel(&"top_bar")
