@@ -22,10 +22,18 @@ var _base: Dictionary = {}
 var _open := false                # іде вимір «посадка -> перша дія»
 
 # Що вважаємо слідом дії гравця (чисте читання sim).
+#   built  — кількість споруд; nodes — сума запасів у вузлах мапи (добута одиниця її зменшує, навіть коли навичка на стелі);
+#   gather — навичка збору; region — яка це місцевість (переліт міняє мапу й споруди — це не дія).
 static func probe(sim) -> Dictionary:
 	if sim == null:
-		return {"gather": 0.0, "built": 0}
-	return {"gather": float((sim.player as Dictionary).get("skills", {}).get("gather", 0.0)), "built": (sim.buildings as Array).size()}
+		return {"gather": 0.0, "built": 0, "nodes": 0, "region": ""}
+	var total: int = 0
+	var m: Dictionary = sim.map
+	var nodes: Dictionary = m.get("nodes", {})
+	for k in nodes:
+		total += int(nodes[k].amount)
+	return {"gather": float((sim.player as Dictionary).get("skills", {}).get("gather", 0.0)), "built": (sim.buildings as Array).size(),
+		"nodes": total, "region": "%s/%s/%s" % [str(m.get("seed", "")), str(m.get("lat", "")), str(m.get("lon", ""))]}
 
 # Посадка відбулась: фіксуємо перший вимір і починаємо другий.
 func begin(origin: String, wait_ms: int, base: Dictionary, build: String, at: String) -> void:
@@ -39,10 +47,20 @@ func begin(origin: String, wait_ms: int, base: Dictionary, build: String, at: St
 func observe(since_land_ms: int, now: Dictionary) -> bool:
 	if not _open or runs.is_empty():
 		return false
+	if now.is_empty():
+		return false   # сліду нема — нема про що судити
+	if String(now.get("region", "")) != String(_base.get("region", "")):
+		_base = now.duplicate()   # інша місцевість: споруди й вузли інші — відлік сліду з нуля
+		return false
+	# світ міг змінитись і без гравця: споруду знесли вороги, вузол відріс — база рухається за цим, щоб наступна дія не загубилась
+	if now.has("built") and int(now.get("built", 0)) < int(_base.get("built", 0)):
+		_base["built"] = int(now.get("built", 0))
+	if int(now.get("nodes", 0)) > int(_base.get("nodes", 0)):
+		_base["nodes"] = int(now.get("nodes", 0))
 	var kind := ""
 	if int(now.get("built", 0)) > int(_base.get("built", 0)):
 		kind = "build"
-	elif float(now.get("gather", 0.0)) > float(_base.get("gather", 0.0)) + 0.0001:
+	elif float(now.get("gather", 0.0)) > float(_base.get("gather", 0.0)) + 0.0001 or (now.has("nodes") and int(now.get("nodes", 0)) < int(_base.get("nodes", 0))):
 		kind = "gather"
 	if kind == "":
 		return false
@@ -56,7 +74,7 @@ func is_open() -> bool:
 	return _open
 
 static func _secs(ms: int) -> String:
-	return ("%.1f с" % (ms / 1000.0)) if ms < 10000 else ("%d с" % int(round(ms / 1000.0)))
+	return "%.1f с" % (ceili(ms / 100.0) / 10.0)   # десяті, округлення вгору: 30001 мс = «30.1 с» — число не суперечить вердикту поруч
 
 static func row_text(r: Dictionary) -> String:
 	var head: String = "посадка за %s від %s" % [_secs(int(r.get("wait_ms", 0))), "старту застосунку" if String(r.get("origin", "")) == "app" else "меню"]
@@ -79,23 +97,41 @@ func lines(limit: int = 1) -> PackedStringArray:
 func to_dict() -> Dictionary:
 	return {"version": VERSION, "runs": runs.duplicate(true)}
 
-# Чужий/зіпсований запис = порожній журнал (не падаємо й не показуємо сміття).
+const MAX_MS := 86400000   # правдоподібна межа виміру (доба); більше — сміття з файла
+
+static func _num(v: Variant) -> bool:
+	return (typeof(v) == TYPE_INT or typeof(v) == TYPE_FLOAT) and is_finite(float(v))
+
+static func _text(v: Variant, max_len: int) -> String:
+	return String(v).replace("\n", " ").replace("\r", " ").substr(0, max_len) if typeof(v) == TYPE_STRING else ""
+
+# Чужий/зіпсований файл = порожній журнал; зіпсований ЗАПИС відкидається цілком (не вгадуємо й не показуємо сміття), решта лишається.
 func from_dict(d: Variant) -> bool:
 	runs = []
 	_open = false
-	if typeof(d) != TYPE_DICTIONARY or int((d as Dictionary).get("version", -1)) != VERSION or typeof((d as Dictionary).get("runs")) != TYPE_ARRAY:
+	if typeof(d) != TYPE_DICTIONARY:
 		return false
-	for r in ((d as Dictionary)["runs"] as Array):
-		if typeof(r) != TYPE_DICTIONARY:
+	var rec: Dictionary = d
+	if not _num(rec.get("version")) or int(rec["version"]) != VERSION or typeof(rec.get("runs")) != TYPE_ARRAY:
+		return false
+	for item in (rec["runs"] as Array):
+		if typeof(item) != TYPE_DICTIONARY:
 			continue
-		var w: Variant = (r as Dictionary).get("wait_ms")
-		var a: Variant = (r as Dictionary).get("action_ms")
-		if not (typeof(w) in [TYPE_INT, TYPE_FLOAT]) or not (typeof(a) in [TYPE_INT, TYPE_FLOAT]):
+		var r: Dictionary = item
+		if not _num(r.get("wait_ms")) or not _num(r.get("action_ms")):
 			continue
-		var kind: String = String((r as Dictionary).get("action", ""))
-		runs.append({"origin": "app" if String((r as Dictionary).get("origin", "")) == "app" else "menu", "wait_ms": maxi(0, int(w)),
-			"action_ms": maxi(-1, int(a)), "action": kind if kind in ["build", "gather"] else "",
-			"build": String((r as Dictionary).get("build", "")), "at": String((r as Dictionary).get("at", ""))})
+		var w: float = float(r["wait_ms"])
+		var a: float = float(r["action_ms"])
+		var origin: String = _text(r.get("origin"), 8)
+		var kind: String = _text(r.get("action"), 8)
+		if w < 0.0 or w > MAX_MS or a > MAX_MS or not (origin in ["app", "menu"]):
+			continue
+		if a < 0.0:
+			a = -1.0
+			kind = ""
+		elif not (kind in ["build", "gather"]):
+			continue
+		runs.append({"origin": origin, "wait_ms": int(w), "action_ms": int(a), "action": kind, "build": _text(r.get("build"), 16), "at": _text(r.get("at"), 16)})
 	while runs.size() > KEEP:
 		runs.pop_front()
 	return true
