@@ -103,7 +103,11 @@ class CapsuleRing extends OverlayBase.Overlay:
 		var box := Rect2(bx0, (float(ring.y) + 1.0) * TILE + 4.0 + 13.0 * float(pill_rows) + 6.0, w, bh)
 		# T-Ніколая: підпис під табличкою тонув під нижньою панеллю слотів — якщо внизу немає місця на екрані, він іде НАД капсулу (над шкалою ядра в контакті)
 		var safe: Rect2 = _safe_world(host)
-		if safe.size.x > 0.0 and box.end.y > safe.end.y:
+		var lift: bool = safe.size.x > 0.0 and box.end.y > safe.end.y
+		# G3 2026-11-18: піднятий підпис лягав на верхні іконки HUD і лівий док. Без тривоги він другорядний (табличка капсули вже каже «дім»),
+		# тож коли знизу місця нема — не малюємо його зовсім; у тривозі — над капсулою, але нижче верхньої смуги й правіше лівого дока
+		var draw_label: bool = alert or not lift
+		if lift:
 			var clear: float = 10.0   # зазор над капсулою: у контакті там шкала ядра, під імунітетом — підпис щита-кільця
 			if float(ring.get("core_hp", -1.0)) >= 0.0:
 				clear = 46.0
@@ -111,12 +115,14 @@ class CapsuleRing extends OverlayBase.Overlay:
 				clear = maxf(clear, TILE * 0.45 + 16.0)
 			box.position.y = float(ring.y) * TILE - bh - clear
 			box.position.y = maxf(box.position.y, safe.position.y)
-		host.draw_rect(box, Tokens.with_alpha(Tokens.BG, 0.92))
-		host.draw_rect(box, Tokens.with_alpha(col, 0.9), false, 1.0)
-		host.draw_string(font, box.position + Vector2(6.0, 11.0), l1, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Tokens.with_alpha(col, 1.0))
-		host.draw_string(font, box.position + Vector2(6.0, 24.0), l2, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Tokens.INK)
-		if l3 != "":
-			host.draw_string(font, box.position + Vector2(6.0, 37.0), l3, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Tokens.INK)
+			box.position.x = maxf(box.position.x, _left_clear_world(host))
+		if draw_label:
+			host.draw_rect(box, Tokens.with_alpha(Tokens.BG, 0.92))
+			host.draw_rect(box, Tokens.with_alpha(col, 0.9), false, 1.0)
+			host.draw_string(font, box.position + Vector2(6.0, 11.0), l1, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Tokens.with_alpha(col, 1.0))
+			host.draw_string(font, box.position + Vector2(6.0, 24.0), l2, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Tokens.INK)
+			if l3 != "":
+				host.draw_string(font, box.position + Vector2(6.0, 37.0), l3, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Tokens.INK)
 		if alert:
 			_draw_incoming(host, area, int(ring.get("dir", 0)), col)
 		# контакт: шкала HP ядра НАД капсулою (T-Ніколая: «не дай пробити ядро» без шкали) — залита частина = що лишилось, підпис із числами
@@ -151,9 +157,19 @@ class CapsuleRing extends OverlayBase.Overlay:
 		var vr: Rect2 = vp.get_visible_rect()
 		var inv: Transform2D = host.get_global_transform_with_canvas().affine_inverse()
 		var k: float = maxf(0.01, vp.get_final_transform().get_scale().x)   # вікно-пікселі на одиницю контенту: смуги HUD задано в пікселях вікна
-		var a: Vector2 = inv * Vector2(0.0, vr.position.y + 104.0 / k)
+		# верх: смуга HUD (на телефоні — вітали й лічильники з підписами, ~30 % висоти; на десктопі — 104 px вікна)
+		var a: Vector2 = inv * Vector2(0.0, vr.position.y + maxf(104.0 / k, vr.size.y * 0.30))
 		var b: Vector2 = inv * Vector2(vr.end.x, vr.end.y - 108.0 / k)
 		return Rect2(a, b - a).abs()
+
+	# Ліва межа в координатах світу, правіше за лівий док HUD (та сама частка, що й для таблички капсули — world_view).
+	static func _left_clear_world(host: CanvasItem) -> float:
+		var vp: Viewport = host.get_viewport()
+		if vp == null:
+			return -INF
+		var vr: Rect2 = vp.get_visible_rect()
+		var inv: Transform2D = host.get_global_transform_with_canvas().affine_inverse()
+		return (inv * Vector2(vr.position.x + vr.size.x * 0.34, 0.0)).x
 
 	# Три шеврони, що вказують на капсулу з того краю рамки, з якого йде рейд (0 захід, 1 схід, 2 північ, 3 південь — Threats.edge_cell).
 	func _draw_incoming(host: CanvasItem, area: Rect2, dir: int, col: Color) -> void:

@@ -449,6 +449,9 @@ class BannerWidget extends WidgetBase.Widget:
 	var _bus: Variant
 	var _card: Dictionary = {}
 	var status: StringName = &"none"
+	# phone: the banner sits in the RIGHT half under the resource counters (hud_root._place_banner) — centred, it covered the hero (G3 2026-11-19)
+	var dock_right := false
+	var right_pad := 12.0
 	func _build() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_card = CardKit.make(0.0)
@@ -469,10 +472,14 @@ class BannerWidget extends WidgetBase.Widget:
 		var vw: float = get_viewport_rect().size.x if is_inside_tree() else 800.0
 		var fnt: Font = _card.label.get_theme_font("font")
 		var want: float = fnt.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 17).x + 8.0 if fnt != null else 400.0
-		var lw: float = clampf(want, 60.0, maxf(60.0, vw * 0.84 - 30.0))
+		var lw: float = clampf(want, 60.0, maxf(60.0, vw * (0.44 if dock_right else 0.84) - 30.0))
 		_card.label.custom_minimum_size = Vector2(lw, 0.0)
-		offset_left = -(lw + 30.0) * 0.5   # явне центрування: grow-both лишав широкий банер, що починається від середини екрана
-		offset_right = (lw + 30.0) * 0.5
+		if dock_right:   # anchor is the top centre: the right edge sits right_pad from the screen edge
+			offset_right = vw * 0.5 - right_pad
+			offset_left = offset_right - (lw + 30.0)
+		else:
+			offset_left = -(lw + 30.0) * 0.5   # явне центрування: grow-both лишав широкий банер, що починається від середини екрана
+			offset_right = (lw + 30.0) * 0.5
 		# R11: the banner text already carries its icon; the color echoes the urgency
 		var col: Color = Tokens.CRIT if status == &"raid_active" else (Tokens.WARN if status == &"raid_incoming" else Tokens.TEAL)
 		_card.label.add_theme_color_override("font_color", col)
