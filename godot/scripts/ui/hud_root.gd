@@ -44,7 +44,9 @@ func _fit_viewport() -> void:
 # The side docks scroll: Vitals + Goals + Research (+ Gear/browsers on hotkeys) outgrow a 720p screen
 # and the bottom panel used to slide under the build bar. Each dock is a ScrollContainer sized to its
 # CONTENT (capped above the bar) every frame, so an empty strip never blocks clicks on the map.
-const RIGHT_THUMB_LIFT := 14.0         # phone: the right dock ends above the build/action button (it covered the last rows of tall panels)
+# phone: the right dock ends above the action button. = button top (2·ACT_R 46 + 34 margin + 6 ring = 132 from the bottom) −
+# the dock's own bottom gap (76 − 10). Was 14: G3 2026-11-18 — «Прокачати» in the capsule panel sat under the hammer.
+const RIGHT_THUMB_LIFT := 66.0
 const DOCK_BOTTOM_GAP := 84.0          # keep docks clear of the BAR dock (build palette)
 var _left_scroll: ScrollContainer
 var _right_scroll: ScrollContainer
@@ -106,6 +108,7 @@ func _dock_scroll() -> ScrollContainer:
 
 # Size each dock to its content, capped above the build bar (a scrollbar appears past the cap).
 func _fit_docks() -> void:
+	_place_banner()
 	var cap: float = maxf(120.0, size.y - dock_bottom_gap - dock_top + 10.0)
 	_fit_one(_left_scroll, false, cap)
 	_fit_one(_right_scroll, true, cap - (RIGHT_THUMB_LIFT if compact else 0.0))   # touch: the action button sits over the right dock's bottom corner
@@ -130,6 +133,47 @@ func _top_clearance(x: float, w: float) -> float:
 	if need.y <= 1.0 or x + w <= x0 or x >= x0 + need.x:
 		return 0.0
 	return top.position.y + need.y + 6.0
+
+# Phone: the banner goes UNDER the top rows of the side docks (vitals medallions left, resource counters right), not over
+# them — G3 2026-11-18: the raid warning hid the resource counts exactly when the player must judge materials. A gap the
+# banner's height opens in both docks after their first panel, so nothing below (research, an open panel) hides under it.
+# Desktop keeps the authored y (under the top bar) and no gap.
+var _banner_gaps: Array[Control] = []
+
+func _place_banner() -> void:
+	if banner_w == null or not _docks.has(0) or not _docks.has(1):
+		return
+	if _banner_gaps.is_empty():
+		for d in [0, 1]:
+			var g := Control.new()
+			g.name = "BannerGap"
+			g.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_docks[d].add_child(g)
+			_banner_gaps.append(g)
+	var on: bool = compact and banner_w.visible
+	var bottom: float = 0.0
+	for i in 2:
+		var box: Control = _docks[i]
+		var g: Control = _banner_gaps[i]
+		var first: Control = null   # the first VISIBLE panel (hidden ones — goals in real time, hotkey panels — don't count)
+		for c in box.get_children():
+			if c != g and (c as Control).visible:
+				first = c
+				break
+		if first == null:
+			continue
+		var want: int = first.get_index() + (1 if g.get_index() > first.get_index() else 0)
+		if g.get_index() != want:
+			box.move_child(g, want)
+		bottom = maxf(bottom, first.get_global_rect().end.y - get_global_rect().position.y)
+	var h: float = 0.0
+	if on and banner_w.get_child_count() > 0:
+		h = (banner_w.get_child(0) as Control).size.y + 8.0
+	for g in _banner_gaps:
+		g.custom_minimum_size = Vector2(0.0, h)
+	if compact and bottom > 0.0:
+		banner_w.offset_top = bottom + 4.0
+		banner_w.offset_bottom = bottom + 4.0
 
 # Phone safe area (camera cutout / rounded corners, often on a SHORT side in landscape): returns the
 # (left, right) insets in this Control's logical px. Desktop/windowed → (0, 0).

@@ -72,8 +72,10 @@ class FeedbackBus extends RefCounted:
 	func _banner_status(text: String) -> StringName:
 		if text == "":
 			return &"none"
-		if "РЕЙД" in text and "НАБЛИЖА" not in text:
+		# попередження починається з ⚠ (капсульне «⚠ РЕЙД … за 10 хв» вже без «НАБЛИЖАЄТЬСЯ» — G3 2026-11-18), контакт — з ⚔
+		var warn: bool = "НАБЛИЖА" in text or "підході" in text or text.begins_with("⚠ РЕЙД")
+		if "РЕЙД" in text and not warn:
 			return &"raid_active"
-		if "НАБЛИЖА" in text or "підході" in text:
+		if warn:
 			return &"raid_incoming"
 		return &"info"

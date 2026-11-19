@@ -184,13 +184,16 @@ class CapsulePanel extends PanelBase.Base:
 			_invite_ids.append(null)
 	# ON-режим: ОДНА головна залита дія «Прокачати»; «Захист» і «Склад» — під розкриттям «Ще» (REQ-0010-86, D1). Жодних нових H2-заголовків.
 	func _build_main(vb: VBoxContainer) -> void:
-		_m_levels = _m_label(vb, Tokens.INK)
+		# G3 2026-11-18: на телефоні правий док короткий (між лічильниками й молотком) — головна дія з причиною мусять бути вгорі.
+		# Порядок: тривоги (імунітет, рейд) → причина відмови → кнопка → рівні (їх і так видно на табличці капсули поруч).
+		# Правий док закінчується НАД молотком (hud_root.RIGHT_THUMB_LIFT), тож нижні рядки вже не під ним, лише під прокруткою
 		_m_immune = _m_label(vb, Tokens.TEAL)
 		_m_raid = _m_label(vb, Tokens.WARN)
-		_m_up_why = _m_label(vb, Tokens.WARN)   # причина відмови — НАД кнопкою: нижче її перекриває молоток телефону (T-Ніколая: «чому неактивна?»)
+		_m_up_why = _m_label(vb, Tokens.WARN)   # «чому неактивна?» (T-Ніколая) — прямо над кнопкою
 		_m_up = _m_button(vb, 44)
 		_m_up.theme_type_variation = UITheme.V_PRIMARY   # єдина залита кнопка панелі
 		_m_up.pressed.connect(func() -> void: emit_intent(&"capsule_upgrade", {}))
+		_m_levels = _m_label(vb, Tokens.INK)
 		_m_up_cost = _m_label(vb, Tokens.MUT)
 		_m_more = _m_button(vb, 36)
 		_m_more.flat = true

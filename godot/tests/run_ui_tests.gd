@@ -1897,7 +1897,7 @@ func _t_capsule_texts() -> void:
 	var death_lines: Array = _all_texts(ds)
 	ok(_stale_hits(death_lines).is_empty(), "REQ-0010-10/40: the ON death screen carries no stale claim (%s)" % str(_stale_hits(death_lines)))
 	var death_text: String = " ".join(death_lines)
-	ok("З'явитись у капсулі" in death_text and "біля капсули" in death_text and "позначена на мапі" in death_text, "REQ-0010-10: the ON death screen leads to the capsule and shows the bag marker")
+	ok("З'явитись у капсулі" in death_text and "біля капсули" in death_text and "мітка на мапі" in death_text, "REQ-0010-10: the ON death screen leads to the capsule and shows the bag marker")
 	ok(not ("Торба лежить" in death_text) and not ("годин" in death_text) and not ("підбере" in death_text.to_lower()), "REQ-0010-10: no promise about the bag's fate or TTL (blocked on Q-10(a))")
 	for bad in ["загинув", "загинула", "з'явився", "з'явилась"]:
 		ok(not (bad in death_text.to_lower()), "D8: the ON death text has no grammatical gender («%s»)" % bad)
@@ -2034,7 +2034,7 @@ func _t_capsule_w4b_adv() -> void:
 	ok("Рюкзак був порожній" in empty_on and "біля капсули" in empty_on and _stale_hits([empty_on]).is_empty(), "REQ-0010-10: ON death with an empty pack leads to the capsule, no stale claim")
 	ok(not ("Торба (" in empty_on), "REQ-0010-10: ON empty-pack death does not mention a bag")
 	var bag_on: String = DS._fate({"capsule": true, "inventory": true, "bag_items": 7})
-	ok("(7 предм.)" in bag_on and "позначена на мапі" in bag_on, "REQ-0010-10: ON death shows the bag count and map marker")
+	ok("(7 предм.)" in bag_on and "мітка на мапі" in bag_on, "REQ-0010-10: ON death shows the bag count and map marker")
 	ok(DS._fate({"capsule": false, "inventory": true, "bag_items": 18}) == DS._fate({"inventory": true, "bag_items": 18}), "REQ-0010-85: capsule:false is exactly the OFF text")
 	for c in ["переохолодження", "голод", "тепловий удар", "втрата крові", ""]:
 		var l: String = DS._lesson(c, true)
@@ -2232,7 +2232,7 @@ func _t_capsule_g3_qa() -> void:
 		var bus: Variant = FeedbackBus.FeedbackBus.new()
 		var wb: String = bus._raid_banner(r.sim, String(r.sim.banner))
 		ok(String(r.sim.capsule_raid.state) == "warning" and int(r.sim.capsule_raid.count) > 0, "G3-QA: L%d forced raid is in warning with a real composition (%d)" % [lvl, int(r.sim.capsule_raid.count)])
-		ok("~%d рейдерів" % int(r.sim.capsule_raid.count) in wb and not ("~0" in wb) and "НАБЛИЖАЄТЬСЯ" in wb, "G3-QA/REQ-0010-19: L%d player-visible warning banner names the sim count (%s)" % [lvl, wb])
+		ok("~%d рейдерів" % int(r.sim.capsule_raid.count) in wb and not ("~0" in wb) and bus._banner_status(wb) == &"raid_incoming", "G3-QA/REQ-0010-19: L%d player-visible warning banner names the sim count and reads as a WARNING (%s)" % [lvl, wb])
 		ok("тест" not in wb.to_lower() and "test" not in wb.to_lower(), "G3-QA: L%d warning banner has no debug word" % lvl)
 		_g3_to_contact(r)
 		var cb: String = bus._raid_banner(r.sim, String(r.sim.banner))
