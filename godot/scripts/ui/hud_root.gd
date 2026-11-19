@@ -134,46 +134,41 @@ func _top_clearance(x: float, w: float) -> float:
 		return 0.0
 	return top.position.y + need.y + 6.0
 
-# Phone: the banner goes UNDER the top rows of the side docks (vitals medallions left, resource counters right), not over
-# them — G3 2026-11-18: the raid warning hid the resource counts exactly when the player must judge materials. A gap the
-# banner's height opens in both docks after their first panel, so nothing below (research, an open panel) hides under it.
-# Desktop keeps the authored y (under the top bar) and no gap.
-var _banner_gaps: Array[Control] = []
+# Phone: the banner goes into the RIGHT half, UNDER the resource counters (the right dock's first panel) — G3 2026-11-18: over
+# the top strip it hid the counts exactly when the player must judge materials; centred below it, it covered the hero (2026-11-19).
+# A gap the banner's height opens in the right dock after that panel, so an open panel (capsule) never hides under it.
+# Desktop keeps the authored centred banner under the top bar and no gap.
+var _banner_gap: Control
 
 func _place_banner() -> void:
-	if banner_w == null or not _docks.has(0) or not _docks.has(1):
+	if banner_w == null or not _docks.has(1):
 		return
-	if _banner_gaps.is_empty():
-		for d in [0, 1]:
-			var g := Control.new()
-			g.name = "BannerGap"
-			g.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			_docks[d].add_child(g)
-			_banner_gaps.append(g)
-	var on: bool = compact and banner_w.visible
-	var bottom: float = 0.0
-	for i in 2:
-		var box: Control = _docks[i]
-		var g: Control = _banner_gaps[i]
-		var first: Control = null   # the first VISIBLE panel (hidden ones — goals in real time, hotkey panels — don't count)
-		for c in box.get_children():
-			if c != g and (c as Control).visible:
-				first = c
-				break
-		if first == null:
-			continue
-		var want: int = first.get_index() + (1 if g.get_index() > first.get_index() else 0)
-		if g.get_index() != want:
-			box.move_child(g, want)
-		bottom = maxf(bottom, first.get_global_rect().end.y - get_global_rect().position.y)
+	var box: Control = _docks[1]
+	if _banner_gap == null:
+		_banner_gap = Control.new()
+		_banner_gap.name = "BannerGap"
+		_banner_gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		box.add_child(_banner_gap)
+	banner_w.dock_right = compact
+	banner_w.right_pad = 12.0 + safe_insets().y
+	var first: Control = null   # the first VISIBLE panel (hidden hotkey panels don't count)
+	for c in box.get_children():
+		if c != _banner_gap and (c as Control).visible:
+			first = c
+			break
 	var h: float = 0.0
-	if on and banner_w.get_child_count() > 0:
+	if compact and banner_w.visible and banner_w.get_child_count() > 0:
 		h = (banner_w.get_child(0) as Control).size.y + 8.0
-	for g in _banner_gaps:
-		g.custom_minimum_size = Vector2(0.0, h)
-	if compact and bottom > 0.0:
-		banner_w.offset_top = bottom + 4.0
-		banner_w.offset_bottom = bottom + 4.0
+	_banner_gap.custom_minimum_size = Vector2(0.0, h)
+	if first == null:
+		return
+	var want: int = first.get_index() + (1 if _banner_gap.get_index() > first.get_index() else 0)
+	if _banner_gap.get_index() != want:
+		box.move_child(_banner_gap, want)
+	if compact:
+		var y: float = first.get_global_rect().end.y - get_global_rect().position.y + 4.0
+		banner_w.offset_top = y
+		banner_w.offset_bottom = y
 
 # Phone safe area (camera cutout / rounded corners, often on a SHORT side in landscape): returns the
 # (left, right) insets in this Control's logical px. Desktop/windowed → (0, 0).
