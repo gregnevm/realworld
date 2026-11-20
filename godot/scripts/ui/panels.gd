@@ -687,11 +687,21 @@ class TopBarPanel extends PanelBase.Base:
 			_chip_box.add_child(b)
 			_chips.append(b)
 	func _cell(parent: Control, tip: String) -> Label:
+		var ic := TextureRect.new()   # згенерована іконка замість емоджі на початку напису (ArtIcons.dress_label)
+		ic.custom_minimum_size = Vector2(22, 22)
+		ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ic.visible = false
+		parent.add_child(ic)
 		var l := Label.new()
 		l.tooltip_text = tip
 		l.mouse_filter = Control.MOUSE_FILTER_PASS
+		l.set_meta("art", ic)
 		parent.add_child(l)
 		return l
+	func _put(l: Label, text: String) -> void:
+		ArtIcons.dress_label(l, l.get_meta("art") as TextureRect, text)
 	func _on_chip(mult: float) -> void:
 		emit_intent(&"set_speed", {"mult": mult})
 	func bind(vm) -> void:
@@ -701,15 +711,15 @@ class TopBarPanel extends PanelBase.Base:
 			return
 		var c: Dictionary = vm.clock
 		var phase: StringName = StringName(c.get("phase", &"day"))
-		_clock.text = "%s День %d · %s" % [Fmt.phase_icon(phase), int(c.get("day", 1)), String(c.get("hhmm", ""))]
+		_put(_clock, "%s День %d · %s" % [Fmt.phase_icon(phase), int(c.get("day", 1)), String(c.get("hhmm", ""))])
 		var season := String(c.get("season", ""))
 		_season.text = "%s %s" % [Fmt.season_icon(season), season] if season != "" else ""
 		_season.visible = season != "" and not _touch
 		var env: Dictionary = vm.get("env", {})
-		_weather.text = Fmt.weather_label(StringName(env.get("weather", &"clear")))
+		_put(_weather, Fmt.weather_label(StringName(env.get("weather", &"clear"))))
 		var t: float = float(env.get("temp_c", 15.0))
 		var anomaly: float = float(env.get("anomaly_c", 0.0))
-		_temp.text = "🌡 %s%s" % [Fmt.temp(t), " ⚠" if anomaly < 0.0 else ""]
+		_put(_temp, "🌡 %s%s" % [Fmt.temp(t), " ⚠" if anomaly < 0.0 else ""])
 		var heat: Dictionary = vm.get("heat", {})
 		var lo: float = float(heat.get("comfort_min", 12.0))
 		var hi: float = float(heat.get("comfort_max", 30.0))

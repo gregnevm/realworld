@@ -161,6 +161,7 @@ class SettingsPanel extends WidgetBase.Widget:
 			if not _confirm_armed:
 				_confirm_armed = true
 				_confirm_btn.text = "⚠ Так, стерти збереження"
+				ArtIcons.dress(_confirm_btn)
 				return
 			_disarm()
 		else:
@@ -171,6 +172,7 @@ class SettingsPanel extends WidgetBase.Widget:
 		_confirm_armed = false
 		if _confirm_btn != null:
 			_confirm_btn.text = "🗑 Нова гра…"
+			ArtIcons.dress(_confirm_btn)
 
 	# values: id -> поточне значення; info — рядок збірки.
 	func bind(vm) -> void:

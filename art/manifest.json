@@ -4063,21 +4063,25 @@
    "id": "ui_back",
    "kind": "ui",
    "subject": "a thick curved arrow turning back to the left, return symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_back",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "d1295458",
+   "approved": "v0"
   },
   {
    "id": "ui_balance",
    "kind": "ui",
    "subject": "a rusty balance scale with two pans, threat balance symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_balance",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "a99b81a5",
+   "approved": "v0"
   },
   {
    "id": "ui_blood",
@@ -4095,21 +4099,25 @@
    "id": "ui_build",
    "kind": "ui",
    "subject": "a worn claw hammer with a wooden handle, build symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_build",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "3699df94",
+   "approved": "v0"
   },
   {
    "id": "ui_capsule",
    "kind": "ui",
    "subject": "a small scorched orbital drop capsule standing upright on landing legs, home capsule symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_capsule",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "56a2e9a1",
+   "approved": "v0"
   },
   {
    "id": "ui_carry",
@@ -4127,81 +4135,109 @@
    "id": "ui_close",
    "kind": "ui",
    "subject": "two crossed rusty metal bars forming an X, close symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_close",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "95e5cccf",
+   "approved": "v0"
   },
   {
    "id": "ui_cloud",
    "kind": "ui",
    "subject": "a single puffy cloud partly covering a sun, cloudy weather symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_cloud",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "18622bed",
+   "approved": "v0"
   },
   {
    "id": "ui_compass",
    "kind": "ui",
    "subject": "a brass pocket compass with a red needle, landmarks symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_compass",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "e410547b",
+   "approved": "v0"
   },
   {
    "id": "ui_convoy",
    "kind": "ui",
    "subject": "a rugged cargo truck with a tarp-covered bed, side view, convoy symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_convoy",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "c1eecdf9",
+   "approved": "v0"
   },
   {
    "id": "ui_death",
    "kind": "ui",
    "subject": "a weathered human skull facing front, death symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_death",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "3e23f9ec",
+   "approved": "v0"
   },
   {
    "id": "ui_dismantle",
    "kind": "ui",
-   "subject": "a crowbar prying apart a wooden plank, dismantle symbol",
-   "status": "todo",
+   "subject": "a steel crowbar levering a brick out of a crumbling brick wall corner, loose bricks falling, demolition symbol",
+   "status": "approved",
    "manual": true,
    "label": "ui_dismantle",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "5079081d",
+   "approved": "v2"
+  },
+  {
+   "id": "ui_energy",
+   "kind": "ui",
+   "subject": "a bright yellow lightning bolt, electric power symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_energy",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "fc0ce3fb",
+   "approved": "v0"
   },
   {
    "id": "ui_eras",
    "kind": "ui",
    "subject": "a rolled parchment scroll with a wax seal, eras symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_eras",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "82268658",
+   "approved": "v0"
   },
   {
    "id": "ui_fog",
    "kind": "ui",
    "subject": "three horizontal drifting fog bands, fog weather symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_fog",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "25fc99e6",
+   "approved": "v0"
   },
   {
    "id": "ui_food",
@@ -4231,11 +4267,13 @@
    "id": "ui_help",
    "kind": "ui",
    "subject": "a weathered wooden signpost with a question mark carved in, help symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_help",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "961d5aed",
+   "approved": "v0"
   },
   {
    "id": "ui_hp",
@@ -4253,61 +4291,73 @@
    "id": "ui_lock",
    "kind": "ui",
    "subject": "a heavy closed padlock, locked symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_lock",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "612ccb59",
+   "approved": "v0"
   },
   {
    "id": "ui_map",
    "kind": "ui",
    "subject": "a folded paper map with a torn corner and a marked route, map symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_map",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text; clearly a MAP: visible folds, a bold red dashed route and a red X mark, light paper, readable at 24 px",
+   "hash": "39743f50",
+   "approved": "v1"
   },
   {
    "id": "ui_menu",
    "kind": "ui",
-   "subject": "three stacked scrap-metal plates like a menu list, menu symbol",
-   "status": "todo",
+   "subject": "three thick horizontal light-grey steel bars stacked with clear dark gaps between them, classic hamburger menu symbol, front view, bright and simple",
+   "status": "approved",
    "manual": true,
    "label": "ui_menu",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "d983eab7",
+   "approved": "v1"
   },
   {
    "id": "ui_moon",
    "kind": "ui",
    "subject": "a crescent moon, night symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_moon",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "970b2382",
+   "approved": "v0"
   },
   {
    "id": "ui_pin",
    "kind": "ui",
    "subject": "a map pin marker with a round head, location symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_pin",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "0abd2be9",
+   "approved": "v0"
   },
   {
    "id": "ui_rain",
    "kind": "ui",
    "subject": "a grey cloud with falling rain drops, rain weather symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_rain",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "dfca0d81",
+   "approved": "v0"
   },
   {
    "id": "ui_research",
@@ -4325,11 +4375,13 @@
    "id": "ui_reset",
    "kind": "ui",
    "subject": "a thick circular arrow looping counter-clockwise, reset symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_reset",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "d97a7e81",
+   "approved": "v0"
   },
   {
    "id": "ui_rest",
@@ -4347,51 +4399,73 @@
    "id": "ui_save",
    "kind": "ui",
    "subject": "a ruggedized data cartridge with a blank label plate, save symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_save",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "f28eba21",
+   "approved": "v0"
   },
   {
    "id": "ui_settings",
    "kind": "ui",
    "subject": "a single worn steel cogwheel, settings symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_settings",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "6041ea98",
+   "approved": "v0"
   },
   {
    "id": "ui_snow",
    "kind": "ui",
    "subject": "a single large snowflake crystal, snow and frost symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_snow",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "30e62205",
+   "approved": "v0"
   },
   {
    "id": "ui_social",
    "kind": "ui",
    "subject": "two survivor silhouettes shoulder to shoulder behind a round shield, social symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_social",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text; two bright light-coloured head-and-shoulder busts side by side, simple and large, readable at 24 px, no shield detail clutter",
+   "hash": "6fdaaa1b",
+   "approved": "v1"
   },
   {
    "id": "ui_sun",
    "kind": "ui",
    "subject": "a bright sun disc with short rays, clear day weather symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_sun",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "731527d3",
+   "approved": "v0"
+  },
+  {
+   "id": "ui_techno",
+   "kind": "ui",
+   "subject": "a glass laboratory flask with glowing teal liquid, technology research symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_techno",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "d727a8d6",
+   "approved": "v0"
   },
   {
    "id": "ui_temp",
@@ -4421,31 +4495,37 @@
    "id": "ui_timer",
    "kind": "ui",
    "subject": "a field stopwatch with a single hand, timer symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_timer",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "3ec2148c",
+   "approved": "v0"
   },
   {
    "id": "ui_trash",
    "kind": "ui",
    "subject": "a dented metal trash bin with a lid, delete symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_trash",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "5b9eb3cd",
+   "approved": "v0"
   },
   {
    "id": "ui_warning",
    "kind": "ui",
    "subject": "a yellow-black hazard triangle plate with an exclamation mark, warning symbol",
-   "status": "todo",
+   "status": "approved",
    "manual": true,
    "label": "ui_warning",
    "size": 64,
-   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text"
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "587909bf",
+   "approved": "v0"
   },
   {
    "id": "ui_wealth",

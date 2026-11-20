@@ -1,0 +1,36 @@
+{
+ "id": "ui_timer",
+ "kind": "ui",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "3ec2148c",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2985,
+  "candidatesTokenCount": 1442,
+  "totalTokenCount": 5525,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 745
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 1098,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3234
+}

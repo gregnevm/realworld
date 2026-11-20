@@ -133,8 +133,18 @@ func _t_art_icons() -> void:
 	var db := Button.new()
 	db.text = "📦 Склад"
 	ok(ArtIcons.dress(db) and db.icon != null and db.text == "Склад", "dress: «📦 Склад» → іконка-арт + текст без емоджі")
+	for g4 in ArtIcons.GLYPH_PENDING:
+		ok(ArtIcons.for_glyph(String(g4)) != null, "набір ui_* 2026-11-20: %s → %s має PNG" % [g4, ArtIcons.GLYPH_PENDING[g4]])
 	db.text = "☰"
-	ok(ArtIcons.dress(db) == (ArtIcons.ui("ui_menu") != null), "dress: гліф без згенерованого арту лишає кнопку з емоджі (R11)")
+	ok(ArtIcons.dress(db) and db.text == "" and db.expand_icon, "dress: кнопка лише з гліфом → іконка на всю кнопку")
+	var dl := Label.new()
+	var di := TextureRect.new()
+	ArtIcons.dress_label(dl, di, "🌧 дощ")
+	ok(di.visible and di.texture != null and dl.text == "дощ", "dress_label: «🌧 дощ» → іконка + текст без емоджі")
+	ArtIcons.dress_label(dl, di, "◌ невідомо")
+	ok(not di.visible and dl.text == "◌ невідомо", "dress_label: гліф без арту лишає напис як був (R11)")
+	dl.free()
+	di.free()
 	db.text = "Просто текст"
 	ok(not ArtIcons.dress(db) and db.text == "Просто текст", "dress: текст без гліфа не чіпається")
 	db.free()
