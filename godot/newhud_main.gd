@@ -699,7 +699,9 @@ func _shot_step(dt: float) -> void:
 		var hp := Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE - TILE * 1.3)   # `shot fx`: show the floating texts
 		view.fx_add("+3", hp, Color(1.0, 0.95, 0.8), "res_wood")
 		view.fx_add("-7", hp + Vector2(TILE * 2.5, TILE * 0.3), Color(1.0, 0.85, 0.4))
-	if "ftue" in OS.get_cmdline_user_args() and not ("settings" in OS.get_cmdline_user_args()) and _t > 1.0 and not panel_menu.visible:   # `shot ftue`: ☰ із рядком хронометражу G4 (вимір цього ж запуску; демо-база рахується як перша дія)
+	# `shot ftue`: ☰ із рядком хронометражу G4 (вимір цього ж запуску; демо-база рахується як перша дія)
+	var shot_args: PackedStringArray = OS.get_cmdline_user_args()
+	if "ftue" in shot_args and not ("settings" in shot_args) and _t > 1.0 and not panel_menu.visible:
 		_set_menu(true)
 	if "settings" in OS.get_cmdline_user_args() and _t > 1.0 and not settings_panel.visible:   # `shot settings`: вікно налаштувань над грою
 		_set_settings(true)
