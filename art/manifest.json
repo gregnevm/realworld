@@ -4084,6 +4084,30 @@
    "approved": "v0"
   },
   {
+   "id": "ui_bandage",
+   "kind": "ui",
+   "subject": "a crossed adhesive bandage strip, wound treated symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_bandage",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "c1491ca2",
+   "approved": "v0"
+  },
+  {
+   "id": "ui_blast",
+   "kind": "ui",
+   "subject": "a bright orange-yellow explosion burst with debris, destruction symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_blast",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "3e2b8d55",
+   "approved": "v0"
+  },
+  {
    "id": "ui_blood",
    "kind": "ui",
    "subject": "a single blood drop with a thin highlight, blood level symbol",
@@ -4130,6 +4154,18 @@
    "notes": "single bold readable silhouette, fills the frame, strong dark outline, no text",
    "hash": "619e39f1",
    "approved": "v1"
+  },
+  {
+   "id": "ui_check",
+   "kind": "ui",
+   "subject": "a thick bright green check mark, done symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_check",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "9c9aaaa5",
+   "approved": "v0"
   },
   {
    "id": "ui_close",
@@ -4180,6 +4216,18 @@
    "approved": "v0"
   },
   {
+   "id": "ui_crown",
+   "kind": "ui",
+   "subject": "a battered golden crown, ruler rank symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_crown",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "9b7d1d79",
+   "approved": "v0"
+  },
+  {
    "id": "ui_death",
    "kind": "ui",
    "subject": "a weathered human skull facing front, death symbol",
@@ -4204,6 +4252,30 @@
    "approved": "v2"
   },
   {
+   "id": "ui_dna",
+   "kind": "ui",
+   "subject": "a twisted double helix strand of DNA, genome symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_dna",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "0afb9a76",
+   "approved": "v0"
+  },
+  {
+   "id": "ui_drop",
+   "kind": "ui",
+   "subject": "a single clear blue water drop, water symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_drop",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "f8393dfc",
+   "approved": "v0"
+  },
+  {
    "id": "ui_energy",
    "kind": "ui",
    "subject": "a bright yellow lightning bolt, electric power symbol",
@@ -4225,6 +4297,30 @@
    "size": 64,
    "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
    "hash": "82268658",
+   "approved": "v0"
+  },
+  {
+   "id": "ui_eye",
+   "kind": "ui",
+   "subject": "a single open human eye, look or inspect symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_eye",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "8689d5d8",
+   "approved": "v0"
+  },
+  {
+   "id": "ui_flag",
+   "kind": "ui",
+   "subject": "a checkered finish flag on a short pole, completion symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_flag",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "5ffb53d1",
    "approved": "v0"
   },
   {
@@ -4252,6 +4348,30 @@
    "approved": "v3"
   },
   {
+   "id": "ui_fuel",
+   "kind": "ui",
+   "subject": "a dented red jerrycan of fuel, fuel symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_fuel",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "21041cd0",
+   "approved": "v0"
+  },
+  {
+   "id": "ui_germ",
+   "kind": "ui",
+   "subject": "a green spiky microbe cell, disease symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_germ",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "33c7b10e",
+   "approved": "v0"
+  },
+  {
    "id": "ui_goal",
    "kind": "ui",
    "subject": "a hand-drawn compass star pointing up, objective marker symbol",
@@ -4262,6 +4382,42 @@
    "notes": "single bold readable silhouette, fills the frame, strong dark outline, no text",
    "hash": "f10352ec",
    "approved": "v1"
+  },
+  {
+   "id": "ui_hand",
+   "kind": "ui",
+   "subject": "an open gloved hand palm facing forward, interact or stop symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_hand",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "0c885c98",
+   "approved": "v0"
+  },
+  {
+   "id": "ui_handshake",
+   "kind": "ui",
+   "subject": "two gloved hands clasped in a handshake, alliance symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_handshake",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "edf91cba",
+   "approved": "v0"
+  },
+  {
+   "id": "ui_heat",
+   "kind": "ui",
+   "subject": "a blazing sun over wavy heat haze lines, overheating symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_heat",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "8525b933",
+   "approved": "v0"
   },
   {
    "id": "ui_help",
@@ -4276,6 +4432,18 @@
    "approved": "v0"
   },
   {
+   "id": "ui_house",
+   "kind": "ui",
+   "subject": "a small survivor shack with a pitched roof and a door, shelter symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_house",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "1ab8a0c2",
+   "approved": "v0"
+  },
+  {
    "id": "ui_hp",
    "kind": "ui",
    "subject": "a bold stylised heart pierced by a small cracked circuit trace, survivor vitality symbol",
@@ -4286,6 +4454,18 @@
    "notes": "single bold readable silhouette, fills the frame, strong dark outline, no text",
    "hash": "585214d2",
    "approved": "v1"
+  },
+  {
+   "id": "ui_leaf",
+   "kind": "ui",
+   "subject": "a single orange-brown fallen autumn leaf, autumn season symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_leaf",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "6f17b3bc",
+   "approved": "v0"
   },
   {
    "id": "ui_lock",
@@ -4333,6 +4513,18 @@
    "size": 64,
    "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
    "hash": "970b2382",
+   "approved": "v0"
+  },
+  {
+   "id": "ui_pause",
+   "kind": "ui",
+   "subject": "two thick vertical light-grey steel bars side by side, pause symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_pause",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "d66d2ed2",
    "approved": "v0"
   },
   {
@@ -4396,6 +4588,18 @@
    "approved": "v2"
   },
   {
+   "id": "ui_satellite",
+   "kind": "ui",
+   "subject": "a small satellite with two solar panel wings, orbit symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_satellite",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "e47f3715",
+   "approved": "v0"
+  },
+  {
    "id": "ui_save",
    "kind": "ui",
    "subject": "a ruggedized data cartridge with a blank label plate, save symbol",
@@ -4405,6 +4609,18 @@
    "size": 64,
    "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
    "hash": "f28eba21",
+   "approved": "v0"
+  },
+  {
+   "id": "ui_scar",
+   "kind": "ui",
+   "subject": "a stitched scar line with cross stitches on a patch of skin-toned bandage cloth, old wound symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_scar",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "9542f521",
    "approved": "v0"
   },
   {
@@ -4442,6 +4658,18 @@
    "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text; two bright light-coloured head-and-shoulder busts side by side, simple and large, readable at 24 px, no shield detail clutter",
    "hash": "6fdaaa1b",
    "approved": "v1"
+  },
+  {
+   "id": "ui_steps",
+   "kind": "ui",
+   "subject": "two muddy boot footprints, walk here symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_steps",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "b61535a5",
+   "approved": "v0"
   },
   {
    "id": "ui_sun",
@@ -4516,6 +4744,18 @@
    "approved": "v0"
   },
   {
+   "id": "ui_unlock",
+   "kind": "ui",
+   "subject": "a heavy padlock with its shackle swung open, unlocked symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_unlock",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "92b42dad",
+   "approved": "v0"
+  },
+  {
    "id": "ui_warning",
    "kind": "ui",
    "subject": "a yellow-black hazard triangle plate with an exclamation mark, warning symbol",
@@ -4538,6 +4778,30 @@
    "notes": "single bold readable silhouette, fills the frame, strong dark outline, no text",
    "hash": "f77f8fb9",
    "approved": "v1"
+  },
+  {
+   "id": "ui_wind",
+   "kind": "ui",
+   "subject": "three curling gusts of wind, wind power symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_wind",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "9b69314b",
+   "approved": "v0"
+  },
+  {
+   "id": "ui_wrench",
+   "kind": "ui",
+   "subject": "a worn steel wrench, repair symbol",
+   "status": "approved",
+   "manual": true,
+   "label": "ui_wrench",
+   "size": 64,
+   "notes": "bare object only: NO frame, NO roundel, NO badge, NO plate; single bold silhouette filling the frame, strong dark outline, no text",
+   "hash": "5232fc87",
+   "approved": "v0"
   }
  ]
 }

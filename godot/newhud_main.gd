@@ -30,6 +30,7 @@ const TouchCtl = preload("res://scripts/ui/touch_controls.gd")
 const AM = preload("res://scripts/ui/action_model.gd")
 const InventoryMod = preload("res://scripts/sim/inventory.gd")
 const BuildInfo = preload("res://scripts/build_info.gd")
+const ArtIcons = preload("res://scripts/ui/art_icons.gd")
 const FtueMeter = preload("res://scripts/ftue_meter.gd")   # хронометраж G4 (REQ-0010-42 / REQ-0012-52): старт -> посадка -> перша дія
 const Clock = preload("res://scripts/clock.gd")
 const SettingsScript = preload("res://scripts/settings.gd")
@@ -365,6 +366,7 @@ func _build_settings(ui_theme: Theme) -> void:
 	layer.add_child(_fps_label)
 	_gear_btn = Button.new()   # на екранах Орбіти/старту (поки нема сесії) шестерня доступна завжди; у грі вхід — ☰
 	_gear_btn.text = "⚙"
+	ArtIcons.dress(_gear_btn, 30)   # шестерня-арт; у рядку тексту ⚙ означає брухт (SpriteFont.INLINE_RES)
 	_gear_btn.custom_minimum_size = Vector2(48, 44)
 	_gear_btn.focus_mode = Control.FOCUS_NONE
 	_gear_btn.theme = ui_theme

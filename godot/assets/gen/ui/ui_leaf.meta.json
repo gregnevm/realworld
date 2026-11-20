@@ -1,0 +1,35 @@
+{
+ "id": "ui_leaf",
+ "kind": "ui",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "6f17b3bc",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2987,
+  "candidatesTokenCount": 1431,
+  "totalTokenCount": 4418,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 747
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3246
+}

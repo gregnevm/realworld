@@ -30,14 +30,19 @@ static func ui(id: String) -> Texture2D:
 # Пін-тест `_t_art_icons` вимагає PNG для кожного рядка цієї таблиці.
 const GLYPH_REUSE := {"📦": "bld:storage", "🎯": "ui:ui_goal", "🏗": "bld:stone_wall",
 	"⚒": "bld:workbench", "💡": "bld:lamp", "🦺": "item:flak_vest", "⛏": "item:pick", "🔥": "bld:campfire", "🪵": "res:wood", "🪨": "res:stone",
-	"🛏": "bld:bed", "🛠": "bld:workbench"}
+	"🛏": "bld:bed", "🛠": "bld:workbench", "🌲": "node:tree", "🫐": "node:bush", "🔋": "bld:battery", "🔌": "bld:power_conduit",
+	"🤖": "actor:patrol_robot", "🧍": "actor:hero", "🪤": "bld:deadfall_trap", "🦾": "item:bionic_arm", "📚": "ui:ui_research",
+	"🛬": "ui:ui_capsule", "🏛": "ui:ui_eras", "💤": "ui:ui_rest", "🔄": "ui:ui_reset", "⏳": "ui:ui_timer"}
 # Гліфи другого набору `ui_*` (згенеровано 2026-11-20; рядки в art/manifest.json). Назва історична: сюди ж додається гліф, для якого
 # іконки ще нема, — поки PNG відсутній, лишається емоджі (R11), а `/gen-art` бачить рядок маніфесту. `_t_art_icons` звіряє id з маніфестом.
 const GLYPH_PENDING := {"☰": "ui_menu", "⚙": "ui_settings", "♻": "ui_dismantle", "🔨": "ui_build", "🚀": "ui_capsule", "🚚": "ui_convoy",
 	"🗺": "ui_map", "🧭": "ui_compass", "🛡": "ui_social", "📜": "ui_eras", "❔": "ui_help", "⚖": "ui_balance", "💾": "ui_save", "🗑": "ui_trash",
 	"↩": "ui_back", "↺": "ui_reset", "⚠": "ui_warning", "☀": "ui_sun", "🌙": "ui_moon", "⛅": "ui_cloud", "🌧": "ui_rain", "❄": "ui_snow",
-	"🌫": "ui_fog", "🌤": "ui_sun", "🌨": "ui_snow", "🥶": "ui_snow", "🌅": "ui_sun", "🌇": "ui_sun", "✖": "ui_close",
-	"⚡": "ui_energy", "🧪": "ui_techno", "⏱": "ui_timer", "🔒": "ui_lock", "☠": "ui_death", "📍": "ui_pin"}
+	"🌫": "ui_fog", "🌤": "ui_sun", "🌨": "ui_snow", "🥶": "ui_snow", "🌅": "ui_sun", "🌇": "ui_moon", "✖": "ui_close",
+	"⚡": "ui_energy", "🧪": "ui_techno", "⛽": "ui_fuel", "✅": "ui_check", "✋": "ui_hand", "〰": "ui_scar", "🌬": "ui_wind", "🍂": "ui_leaf",
+	"🏁": "ui_flag", "🏠": "ui_house", "👁": "ui_eye", "👑": "ui_crown", "👣": "ui_steps", "💧": "ui_drop", "🔓": "ui_unlock", "🔧": "ui_wrench",
+	"🛰": "ui_satellite", "🤝": "ui_handshake", "🥵": "ui_heat", "🦠": "ui_germ", "🧬": "ui_dna", "🩹": "ui_bandage",
+	"⏸": "ui_pause", "💥": "ui_blast", "⏱": "ui_timer", "🔒": "ui_lock", "☠": "ui_death", "📍": "ui_pin"}
 
 static func for_glyph(glyph: String) -> Texture2D:
 	if GLYPH_ART.has(glyph):
@@ -51,6 +56,10 @@ static func for_glyph(glyph: String) -> Texture2D:
 				return texture("item_" + src[1])
 			"res":
 				return res(src[1])
+			"node":
+				return _load("node:" + src[1], "res://assets/gen/sprite/node_%s.png" % src[1])
+			"actor":
+				return _load("actor:" + src[1], "res://assets/gen/actor/actor_%s.png" % src[1])
 		return ui(src[1])
 	return ui(String(GLYPH_PENDING[glyph])) if GLYPH_PENDING.has(glyph) else null
 

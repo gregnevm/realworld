@@ -1,0 +1,35 @@
+{
+ "id": "ui_dna",
+ "kind": "ui",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "0afb9a76",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2985,
+  "candidatesTokenCount": 1455,
+  "totalTokenCount": 4440,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 745
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3235
+}

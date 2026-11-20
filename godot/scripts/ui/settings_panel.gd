@@ -44,7 +44,7 @@ class SettingsPanel extends WidgetBase.Widget:
 		var head := HBoxContainer.new()
 		vb.add_child(head)
 		var title := Label.new()
-		title.text = "⚙ Налаштування"
+		title.text = "Налаштування"
 		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		title.add_theme_color_override("font_color", Tokens.AMBER)
 		head.add_child(title)
