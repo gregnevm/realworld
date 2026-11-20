@@ -139,8 +139,12 @@ class TouchControls extends Control:
 		_slot_bar.add_child(b)
 		return b
 
-	func set_tool_state(menu_open: bool, remove_armed: bool) -> void:
-		_menu_btn.set_pressed_no_signal(menu_open)
+	var menu_open := false   # ☰ відкрите: підказка джойстика й плашка цілі не малюються поверх меню
+	func set_tool_state(p_menu_open: bool, remove_armed: bool, covered: bool = false) -> void:
+		if menu_open != (p_menu_open or covered):   # covered: над грою інша модаль (налаштування)
+			menu_open = p_menu_open or covered
+			queue_redraw()
+		_menu_btn.set_pressed_no_signal(p_menu_open)
 		_remove_btn.set_pressed_no_signal(remove_armed)
 
 	func _layout() -> void:
@@ -379,7 +383,7 @@ class TouchControls extends Control:
 		else:
 			# idle hint where the stick lives (discoverability without a text wall)
 			var hint := Vector2(110, size.y - 120)
-			if not _over_gui(hint):   # an open panel (inventory) covers the stick zone: no ring drawn over it
+			if not menu_open and not _over_gui(hint):   # an open panel (inventory) covers the stick zone: no ring drawn over it
 				# visible enough to be found (a 0.12 ring read as decor in the independent read): ring + knob
 				draw_circle(hint, STICK_R * 0.7, Tokens.with_alpha(Tokens.PANEL, 0.22))
 				draw_arc(hint, STICK_R * 0.7, 0, TAU, 40, Tokens.with_alpha(Tokens.INK, 0.3), 2.0, true)
@@ -396,7 +400,7 @@ class TouchControls extends Control:
 		var f: Font = ThemeDB.fallback_font
 		var g: String = String(AM.MODE_INFO.get(mode, {}).get("glyph", "?"))
 		draw_string(f, c + Vector2(-ACT_R, 12.0), g, HORIZONTAL_ALIGNMENT_CENTER, ACT_R * 2.0, 34, Tokens.INK)
-		if target_label != "":
+		if target_label != "" and not menu_open:
 			var df: Font = UITheme.display_font()
 			# a pill under the words: bare green text was lost on grass (independent read, gamedev §5)
 			var tw: float = df.get_string_size(target_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x

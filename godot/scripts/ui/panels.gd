@@ -558,7 +558,7 @@ class GearPanel extends PanelBase.Base:
 	var _ids: Array = []       # current item id per row, refreshed in bind()
 	func _init() -> void:
 		panel_id = &"gear"; dock = PanelBase.DOCK_LEFT; priority = 80; hotkey = KEY_I; default_open = false
-		menu_label = "🎒 Інвентар"; compact_open = 0
+		menu_label = "🦺 Спорядження"; compact_open = 0   # не «Інвентар»: у ☰ уже є панель рюкзака з цією назвою (дві однакові кнопки — fresh-eyes 2026-11-19)
 	func _build() -> void:
 		rebuild_count += 1
 		var vb := VBoxContainer.new()

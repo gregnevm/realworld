@@ -720,7 +720,7 @@ class PanelMenu extends WidgetBase.Widget:
 	var _btns: Dictionary = {}   # "kind:id" -> Button
 	var _footer: Label
 	var _scroll: ScrollContainer
-	const CHROME_H := 224.0   # заголовок + рядок збірки + поля модалі + нижня смуга хотбара, яку модаль не має перекривати
+	const CHROME_H := 250.0   # заголовок + рядок збірки + поля модалі + нижня смуга хотбара, яку модаль не має перекривати
 	# Висота сітки: уся, якщо влазить; інакше — скільки лишає екран (решта гортається).
 	static func grid_height(content_h: float, viewport_h: float) -> float:
 		return minf(content_h, maxf(96.0, viewport_h - CHROME_H))

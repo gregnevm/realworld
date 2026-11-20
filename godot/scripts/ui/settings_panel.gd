@@ -97,7 +97,7 @@ class SettingsPanel extends WidgetBase.Widget:
 		foot.alignment = BoxContainer.ALIGNMENT_END
 		vb.add_child(foot)
 		var rst := Button.new()
-		rst.text = "↺ Скинути"
+		rst.text = "↺ Скинути налаштування"   # не просто «Скинути»: поруч «Нова гра…», читалось як стирання прогресу (fresh-eyes 2026-11-20)
 		rst.custom_minimum_size = Vector2(110, 38)
 		rst.focus_mode = Control.FOCUS_NONE
 		rst.pressed.connect(func() -> void: action.emit("reset_settings"))

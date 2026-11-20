@@ -94,6 +94,15 @@ func lines(limit: int = 1) -> PackedStringArray:
 		i -= 1
 	return out
 
+# Короткий рядок останнього виміру для ☰ (повний — lines()). Порожньо, якщо вимірів нема.
+func brief() -> String:
+	if runs.is_empty():
+		return ""
+	var r: Dictionary = runs[runs.size() - 1]
+	var a: int = int(r.get("action_ms", -1))
+	var tail: String = "дії ще не було" if a < 0 else "%s до першої дії %s" % [_secs(a), "✓" if a <= ACTION_TARGET_MS else "✗"]
+	return "⏱ Плейтест: %s до посадки · %s" % [_secs(int(r.get("wait_ms", 0))), tail]
+
 func to_dict() -> Dictionary:
 	return {"version": VERSION, "runs": runs.duplicate(true)}
 

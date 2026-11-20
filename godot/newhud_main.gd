@@ -437,7 +437,7 @@ func _haptics_step() -> void:
 func _set_menu(on: bool) -> void:
 	panel_menu.visible = on
 	if on:
-		panel_menu.set_footer(_info_text(1))
+		panel_menu.set_footer(_menu_footer())
 		_refresh_menu()
 
 # Орбіта (spec 0011) УВІМК за замовчуванням (OD-165, 2026-11-13); опт-аут `-- noorbit`. Кадри `shot` лишаються на OFF (детерміновані),
@@ -487,6 +487,11 @@ func _build_line() -> String:
 		cap = "УВІМК"
 	return "Збірка %s · капсула: %s" % [BuildInfo.label(), cap]
 
+# ☰: рядок збірки + короткий останній вимір (повні рядки — у ⚙; довгий рядок тут ховався під кнопкою дії).
+func _menu_footer() -> String:
+	var b: String = ftue.brief()
+	return _build_line() if b == "" else "%s\n%s" % [_build_line(), b]
+
 func _ftue_save() -> void:
 	if not shot_mode:   # кадр `shot ftue` міряє в пам'яті й журнал гравця не чіпає
 		ftue.save()
@@ -533,7 +538,7 @@ func _process(dt: float) -> void:
 	if ftue.is_open() and ftue.observe(Time.get_ticks_msec() - _ftue_land_ms, FtueMeter.probe(session.sim)):
 		_ftue_save()                  # G4: зловлено першу дію гравця після посадки
 		if panel_menu != null and panel_menu.visible:
-			panel_menu.set_footer(_info_text(1))
+			panel_menu.set_footer(_menu_footer())
 	session.tick_goals(dt)            # onboarding goals observe the world (real time, ~2×/s)
 	CatalogSim.shared().tick(sdt)     # advance the forward-engine catalogue model
 	# camera eases after the hero (exp. smoothing, frame-rate independent) instead of hard-locking to it;
@@ -694,7 +699,7 @@ func _shot_step(dt: float) -> void:
 		var hp := Vector2(session.sim.player.px * TILE, session.sim.player.py * TILE - TILE * 1.3)   # `shot fx`: show the floating texts
 		view.fx_add("+3", hp, Color(1.0, 0.95, 0.8), "res_wood")
 		view.fx_add("-7", hp + Vector2(TILE * 2.5, TILE * 0.3), Color(1.0, 0.85, 0.4))
-	if "ftue" in OS.get_cmdline_user_args() and _t > 1.0 and not panel_menu.visible:   # `shot ftue`: ☰ із рядком хронометражу G4 (вимір цього ж запуску; демо-база рахується як перша дія)
+	if "ftue" in OS.get_cmdline_user_args() and not ("settings" in OS.get_cmdline_user_args()) and _t > 1.0 and not panel_menu.visible:   # `shot ftue`: ☰ із рядком хронометражу G4 (вимір цього ж запуску; демо-база рахується як перша дія)
 		_set_menu(true)
 	if "settings" in OS.get_cmdline_user_args() and _t > 1.0 and not settings_panel.visible:   # `shot settings`: вікно налаштувань над грою
 		_set_settings(true)
@@ -896,7 +901,7 @@ func _tick_action(dt: float) -> void:
 	# підпис дії над кнопкою ховається, поки відкрита панель капсули: інакше він лягає на рядок ціни (T-Ніколая, кадр 05)
 	var cap_pn: Variant = preg.get_panel(&"capsule_bay")
 	var cap_open: bool = cap_pn != null and bool(cap_pn.visible)
-	tc.set_tool_state(panel_menu.visible, String(view.selected_build) == String(WorldInputScript.WorldInput.REMOVE_TOOL))
+	tc.set_tool_state(panel_menu.visible, String(view.selected_build) == String(WorldInputScript.WorldInput.REMOVE_TOOL), settings_panel.visible)
 	tc.bind_state({"mode": act_mode, "slots": _act_slots, "active": act_slot, "overview": act_overview,
 		"target": "" if cap_open else _target_label(act_target), "guide": _guide_slot()})
 	var bb: Variant = preg.get_panel(&"build_bar")
