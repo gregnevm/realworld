@@ -272,6 +272,7 @@ class SpawnScreen extends Control:
 
 		var gear := Button.new()
 		gear.text = "⚙ Налаштування"
+		ArtIcons.dress(gear)   # шестерня-арт; у рядку тексту ⚙ означає брухт (SpriteFont.INLINE_RES)
 		gear.flat = true
 		gear.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		gear.custom_minimum_size = Vector2(0, 40)

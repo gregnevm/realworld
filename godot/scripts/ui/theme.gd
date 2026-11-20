@@ -8,6 +8,7 @@
 # name is (1) registered as a variation of a built-in base via set_type_variation AND (2) given its own
 # styleboxes. So we always do the two-step: register the variation, THEN set the box on the variation.
 extends RefCounted
+const SpriteFont = preload("res://scripts/ui/sprite_font.gd")
 const Tokens = preload("res://scripts/ui/tokens.gd")
 
 # Variation names the widgets ask for (kept as consts so callers can't typo them).
@@ -98,6 +99,7 @@ static func _load_emoji_font() -> Font:
 # glyph Rubik lacks) → NotoEmoji (icons). Both faces are variable fonts; weight is set per variation.
 const BODY_FONT := "res://assets/fonts/Rubik-Variable.ttf"
 const DISPLAY_FONT := "res://assets/fonts/Oswald-Variable.ttf"
+const SYMBOL_FONT := "res://assets/fonts/DejaVuSans.ttf"   # вільна ліцензія Bitstream Vera/DejaVu (assets/fonts/LICENSE-DejaVu.txt)
 static var _display: Font = null
 
 static func install_emoji_fallback() -> void:
@@ -105,10 +107,22 @@ static func install_emoji_fallback() -> void:
 	if base is FontVariation:
 		return   # already installed (scene reload / respawn re-enters _ready)
 	var emoji: Font = _load_emoji_font()
-	var chain: Array[Font] = [base]
+	var chain: Array[Font] = []
+	var sprites: Font = SpriteFont.build()   # наш арт ПЕРШИМ: емоджі з артом малюється спрайтом у будь-якому тексті
+	if sprites != null:
+		chain.append(sprites)
+	chain.append(base)
+	var symbols: Font = _load_font(SYMBOL_FONT)   # стрілки, геометричні фігури, ✓ ✕ — раніше їх мовчки давав системний шрифт
+	if symbols != null:
+		chain.append(symbols)
 	if emoji != null:
 		chain.append(emoji)
 	var body: Font = _load_font(BODY_FONT)
+	# Системний шрифт емоджі (на телефоні — Noto Color Emoji) рушій бере ПЕРЕД ланцюгом запасних, якщо шрифти це дозволяють:
+	# тоді наш арт програє. Вимикаємо для всього ланцюга — емоджі без арту доходить до вбудованого NotoEmoji, не до системи.
+	for fnt in chain + ([body] if body != null else []):
+		if fnt is FontFile:
+			(fnt as FontFile).allow_system_fallback = false
 	var f := FontVariation.new()
 	if body != null:
 		f.base_font = body
@@ -119,6 +133,8 @@ static func install_emoji_fallback() -> void:
 		f.fallbacks = [emoji] if emoji != null else []
 	ThemeDB.fallback_font = f
 	var disp: Font = _load_font(DISPLAY_FONT)
+	if disp is FontFile:
+		(disp as FontFile).allow_system_fallback = false
 	if disp != null:
 		var dv := FontVariation.new()
 		dv.base_font = disp

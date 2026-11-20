@@ -34,6 +34,7 @@ realworld/
     scripts/sim/orbit.gd  spec 0011 (W1–W6, OD-151): акаунт-запис Орбіти — ростер клонів, safe_stock (32 слоти), settle сплячих, кулдаун базового клона; `use_orbit` УВІМК у збірках (OD-165, опт-аут `-- noorbit`; кадри `shot` — OFF); версія продукту — `build_info.gd` VERSION (1.01); `clone_tuning.gd` — усі числа таблицею
     scripts/settings.gd   spec 0015 (OD-164): налаштування пристрою (user://settings.json, поза сейвом/world_hash); таблиця DEFS — кожен пункт має реальну дію (тест `run_settings_tests` ловить заглушки); вікно — `ui/settings_panel.gd`, вхід: ☰ і стартовий екран
     scripts/ftue_meter.gd хронометраж G4 (REQ-0010-42 / 0012-52): старт → посадка → перша дія; user://ftue.json поза сейвом; лише читає sim; рядок у ☰ і ⚙; кадр — `shot ftue`
+    scripts/ui/sprite_font.gd  шрифт-атлас зі згенерованого арту: емоджі в БУДЬ-ЯКОМУ тексті малюється спрайтом (перший у ланцюгу шрифтів теми; системний шрифт емоджі вимкнено; символи без арту — DejaVu). Новий емоджі в коді без арту валить `run_ui_tests` (`_t_no_system_emoji`) → додай гліф у таблиці `ui/art_icons.gd` + рядок `ui_*` у маніфест і `/gen-art`
     scripts/goals.gd      онбординг-ланцюг «Цілі» (чисті перевірки стану; липке виконання в session)
     content/catalog.json  335 def; валідовано catalog.gd ↔ tests/catalog.test.js (`catalog_data.js`/JS-дзеркало видалено)
     tests/                headless-сьюти Godot (run_*.gd)
@@ -42,6 +43,7 @@ realworld/
   tools/               lint.mjs (secret-scan + Godot-3 tripwire + sim без годинника) · gen-art.mjs + art/ (арт-пайплайн Nano Banana) · process/ (PR-гейт check-pr.mjs, звіт report.mjs, Godot-3 tripwire — lib.mjs)
   art/                 style.md (арт-біблія) · palette.json · refs/ (якорі стилю) · manifest.json (виводиться з catalog.json) · out/ (gitignored кандидати)
   .claude/skills/gen-art/  скіл генерації арту (/gen-art)
+  .claude/skills/gemini-api-dev/  скіл Google (актуальні моделі й зразки Gemini API; зафіксований у skills-lock.json); доки Gemini — MCP `geminiDocs` (.mcp.json). У цьому репо Gemini — лише dev-тулінг і лише через REST, без SDK (рішення власника 2026-11-20: правило «нуль npm-залежностей» лишається)
   .claude/skills/gamedev/  шлюз цілісності гри (/gamedev): ворота 0–6, правило доказу, тест Ніколая, FTUE — вхід для будь-якої механіки/фічі/плейтесту
   .claude/skills/godot-game-uiux-designer/  цикл UX/UI (аудит кадрами → код → анімація → кадр після)
   .claude/agents/      ролі процесу: designer · developer · integrity (вердикти воріт, лише читання) · qa-adversary (тести від REQ) · fresh-eyes (тест Ніколая, лише кадри)
@@ -63,7 +65,7 @@ realworld/
 
 ## Арт-пайплайн (gen-art, Nano Banana)
 - **Лор:** ШІ-постапокаліпсис (OD-6, 2026-11-05) — машини повстали, патрульні роботи, брухт замість мародерства; біоми багаторівневі (макробіом → кластер), є фауна й флора (OD-6).
-- **Деталі:** `docs/agents/art-pipeline.md`. Мінімум: `node tools/gen-art.mjs sync` синхронізує маніфест із каталогом; ключ лише в `.env.local`/`$GEMINI_API_KEY`; не міняти модель посеред серії; арт — лише для механік, що пройшли G0–G1 (P4).
+- **Деталі:** `docs/agents/art-pipeline.md`. Мінімум: `node tools/gen-art.mjs sync` синхронізує маніфест із каталогом; ключ лише в `.env.local`/`$GEMINI_API_KEY` (у хмарній сесії ключ підставляє мережевий секрет середовища: запускай `NODE_USE_ENV_PROXY=1 GEMINI_API_KEY=proxy-injected node tools/gen-art.mjs …`); не міняти модель посеред серії; арт — лише для механік, що пройшли G0–G1 (P4).
 
 ## Конвенції
 - **Іменування:** GDScript-конвенції — `docs/agents/godot-sim.md`; статична типізація, лише seeded RNG.

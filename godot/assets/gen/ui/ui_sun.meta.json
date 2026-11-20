@@ -1,0 +1,36 @@
+{
+ "id": "ui_sun",
+ "kind": "ui",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "731527d3",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2987,
+  "candidatesTokenCount": 1482,
+  "totalTokenCount": 5531,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 747
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 1062,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3243
+}

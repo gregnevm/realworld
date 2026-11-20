@@ -93,6 +93,7 @@ func _init() -> void:
 	ok(_trap.count == 0, "V2–V5: за весь прогін модуль хронометра не дав жодної помилки скрипта (є %d)" % _trap.count)
 	OS.remove_logger(_trap)
 	_cleanup()
+	_t_brief()
 	finish()
 
 
@@ -962,3 +963,14 @@ func _t_wiring() -> void:
 		var cut: int = ln.find("#")   # коментарі не рахуємо (у рядках модуля «#» нема)
 		meter_src += (ln if cut < 0 else ln.substr(0, cut)) + "\n"
 	ok(not meter_src.contains("Time.") and not meter_src.contains("randi") and not meter_src.contains("randf") and not meter_src.contains("RandomNumberGenerator"), "V3: модуль хронометра не читає годинник і не чіпає RNG")
+
+
+# V5 (додано автором коду 2026-11-20, не qa-adversary): короткий рядок для ☰ — порожній без вимірів, без вердикту до дії,
+# число й вердикт узгоджені з повним рядком, і він коротший за повний (у ☰ довгий рядок ховався під кнопкою дії).
+func _t_brief() -> void:
+	var m: RefCounted = FtueMeter.new()
+	ok(m.brief() == "", "V5 brief: без вимірів — порожньо")
+	m.begin("app", 2100, {"gather": 0.0, "built": 1}, "", "")
+	ok(m.brief().contains("2.1 с") and not m.brief().contains("✓") and not m.brief().contains("✗"), "V5 brief: до дії — час посадки без вердикту")
+	m.observe(30001, {"gather": 0.0, "built": 2})
+	ok(m.brief().contains("30.1 с") and m.brief().contains("✗") and m.brief().length() < String(m.lines(1)[0]).length(), "V5 brief: число не суперечить вердикту; коротший за повний рядок")

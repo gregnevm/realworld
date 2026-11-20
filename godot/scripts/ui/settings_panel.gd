@@ -4,6 +4,7 @@
 # і не чіпає сесію: entry-сцена слухає changed/action і застосовує. Стан показано текстом (ON ✓ / OFF), не лише кольором (R11).
 extends RefCounted
 
+const ArtIcons = preload("res://scripts/ui/art_icons.gd")
 const WidgetBase = preload("res://scripts/ui/widget.gd")
 const Tokens = preload("res://scripts/ui/tokens.gd")
 const UITheme = preload("res://scripts/ui/theme.gd")
@@ -43,7 +44,7 @@ class SettingsPanel extends WidgetBase.Widget:
 		var head := HBoxContainer.new()
 		vb.add_child(head)
 		var title := Label.new()
-		title.text = "⚙ Налаштування"
+		title.text = "Налаштування"
 		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		title.add_theme_color_override("font_color", Tokens.AMBER)
 		head.add_child(title)
@@ -97,7 +98,7 @@ class SettingsPanel extends WidgetBase.Widget:
 		foot.alignment = BoxContainer.ALIGNMENT_END
 		vb.add_child(foot)
 		var rst := Button.new()
-		rst.text = "↺ Скинути"
+		rst.text = "↺ Скинути налаштування"   # не просто «Скинути»: поруч «Нова гра…», читалось як стирання прогресу (fresh-eyes 2026-11-20)
 		rst.custom_minimum_size = Vector2(110, 38)
 		rst.focus_mode = Control.FOCUS_NONE
 		rst.pressed.connect(func() -> void: action.emit("reset_settings"))
@@ -147,6 +148,7 @@ class SettingsPanel extends WidgetBase.Widget:
 	func _add_action(id: String, text: String) -> Button:
 		var b := Button.new()
 		b.text = text
+		ArtIcons.dress(b)
 		b.custom_minimum_size = Vector2(0, 44)
 		b.focus_mode = Control.FOCUS_NONE
 		b.pressed.connect(func() -> void: _on_action(id))
@@ -159,6 +161,7 @@ class SettingsPanel extends WidgetBase.Widget:
 			if not _confirm_armed:
 				_confirm_armed = true
 				_confirm_btn.text = "⚠ Так, стерти збереження"
+				ArtIcons.dress(_confirm_btn)
 				return
 			_disarm()
 		else:
@@ -169,6 +172,7 @@ class SettingsPanel extends WidgetBase.Widget:
 		_confirm_armed = false
 		if _confirm_btn != null:
 			_confirm_btn.text = "🗑 Нова гра…"
+			ArtIcons.dress(_confirm_btn)
 
 	# values: id -> поточне значення; info — рядок збірки.
 	func bind(vm) -> void:

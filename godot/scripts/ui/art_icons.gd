@@ -26,8 +26,74 @@ const GLYPH_ART := {"❤": "ui_hp", "🍖": "ui_food", "😴": "ui_rest", "🩸"
 static func ui(id: String) -> Texture2D:
 	return _load("ui:" + id, "%s%s.png" % [UI_DIR, id])
 
+# Гліфи, для яких арт УЖЕ є в інших наборах (спрайт споруди / іконка предмета чи ресурсу): «bld:», «item:», «res:».
+# Пін-тест `_t_art_icons` вимагає PNG для кожного рядка цієї таблиці.
+const GLYPH_REUSE := {"📦": "bld:storage", "🎯": "ui:ui_goal", "🏗": "bld:stone_wall",
+	"⚒": "bld:workbench", "💡": "bld:lamp", "🦺": "item:flak_vest", "⛏": "item:pick", "🔥": "bld:campfire", "🪵": "res:wood", "🪨": "res:stone",
+	"🛏": "bld:bed", "🛠": "bld:workbench", "🌲": "node:tree", "🫐": "node:bush", "🔋": "bld:battery", "🔌": "bld:power_conduit",
+	"🤖": "actor:patrol_robot", "🧍": "actor:hero", "🪤": "bld:deadfall_trap", "🦾": "item:bionic_arm", "📚": "ui:ui_research",
+	"🛬": "ui:ui_capsule", "🏛": "ui:ui_eras", "💤": "ui:ui_rest", "🔄": "ui:ui_reset", "⏳": "ui:ui_timer"}
+# Гліфи другого набору `ui_*` (згенеровано 2026-11-20; рядки в art/manifest.json). Назва історична: сюди ж додається гліф, для якого
+# іконки ще нема, — поки PNG відсутній, лишається емоджі (R11), а `/gen-art` бачить рядок маніфесту. `_t_art_icons` звіряє id з маніфестом.
+const GLYPH_PENDING := {"☰": "ui_menu", "⚙": "ui_settings", "♻": "ui_dismantle", "🔨": "ui_build", "🚀": "ui_capsule", "🚚": "ui_convoy",
+	"🗺": "ui_map", "🧭": "ui_compass", "🛡": "ui_social", "📜": "ui_eras", "❔": "ui_help", "⚖": "ui_balance", "💾": "ui_save", "🗑": "ui_trash",
+	"↩": "ui_back", "↺": "ui_reset", "⚠": "ui_warning", "☀": "ui_sun", "🌙": "ui_moon", "⛅": "ui_cloud", "🌧": "ui_rain", "❄": "ui_snow",
+	"🌫": "ui_fog", "🌤": "ui_sun", "🌨": "ui_snow", "🥶": "ui_snow", "🌅": "ui_sun", "🌇": "ui_moon", "✖": "ui_close",
+	"⚡": "ui_energy", "🧪": "ui_techno", "⛽": "ui_fuel", "✅": "ui_check", "✋": "ui_hand", "〰": "ui_scar", "🌬": "ui_wind", "🍂": "ui_leaf",
+	"🏁": "ui_flag", "🏠": "ui_house", "👁": "ui_eye", "👑": "ui_crown", "👣": "ui_steps", "💧": "ui_drop", "🔓": "ui_unlock", "🔧": "ui_wrench",
+	"🛰": "ui_satellite", "🤝": "ui_handshake", "🥵": "ui_heat", "🦠": "ui_germ", "🧬": "ui_dna", "🩹": "ui_bandage",
+	"⏸": "ui_pause", "💥": "ui_blast", "⏱": "ui_timer", "🔒": "ui_lock", "☠": "ui_death", "📍": "ui_pin"}
+
 static func for_glyph(glyph: String) -> Texture2D:
-	return ui(String(GLYPH_ART[glyph])) if GLYPH_ART.has(glyph) else null
+	if GLYPH_ART.has(glyph):
+		return ui(String(GLYPH_ART[glyph]))
+	if GLYPH_REUSE.has(glyph):
+		var src: PackedStringArray = String(GLYPH_REUSE[glyph]).split(":")
+		match src[0]:
+			"bld":
+				return building(src[1])
+			"item":
+				return texture("item_" + src[1])
+			"res":
+				return res(src[1])
+			"node":
+				return _load("node:" + src[1], "res://assets/gen/sprite/node_%s.png" % src[1])
+			"actor":
+				return _load("actor:" + src[1], "res://assets/gen/actor/actor_%s.png" % src[1])
+		return ui(src[1])
+	return ui(String(GLYPH_PENDING[glyph])) if GLYPH_PENDING.has(glyph) else null
+
+# «🎒 Інвентар» -> ["🎒", "Інвентар"]: перший «словесний» шматок до пробілу, якщо він відомий гліф (з будь-якої з трьох таблиць).
+# Текст без відомого гліфа повертається як ["", text].
+static func split_glyph(text: String) -> PackedStringArray:
+	var at: int = text.find(" ")
+	var head: String = (text if at < 0 else text.substr(0, at)).replace("\ufe0f", "")
+	if GLYPH_ART.has(head) or GLYPH_REUSE.has(head) or GLYPH_PENDING.has(head):
+		return PackedStringArray([head, "" if at < 0 else text.substr(at + 1)])
+	return PackedStringArray(["", text])
+
+# Напис «<емоджі> текст» поруч із TextureRect: є арт — він у `icon`, а в написі лишається текст без емоджі; нема — напис як був (R11).
+static func dress_label(l: Label, icon: TextureRect, text: String) -> void:
+	var parts: PackedStringArray = split_glyph(text)
+	var tex: Texture2D = for_glyph(parts[0]) if parts[0] != "" else null
+	icon.texture = tex
+	icon.visible = tex != null
+	l.text = parts[1] if tex != null else text
+
+# Кнопка з текстом «<емоджі> Назва»: якщо для емоджі є арт — він стає іконкою кнопки, а емоджі зникає з тексту.
+# Нема арту — кнопка лишається як була (R11). Викликати ПІСЛЯ встановлення тексту; повторний виклик безпечний.
+static func dress(b: Button, icon_px: int = 22) -> bool:
+	var parts: PackedStringArray = split_glyph(b.text)
+	if parts[0] == "":
+		return false
+	var tex: Texture2D = for_glyph(parts[0])
+	if tex == null:
+		return false
+	b.icon = tex
+	b.text = parts[1]
+	b.expand_icon = parts[1] == ""   # лише іконка — заповнює кнопку; з текстом розтягування з'їдало іконку у вузькій кнопці
+	b.add_theme_constant_override("icon_max_width", icon_px)
+	return true
 
 static func _load(key: String, path: String) -> Texture2D:
 	if _cache.has(key):

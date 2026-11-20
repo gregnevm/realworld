@@ -187,7 +187,7 @@ class InventoryPanel extends PanelBase.Base:
 		var tools := HBoxContainer.new()   # act on the picked-up slot (tap a slot first)
 		tools.add_theme_constant_override("separation", 6)
 		vb.add_child(tools)
-		for spec in [["⇅ Сортувати", &"inv_sort"], ["½ Розділити", &"inv_split"], ["⤓ Викинути", &"inv_drop"]]:
+		for spec in [["⇅ Сортувати", &"inv_sort"], ["½ Розділити", &"inv_split"], ["↓ Викинути", &"inv_drop"]]:
 			var tb := Button.new()
 			tb.text = String(spec[0])
 			tb.focus_mode = Control.FOCUS_NONE

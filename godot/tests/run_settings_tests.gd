@@ -145,7 +145,8 @@ func _t_panel() -> void:
 	p.bind({"values": s.values, "info": ""})
 	var nb: Button = p._confirm_btn
 	nb.pressed.emit()
-	ok(acts.is_empty() and nb.text.begins_with("⚠"), "«Нова гра»: перше натискання лише озброює")
+	ok(acts.is_empty() and "стерти" in nb.text and (nb.text.begins_with("⚠") or nb.icon != null),
+		"«Нова гра»: перше натискання лише озброює (попередження — згенерована іконка ⚠ або гліф, коли арту нема)")
 	nb.pressed.emit()
 	ok(acts == ["new_game"], "друге натискання виконує дію")
 	nb.pressed.emit()

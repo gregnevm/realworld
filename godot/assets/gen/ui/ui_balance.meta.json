@@ -1,0 +1,36 @@
+{
+ "id": "ui_balance",
+ "kind": "ui",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "a99b81a5",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2986,
+  "candidatesTokenCount": 1520,
+  "totalTokenCount": 6053,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 746
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 1547,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3242
+}

@@ -720,7 +720,7 @@ class PanelMenu extends WidgetBase.Widget:
 	var _btns: Dictionary = {}   # "kind:id" -> Button
 	var _footer: Label
 	var _scroll: ScrollContainer
-	const CHROME_H := 224.0   # заголовок + рядок збірки + поля модалі + нижня смуга хотбара, яку модаль не має перекривати
+	const CHROME_H := 250.0   # заголовок + рядок збірки + поля модалі + нижня смуга хотбара, яку модаль не має перекривати
 	# Висота сітки: уся, якщо влазить; інакше — скільки лишає екран (решта гортається).
 	static func grid_height(content_h: float, viewport_h: float) -> float:
 		return minf(content_h, maxf(96.0, viewport_h - CHROME_H))
@@ -747,6 +747,7 @@ class PanelMenu extends WidgetBase.Widget:
 		head.add_child(title)
 		var gear := Button.new()
 		gear.text = "⚙ Налаштування"
+		ArtIcons.dress(gear)
 		gear.custom_minimum_size = Vector2(150, 38)
 		gear.focus_mode = Control.FOCUS_NONE
 		gear.pressed.connect(func() -> void: settings_requested.emit())
@@ -782,6 +783,7 @@ class PanelMenu extends WidgetBase.Widget:
 			var b := Button.new()
 			b.toggle_mode = true
 			b.text = String(e.label)
+			ArtIcons.dress(b, 26)   # емоджі назви -> згенерована іконка, коли вона є
 			b.custom_minimum_size = Vector2(170, 42)
 			b.focus_mode = Control.FOCUS_NONE
 			b.pressed.connect(func() -> void: chosen.emit(StringName(e.kind), StringName(e.id)))

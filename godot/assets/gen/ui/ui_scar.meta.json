@@ -1,0 +1,36 @@
+{
+ "id": "ui_scar",
+ "kind": "ui",
+ "variant": 0,
+ "model": "gemini-nano-banana-2.1",
+ "hash": "9542f521",
+ "refs": [
+  "ref_ground.png",
+  "ref_world.png"
+ ],
+ "usage": {
+  "promptTokenCount": 2995,
+  "candidatesTokenCount": 1466,
+  "totalTokenCount": 5429,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 755
+   },
+   {
+    "modality": "IMAGE",
+    "tokenCount": 2240
+   }
+  ],
+  "candidatesTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 1120
+   }
+  ],
+  "thoughtsTokenCount": 968,
+  "serviceTier": "standard"
+ },
+ "approved_from": "v0",
+ "prompt_chars": 3281
+}

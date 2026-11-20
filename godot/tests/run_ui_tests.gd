@@ -56,6 +56,7 @@ func _init() -> void:
 	print("== RealWorld UI view-layer tests (spec 0005) ==")
 	_t_tokens()
 	_t_art_icons()
+	_t_no_system_emoji()
 	_t_world_fx()
 	_t_panel_fold()
 	_t_goal_guide()
@@ -120,6 +121,34 @@ func _init() -> void:
 func _t_art_icons() -> void:
 	for g in ArtIcons.GLYPH_ART:
 		ok(ArtIcons.for_glyph(String(g)) != null, "GLYPH_ART %s → %s has a PNG" % [g, ArtIcons.GLYPH_ART[g]])
+	for g2 in ArtIcons.GLYPH_REUSE:
+		ok(ArtIcons.for_glyph(String(g2)) != null, "GLYPH_REUSE %s → %s has a PNG" % [g2, ArtIcons.GLYPH_REUSE[g2]])
+	# іконки, яких ще не згенеровано: кожна має рядок у маніфесті (щоб /gen-art знав, що малювати) і не дублює готові таблиці
+	var manifest: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://../art/manifest.json"))
+	var ids: Dictionary = {}
+	for a in (manifest.assets as Array):
+		ids[String(a.id)] = true
+	for g3 in ArtIcons.GLYPH_PENDING:
+		ok(ids.has(String(ArtIcons.GLYPH_PENDING[g3])) and not ArtIcons.GLYPH_ART.has(g3) and not ArtIcons.GLYPH_REUSE.has(g3),
+			"GLYPH_PENDING %s → %s є в art/manifest.json" % [g3, ArtIcons.GLYPH_PENDING[g3]])
+	var db := Button.new()
+	db.text = "📦 Склад"
+	ok(ArtIcons.dress(db) and db.icon != null and db.text == "Склад", "dress: «📦 Склад» → іконка-арт + текст без емоджі")
+	for g4 in ArtIcons.GLYPH_PENDING:
+		ok(ArtIcons.for_glyph(String(g4)) != null, "набір ui_* 2026-11-20: %s → %s має PNG" % [g4, ArtIcons.GLYPH_PENDING[g4]])
+	db.text = "☰"
+	ok(ArtIcons.dress(db) and db.text == "" and db.expand_icon, "dress: кнопка лише з гліфом → іконка на всю кнопку")
+	var dl := Label.new()
+	var di := TextureRect.new()
+	ArtIcons.dress_label(dl, di, "🌧 дощ")
+	ok(di.visible and di.texture != null and dl.text == "дощ", "dress_label: «🌧 дощ» → іконка + текст без емоджі")
+	ArtIcons.dress_label(dl, di, "◌ невідомо")
+	ok(not di.visible and dl.text == "◌ невідомо", "dress_label: гліф без арту лишає напис як був (R11)")
+	dl.free()
+	di.free()
+	db.text = "Просто текст"
+	ok(not ArtIcons.dress(db) and db.text == "Просто текст", "dress: текст без гліфа не чіпається")
+	db.free()
 	for res in GameData.RES_ORDER:
 		ok(ArtIcons.res(String(res)) != null, "live resource %s has an icon" % res)
 	var wall: Texture2D = ArtIcons.building("wall")
@@ -2519,3 +2548,69 @@ class _FakeSim extends RefCounted:
 	func melee_damage() -> float: return 12.0
 	func daylight() -> float: return 0.0
 	func region_seed() -> int: return int(map.get("seed", 0))
+
+
+# «Всі емоджі» (поправка власника 2026-11-20): жоден символ із текстів гри не має доходити до системного/вбудованого шрифту
+# емоджі чи лишатись без гліфа. Кожен не-буквений символ або має згенерований арт у шрифті-атласі (SpriteFont), або є
+# звичайним текстовим знаком у шрифтах гри (Rubik / вбудований / DejaVu). Новий емоджі в коді без арту = червоний тест.
+func _t_no_system_emoji() -> void:
+	var SpriteFont: GDScript = load("res://scripts/ui/sprite_font.gd")
+	var sprite: FontFile = SpriteFont.build()
+	ok(sprite != null and not sprite.allow_system_fallback, "шрифт-атлас зібрано; системний шрифт емоджі йому заборонено")
+	var text_fonts: Array = [ThemeDB.fallback_font]
+	for path in ["res://assets/fonts/Rubik-Variable.ttf", "res://assets/fonts/DejaVuSans.ttf"]:
+		var ff := FontFile.new()
+		ok(ff.load_dynamic_font(path) == OK, "шрифт %s є" % path.get_file())
+		text_fonts.append(ff)
+	var files: Array = ["res://newhud_main.gd", "res://content/catalog.json"]
+	var stack: Array = ["res://scripts"]
+	while not stack.is_empty():
+		var d: String = stack.pop_back()
+		for sub in DirAccess.get_directories_at(d):
+			stack.append(d + "/" + sub)
+		for fn in DirAccess.get_files_at(d):
+			if fn.ends_with(".gd") and not (d == "res://scripts" and fn == "main.gd"):   # main.gd — стара сцена, не продукт
+				files.append(d + "/" + fn)
+	var bad: Dictionary = {}
+	var seen: int = 0
+	for path in files:
+		for ln in FileAccess.get_file_as_string(path).split("\n"):
+			var code: String = ln
+			if String(path).ends_with(".gd"):
+				if ln.strip_edges().begins_with("#"):
+					continue
+				var h: int = maxi(ln.find("  #"), ln.find("\t#"))
+				if h > 0:
+					code = ln.substr(0, h)
+			for i in code.length():
+				var c: int = code.unicode_at(i)
+				if c <= 0x2000 or c == 0xFE0F or c == 0x200D or bad.has(c):
+					continue
+				seen += 1
+				var covered: bool = sprite.has_char(c)
+				for tf in text_fonts:
+					covered = covered or (tf as Font).has_char(c)
+				if not covered:
+					bad[c] = "%s (%s)" % [String.chr(c), String(path).get_file()]
+	ok(seen > 300 and bad.is_empty(), "жоден символ текстів гри не лишається системним емоджі чи без гліфа: %s" % " ".join(bad.values()))
+	# шейпінг: «кольоровий» емоджі (кодпоінт поза базовою площиною) у реченні бере НАШ спрайт, а не системний шрифт
+	var ts: TextServer = TextServerManager.get_primary_interface()
+	var theme_font: Font = UITheme.build().default_font
+	var sh: RID = ts.create_shaped_text()
+	ts.shaped_text_add_string(sh, "⚠ РЕЙД · стіни: 🎒 крафт ◎", theme_font.get_rids(), 16)
+	ts.shaped_text_shape(sh)
+	var chain: Array = (theme_font as FontVariation).fallbacks if theme_font is FontVariation else []
+	var atlas_rid: RID = (chain[0] as Font).get_rids()[0] if not chain.is_empty() else RID()
+	ok(not chain.is_empty() and chain[0] is FontFile and (chain[0] as FontFile).fixed_size == SpriteFont.FIXED, "шрифт-атлас стоїть ПЕРШИМ у ланцюгу запасних теми")
+	var ours: Dictionary = {}
+	for gl in ts.shaped_text_get_glyphs(sh):
+		if gl.font_rid == atlas_rid:
+			ours[int(gl.index)] = true
+	ts.free_rid(sh)
+	ok(ours.has("🎒".unicode_at(0)), "🎒 у реченні шейпиться шрифтом-атласом теми (не системним шрифтом емоджі)")
+	ok(ours.has("⚠".unicode_at(0)), "⚠ береться з атласу, хоча текстовий шрифт символів теж його має")
+	ok(not ours.has("◎".unicode_at(0)), "◎ лишається текстовим кільцем (ядро капсули / легенда радара), а не іконкою цілі")
+	var gm: Dictionary = SpriteFont.glyph_map()
+	ok(gm.get("⚙") == ArtIcons.res("scrap") and gm.get("🟢") != gm.get("🔴") and not gm.has("▪"),
+		"у рядку ⚙ = брухт (не шестерня налаштувань); 🟢/🔴 — різні плашки стану, а не ресурси каталогу; ▪ — текст")
+
