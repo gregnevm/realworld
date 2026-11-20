@@ -747,6 +747,7 @@ class PanelMenu extends WidgetBase.Widget:
 		head.add_child(title)
 		var gear := Button.new()
 		gear.text = "⚙ Налаштування"
+		ArtIcons.dress(gear)
 		gear.custom_minimum_size = Vector2(150, 38)
 		gear.focus_mode = Control.FOCUS_NONE
 		gear.pressed.connect(func() -> void: settings_requested.emit())
@@ -782,6 +783,7 @@ class PanelMenu extends WidgetBase.Widget:
 			var b := Button.new()
 			b.toggle_mode = true
 			b.text = String(e.label)
+			ArtIcons.dress(b, 26)   # емоджі назви -> згенерована іконка, коли вона є
 			b.custom_minimum_size = Vector2(170, 42)
 			b.focus_mode = Control.FOCUS_NONE
 			b.pressed.connect(func() -> void: chosen.emit(StringName(e.kind), StringName(e.id)))

@@ -95,6 +95,8 @@ class TouchControls extends Control:
 		_inv_btn.focus_mode = Control.FOCUS_NONE
 		_inv_btn.custom_minimum_size = Vector2(52, 52)
 		_inv_btn.add_theme_font_size_override("font_size", 24)
+		if ArtIcons.dress(_inv_btn, 38):   # той самий рюкзак, що й медальйон «Слоти», а не системний емоджі
+			_inv_btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_inv_btn.pressed.connect(func() -> void: inventory_pressed.emit())
 		_slot_bar.add_child(_inv_btn)
 		_menu_btn = _tool_btn("☰", &"toggle_menu", "Панелі та оверлеї")
@@ -135,6 +137,7 @@ class TouchControls extends Control:
 		b.focus_mode = Control.FOCUS_NONE
 		b.custom_minimum_size = Vector2(52, 52)
 		b.add_theme_font_size_override("font_size", 24 if txt.length() <= 2 else 15)   # слово — щоб не читалось як руйнівна піктограма (T-Ніколая 2026-11-05)
+		ArtIcons.dress(b, 28)   # ☰ / ♻ — згенерована іконка, коли вона є
 		b.pressed.connect(func() -> void: tool_pressed.emit(verb))
 		_slot_bar.add_child(b)
 		return b
@@ -399,7 +402,12 @@ class TouchControls extends Control:
 			draw_arc(c, r + 6.0, -PI / 2.0, -PI / 2.0 + TAU * k, 48, Tokens.with_alpha(col, 0.9), 3.0, true)
 		var f: Font = ThemeDB.fallback_font
 		var g: String = String(AM.MODE_INFO.get(mode, {}).get("glyph", "?"))
-		draw_string(f, c + Vector2(-ACT_R, 12.0), g, HORIZONTAL_ALIGNMENT_CENTER, ACT_R * 2.0, 34, Tokens.INK)
+		var gtex: Texture2D = ArtIcons.for_glyph(g)   # згенерована іконка режиму, коли вона є; інакше емоджі (R11)
+		if gtex != null:
+			var gs: float = ACT_R * 1.15 * _press_scale
+			draw_texture_rect(gtex, Rect2(c - Vector2(gs, gs) * 0.5, Vector2(gs, gs)), false)
+		else:
+			draw_string(f, c + Vector2(-ACT_R, 12.0), g, HORIZONTAL_ALIGNMENT_CENTER, ACT_R * 2.0, 34, Tokens.INK)
 		if target_label != "" and not menu_open:
 			var df: Font = UITheme.display_font()
 			# a pill under the words: bare green text was lost on grass (independent read, gamedev §5)

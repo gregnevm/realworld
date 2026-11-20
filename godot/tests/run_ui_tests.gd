@@ -120,6 +120,24 @@ func _init() -> void:
 func _t_art_icons() -> void:
 	for g in ArtIcons.GLYPH_ART:
 		ok(ArtIcons.for_glyph(String(g)) != null, "GLYPH_ART %s → %s has a PNG" % [g, ArtIcons.GLYPH_ART[g]])
+	for g2 in ArtIcons.GLYPH_REUSE:
+		ok(ArtIcons.for_glyph(String(g2)) != null, "GLYPH_REUSE %s → %s has a PNG" % [g2, ArtIcons.GLYPH_REUSE[g2]])
+	# іконки, яких ще не згенеровано: кожна має рядок у маніфесті (щоб /gen-art знав, що малювати) і не дублює готові таблиці
+	var manifest: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://../art/manifest.json"))
+	var ids: Dictionary = {}
+	for a in (manifest.assets as Array):
+		ids[String(a.id)] = true
+	for g3 in ArtIcons.GLYPH_PENDING:
+		ok(ids.has(String(ArtIcons.GLYPH_PENDING[g3])) and not ArtIcons.GLYPH_ART.has(g3) and not ArtIcons.GLYPH_REUSE.has(g3),
+			"GLYPH_PENDING %s → %s є в art/manifest.json" % [g3, ArtIcons.GLYPH_PENDING[g3]])
+	var db := Button.new()
+	db.text = "📦 Склад"
+	ok(ArtIcons.dress(db) and db.icon != null and db.text == "Склад", "dress: «📦 Склад» → іконка-арт + текст без емоджі")
+	db.text = "☰"
+	ok(ArtIcons.dress(db) == (ArtIcons.ui("ui_menu") != null), "dress: гліф без згенерованого арту лишає кнопку з емоджі (R11)")
+	db.text = "Просто текст"
+	ok(not ArtIcons.dress(db) and db.text == "Просто текст", "dress: текст без гліфа не чіпається")
+	db.free()
 	for res in GameData.RES_ORDER:
 		ok(ArtIcons.res(String(res)) != null, "live resource %s has an icon" % res)
 	var wall: Texture2D = ArtIcons.building("wall")

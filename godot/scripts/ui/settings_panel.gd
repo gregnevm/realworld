@@ -4,6 +4,7 @@
 # і не чіпає сесію: entry-сцена слухає changed/action і застосовує. Стан показано текстом (ON ✓ / OFF), не лише кольором (R11).
 extends RefCounted
 
+const ArtIcons = preload("res://scripts/ui/art_icons.gd")
 const WidgetBase = preload("res://scripts/ui/widget.gd")
 const Tokens = preload("res://scripts/ui/tokens.gd")
 const UITheme = preload("res://scripts/ui/theme.gd")
@@ -147,6 +148,7 @@ class SettingsPanel extends WidgetBase.Widget:
 	func _add_action(id: String, text: String) -> Button:
 		var b := Button.new()
 		b.text = text
+		ArtIcons.dress(b)
 		b.custom_minimum_size = Vector2(0, 44)
 		b.focus_mode = Control.FOCUS_NONE
 		b.pressed.connect(func() -> void: _on_action(id))
