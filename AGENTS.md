@@ -42,6 +42,7 @@ realworld/
   tools/               lint.mjs (secret-scan + Godot-3 tripwire + sim без годинника) · gen-art.mjs + art/ (арт-пайплайн Nano Banana) · process/ (PR-гейт check-pr.mjs, звіт report.mjs, Godot-3 tripwire — lib.mjs)
   art/                 style.md (арт-біблія) · palette.json · refs/ (якорі стилю) · manifest.json (виводиться з catalog.json) · out/ (gitignored кандидати)
   .claude/skills/gen-art/  скіл генерації арту (/gen-art)
+  .claude/skills/gemini-api-dev/  скіл Google (актуальні моделі й зразки Gemini API; зафіксований у skills-lock.json); доки Gemini — MCP `geminiDocs` (.mcp.json). У цьому репо Gemini — лише dev-тулінг і лише через REST, без SDK (рішення власника 2026-11-20: правило «нуль npm-залежностей» лишається)
   .claude/skills/gamedev/  шлюз цілісності гри (/gamedev): ворота 0–6, правило доказу, тест Ніколая, FTUE — вхід для будь-якої механіки/фічі/плейтесту
   .claude/skills/godot-game-uiux-designer/  цикл UX/UI (аудит кадрами → код → анімація → кадр після)
   .claude/agents/      ролі процесу: designer · developer · integrity (вердикти воріт, лише читання) · qa-adversary (тести від REQ) · fresh-eyes (тест Ніколая, лише кадри)

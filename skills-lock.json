@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "skills": {
+    "gemini-api-dev": {
+      "source": "google-gemini/gemini-skills",
+      "commit": "c4d0c62c1240e08a90546186bf320600ab6a039a",
+      "sourceType": "github",
+      "skillPath": "skills/gemini-api-dev/SKILL.md",
+      "computedHash": "b3823bd7210e46d4528ca85ebc03326842a6df47ced9a856a1729639f9756c12"
+    }
+  }
+}
